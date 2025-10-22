@@ -4,6 +4,8 @@
  */
 import { supabaseAdmin } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const { data, error } = await supabaseAdmin
     .from('mv_persona_efficiency')
