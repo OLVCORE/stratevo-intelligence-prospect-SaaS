@@ -56,11 +56,10 @@ export async function POST(req: NextRequest) {
         ],
       });
 
-      await supabaseAdmin.from('report_jobs').update({ status: 'sent' }).eq('id', job.id);
-      await supabaseAdmin
-        .from('audit_log')
+      await (supabaseAdmin.from('report_jobs') as any).update({ status: 'sent' }).eq('id', job.id);
+      await (supabaseAdmin.from('audit_log') as any)
         .insert({ action: 'report_send', entity: 'report', entity_id: job.id, meta: { to: job.to_email } });
-      await supabaseAdmin.from('provider_logs').insert({
+      await (supabaseAdmin.from('provider_logs') as any).insert({
         company_id: job.company_id,
         provider: 'smtp',
         operation: 'report-schedule',

@@ -54,7 +54,7 @@ ${appUrl}/companies/${o.company_id}
       // WhatsApp: reusar provider do Ciclo 5 se necessário
     }
 
-    await supabaseAdmin.from('alert_occurrences').update({ notified: true }).eq('id', o.id);
+    await (supabaseAdmin.from('alert_occurrences') as any).update({ notified: true }).eq('id', o.id);
     sent++;
   }
 
