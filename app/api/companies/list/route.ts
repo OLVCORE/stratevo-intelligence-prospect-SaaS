@@ -45,11 +45,11 @@ export async function GET(req: NextRequest) {
   if (maxCapital) query = query.lte('capital_social', Number(maxCapital));
 
   // paginação
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
+  const offset = (page - 1) * pageSize;
+  const to = offset + pageSize - 1;
 
   // ordenação
-  query = query.order(sort as any, { ascending: order === 'asc' }).range(from, to);
+  query = query.order(sort as any, { ascending: order === 'asc' }).range(offset, to);
 
   const { data, error, count } = await query;
   if (error)
