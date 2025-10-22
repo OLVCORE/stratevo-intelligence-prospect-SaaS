@@ -6,6 +6,8 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const Rule = z.object({
   id: z.string().uuid().optional(),
   companyId: z.string().uuid().nullable().optional(),
