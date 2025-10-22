@@ -85,8 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // 4. Persistência idempotente (evitar duplicatas por full_name + company_id)
   for (const p of items) {
-    const { data: existing } = await supabaseAdmin
-      .from('people')
+    const { data: existing } = await from('people')
       .select('id')
       .eq('company_id', company.id)
       .ilike('full_name', p.full_name)
@@ -97,8 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (!existing) {
       // Inserir nova pessoa
-      const { data: ins } = await supabaseAdmin
-        .from('people')
+      const { data: ins } = await from('people')
         .insert({
           company_id: company.id,
           full_name: p.full_name,
@@ -118,8 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (personId) added++;
     } else {
       // Atualizar pessoa existente
-      await supabaseAdmin
-        .from('people')
+      await from('people')
         .update({
           title: p.title,
           department: p.department,
@@ -137,8 +134,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // Inserir contatos (evitar duplicatas simples por type + value)
     if (personId && Array.isArray(p.contacts)) {
       for (const c of p.contacts) {
-        const { data: ex } = await supabaseAdmin
-          .from('person_contacts')
+        const { data: ex } = await from('person_contacts')
           .select('id')
           .eq('person_id', personId)
           .eq('type', c.type)
