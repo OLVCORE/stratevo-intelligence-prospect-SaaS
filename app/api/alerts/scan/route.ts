@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
     for (const r of rules4) {
       const techName = r.conditions?.tech_name;
       const matches = (ts || []).filter(
-        (t) =>
+        (t: any) =>
           (!r.company_id || t.company_id === r.company_id) &&
           (!techName || (t.tech_name || '').toLowerCase() === String(techName).toLowerCase())
       );
