@@ -17,6 +17,7 @@ type Recommendation = {
   recommendation: string;
   rationale: string;
   priority: string;
+  source?: string;
 };
 
 export default function MaturityRadar({ companyId }: { companyId: string }) {
