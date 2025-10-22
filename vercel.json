@@ -1,0 +1,27 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["gru1"],
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/reports/cron",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/alerts/scan",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/alerts/notify",
+      "schedule": "*/20 * * * *"
+    }
+  ]
+}
+

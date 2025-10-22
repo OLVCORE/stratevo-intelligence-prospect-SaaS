@@ -1,0 +1,63 @@
+{
+  "name": "olv-intelligence-prospect-v2",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run verify-env && next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "verify-env": "tsx scripts/verify-env.ts",
+    "type-check": "tsc --noEmit",
+    "doctor": "tsx scripts/doctor.ts",
+    "test:smoke": "playwright test tests/e2e.smoke.spec.ts --reporter=list",
+    "test:tenant": "playwright test tests/e2e.tenant.spec.ts --reporter=list",
+    "ci:perf": "tsx scripts/perf-analytics.ts",
+    "ci:tenant": "tsx scripts/check-tenant-guard.ts",
+    "ci:quick": "npm run build && npm run doctor && npm run test:smoke && npm run ci:tenant",
+    "ci:full": "npm run build && npm run doctor && npm run test:smoke && npm run ci:perf && npm run ci:tenant",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.3",
+    "next": "^14.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zod": "^3.22.4",
+    "@react-pdf/renderer": "^3.1.15",
+    "nodemailer": "^6.9.8",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.1",
+    "lucide-react": "^0.309.0",
+    "tailwindcss-animate": "^1.0.7",
+    "zustand": "^4.4.7",
+    "recharts": "^2.10.3",
+    "@react-pdf/renderer": "^3.1.15",
+    "papaparse": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/nodemailer": "^6.4.14",
+    "@types/papaparse": "^5.3.14",
+    "typescript": "^5.3.3",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8.4.33",
+    "autoprefixer": "^10.4.17",
+    "tsx": "^4.7.0",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.1.0",
+    "ts-node": "^10.9.2",
+    "playwright": "^1.40.1",
+    "@playwright/test": "^1.40.1",
+    "husky": "^8.0.3",
+    "glob": "^10.3.10"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
+

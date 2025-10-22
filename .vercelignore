@@ -1,0 +1,30 @@
+# Vercel Ignore
+node_modules
+.next
+.env.local
+.env*.local
+*.log
+.DS_Store
+.vscode
+.idea
+
+# Documentação de desenvolvimento (não necessária em produção)
+docs/
+*.md
+!README.md
+
+# Testes (rodam no CI, não no deploy)
+tests/
+playwright-report/
+test-results/
+
+# Scripts de desenvolvimento
+scripts/backfill-tenant.ts
+scripts/doctor.ts
+scripts/perf-analytics.ts
+scripts/check-tenant-guard.ts
+
+# Git
+.git
+.gitignore
+
