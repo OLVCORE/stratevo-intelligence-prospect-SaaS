@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const lines =
       (occs || [])
         .map(
-          (o) =>
+          (o: any) =>
             `• ${o.detected_at} | ${o.alert_rules?.event} | ${o.alert_rules?.name} | company=${o.company_id}`
         )
         .join('\n') || 'Sem alertas no período.';
