@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     .limit(50);
 
   let sent = 0;
-  for (const o of occs || []) {
+  for (const o of (occs || []) as any[]) {
     const channels = (o.alert_rules?.channels as any) || [];
     const title = `Alerta: ${o.alert_rules?.name} (${o.alert_rules?.event})`;
     const appUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
