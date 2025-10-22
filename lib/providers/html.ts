@@ -24,7 +24,7 @@ export async function fetchHomepageArtifacts(url: string, timeoutMs = 8000) {
     const html = await res.text();
 
     // Extração básica (regex simples - pode melhorar com parser se necessário)
-    const metas: string[] = Array.from(html.matchAll(/<meta[^>]+>/gi)).map((m) => m[0]);
+    const metas: string[] = Array.from(html.matchAll(/<meta[^>]+>/gi)).map((m: any) => m[0]);
     const scripts: string[] = Array.from(
       html.matchAll(/<script[^>]+src=['"]([^'"]+)['"]/gi)
     ).map((m: any) => m[1]);

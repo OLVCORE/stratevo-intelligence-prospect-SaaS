@@ -52,7 +52,7 @@ export function db() {
      */
     insert: (table: TableName, values: any | any[]) => {
       const withTenant = Array.isArray(values)
-        ? values.map((v) => ({ ...v, tenant_id: tenantId }))
+        ? values.map((v: any) => ({ ...v, tenant_id: tenantId }))
         : { ...values, tenant_id: tenantId };
       return supabaseAdmin.from(table).insert(withTenant);
     },
@@ -71,7 +71,7 @@ export function db() {
      */
     upsert: (table: TableName, values: any | any[], opts?: any) => {
       const withTenant = Array.isArray(values)
-        ? values.map((v) => ({ ...v, tenant_id: tenantId }))
+        ? values.map((v: any) => ({ ...v, tenant_id: tenantId }))
         : { ...values, tenant_id: tenantId };
       return supabaseAdmin.from(table).upsert(withTenant, opts);
     },

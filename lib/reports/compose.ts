@@ -43,11 +43,11 @@ export async function composeReport(
     const latestRun = ms?.[0]?.run_id;
     out.maturity = {
       pillars: (ms || [])
-        .filter((x) => x.run_id === latestRun)
-        .map((x) => ({ name: x.pillar, score: x.score, evidence: x.evidence || [] })),
+        .filter((x: any) => x.run_id === latestRun)
+        .map((x: any) => ({ name: x.pillar, score: x.score, evidence: x.evidence || [] })),
       recos: (recos || [])
-        .filter((x) => x.run_id === latestRun)
-        .map((x) => ({ pillar: x.pillar, recommendation: x.recommendation, priority: x.priority })),
+        .filter((x: any) => x.run_id === latestRun)
+        .map((x: any) => ({ pillar: x.pillar, recommendation: x.recommendation, priority: x.priority })),
     };
   }
 
@@ -59,8 +59,8 @@ export async function composeReport(
       .order('created_at', { ascending: false });
     const latestRun = fits?.[0]?.run_id;
     out.fit = (fits || [])
-      .filter((x) => x.run_id === latestRun)
-      .map((x) => ({ area: x.area, fit: x.fit, signals: x.signals, next_steps: x.next_steps }));
+      .filter((x: any) => x.run_id === latestRun)
+      .map((x: any) => ({ area: x.area, fit: x.fit, signals: x.signals, next_steps: x.next_steps }));
   }
 
   if (sections.includes('decisores')) {
@@ -72,7 +72,7 @@ export async function composeReport(
       .eq('company_id', companyId)
       .order('created_at', { ascending: false })
       .limit(200);
-    out.decisionMakers = (people || []).map((p) => ({
+    out.decisionMakers = (people || []).map((p: any) => ({
       name: p.full_name,
       title: p.title,
       source: p.source,

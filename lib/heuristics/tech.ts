@@ -166,8 +166,8 @@ export function detectTech(ctx: {
   html: string;
 }) {
   return rules
-    .filter((r) => r.test(ctx))
-    .map((r) => ({
+    .filter((r: any) => r.test(ctx))
+    .map((r: any) => ({
       tech_name: r.name,
       category: r.category,
       confidence: r.confidence,
