@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       .limit(500);
 
     for (const r of rules2) {
-      const matches = (errors || []).filter((e) => !r.company_id || e.company_id === r.company_id);
+      const matches = (errors || []).filter((e: any) => !r.company_id || e.company_id === r.company_id);
       if (matches.length) {
         await supabaseAdmin.from('alert_occurrences').insert({
           rule_id: r.id,
