@@ -43,7 +43,7 @@ export function db() {
      * Uso: db().from("companies").select("*")
      */
     from: (table: TableName) => {
-      return supabaseAdmin.from(table).eq('tenant_id', tenantId);
+      return supabaseAdmin.from(table).eq('tenant_id', tenantId) as any;
     },
 
     /**
@@ -62,7 +62,7 @@ export function db() {
      * Uso: db().update("companies", { status: "ATIVA" }).eq("id", companyId)
      */
     update: (table: TableName, values: any) => {
-      return supabaseAdmin.from(table).update(values).eq('tenant_id', tenantId);
+      return supabaseAdmin.from(table).update(values).eq('tenant_id', tenantId) as any;
     },
 
     /**
@@ -81,7 +81,7 @@ export function db() {
      * Uso: db().delete("companies").eq("id", companyId)
      */
     delete: (table: TableName) => {
-      return supabaseAdmin.from(table).delete().eq('tenant_id', tenantId);
+      return supabaseAdmin.from(table).delete().eq('tenant_id', tenantId) as any;
     },
 
     /**
