@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await supabaseAdmin.rpc('digest_reschedule', {
+    await (supabaseAdmin as any).rpc('digest_reschedule', {
       job_id: j.id,
       minutes: j.cadence === 'weekly' ? 7 * 24 * 60 : 24 * 60,
     });

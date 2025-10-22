@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const { error } = await supabaseAdmin.rpc('refresh_ciclo9_materialized');
+  const { error } = await (supabaseAdmin as any).rpc('refresh_ciclo9_materialized');
 
   if (error) {
     return new Response(
