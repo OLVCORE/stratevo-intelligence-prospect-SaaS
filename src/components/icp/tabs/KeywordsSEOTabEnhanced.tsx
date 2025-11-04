@@ -108,6 +108,7 @@ export function KeywordsSEOTabEnhanced({
       });
     },
     onSuccess: (results) => {
+      console.log('[KEYWORDS] ✅ Recebeu', results.length, 'opções');
       setWebsiteOptions(results);
       onLoading?.(false);
       toast({

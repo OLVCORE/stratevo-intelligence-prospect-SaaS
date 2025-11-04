@@ -55,6 +55,8 @@ export async function searchOfficialWebsite(
 
     const data = await response.json();
     const organic = data.organic || [];
+    
+    console.log('[OFFICIAL] 📊 Organic results:', organic.length);
 
     // Processar e rankear resultados
     const results: WebsiteSearchResult[] = organic.map((result: any, index: number) => {
@@ -94,9 +96,14 @@ export async function searchOfficialWebsite(
     });
 
     // Ordenar por confiança (maior primeiro)
-    return results
+    const finalResults = results
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 10);
+    
+    console.log('[OFFICIAL] ✅ Retornando', finalResults.length, 'resultados');
+    console.log('[OFFICIAL] 🎯 TOP 3:', finalResults.slice(0, 3).map(r => ({ url: r.url, conf: r.confidence })));
+    
+    return finalResults;
 
   } catch (error) {
     console.error('[OFFICIAL] ❌ Erro na busca:', error);
