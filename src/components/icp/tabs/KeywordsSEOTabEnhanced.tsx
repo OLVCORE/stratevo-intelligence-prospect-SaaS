@@ -2,18 +2,20 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, TrendingUp, ExternalLink, Globe, Target, BarChart3, Loader2, Sparkles, RefreshCw, Save, AlertTriangle } from 'lucide-react';
+import { Search, TrendingUp, ExternalLink, Globe, Target, BarChart3, Loader2, Sparkles, RefreshCw, Save, AlertTriangle, Zap } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { performFullSEOAnalysis } from '@/services/seoAnalysis';
 import type { KeywordData, SimilarCompanyBySEO } from '@/services/seoAnalysis';
 import { analyzeSimilarCompanies, generateBattleCard } from '@/services/competitiveIntelligence';
 import type { CompanyIntelligence } from '@/services/competitiveIntelligence';
+import { discoverFullDigitalPresence, type DigitalPresence } from '@/services/websiteDiscovery';
 
 interface KeywordsSEOTabProps {
   companyName?: string;
   domain?: string;
   savedData?: any;
+  cnpj?: string;
   onDataChange?: (data: any) => void;
   onLoading?: (loading: boolean) => void;
   onError?: (error: string) => void;
@@ -23,6 +25,7 @@ export function KeywordsSEOTabEnhanced({
   companyName, 
   domain, 
   savedData,
+  cnpj,
   onDataChange,
   onLoading,
   onError
@@ -30,6 +33,8 @@ export function KeywordsSEOTabEnhanced({
   const { toast } = useToast();
   const [seoData, setSeoData] = useState<any>(savedData || null);
   const [competitiveAnalysis, setCompetitiveAnalysis] = useState<any>(null);
+  const [digitalPresence, setDigitalPresence] = useState<DigitalPresence | null>(null);
+  const [discoveredDomain, setDiscoveredDomain] = useState<string | null>(null);
 
   // 🔥 Análise SEO completa
   const seoMutation = useMutation({
@@ -82,6 +87,53 @@ export function KeywordsSEOTabEnhanced({
         variant: 'destructive'
       });
     }
+  });
+
+  // 🔥 WEBSITE DISCOVERY - USA TODAS AS FERRAMENTAS!
+  const discoveryMutation = useMutation({
+    mutationFn: async () => {
+      if (!companyName) throw new Error('Nome da empresa necessário');
+      return await discoverFullDigitalPresence(companyName, cnpj);
+    },
+    onMutate: () => {
+      onLoading?.(true);
+      toast({
+        title: '🔍 Descobrindo Presença Digital...',
+        description: 'Buscando website, redes sociais, emails e contatos',
+      });
+    },
+    onSuccess: (data) => {
+      setDigitalPresence(data);
+      if (data.website) {
+        setDiscoveredDomain(new URL(data.website).hostname.replace('www.', ''));
+      }
+      onLoading?.(false);
+      
+      const found = [];
+      if (data.website) found.push('Website');
+      if (data.linkedin) found.push('LinkedIn');
+      if (data.instagram) found.push('Instagram');
+      if (data.twitter) found.push('Twitter');
+      if (data.facebook) found.push('Facebook');
+      if (data.emails.length > 0) found.push(`${data.emails.length} emails`);
+      
+      toast({
+        title: '✅ Presença Digital Descoberta!',
+        description: `Encontrado: ${found.join(', ')} | Confiança: ${data.confidence}%`,
+      });
+
+      // 🚨 Notifica parent: dados prontos para salvar
+      onDataChange?.({ digitalPresence: data });
+    },
+    onError: (error) => {
+      onError?.((error as Error).message);
+      onLoading?.(false);
+      toast({
+        title: '❌ Erro na descoberta',
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+    },
   });
 
   if (!companyName) {
