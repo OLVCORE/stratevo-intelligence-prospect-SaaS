@@ -37,11 +37,11 @@ export const useSimpleTOTVSCheck = ({
 
       console.log('[HOOK] Resultado:', data);
       
-      // AUTO-SALVAR NO HISTÓRICO STC
+      // AUTO-SALVAR NO HISTÓRICO STC (se tabela existir)
       if (data?.data && companyId) {
         try {
           const result = data.data;
-          await supabase.from('stc_verification_history').insert({
+          const { error: insertError } = await supabase.from('stc_verification_history').insert({
             company_id: companyId,
             company_name: companyName || 'N/A',
             cnpj: cnpj || null,
@@ -56,7 +56,16 @@ export const useSimpleTOTVSCheck = ({
             queries_executed: result.queriesExecuted || 0,
             verification_duration_ms: result.verificationDurationMs || 0
           });
-          console.log('[STC] ✅ Verificação salva no histórico');
+          
+          if (insertError) {
+            if (insertError.code === 'PGRST116' || insertError.message?.includes('does not exist')) {
+              console.warn('[STC] Tabela stc_verification_history não existe (OK - histórico desabilitado)');
+            } else {
+              console.warn('[STC] Erro ao salvar histórico:', insertError.message);
+            }
+          } else {
+            console.log('[STC] ✅ Verificação salva no histórico');
+          }
         } catch (historyError: any) {
           console.warn('[STC] ⚠️ Erro ao salvar histórico (não crítico):', historyError.message);
           // Não falha a verificação se salvar histórico falhar

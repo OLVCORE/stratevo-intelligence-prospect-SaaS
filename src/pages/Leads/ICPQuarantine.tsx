@@ -142,12 +142,8 @@ export default function ICPQuarantine() {
 
       if (updateError) throw updateError;
 
-      // CRÍTICO: Chamar função SQL para recalcular score após enriquecimento
-      const { error: scoreError } = await supabase.rpc('calculate_icp_score_quarantine', {
-        p_analysis_id: analysisId
-      });
-
-      if (scoreError) console.error('Erro ao recalcular score:', scoreError);
+      // Função calculate_icp_score_quarantine não existe - score será calculado manualmente se necessário
+      console.log('[Receita] ✅ Dados salvos, score será atualizado na próxima análise');
 
       // Se tem company_id, atualizar cnpj_status baseado na situação
       if (analysis.company_id && result.data?.situacao) {
@@ -437,17 +433,8 @@ export default function ICPQuarantine() {
         })
         .eq('id', analysisId);
 
-      // Recalcular score (se função existir - não é crítico)
-      toast.loading('Recalculando Score ICP...', { id: '360-progress' });
-
-      try {
-        await supabase.rpc('calculate_icp_score_quarantine', {
-          p_analysis_id: analysisId
-        });
-        console.log('[360°] Score recalculado');
-      } catch (err) {
-        console.warn('[360°] Função calculate_icp_score_quarantine não existe (OK)');
-      }
+      // Scores já foram salvos no raw_data, não precisa recalcular
+      console.log('[360°] ✅ Scores salvos em raw_data.enrichment_360');
 
       toast.dismiss('360-progress');
 

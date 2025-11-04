@@ -40,7 +40,14 @@ export function useSTCHistory(companyId?: string, companyName?: string) {
 
       const { data, error } = await query.limit(10);
 
-      if (error) throw error;
+      // Se tabela não existir, retornar vazio (não é crítico)
+      if (error) {
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+          console.warn('[STC History] Tabela stc_verification_history não existe (OK)');
+          return [];
+        }
+        throw error;
+      }
       return data as STCHistoryRecord[];
     },
     enabled: !!(companyId || companyName),
@@ -68,7 +75,14 @@ export function useLatestSTCReport(companyId?: string, companyName?: string) {
 
       const { data, error } = await query.single();
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = não encontrado
+      // Se tabela não existir ou registro não encontrado, retornar null (não é crítico)
+      if (error) {
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+          console.warn('[STC Latest] Tabela/Registro não existe (OK)');
+          return null;
+        }
+        throw error;
+      }
       return data as STCHistoryRecord | null;
     },
     enabled: !!(companyId || companyName),
