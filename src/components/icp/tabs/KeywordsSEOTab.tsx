@@ -1,3 +1,7 @@
+// 🔥 VERSÃO MELHORADA: Usa KeywordsSEOTabEnhanced com análise SEO completa
+export { KeywordsSEOTabEnhanced as KeywordsSEOTab } from './KeywordsSEOTabEnhanced';
+
+/*
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -242,3 +246,4 @@ export function KeywordsSEOTab({ companyName, domain, savedData }: KeywordsSEOTa
     </div>
   );
 }
+*/
