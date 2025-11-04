@@ -198,6 +198,168 @@ export function KeywordsSEOTabEnhanced({
             )}
           </div>
         </div>
+
+        {/* 🚨 CARD EXPLICATIVO - SUPER DISCOVERY */}
+        {!domain && !discoveredDomain && !discoveryMutation.isPending && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-lg">
+            <p className="text-base font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
+              <Zap className="w-6 h-6" />
+              🚀 SUPER DISCOVERY - Arsenal Completo de Ferramentas!
+            </p>
+            <div className="grid grid-cols-2 gap-3 text-sm text-purple-800 dark:text-purple-200 mb-3">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                <strong>Serper:</strong> Website + Redes Sociais
+              </div>
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4" />
+                <strong>BrasilAPI:</strong> Email → Domain
+              </div>
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4" />
+                <strong>Hunter.io:</strong> Domain + Emails
+              </div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                <strong>Apollo.io:</strong> Organization
+              </div>
+            </div>
+            <div className="p-3 bg-white/60 dark:bg-black/30 rounded border border-purple-200 dark:border-purple-800">
+              <p className="text-sm font-semibold text-purple-900 dark:text-purple-100 mb-2">
+                🎯 Busca completa em:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <Badge className="bg-purple-100 text-purple-900 dark:bg-purple-800 dark:text-purple-100">Website oficial</Badge>
+                <Badge className="bg-blue-100 text-blue-900 dark:bg-blue-800 dark:text-blue-100">LinkedIn</Badge>
+                <Badge className="bg-pink-100 text-pink-900 dark:bg-pink-800 dark:text-pink-100">Instagram</Badge>
+                <Badge className="bg-sky-100 text-sky-900 dark:bg-sky-800 dark:text-sky-100">Twitter/X</Badge>
+                <Badge className="bg-indigo-100 text-indigo-900 dark:bg-indigo-800 dark:text-indigo-100">Facebook</Badge>
+                <Badge className="bg-red-100 text-red-900 dark:bg-red-800 dark:text-red-100">YouTube</Badge>
+                <Badge className="bg-green-100 text-green-900 dark:bg-green-800 dark:text-green-100">Emails</Badge>
+                <Badge className="bg-amber-100 text-amber-900 dark:bg-amber-800 dark:text-amber-100">Telefones</Badge>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🟡 LOADING STATE - Discovery em progresso */}
+        {discoveryMutation.isPending && (
+          <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-300 dark:border-yellow-700 rounded-lg">
+            <p className="text-base font-semibold text-yellow-900 dark:text-yellow-100 mb-3 flex items-center gap-2 animate-pulse">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              🔍 Varrendo toda a web com 8 ferramentas...
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                '✓ Google Search (website oficial)...',
+                '✓ LinkedIn corporativo...',
+                '✓ Instagram da empresa...',
+                '✓ Twitter/X oficial...',
+                '✓ Facebook page...',
+                '✓ BrasilAPI (email corporativo)...',
+                '✓ Hunter.io (domain search)...',
+                '✓ Apollo.io (organization)...',
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs text-yellow-800 dark:text-yellow-200">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-ping" />
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 🟢 RESULTADO DISCOVERY */}
+        {digitalPresence && (
+          <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-300 dark:border-green-700 rounded-lg">
+            <p className="text-base font-bold text-green-900 dark:text-green-100 mb-4 flex items-center gap-2">
+              <Sparkles className="w-6 h-6" />
+              ✅ Presença Digital Encontrada! (Confiança: {digitalPresence.confidence}%)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {digitalPresence.website && (
+                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-green-300 dark:border-green-700">
+                  <Globe className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Website Oficial</p>
+                    <a href={digitalPresence.website} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
+                      {digitalPresence.website}
+                    </a>
+                  </div>
+                </div>
+              )}
+              {digitalPresence.linkedin && (
+                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-blue-300 dark:border-blue-700">
+                  <ExternalLink className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">LinkedIn</p>
+                    <a href={digitalPresence.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
+                      Perfil corporativo →
+                    </a>
+                  </div>
+                </div>
+              )}
+              {digitalPresence.instagram && (
+                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-pink-300 dark:border-pink-700">
+                  <TrendingUp className="w-5 h-5 text-pink-600 dark:text-pink-400 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Instagram</p>
+                    <a href={digitalPresence.instagram} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
+                      Perfil oficial →
+                    </a>
+                  </div>
+                </div>
+              )}
+              {digitalPresence.twitter && (
+                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-sky-300 dark:border-sky-700">
+                  <Target className="w-5 h-5 text-sky-600 dark:text-sky-400 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Twitter/X</p>
+                    <a href={digitalPresence.twitter} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
+                      Perfil oficial →
+                    </a>
+                  </div>
+                </div>
+              )}
+              {digitalPresence.facebook && (
+                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-indigo-300 dark:border-indigo-700">
+                  <Globe className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Facebook</p>
+                    <a href={digitalPresence.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
+                      Página oficial →
+                    </a>
+                  </div>
+                </div>
+              )}
+              {digitalPresence.emails.length > 0 && (
+                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-green-300 dark:border-green-700 col-span-2">
+                  <Search className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-2">
+                      Emails Corporativos ({digitalPresence.emails.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {digitalPresence.emails.slice(0, 5).map((email, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs">{email}</Badge>
+                      ))}
+                      {digitalPresence.emails.length > 5 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{digitalPresence.emails.length - 5} mais
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-green-300 dark:border-green-700">
+              <p className="text-xs text-green-700 dark:text-green-300">
+                <strong>Fontes utilizadas:</strong> {digitalPresence.sources.join(' | ')}
+              </p>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Loader */}
