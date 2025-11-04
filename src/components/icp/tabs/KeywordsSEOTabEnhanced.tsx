@@ -366,8 +366,71 @@ export function KeywordsSEOTabEnhanced({
           </div>
         </div>
 
+        {/* 📋 DROPDOWN TOP 10 - ESCOLHA DO USUÁRIO */}
+        {websiteOptions.length > 0 && (
+          <div className="mt-4 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-3 border-blue-500 dark:border-blue-600 rounded-xl shadow-lg">
+            <p className="text-lg font-black text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
+              <Search className="w-6 h-6" />
+              🎯 Escolha o Website Oficial ({websiteOptions.length} opções)
+            </p>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {websiteOptions.map((option, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    const cleanDomain = option.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+                    setDiscoveredDomain(cleanDomain);
+                    setDigitalPresence({
+                      website: option.url,
+                      confidence: option.confidence,
+                      sources: ['Busca Oficial (escolha usuário)'],
+                      emails: [],
+                      phones: [],
+                      addresses: [],
+                    });
+                    setWebsiteOptions([]);
+                    toast({
+                      title: '✅ Website selecionado!',
+                      description: option.title,
+                    });
+                  }}
+                  className={`
+                    w-full p-4 text-left rounded-lg border-2 transition-all hover:scale-[1.02]
+                    ${option.isBacklink 
+                      ? 'bg-red-50 dark:bg-red-950/20 border-red-400 dark:border-red-600' 
+                      : 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-600 hover:border-blue-500 hover:shadow-lg'
+                    }
+                  `}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-black text-base text-slate-900 dark:text-white">#{idx + 1}</span>
+                        {option.isBacklink && (
+                          <Badge variant="destructive" className="text-xs font-bold">⚠️ BACKLINK</Badge>
+                        )}
+                        <Badge className={`text-xs font-bold ${
+                          option.confidence >= 80 ? 'bg-green-600' :
+                          option.confidence >= 60 ? 'bg-blue-600' :
+                          option.confidence >= 40 ? 'bg-yellow-600' : 'bg-red-600'
+                        } text-white`}>
+                          {option.confidence}%
+                        </Badge>
+                      </div>
+                      <p className="font-bold text-base text-slate-900 dark:text-white mb-1">{option.title}</p>
+                      <p className="text-sm text-blue-600 dark:text-blue-400 mb-2 break-all">{option.url}</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">{option.snippet}</p>
+                    </div>
+                    <ExternalLink className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
         {/* 🚨 CARD EXPLICATIVO - SUPER DISCOVERY */}
-        {!domain && !discoveredDomain && !discoveryMutation.isPending && (
+        {!domain && !discoveredDomain && !discoveryMutation.isPending && websiteOptions.length === 0 && (
           <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-lg">
             <p className="text-base font-bold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
               <Zap className="w-6 h-6" />
