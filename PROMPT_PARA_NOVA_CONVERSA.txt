@@ -1,0 +1,88 @@
+==================================================
+🚀 PROMPT PARA INICIAR NOVA CONVERSA NO CURSOR
+==================================================
+
+Cole este texto na nova conversa quando abrir o projeto correto:
+
+---
+
+Olá! Estou continuando uma implementação anterior do projeto OLV Intelligence Prospect v2.
+
+📖 **CONTEXTO COMPLETO:**
+Por favor, leia IMEDIATAMENTE o arquivo `CONTEXTO_COMPLETO_PARA_CONTINUACAO.md` 
+para entender TUDO que já foi feito.
+
+✅ **O QUE JÁ FOI IMPLEMENTADO (100%):**
+
+1. **ABA 4 (Empresas Similares)** - 3 TODOs conectados
+   - enrich-receita-federal Edge Function (BrasilAPI/ReceitaWS)
+   - enrich-apollo-decisores Edge Function (Apollo.io)
+   - analyze-stc-automatic Edge Function (STC automático)
+
+2. **ABA 5 (Client Discovery)** - Wave7 implementada do zero
+   - Jina AI scraping de páginas /clientes, /cases
+   - Serper para press releases e notícias
+   - LinkedIn customers discovery
+   - Filtro automático de clientes TOTVS
+   - Expansão exponencial 3.5x (nível 2)
+
+3. **ABA 7 (Produtos TOTVS)** - Refatorada completamente com IA
+   - generate-product-gaps Edge Function (GPT-4o-mini)
+   - Recomendação inteligente (cross-sell, upsell, new sale)
+   - Stack TOTVS sugerido (core/complementar/futuro)
+
+📦 **ARQUIVOS CRIADOS (13 total):**
+- 6 Edge Functions
+- 1 Serviço (Jina AI)
+- 2 Hooks
+- 3 Componentes modificados
+- 1 .env.local corrigido
+- 2 Documentações
+
+🎯 **STATUS ATUAL:**
+- ✅ Código commitado e no GitHub
+- ✅ .env.local com 27 variáveis (incluindo VITE_JINA_API_KEY)
+- ✅ Conectividade: 100% (0 mocks, 0 placeholders)
+- ✅ Migrado de stratevo-v2 para olv-intelligence-prospect-v2
+
+⚠️ **PRÓXIMOS PASSOS (TODOs PENDENTES):**
+
+1. **URGENTE:** Executar SQL de correção
+   - Arquivo: `CORRECAO_TABELA_ICP_MAPPING_TEMPLATES.sql`
+   - Local: Supabase Dashboard → SQL Editor
+   - Motivo: Erro 404 na tabela icp_mapping_templates
+
+2. **Deploy das 6 Edge Functions**
+   ```bash
+   cd supabase/functions
+   supabase functions deploy --all
+   ```
+   - enrich-receita-federal
+   - enrich-apollo-decisores
+   - analyze-stc-automatic
+   - client-discovery-wave7
+   - generate-product-gaps
+   - generate-similar-companies
+
+3. **Testar fluxos completos:**
+   - Aba 4: Enriquecer empresa similar
+   - Aba 5: Executar Wave7
+   - Aba 7: Ver produtos recomendados
+
+📚 **DOCUMENTAÇÃO COMPLETA:**
+- `CONTEXTO_COMPLETO_PARA_CONTINUACAO.md` (665 linhas)
+- `RELATORIO_IMPLEMENTACAO_COMPLETA.md`
+
+🔑 **VARIÁVEIS JÁ CONFIGURADAS NO SUPABASE:**
+- VITE_JINA_API_KEY ✅
+- VITE_OPENAI_API_KEY ✅
+
+🚀 **VAMOS CONTINUAR DE ONDE PARAMOS?**
+
+Por favor, confirme que leu o contexto completo e me diga 
+qual dos 3 TODOs pendentes deseja que eu execute primeiro.
+
+---
+
+==================================================
+
