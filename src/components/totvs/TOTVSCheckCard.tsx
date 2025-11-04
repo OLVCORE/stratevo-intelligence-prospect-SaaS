@@ -129,6 +129,7 @@ export default function TOTVSCheckCard({
   const hasCompetitorsSaved = !!latestReport?.full_report?.competitors_report;
   const hasSimilarSaved = Array.isArray(latestReport?.full_report?.similar_companies_report) && (latestReport?.full_report?.similar_companies_report?.length || 0) > 0;
   const hasKeywordsSaved = !!latestReport?.full_report?.keywords_seo_report;
+  const hasDecisorsSaved = !!latestReport?.full_report?.decisors_report;
 
   // Buscar dados de empresas similares da tabela similar_companies
   const { data: similarCompaniesData } = useQuery({
