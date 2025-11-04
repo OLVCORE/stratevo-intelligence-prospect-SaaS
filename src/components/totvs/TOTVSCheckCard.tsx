@@ -206,6 +206,11 @@ export default function TOTVSCheckCard({
             Keywords
             {hasKeywordsSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
           </TabsTrigger>
+          <TabsTrigger value="decisors" className="flex items-center gap-2 text-xs">
+            <UserCircle className="w-4 h-4" />
+            Decisores
+            {hasDecisorsSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          </TabsTrigger>
         </TabsList>
 
         {/* ABA 1: EXECUTIVE SUMMARY (NOVA) */}
