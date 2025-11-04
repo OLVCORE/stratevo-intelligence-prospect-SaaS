@@ -150,10 +150,10 @@ export default function ICPQuarantine() {
       if (scoreError) console.error('Erro ao recalcular score:', scoreError);
 
       // Se tem company_id, atualizar cnpj_status baseado na situação
-      if (analysis.company_id && data?.data?.situacao) {
-        const cnpjStatus = data.data.situacao.toLowerCase().includes('ativa') 
+      if (analysis.company_id && result.data?.situacao) {
+        const cnpjStatus = result.data.situacao.toLowerCase().includes('ativa') 
           ? 'ativa' 
-          : data.data.situacao.toLowerCase().includes('inapta') 
+          : result.data.situacao.toLowerCase().includes('inapta') 
           ? 'inativo' 
           : 'pendente';
 
@@ -163,7 +163,7 @@ export default function ICPQuarantine() {
           .eq('id', analysis.company_id);
       }
 
-      return data;
+      return result;
     },
     onSuccess: () => {
       toast.success('✅ Receita Federal atualizada - Score recalculado', {
@@ -201,18 +201,13 @@ export default function ICPQuarantine() {
       // Delay entre chamadas
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 2️⃣ APOLLO DECISORES
-      toast.loading('⚡ 2/3: Buscando decisores no Apollo...', { id: 'completo' });
-      try {
-        await enrichApolloMutation.mutateAsync(analysisId);
-        results.apollo = 'success';
-      } catch (error: any) {
-        results.errors.push(`Apollo: ${error.message}`);
-        console.error('[COMPLETO] Apollo falhou:', error);
-      }
-
-      // Delay entre chamadas
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 2️⃣ APOLLO DECISORES (SKIP - CORS bloqueado)
+      toast.loading('⚡ 2/3: Apollo (indisponível - CORS)...', { id: 'completo' });
+      results.errors.push('Apollo: Requer Edge Function (CORS)');
+      console.warn('[COMPLETO] Apollo pulado (CORS bloqueado no frontend)');
+      
+      // Delay antes do próximo
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // 3️⃣ INTELLIGENCE 360°
       toast.loading('⚡ 3/3: Executando Intelligence 360°...', { id: 'completo' });
@@ -231,19 +226,20 @@ export default function ICPQuarantine() {
       
       toast.dismiss('completo');
       
-      if (successCount === 3) {
-        toast.success('🎉 Análise Completa 360° CONCLUÍDA!', {
-          description: '✅ Receita Federal | ✅ Apollo Decisores | ✅ Intelligence 360°',
+      if (successCount === 2) {
+        // Sucesso parcial (Receita + 360°)
+        toast.success('✅ Análise Completa concluída!', {
+          description: '✅ Receita Federal | ✅ Intelligence 360° | ⚠️ Apollo (requer deploy)',
           duration: 5000,
         });
       } else if (successCount > 0) {
-        toast.warning(`⚠️ Análise parcialmente concluída (${successCount}/3)`, {
-          description: results.errors.join(' | '),
+        toast.warning(`⚠️ Análise parcial (${successCount}/3)`, {
+          description: results.errors.slice(0, 2).join(' | '),
           duration: 7000,
         });
       } else {
-        toast.error('❌ Análise falhou completamente', {
-          description: results.errors.join(' | '),
+        toast.error('❌ Análise falhou', {
+          description: results.errors.slice(0, 2).join(' | '),
           duration: 10000,
         });
       }
@@ -272,53 +268,9 @@ export default function ICPQuarantine() {
         ? analysis.raw_data as Record<string, any>
         : {};
 
-      // ✅ CHAMAR API DIRETAMENTE (sem Edge Function)
-      const domain = rawData.domain || analysis.domain || analysis.website || '';
-      const orgResult = await searchApolloOrganizations(analysis.razao_social, domain);
-
-      if (!orgResult.success) throw new Error(orgResult.error || 'Erro ao buscar no Apollo');
-
-      const organizations = orgResult.organizations || [];
-      let peopleData: any[] = [];
-
-      // Se encontrou organizações, buscar decisores da primeira
-      if (organizations.length > 0) {
-        const firstOrg = organizations[0];
-        const peopleResult = await searchApolloPeople(firstOrg.id, 10);
-        
-        if (peopleResult.success) {
-          peopleData = peopleResult.people || [];
-        }
-      }
-
-      // Extrair website do Apollo se disponível
-      let websiteUpdate = {};
-      if (organizations.length > 0 && organizations[0]?.website_url) {
-        websiteUpdate = { website: organizations[0].website_url };
-      }
-
-      await supabase
-        .from('icp_analysis_results')
-        .update({
-          ...websiteUpdate,
-          raw_data: {
-            ...rawData,
-            apollo_organizations: organizations,
-            apollo_people: peopleData,
-          },
-        })
-        .eq('id', analysisId);
-
-      // Recalcular score após Apollo (se função existir - não é crítico)
-      await supabase.rpc('calculate_icp_score_quarantine', {
-        p_analysis_id: analysisId
-      }).then(() => {
-        console.log('[Apollo] Score recalculado');
-      }).catch((err) => {
-        console.warn('[Apollo] Função calculate_icp_score_quarantine não existe (OK)');
-      });
-
-      return { organizations, people: peopleData };
+      // ⚠️ APOLLO NÃO FUNCIONA NO FRONTEND (CORS bloqueado)
+      // API Apollo.io não aceita chamadas diretas do browser
+      throw new Error('⚠️ Apollo requer Edge Function devido ao CORS. Deploy necessário!');
     },
     onSuccess: () => {
       toast.success('✅ Apollo atualizado - Website e decisores adicionados');
@@ -488,11 +440,14 @@ export default function ICPQuarantine() {
       // Recalcular score (se função existir - não é crítico)
       toast.loading('Recalculando Score ICP...', { id: '360-progress' });
 
-      await supabase.rpc('calculate_icp_score_quarantine', {
-        p_analysis_id: analysisId
-      }).catch((err) => {
+      try {
+        await supabase.rpc('calculate_icp_score_quarantine', {
+          p_analysis_id: analysisId
+        });
+        console.log('[360°] Score recalculado');
+      } catch (err) {
         console.warn('[360°] Função calculate_icp_score_quarantine não existe (OK)');
-      });
+      }
 
       toast.dismiss('360-progress');
 
