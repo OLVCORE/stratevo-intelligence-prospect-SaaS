@@ -52,8 +52,8 @@ serve(async (req) => {
     console.log('[CLIENT-DISCOVERY] Descobrindo clientes de:', companyName);
 
     const discoveredClients: string[] = [];
-    const jinaKey = Deno.env.get('VITE_JINA_API_KEY');
-    const serperKey = Deno.env.get('VITE_SERPER_API_KEY');
+    const jinaKey = Deno.env.get('JINA_API_KEY');
+    const serperKey = Deno.env.get('SERPER_API_KEY');
 
     // ESTRATÉGIA 1: Scraping de páginas de clientes (Jina AI)
     if (domain && jinaKey) {

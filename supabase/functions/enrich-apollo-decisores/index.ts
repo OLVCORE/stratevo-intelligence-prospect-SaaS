@@ -68,7 +68,7 @@ serve(async (req) => {
 
     console.log('[ENRICH-APOLLO] Buscando decisores para:', companyName);
 
-    const apolloKey = Deno.env.get('VITE_APOLLO_API_KEY');
+    const apolloKey = Deno.env.get('APOLLO_API_KEY');
     
     if (!apolloKey) {
       throw new Error('APOLLO_API_KEY não configurada');

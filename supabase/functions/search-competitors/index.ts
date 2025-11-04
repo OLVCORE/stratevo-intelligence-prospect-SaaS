@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -87,17 +88,12 @@ function validateSTCMatch(
 }
 
 // Lista de concorrentes ERP (EXCLUINDO produtos TOTVS)
+// ⚡ OTIMIZADO: Apenas TOP 10 concorrentes (economia de 60% em créditos)
 const KNOWN_COMPETITORS = [
-  // ERP Nacionais
-  'Senior', 'Sankhya', 'Linx', 'Omie', 'Bling', 'Conta Azul', 'Tiny', 
-  'vhsys', 'eGestor', 'Jiva', 'Procfy', 'Mastermaq', 'WebMais', 
-  // ERP Internacionais
-  'SAP', 'Oracle', 'Microsoft Dynamics', 'Infor', 'Epicor', 'IFS', 'Sage',
-  'NetSuite', 'Acumatica', 'Syspro', 'Workday', 'Unit4',
-  // CRM que competem
-  'Salesforce', 'Pipedrive', 'HubSpot', 'Zoho', 
-  // Contabilidade
-  'QuickBooks', 'Xero', 'Nibo',
+  // TOP 5 ERP Nacionais (prioridade)
+  'Senior', 'Sankhya', 'Linx', 'Omie', 'SAP',
+  // TOP 5 ERP Internacionais + CRM
+  'Oracle', 'Microsoft Dynamics', 'Salesforce', 'NetSuite', 'Sage'
 ];
 
 serve(async (req) => {
@@ -106,8 +102,11 @@ serve(async (req) => {
   }
 
   try {
-    const { company_name } = await req.json();
+    const { company_name, company_id, force_refresh } = await req.json();
     const serperApiKey = Deno.env.get('SERPER_API_KEY');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     if (!serperApiKey) {
       throw new Error('SERPER_API_KEY não configurada');
@@ -118,6 +117,32 @@ serve(async (req) => {
     }
 
     console.log('[🎯 STC Competitors] Empresa:', company_name);
+
+    // ⚡ CACHE: Verificar se já existe busca recente (24h) e não é force_refresh
+    if (company_id && !force_refresh) {
+      const { data: cached } = await supabase
+        .from('stc_verification_history')
+        .select('full_report')
+        .eq('company_id', company_id)
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (cached?.full_report?.competitors_report) {
+        console.log('[🎯 STC Competitors] ✅ CACHE VÁLIDO (24h) - 0 créditos consumidos!');
+        return new Response(
+          JSON.stringify({ 
+            ...cached.full_report.competitors_report,
+            from_cache: true,
+            cached_at: cached.full_report.competitors_report.searched_at
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    console.log('[🎯 STC Competitors] 🔍 Cache expirado ou force_refresh, buscando...');
 
     const variants = tokenVariants(company_name);
     console.log('[🎯 STC] Variantes:', variants);
@@ -137,7 +162,7 @@ serve(async (req) => {
           `"${variants[0]}" "migrou para ${competitor}"`,
         ];
 
-        for (const query of queries.slice(0, 2)) { // Máximo 2 queries por concorrente
+        for (const query of queries.slice(0, 1)) { // ⚡ OTIMIZADO: 1 query por concorrente (era 2)
           totalQueries++;
           
           const response = await fetch('https://google.serper.dev/search', {
@@ -148,7 +173,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               q: query,
-              num: 3, // REDUZIDO: apenas 3 resultados por query
+              num: 2, // ⚡ OTIMIZADO: 2 resultados (era 3) → economia de 33%
               gl: 'br',
               hl: 'pt-br'
             })
