@@ -114,16 +114,24 @@ export function KeywordsSEOTabEnhanced({
     }
   });
 
-  // 🏢 BUSCA EMPRESAS SIMILARES - TOP 10
+  // 🏢 BUSCA EMPRESAS SIMILARES - TOP 10 (CNAE + NCM + Keywords)
   const similarCompaniesMutation = useMutation({
     mutationFn: async () => {
       if (!companyName) throw new Error('Nome da empresa necessário');
       
-      // Buscar empresas similares no Serper (segmento/setor)
       const serperKey = import.meta.env.VITE_SERPER_API_KEY;
       if (!serperKey) throw new Error('SERPER_API_KEY não configurada');
       
-      const query = `empresas ${companyName.split(' ')[0]} brasil site:.com.br`;
+      // 🔥 PRIORIDADE: 1º CNAE, 2º NCM, 3º Keywords
+      const cnaeCode = cnpj ? await fetchCNAE(cnpj) : null; // TODO: buscar CNAE do CNPJ
+      
+      // Query inteligente: CNAE (setor) + nome empresa + Brasil + .com.br (corporativo)
+      const sector = companyName.split(' ').slice(0, 2).join(' '); // Primeiras 2 palavras
+      const query = cnaeCode 
+        ? `empresas setor CNAE ${cnaeCode} brasil site:.com.br -vagas -emprego -wikipedia -youtube`
+        : `empresas setor "${sector}" brasil site:.com.br -vagas -emprego -wikipedia -youtube`;
+      
+      console.log('[SIMILAR] 🔍 Query:', query);
       
       const response = await fetch('https://google.serper.dev/search', {
         method: 'POST',
@@ -137,12 +145,36 @@ export function KeywordsSEOTabEnhanced({
       if (!response.ok) throw new Error('Erro ao buscar empresas similares');
       
       const data = await response.json();
-      const results = (data.organic || []).slice(0, 10).map((r: any) => ({
-        title: r.title,
-        url: r.link,
-        snippet: r.snippet,
-        domain: new URL(r.link).hostname.replace('www.', ''),
-      }));
+      
+      // Filtrar APENAS empresas corporativas (não blogs, notícias, etc)
+      const results = (data.organic || [])
+        .filter((r: any) => {
+          const url = r.link.toLowerCase();
+          const title = r.title.toLowerCase();
+          
+          // ❌ REJEITAR backlinks e sites irrelevantes
+          const isBacklink = 
+            url.includes('vagas') || url.includes('emprego') ||
+            url.includes('wikipedia') || url.includes('youtube') ||
+            url.includes('linkedin.com/posts') || url.includes('facebook.com/') ||
+            url.includes('instagram.com/p/') || url.includes('twitter.com/') ||
+            url.includes('glassdoor') || url.includes('indeed') ||
+            url.includes('catho') || url.includes('infojobs') ||
+            url.includes('blog.') || url.includes('/blog/') ||
+            url.includes('noticias') || url.includes('revista') ||
+            title.includes('vaga') || title.includes('contrata');
+          
+          return !isBacklink;
+        })
+        .slice(0, 10)
+        .map((r: any) => ({
+          title: r.title,
+          url: r.link,
+          snippet: r.snippet,
+          domain: new URL(r.link).hostname.replace('www.', ''),
+        }));
+      
+      console.log('[SIMILAR] ✅ Filtrado:', results.length, 'empresas corporativas');
       
       return results;
     },
@@ -179,6 +211,8 @@ export function KeywordsSEOTabEnhanced({
       return await searchOfficialWebsite(companyName);
     },
     onMutate: () => {
+      // 🧹 LIMPAR tabela de empresas similares
+      setSimilarCompaniesOptions([]);
       onLoading?.(true);
       toast({
         title: '🔍 Buscando TOP 10 websites...',
@@ -212,6 +246,8 @@ export function KeywordsSEOTabEnhanced({
       return await discoverFullDigitalPresence(companyName, cnpj);
     },
     onMutate: () => {
+      // 🧹 LIMPAR tabela de empresas similares
+      setSimilarCompaniesOptions([]);
       onLoading?.(true);
       toast({
         title: '🔍 Descobrindo Presença Digital...',
@@ -336,6 +372,20 @@ export function KeywordsSEOTabEnhanced({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // 🔍 Helper: Buscar CNAE do CNPJ
+  const fetchCNAE = async (cnpj: string): Promise<string | null> => {
+    try {
+      const cleanCNPJ = cnpj.replace(/\D/g, '');
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCNPJ}`);
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data.cnae_fiscal || null;
+    } catch (error) {
+      console.warn('[CNAE] ⚠️ Erro ao buscar:', error);
+      return null;
+    }
+  };
+
   // 💾 SALVAR RELATÓRIO (REALMENTE SALVA!)
   const handleSaveReport = () => {
     const reportData = {
@@ -357,14 +407,26 @@ export function KeywordsSEOTabEnhanced({
   };
 
   return (
-    <div className="space-y-4">
-      {/* 🎯 NAVEGAÇÃO COMPLETA - VOLTAR/HOME/TOPO/SALVAR/EDITAR */}
+    <div className="space-y-4 relative">
+      {/* 🎯 BOTÃO FLUTUANTE - VOLTAR AO TOPO (fixo como WhatsApp) */}
+      {(digitalPresence || seoData || intelligenceReport) && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-50 p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-110 animate-bounce hover:animate-none"
+          title="Voltar ao topo"
+          aria-label="Voltar ao topo"
+        >
+          <ArrowUp className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* 🎯 NAVEGAÇÃO COMPLETA - VOLTAR/HOME/SALVAR/EDITAR */}
       {(digitalPresence || seoData || intelligenceReport) && (
         <div className="flex items-center justify-between gap-2 p-3 bg-gradient-to-r from-slate-100 to-blue-50 dark:from-slate-900 dark:to-blue-950 rounded-lg border-2 border-slate-300 dark:border-slate-700 shadow-md">
           {/* GRUPO ESQUERDO: Navegação */}
           <div className="flex gap-2">
             <Button 
-              onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); }} 
+              onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); setSimilarCompaniesOptions([]); }} 
               variant="outline" 
               size="sm" 
               className="gap-2 hover:bg-slate-200 dark:hover:bg-slate-800"
@@ -372,21 +434,12 @@ export function KeywordsSEOTabEnhanced({
               <ArrowLeft className="w-4 h-4" /> Voltar
             </Button>
             <Button 
-              onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); }} 
+              onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); setSimilarCompaniesOptions([]); }} 
               variant="ghost" 
               size="sm" 
               className="gap-2"
             >
               <Home className="w-4 h-4" /> Início
-            </Button>
-            <Button 
-              onClick={scrollToTop}
-              variant="outline" 
-              size="sm" 
-              className="gap-2 hover:bg-blue-100 dark:hover:bg-blue-900"
-              title="Voltar ao topo"
-            >
-              <ArrowUp className="w-4 h-4" /> Topo
             </Button>
           </div>
 
@@ -407,7 +460,7 @@ export function KeywordsSEOTabEnhanced({
               </Button>
             )}
 
-            {/* 💾 BOTÃO SALVAR - ELEGANTE E PULSANTE */}
+            {/* 💾 BOTÃO SALVAR - ELEGANTE E PULSANTE (REPOSICIONADO) */}
             <Button
               onClick={handleSaveReport}
               disabled={!seoData && !digitalPresence && !intelligenceReport}
@@ -590,7 +643,7 @@ export function KeywordsSEOTabEnhanced({
         {isEditingWebsite && (
           <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg">
             <label className="block text-sm font-bold text-yellow-900 dark:text-yellow-100 mb-2">
-              Editar Website:
+              ✏️ Editar Website:
             </label>
             <div className="flex gap-2">
               <input
@@ -598,7 +651,7 @@ export function KeywordsSEOTabEnhanced({
                 value={editedWebsite}
                 onChange={(e) => setEditedWebsite(e.target.value)}
                 placeholder="exemplo.com.br"
-                className="flex-1 px-3 py-2 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="flex-1 px-3 py-2 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold"
               />
               <Button
                 onClick={() => {
@@ -606,16 +659,22 @@ export function KeywordsSEOTabEnhanced({
                   if (cleanDomain) {
                     setDiscoveredDomain(cleanDomain);
                     setIsEditingWebsite(false);
+                    
+                    // 🚨 LIMPAR análises anteriores para forçar re-análise
+                    setSeoData(null);
+                    setIntelligenceReport(null);
+                    
                     toast({
-                      title: '✅ Website atualizado!',
-                      description: `Novo domain: ${cleanDomain}`,
+                      title: '✅ Website atualizado com sucesso!',
+                      description: `🌐 Novo website: ${cleanDomain}\n🔄 Análises anteriores foram limpas.\n📊 Execute "Análise SEO Completa" e "Análise Inteligente (IA)" novamente com o novo website.`,
+                      duration: 8000,
                     });
                   }
                 }}
                 disabled={!editedWebsite}
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-green-600 hover:bg-green-700 font-bold"
               >
-                <Save className="w-4 h-4 mr-2" /> Salvar
+                <Save className="w-4 h-4 mr-2" /> Salvar e Analisar
               </Button>
               <Button
                 onClick={() => setIsEditingWebsite(false)}
@@ -624,6 +683,22 @@ export function KeywordsSEOTabEnhanced({
                 Cancelar
               </Button>
             </div>
+            <p className="text-xs text-yellow-800 dark:text-yellow-200 mt-2">
+              💡 Após salvar, execute novamente as análises SEO e IA para usar o novo website.
+            </p>
+          </div>
+        )}
+        
+        {/* 📋 WEBSITE ATUAL EM USO */}
+        {(discoveredDomain || domain) && !isEditingWebsite && (
+          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600 rounded-lg">
+            <p className="text-sm font-bold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+              <Globe className="w-4 h-4" />
+              🌐 Website em uso para análises:
+            </p>
+            <p className="text-base font-black text-blue-700 dark:text-blue-300 mt-1">
+              {discoveredDomain || domain}
+            </p>
           </div>
         )}
 
@@ -650,6 +725,10 @@ export function KeywordsSEOTabEnhanced({
                       addresses: [],
                     });
                     setWebsiteOptions([]);
+                    
+                    // 🧹 LIMPAR tabela de empresas similares
+                    setSimilarCompaniesOptions([]);
+                    
                     toast({
                       title: '✅ Website selecionado!',
                       description: option.title,
