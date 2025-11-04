@@ -527,44 +527,44 @@ export function KeywordsSEOTabEnhanced({
                   💎 Inteligência Competitiva Dupla
                 </h4>
                 <div className="grid grid-cols-4 gap-6">
-                  {/* TOTAL ANALISADAS - ALTO CONTRASTE! */}
-                  <div className="p-6 bg-white dark:bg-slate-950 rounded-2xl border-4 border-slate-500 dark:border-slate-600 shadow-xl hover:shadow-2xl transition-all hover:scale-105">
-                    <div className="flex items-center gap-2 mb-3">
-                      <BarChart3 className="w-7 h-7 text-blue-700 dark:text-blue-400" />
-                      <span className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">Total</span>
+                  {/* TOTAL - COMPACTO + ALTO CONTRASTE */}
+                  <div className="p-4 bg-white dark:bg-slate-950 rounded-xl border-3 border-slate-500 dark:border-slate-500 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <BarChart3 className="w-5 h-5 text-blue-700 dark:text-blue-400" />
+                      <span className="text-xs font-black text-slate-900 dark:text-white uppercase">Total</span>
                     </div>
-                    <p className="text-6xl font-black text-slate-900 dark:text-white mb-2 leading-none">{competitiveAnalysis.summary.totalAnalyzed}</p>
-                    <p className="text-base text-slate-700 dark:text-slate-300 font-bold">analisadas</p>
+                    <p className="text-4xl font-black text-slate-900 dark:text-white mb-1">{competitiveAnalysis.summary.totalAnalyzed}</p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200 font-bold">analisadas</p>
                   </div>
                   
-                  {/* VENDA TOTVS - VERDE FORTE */}
-                  <div className="p-6 bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900 dark:to-green-950 rounded-2xl border-4 border-green-600 dark:border-green-500 shadow-xl hover:shadow-2xl transition-all hover:scale-105">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Target className="w-7 h-7 text-green-900 dark:text-green-300" />
-                      <span className="text-sm font-black text-green-900 dark:text-green-100 uppercase tracking-wider">Venda</span>
+                  {/* VENDA - COMPACTO + VERDE FORTE */}
+                  <div className="p-4 bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900 dark:to-green-950 rounded-xl border-3 border-green-600 dark:border-green-500 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-5 h-5 text-green-900 dark:text-green-200" />
+                      <span className="text-xs font-black text-green-900 dark:text-white uppercase">Venda</span>
                     </div>
-                    <p className="text-6xl font-black text-green-800 dark:text-green-300 mb-2 leading-none">{competitiveAnalysis.summary.vendaTotvsCount}</p>
-                    <p className="text-base text-green-900 dark:text-green-200 font-bold">TOTVS</p>
+                    <p className="text-4xl font-black text-green-900 dark:text-green-200 mb-1">{competitiveAnalysis.summary.vendaTotvsCount}</p>
+                    <p className="text-sm text-green-900 dark:text-green-100 font-bold">TOTVS</p>
                   </div>
                   
-                  {/* PARCERIA - AZUL FORTE */}
-                  <div className="p-6 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900 dark:to-blue-950 rounded-2xl border-4 border-blue-600 dark:border-blue-500 shadow-xl hover:shadow-2xl transition-all hover:scale-105">
-                    <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp className="w-7 h-7 text-blue-900 dark:text-blue-300" />
-                      <span className="text-sm font-black text-blue-900 dark:text-blue-100 uppercase tracking-wider">Parceria</span>
+                  {/* PARCERIA - COMPACTO + AZUL FORTE */}
+                  <div className="p-4 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900 dark:to-blue-950 rounded-xl border-3 border-blue-600 dark:border-blue-500 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-5 h-5 text-blue-900 dark:text-blue-200" />
+                      <span className="text-xs font-black text-blue-900 dark:text-white uppercase">Parceria</span>
                     </div>
-                    <p className="text-6xl font-black text-blue-800 dark:text-blue-300 mb-2 leading-none">{competitiveAnalysis.summary.parceriaCount}</p>
-                    <p className="text-base text-blue-900 dark:text-blue-200 font-bold">oportunidades</p>
+                    <p className="text-4xl font-black text-blue-900 dark:text-blue-200 mb-1">{competitiveAnalysis.summary.parceriaCount}</p>
+                    <p className="text-sm text-blue-900 dark:text-blue-100 font-bold">oportunidades</p>
                   </div>
                   
-                  {/* REVENUE - ROXO FORTE */}
-                  <div className="p-6 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900 dark:to-purple-950 rounded-2xl border-4 border-purple-600 dark:border-purple-500 shadow-xl hover:shadow-2xl transition-all hover:scale-105">
-                    <div className="flex items-center gap-2 mb-3">
-                      <BarChart3 className="w-7 h-7 text-purple-900 dark:text-purple-300" />
-                      <span className="text-sm font-black text-purple-900 dark:text-purple-100 uppercase tracking-wider">Revenue</span>
+                  {/* REVENUE - COMPACTO + ROXO FORTE */}
+                  <div className="p-4 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900 dark:to-purple-950 rounded-xl border-3 border-purple-600 dark:border-purple-500 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <BarChart3 className="w-5 h-5 text-purple-900 dark:text-purple-200" />
+                      <span className="text-xs font-black text-purple-900 dark:text-white uppercase">Revenue</span>
                     </div>
-                    <p className="text-3xl font-black text-purple-800 dark:text-purple-300 mb-2 leading-tight">{competitiveAnalysis.summary.estimatedRevenue}</p>
-                    <p className="text-base text-purple-900 dark:text-purple-200 font-bold">ARR potencial</p>
+                    <p className="text-2xl font-black text-purple-900 dark:text-purple-200 mb-1">{competitiveAnalysis.summary.estimatedRevenue}</p>
+                    <p className="text-sm text-purple-900 dark:text-purple-100 font-bold">ARR potencial</p>
                   </div>
                 </div>
               </Card>
