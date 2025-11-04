@@ -39,9 +39,10 @@ export function KeywordsSEOTabEnhanced({
   // 🔥 Análise SEO completa
   const seoMutation = useMutation({
     mutationFn: async () => {
-      if (!domain) throw new Error('Domain não disponível');
+      const activeDomain = discoveredDomain || domain;
+      if (!activeDomain) throw new Error('Domain não disponível');
       
-      const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/^www\./, '');
+      const cleanDomain = activeDomain.replace(/^https?:\/\//, '').replace(/^www\./, '');
       return await performFullSEOAnalysis(cleanDomain, companyName || '');
     },
     onMutate: () => {
