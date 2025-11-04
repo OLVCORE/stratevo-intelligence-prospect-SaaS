@@ -14,9 +14,19 @@ interface KeywordsSEOTabProps {
   companyName?: string;
   domain?: string;
   savedData?: any;
+  onDataChange?: (data: any) => void;
+  onLoading?: (loading: boolean) => void;
+  onError?: (error: string) => void;
 }
 
-export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: KeywordsSEOTabProps) {
+export function KeywordsSEOTabEnhanced({ 
+  companyName, 
+  domain, 
+  savedData,
+  onDataChange,
+  onLoading,
+  onError
+}: KeywordsSEOTabProps) {
   const { toast } = useToast();
   const [seoData, setSeoData] = useState<any>(savedData || null);
   const [competitiveAnalysis, setCompetitiveAnalysis] = useState<any>(null);
@@ -30,6 +40,7 @@ export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: Keywo
       return await performFullSEOAnalysis(cleanDomain, companyName || '');
     },
     onMutate: () => {
+      onLoading?.(true); // 🟡 Notifica parent: loading
       toast({
         title: '🔍 Analisando SEO...',
         description: 'Extraindo keywords e buscando empresas similares',
@@ -43,11 +54,19 @@ export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: Keywo
         const analysis = analyzeSimilarCompanies(data.similarCompanies);
         setCompetitiveAnalysis(analysis);
         
+        // 🚨 Notifica parent: dados prontos para salvar
+        onDataChange?.({ seoData: data, competitiveAnalysis: analysis });
+        onLoading?.(false);
+        
         toast({
           title: '✅ Análise SEO + Inteligência Competitiva concluída!',
           description: `${data.profile.keywords.length} keywords | ${analysis.summary.vendaTotvsCount} oportunidades venda | ${analysis.summary.parceriaCount} oportunidades parceria`,
         });
       } else {
+        // 🚨 Notifica parent: dados prontos para salvar
+        onDataChange?.({ seoData: data, competitiveAnalysis: null });
+        onLoading?.(false);
+        
         toast({
           title: '✅ Análise SEO concluída!',
           description: `${data.profile.keywords.length} keywords | ${data.similarCompanies.length} empresas similares`,
@@ -55,6 +74,8 @@ export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: Keywo
       }
     },
     onError: (error) => {
+      onError?.((error as Error).message); // 🔴 Notifica parent: erro
+      onLoading?.(false);
       toast({
         title: '❌ Erro na análise SEO',
         description: (error as Error).message,
