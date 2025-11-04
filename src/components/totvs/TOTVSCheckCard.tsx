@@ -259,12 +259,15 @@ export default function TOTVSCheckCard({
     return highlighted;
   };
 
+  // 🔥 CRITICAL: Desabilitar consulta se já tem relatório salvo (evita consumo de créditos)
+  const shouldFetchLive = enabled && !latestReport?.full_report;
+
   const { data: liveData, isLoading: isLoadingLive, refetch } = useSimpleTOTVSCheck({
     companyId,
     companyName,
     cnpj,
     domain,
-    enabled,
+    enabled: shouldFetchLive,
   });
 
   // Usar relatório salvo como fonte principal se existir
@@ -277,6 +280,24 @@ export default function TOTVSCheckCard({
   const hasSimilarSaved = Array.isArray(latestReport?.full_report?.similar_companies_report) && (latestReport?.full_report?.similar_companies_report?.length || 0) > 0;
   const hasKeywordsSaved = !!latestReport?.full_report?.keywords_seo_report;
   const hasDecisorsSaved = !!latestReport?.full_report?.decisors_report;
+
+  // 🔥 CRÍTICO: Carregar dados salvos no tabDataRef quando latestReport existir
+  useEffect(() => {
+    if (latestReport?.full_report) {
+      const report = latestReport.full_report;
+      if (report.keywords_report) tabDataRef.current.keywords = report.keywords_report;
+      if (report.detection_report) tabDataRef.current.detection = report.detection_report;
+      if (report.competitors_report) tabDataRef.current.competitors = report.competitors_report;
+      if (report.similar_companies_report) tabDataRef.current.similar = report.similar_companies_report;
+      if (report.clients_report) tabDataRef.current.clients = report.clients_report;
+      if (report.decisors_report) tabDataRef.current.decisors = report.decisors_report;
+      if (report.analysis_report) tabDataRef.current.analysis = report.analysis_report;
+      if (report.products_report) tabDataRef.current.products = report.products_report;
+      if (report.executive_report) tabDataRef.current.executive = report.executive_report;
+      
+      console.log('[TOTVS] ✅ Dados salvos carregados em tabDataRef');
+    }
+  }, [latestReport]);
 
   // Buscar dados de empresas similares da tabela similar_companies
   const { data: similarCompaniesData } = useQuery({
@@ -298,6 +319,16 @@ export default function TOTVSCheckCard({
   }, [data, onResult]);
 
   const handleVerify = () => {
+    // 🚨 SE JÁ TEM RELATÓRIO SALVO, PERGUNTAR SE QUER REPROCESSAR
+    if (hasSaved) {
+      const confirmar = window.confirm(
+        '⚠️ JÁ EXISTE UM RELATÓRIO SALVO!\n\n' +
+        'Ao verificar novamente, você consumirá créditos.\n\n' +
+        'Deseja realmente reprocessar a análise?'
+      );
+      if (!confirmar) return;
+    }
+    
     setEnabled(true);
     refetch();
   };
@@ -364,6 +395,26 @@ export default function TOTVSCheckCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 💾 INDICADOR DE RELATÓRIO SALVO */}
+      {hasSaved && (
+        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border-2 border-green-500 dark:border-green-600 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Save className="w-5 h-5 text-green-600 dark:text-green-400" />
+            <div>
+              <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                ✅ Relatório Salvo no Histórico
+              </p>
+              <p className="text-xs text-green-700 dark:text-green-300">
+                {latestReport?.created_at ? `Salvo em: ${new Date(latestReport.created_at).toLocaleString('pt-BR')}` : 'Dados disponíveis'}
+              </p>
+            </div>
+          </div>
+          <Badge className="bg-green-600 text-white">
+            {Object.keys(latestReport?.full_report || {}).length} abas salvas
+          </Badge>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-9 mb-6 h-auto">
