@@ -97,6 +97,31 @@ export default function TOTVSCheckCard({
   
   // Track de dados por aba (para salvar)
   const tabDataRef = useRef<Record<string, any>>({});
+  
+  // 🎨 SISTEMA DE SEMÁFOROS (4 cores)
+  const [tabsStatus, setTabsStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({
+    keywords: 'idle',
+    detection: 'idle',
+    competitors: 'idle',
+    similar: 'idle',
+    clients: 'idle',
+    decisors: 'idle',
+    analysis: 'idle',
+    products: 'idle',
+    executive: 'idle',
+  });
+  
+  // Render do dot de status
+  const renderStatusDot = (tabId: string) => {
+    const status = tabsStatus[tabId];
+    const colors = {
+      idle: 'bg-gray-500',
+      loading: 'bg-yellow-500 animate-pulse',
+      success: 'bg-green-500',
+      error: 'bg-red-500',
+    };
+    return <Circle className={`w-2 h-2 ${colors[status]} fill-current`} />;
+  };
 
   const copyToClipboard = async (text: string, id: string, type: 'url' | 'terms') => {
     try {
@@ -341,53 +366,83 @@ export default function TOTVSCheckCard({
       </AlertDialog>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-8 mb-6 h-auto">
-          <TabsTrigger value="executive" className="flex items-center gap-2 text-xs">
-            <LayoutDashboard className="w-4 h-4" />
-            Executive
-            {hasSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+        <TabsList className="grid w-full grid-cols-9 mb-6 h-auto">
+          {/* 🔄 NOVA ORDEM: Keywords PRIMEIRO, Executive ÚLTIMO */}
+          <TabsTrigger value="keywords" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <Globe className="w-3 h-3" />
+              <span className="text-[10px]">Keywords</span>
+            </div>
+            {renderStatusDot('keywords')}
           </TabsTrigger>
-          <TabsTrigger value="detection" className="flex items-center gap-2 text-xs">
-            <Search className="w-4 h-4" />
-            TOTVS
-            {hasSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="detection" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <Search className="w-3 h-3" />
+              <span className="text-[10px]">TOTVS</span>
+            </div>
+            {renderStatusDot('detection')}
           </TabsTrigger>
-          <TabsTrigger value="competitors" className="flex items-center gap-2 text-xs">
-            <Target className="w-4 h-4" />
-            Competitors
-            {hasCompetitorsSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="competitors" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <Target className="w-3 h-3" />
+              <span className="text-[10px]">Competitors</span>
+            </div>
+            {renderStatusDot('competitors')}
           </TabsTrigger>
-          <TabsTrigger value="similar" className="flex items-center gap-2 text-xs">
-            <Building2 className="w-4 h-4" />
-            Similar
-            {hasSimilarSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="similar" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              <span className="text-[10px]">Similar</span>
+            </div>
+            {renderStatusDot('similar')}
           </TabsTrigger>
-          <TabsTrigger value="clients" className="flex items-center gap-2 text-xs">
-            <Users className="w-4 h-4" />
-            Clients
-            {hasSimilarSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="clients" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              <span className="text-[10px]">Clients</span>
+            </div>
+            {renderStatusDot('clients')}
           </TabsTrigger>
-          <TabsTrigger value="analysis" className="flex items-center gap-2 text-xs">
-            <BarChart3 className="w-4 h-4" />
-            Analysis 360°
-            {(hasSaved || hasSimilarSaved) && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="decisors" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <UserCircle className="w-3 h-3" />
+              <span className="text-[10px]">Decisores</span>
+            </div>
+            {renderStatusDot('decisors')}
           </TabsTrigger>
-          <TabsTrigger value="products" className="flex items-center gap-2 text-xs">
-            <Package className="w-4 h-4" />
-            Products
-            {hasSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="analysis" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <BarChart3 className="w-3 h-3" />
+              <span className="text-[10px]">360°</span>
+            </div>
+            {renderStatusDot('analysis')}
           </TabsTrigger>
-          <TabsTrigger value="keywords" className="flex items-center gap-2 text-xs">
-            <Globe className="w-4 h-4" />
-            Keywords
-            {hasKeywordsSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="products" className="flex flex-col items-center gap-1 text-xs py-2">
+            <div className="flex items-center gap-1">
+              <Package className="w-3 h-3" />
+              <span className="text-[10px]">Products</span>
+            </div>
+            {renderStatusDot('products')}
           </TabsTrigger>
-          <TabsTrigger value="decisors" className="flex items-center gap-2 text-xs">
-            <UserCircle className="w-4 h-4" />
-            Decisores
-            {hasDecisorsSaved && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-green-500" aria-label="salvo" />}
+          <TabsTrigger value="executive" className="flex flex-col items-center gap-1 text-xs py-2 bg-primary/10 font-bold">
+            <div className="flex items-center gap-1">
+              <LayoutDashboard className="w-3 h-3" />
+              <span className="text-[10px]">Executive</span>
+            </div>
+            {renderStatusDot('executive')}
           </TabsTrigger>
         </TabsList>
+        
+        {/* LEGENDA DOS SEMÁFOROS */}
+        <div className="mb-4 flex items-center justify-between text-xs bg-muted/30 p-2 rounded-lg">
+          <span className="font-semibold">{companyName || 'Empresa não especificada'}</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1"><Circle className="w-2 h-2 fill-gray-500 text-gray-500" /> Não iniciado</div>
+            <div className="flex items-center gap-1"><Circle className="w-2 h-2 fill-yellow-500 text-yellow-500 animate-pulse" /> Processando</div>
+            <div className="flex items-center gap-1"><Circle className="w-2 h-2 fill-green-500 text-green-500" /> Concluído</div>
+            <div className="flex items-center gap-1"><Circle className="w-2 h-2 fill-red-500 text-red-500" /> Erro</div>
+          </div>
+        </div>
 
         {/* ABA 1: EXECUTIVE SUMMARY (NOVA) */}
         <TabsContent value="executive" className="mt-0 overflow-y-auto">
