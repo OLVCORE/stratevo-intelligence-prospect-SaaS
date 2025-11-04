@@ -1,9 +1,7 @@
 // 📧 HUNTER.IO ENHANCED - EMAIL FINDING & VERIFICATION
 // Complementa PhantomBuster para 95%+ de precisão em emails
 
-import { createClient } from '@/integrations/supabase/client';
-
-const supabase = createClient();
+import { supabase } from '@/integrations/supabase/client';
 
 export interface HunterEmailResult {
   email: string;

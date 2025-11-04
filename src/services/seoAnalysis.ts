@@ -1,8 +1,6 @@
 // 🔍 ANÁLISE SEO COMPLETA - SEMrush Approach (Gratuito com Jina AI + Serper)
 
-import { createClient } from '@/integrations/supabase/client';
-
-const supabase = createClient();
+// Não precisa de Supabase - funciona com APIs diretas (Jina AI + Serper)
 
 export interface KeywordData {
   keyword: string;

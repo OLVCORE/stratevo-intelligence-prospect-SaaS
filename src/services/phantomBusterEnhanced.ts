@@ -1,9 +1,7 @@
 // 🚀 PHANTOMBUSTER ENHANCED - INTEGRAÇÃO COMPLETA
 // Features: Lead Generation, LinkedIn Scraping, Engagement Automation, Data Extraction
 
-import { createClient } from '@/integrations/supabase/client';
-
-const supabase = createClient();
+import { supabase } from '@/integrations/supabase/client';
 
 export interface PhantomBusterAgent {
   id: string;

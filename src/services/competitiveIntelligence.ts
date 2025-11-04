@@ -4,6 +4,8 @@
 
 import type { KeywordData, SimilarCompanyBySEO } from './seoAnalysis';
 
+// Não precisa de Supabase - funciona com dados recebidos
+
 export interface CompetitorTechnology {
   name: string;
   category: 'ERP' | 'CRM' | 'BI' | 'Cloud' | 'BPM' | 'eCommerce' | 'Marketing' | 'Outro';
