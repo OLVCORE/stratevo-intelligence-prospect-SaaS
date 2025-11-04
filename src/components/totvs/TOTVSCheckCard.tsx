@@ -1,10 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useSimpleTOTVSCheck } from '@/hooks/useSimpleTOTVSCheck';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SimilarCompaniesTab } from '@/components/intelligence/SimilarCompaniesTab';
 import { Analysis360Tab } from '@/components/intelligence/Analysis360Tab';
@@ -14,6 +24,7 @@ import { ClientDiscoveryTab } from '@/components/icp/tabs/ClientDiscoveryTab';
 import { RecommendedProductsTab } from '@/components/icp/tabs/RecommendedProductsTab';
 import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
 import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
+import { TabSaveWrapper } from './TabSaveWrapper';
 import { toast } from 'sonner';
 import {
   RefreshCw,
@@ -62,6 +73,28 @@ export default function TOTVSCheckCard({
   const [filterMode, setFilterMode] = useState<'all' | 'triple'>('all');
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [copiedTerms, setCopiedTerms] = useState<string | null>(null);
+  
+  // 🚨 SISTEMA DE SALVAMENTO POR ABA
+  const [activeTab, setActiveTab] = useState('executive');
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  const [showUnsavedAlert, setShowUnsavedAlert] = useState(false);
+  const queryClient = useQueryClient();
+  
+  // Track de mudanças não salvas por aba
+  const [unsavedChanges, setUnsavedChanges] = useState<Record<string, boolean>>({
+    executive: false,
+    detection: false,
+    competitors: false,
+    similar: false,
+    clients: false,
+    analysis: false,
+    products: false,
+    keywords: false,
+    decisors: false,
+  });
+  
+  // Track de dados por aba (para salvar)
+  const tabDataRef = useRef<Record<string, any>>({});
 
   const copyToClipboard = async (text: string, id: string, type: 'url' | 'terms') => {
     try {
@@ -76,6 +109,93 @@ export default function TOTVSCheckCard({
       toast.success(type === 'url' ? 'URL copiada!' : 'Termos copiados!');
     } catch (err) {
       toast.error('Erro ao copiar');
+    }
+  };
+
+  // 🚨 FUNÇÃO DE SALVAR ABA
+  const saveTab = async (tabId: string) => {
+    if (!companyId) {
+      toast.error('❌ Empresa não identificada');
+      return;
+    }
+
+    const tabData = tabDataRef.current[tabId];
+    if (!tabData) {
+      toast.error('❌ Nenhum dado para salvar');
+      return;
+    }
+
+    try {
+      // Buscar relatório existente
+      const { data: existing } = await supabase
+        .from('stc_verification_history')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const fullReport = existing?.full_report || {};
+      fullReport[`${tabId}_report`] = tabData;
+
+      // Salvar ou atualizar
+      if (existing) {
+        await supabase
+          .from('stc_verification_history')
+          .update({ full_report: fullReport, updated_at: new Date().toISOString() })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('stc_verification_history')
+          .insert({
+            company_id: companyId,
+            company_name: companyName,
+            full_report: fullReport,
+          });
+      }
+
+      // Marcar como salvo
+      setUnsavedChanges(prev => ({ ...prev, [tabId]: false }));
+      queryClient.invalidateQueries({ queryKey: ['stc-history', companyId] });
+      
+      return true;
+    } catch (error) {
+      console.error('[SAVE TAB] Erro:', error);
+      throw error;
+    }
+  };
+
+  // 🚨 HANDLER DE TROCAR ABA (com verificação)
+  const handleTabChange = (newTab: string) => {
+    if (unsavedChanges[activeTab]) {
+      setPendingTab(newTab);
+      setShowUnsavedAlert(true);
+    } else {
+      setActiveTab(newTab);
+    }
+  };
+
+  // 🚨 CONFIRMAR TROCA SEM SALVAR
+  const confirmTabChange = () => {
+    if (pendingTab) {
+      setUnsavedChanges(prev => ({ ...prev, [activeTab]: false }));
+      setActiveTab(pendingTab);
+      setPendingTab(null);
+    }
+    setShowUnsavedAlert(false);
+  };
+
+  // 🚨 CANCELAR TROCA (SALVAR ANTES)
+  const cancelTabChange = async () => {
+    setShowUnsavedAlert(false);
+    try {
+      await saveTab(activeTab);
+      if (pendingTab) {
+        setActiveTab(pendingTab);
+        setPendingTab(null);
+      }
+    } catch (error) {
+      toast.error('❌ Erro ao salvar. Tente novamente.');
     }
   };
 
