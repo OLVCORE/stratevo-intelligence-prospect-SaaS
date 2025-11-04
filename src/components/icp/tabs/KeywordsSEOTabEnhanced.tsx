@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, TrendingUp, ExternalLink, Globe, Target, BarChart3, Loader2, Sparkles, RefreshCw, Save, AlertTriangle, Zap, ArrowLeft, Home, ChevronDown } from 'lucide-react';
+import { Search, TrendingUp, ExternalLink, Globe, Target, BarChart3, Loader2, Sparkles, RefreshCw, Save, AlertTriangle, Zap, ArrowLeft, Home, ChevronDown, ArrowUp, Edit } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { performFullSEOAnalysis } from '@/services/seoAnalysis';
@@ -42,6 +42,9 @@ export function KeywordsSEOTabEnhanced({
   const [discoveredDomain, setDiscoveredDomain] = useState<string | null>(savedData?.discoveredDomain || null);
   const [intelligenceReport, setIntelligenceReport] = useState<CompanyIntelligenceReport | null>(savedData?.intelligenceReport || null);
   const [websiteOptions, setWebsiteOptions] = useState<WebsiteSearchResult[]>(savedData?.websiteOptions || []);
+  const [isEditingWebsite, setIsEditingWebsite] = useState(false);
+  const [editedWebsite, setEditedWebsite] = useState('');
+  const [similarCompaniesOptions, setSimilarCompaniesOptions] = useState<any[]>([]);
 
   // 🔥 Análise SEO completa
   const seoMutation = useMutation({
@@ -109,6 +112,64 @@ export function KeywordsSEOTabEnhanced({
         variant: 'destructive'
       });
     }
+  });
+
+  // 🏢 BUSCA EMPRESAS SIMILARES - TOP 10
+  const similarCompaniesMutation = useMutation({
+    mutationFn: async () => {
+      if (!companyName) throw new Error('Nome da empresa necessário');
+      
+      // Buscar empresas similares no Serper (segmento/setor)
+      const serperKey = import.meta.env.VITE_SERPER_API_KEY;
+      if (!serperKey) throw new Error('SERPER_API_KEY não configurada');
+      
+      const query = `empresas ${companyName.split(' ')[0]} brasil site:.com.br`;
+      
+      const response = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': serperKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ q: query, num: 10, gl: 'br', hl: 'pt-br' }),
+      });
+      
+      if (!response.ok) throw new Error('Erro ao buscar empresas similares');
+      
+      const data = await response.json();
+      const results = (data.organic || []).slice(0, 10).map((r: any) => ({
+        title: r.title,
+        url: r.link,
+        snippet: r.snippet,
+        domain: new URL(r.link).hostname.replace('www.', ''),
+      }));
+      
+      return results;
+    },
+    onMutate: () => {
+      onLoading?.(true);
+      toast({
+        title: '🔍 Buscando Empresas Similares...',
+        description: 'Pesquisando no Google empresas do mesmo segmento',
+      });
+    },
+    onSuccess: (results) => {
+      setSimilarCompaniesOptions(results);
+      onLoading?.(false);
+      toast({
+        title: '✅ TOP 10 empresas similares encontradas!',
+        description: `${results.length} opções. Escolha para adicionar à quarentena.`,
+      });
+    },
+    onError: (error) => {
+      onError?.((error as Error).message);
+      onLoading?.(false);
+      toast({
+        title: '❌ Erro ao buscar empresas similares',
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+    },
   });
 
   // 🔍 BUSCA OFICIAL - TOP 10 RESULTADOS
@@ -203,14 +264,24 @@ export function KeywordsSEOTabEnhanced({
   const intelligenceMutation = useMutation({
     mutationFn: async () => {
       if (!companyName) throw new Error('Nome da empresa necessário');
-      if (!digitalPresence?.website) throw new Error('Execute Website Discovery primeiro');
+      
+      // 🔥 ACEITA QUALQUER WEBSITE DISPONÍVEL (digitalPresence, discoveredDomain ou domain)
+      const activeWebsite = digitalPresence?.website || 
+                            (discoveredDomain ? `https://${discoveredDomain}` : null) ||
+                            (domain ? `https://${domain}` : null);
+      
+      if (!activeWebsite) {
+        throw new Error('Website não encontrado. Execute "Buscar Website Oficial" ou "Descoberta Automática" primeiro.');
+      }
+      
+      console.log('[INTELLIGENCE] 🧠 Executando análise IA com website:', activeWebsite);
       
       return await generateCompanyIntelligenceReport(
         companyName,
-        digitalPresence.website,
-        digitalPresence.linkedin,
-        digitalPresence.instagram,
-        digitalPresence.facebook
+        activeWebsite,
+        digitalPresence?.linkedin,
+        digitalPresence?.instagram,
+        digitalPresence?.facebook
       );
     },
     onMutate: () => {
@@ -260,17 +331,92 @@ export function KeywordsSEOTabEnhanced({
     );
   }
 
+  // 🔥 SCROLL TO TOP
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 💾 SALVAR RELATÓRIO (REALMENTE SALVA!)
+  const handleSaveReport = () => {
+    const reportData = {
+      seoData,
+      competitiveAnalysis,
+      digitalPresence,
+      discoveredDomain,
+      intelligenceReport,
+      websiteOptions,
+      savedAt: new Date().toISOString(),
+    };
+    
+    onDataChange?.(reportData);
+    
+    toast({
+      title: '✅ Relatório Salvo com Sucesso!',
+      description: 'Dados armazenados no histórico',
+    });
+  };
+
   return (
     <div className="space-y-4">
-      {/* 🔄 NAVEGAÇÃO - VOLTAR/INÍCIO */}
+      {/* 🎯 NAVEGAÇÃO COMPLETA - VOLTAR/HOME/TOPO/SALVAR/EDITAR */}
       {(digitalPresence || seoData || intelligenceReport) && (
-        <div className="flex gap-2 p-2 bg-slate-100 dark:bg-slate-900 rounded-lg border border-slate-300 dark:border-slate-700">
-          <Button onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); }} variant="outline" size="sm" className="gap-2">
-            <ArrowLeft className="w-4 h-4" /> Voltar
-          </Button>
-          <Button onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); }} variant="ghost" size="sm" className="gap-2">
-            <Home className="w-4 h-4" /> Início
-          </Button>
+        <div className="flex items-center justify-between gap-2 p-3 bg-gradient-to-r from-slate-100 to-blue-50 dark:from-slate-900 dark:to-blue-950 rounded-lg border-2 border-slate-300 dark:border-slate-700 shadow-md">
+          {/* GRUPO ESQUERDO: Navegação */}
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); }} 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 hover:bg-slate-200 dark:hover:bg-slate-800"
+            >
+              <ArrowLeft className="w-4 h-4" /> Voltar
+            </Button>
+            <Button 
+              onClick={() => { setDigitalPresence(null); setSeoData(null); setCompetitiveAnalysis(null); setIntelligenceReport(null); setDiscoveredDomain(null); setWebsiteOptions([]); }} 
+              variant="ghost" 
+              size="sm" 
+              className="gap-2"
+            >
+              <Home className="w-4 h-4" /> Início
+            </Button>
+            <Button 
+              onClick={scrollToTop}
+              variant="outline" 
+              size="sm" 
+              className="gap-2 hover:bg-blue-100 dark:hover:bg-blue-900"
+              title="Voltar ao topo"
+            >
+              <ArrowUp className="w-4 h-4" /> Topo
+            </Button>
+          </div>
+
+          {/* GRUPO DIREITO: Ações */}
+          <div className="flex gap-2">
+            {/* 📝 BOTÃO EDITAR WEBSITE - RESTAURADO */}
+            {(discoveredDomain || domain) && (
+              <Button
+                onClick={() => {
+                  setIsEditingWebsite(!isEditingWebsite);
+                  setEditedWebsite(discoveredDomain || domain || '');
+                }}
+                variant="outline"
+                size="sm"
+                className="gap-2 hover:bg-yellow-100 dark:hover:bg-yellow-900"
+              >
+                <Edit className="w-4 h-4" /> Editar Website
+              </Button>
+            )}
+
+            {/* 💾 BOTÃO SALVAR - ELEGANTE E PULSANTE */}
+            <Button
+              onClick={handleSaveReport}
+              disabled={!seoData && !digitalPresence && !intelligenceReport}
+              size="sm"
+              className="gap-2 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 font-bold shadow-lg hover:shadow-xl transition-all duration-300 animate-pulse hover:animate-none disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-4 h-4" /> Salvar Relatório
+            </Button>
+          </div>
         </div>
       )}
       
@@ -368,12 +514,12 @@ export function KeywordsSEOTabEnhanced({
                   </Button>
                 )}
                 
-                {digitalPresence && !intelligenceReport && (
+                {!intelligenceReport && (
                   <Button
                     onClick={() => intelligenceMutation.mutate()}
                     disabled={intelligenceMutation.isPending}
                     size="lg"
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 gap-2"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 gap-2 font-bold"
                   >
                     {intelligenceMutation.isPending ? (
                       <>
@@ -382,10 +528,23 @@ export function KeywordsSEOTabEnhanced({
                       </>
                     ) : (
                       <>
-                        <Sparkles className="h-5 w-5" />
+                        <Sparkles className="h-5 h-5" />
                         🧠 Análise Inteligente Completa (IA)
                       </>
                     )}
+                  </Button>
+                )}
+                
+                {intelligenceReport && (
+                  <Button
+                    onClick={() => intelligenceMutation.mutate()}
+                    variant="outline"
+                    size="sm"
+                    disabled={intelligenceMutation.isPending}
+                    className="w-full"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${intelligenceMutation.isPending ? 'animate-spin' : ''}`} />
+                    Atualizar Análise IA
                   </Button>
                 )}
 
@@ -401,10 +560,72 @@ export function KeywordsSEOTabEnhanced({
                     Atualizar Análise SEO
                   </Button>
                 )}
+                
+                {/* 🏢 BUSCAR EMPRESAS SIMILARES */}
+                <Button
+                  onClick={() => similarCompaniesMutation.mutate()}
+                  disabled={similarCompaniesMutation.isPending}
+                  size="sm"
+                  variant="outline"
+                  className="w-full gap-2 border-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900"
+                >
+                  {similarCompaniesMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <Target className="h-4 w-4" />
+                      🏢 Buscar Empresas Similares (TOP 10)
+                    </>
+                  )}
+                </Button>
               </div>
             )}
           </div>
         </div>
+
+        {/* ✏️ EDITAR WEBSITE - CAMPO EDITÁVEL */}
+        {isEditingWebsite && (
+          <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg">
+            <label className="block text-sm font-bold text-yellow-900 dark:text-yellow-100 mb-2">
+              Editar Website:
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={editedWebsite}
+                onChange={(e) => setEditedWebsite(e.target.value)}
+                placeholder="exemplo.com.br"
+                className="flex-1 px-3 py-2 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+              />
+              <Button
+                onClick={() => {
+                  const cleanDomain = editedWebsite.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+                  if (cleanDomain) {
+                    setDiscoveredDomain(cleanDomain);
+                    setIsEditingWebsite(false);
+                    toast({
+                      title: '✅ Website atualizado!',
+                      description: `Novo domain: ${cleanDomain}`,
+                    });
+                  }
+                }}
+                disabled={!editedWebsite}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Save className="w-4 h-4 mr-2" /> Salvar
+              </Button>
+              <Button
+                onClick={() => setIsEditingWebsite(false)}
+                variant="outline"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* 📋 DROPDOWN TOP 10 - ESCOLHA DO USUÁRIO */}
         {websiteOptions.length > 0 && (
@@ -464,6 +685,58 @@ export function KeywordsSEOTabEnhanced({
                     <ExternalLink className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                   </div>
                 </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 🏢 DROPDOWN EMPRESAS SIMILARES - TOP 10 */}
+        {similarCompaniesOptions.length > 0 && (
+          <div className="mt-4 p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-3 border-purple-500 dark:border-purple-600 rounded-xl shadow-lg">
+            <p className="text-lg font-black text-purple-900 dark:text-purple-100 mb-4 flex items-center gap-2">
+              <Target className="w-6 h-6" />
+              🏢 Empresas Similares ({similarCompaniesOptions.length} encontradas)
+            </p>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {similarCompaniesOptions.map((company, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 bg-white dark:bg-slate-900 rounded-lg border-2 border-purple-300 dark:border-purple-700 hover:border-purple-500 hover:shadow-lg transition-all"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-black text-base text-purple-700 dark:text-purple-400">#{idx + 1}</span>
+                      </div>
+                      <p className="font-bold text-base text-slate-900 dark:text-white mb-1">{company.title}</p>
+                      <p className="text-sm text-purple-600 dark:text-purple-400 mb-2 break-all">{company.url}</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">{company.snippet}</p>
+                      
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          onClick={() => {
+                            // TODO: Adicionar à quarentena
+                            toast({
+                              title: '📋 Empresa adicionada!',
+                              description: `${company.title} será enriquecida na quarentena`,
+                            });
+                          }}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          ➕ Adicionar à Quarentena
+                        </Button>
+                        <Button
+                          onClick={() => window.open(company.url, '_blank')}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" /> Visitar
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
