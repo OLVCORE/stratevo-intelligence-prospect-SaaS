@@ -13,6 +13,7 @@ import { CompetitorsTab } from '@/components/icp/tabs/CompetitorsTab';
 import { ClientDiscoveryTab } from '@/components/icp/tabs/ClientDiscoveryTab';
 import { RecommendedProductsTab } from '@/components/icp/tabs/RecommendedProductsTab';
 import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
+import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
 import { toast } from 'sonner';
 import {
   RefreshCw,
@@ -593,6 +594,17 @@ export default function TOTVSCheckCard({
             companyName={companyName}
             domain={domain}
             savedData={latestReport?.full_report?.keywords_seo_report}
+          />
+        </TabsContent>
+
+        {/* ABA 9: DECISORES & CONTATOS (NOVA - PHANTOMBUSTER) */}
+        <TabsContent value="decisors" className="mt-0 overflow-y-auto">
+          <DecisorsContactsTab
+            companyId={companyId}
+            companyName={companyName}
+            linkedinUrl={data?.linkedin_url}
+            domain={domain}
+            savedData={latestReport?.full_report?.decisors_report}
           />
         </TabsContent>
       </Tabs>
