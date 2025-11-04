@@ -400,13 +400,48 @@ export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: Keywo
                         </a>
                         
                         {/* Insights */}
-                        <div className="bg-blue-50 rounded p-2 text-xs space-y-1">
+                        <div className="bg-blue-50 rounded p-3 text-xs space-y-1">
                           {intel.insights.map((insight, iidx) => (
                             <p key={iidx}>{insight}</p>
                           ))}
                           <p className="font-medium text-blue-700 mt-2">
                             🤝 {intel.opportunity.reason}
                           </p>
+                          
+                          {/* Partnership Score */}
+                          {intel.partnershipScore && (
+                            <div className="mt-3 pt-2 border-t border-blue-200">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium text-blue-800">Partnership Score:</span>
+                                <span className="text-lg font-bold text-blue-900">{intel.partnershipScore}/100</span>
+                              </div>
+                              <div className="w-full bg-blue-200 rounded-full h-2">
+                                <div 
+                                  className="bg-blue-600 h-2 rounded-full transition-all"
+                                  style={{ width: `${intel.partnershipScore}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Complementarity Score */}
+                          {intel.complementarity && intel.complementarity.hasComplementaryStack && (
+                            <div className="mt-2 pt-2 border-t border-blue-200">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium text-blue-800">Sinergia Score:</span>
+                                <span className="text-lg font-bold text-blue-900">{intel.complementarity.synergyScore}/100</span>
+                              </div>
+                              <div className="w-full bg-purple-200 rounded-full h-2">
+                                <div 
+                                  className="bg-purple-600 h-2 rounded-full transition-all"
+                                  style={{ width: `${intel.complementarity.synergyScore}%` }}
+                                />
+                              </div>
+                              <p className="text-xs text-purple-700 mt-1">
+                                🔗 Áreas: {intel.complementarity.complementaryAreas.join(', ')}
+                              </p>
+                            </div>
+                          )}
                         </div>
                         
                         {/* Keywords compartilhadas */}

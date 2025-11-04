@@ -6,10 +6,11 @@ import type { KeywordData, SimilarCompanyBySEO } from './seoAnalysis';
 
 export interface CompetitorTechnology {
   name: string;
-  category: 'ERP' | 'CRM' | 'BI' | 'Cloud' | 'BPM' | 'Outro';
+  category: 'ERP' | 'CRM' | 'BI' | 'Cloud' | 'BPM' | 'eCommerce' | 'Marketing' | 'Outro';
   vendor: string;
   isTotvs: boolean;
   isTotvsCompetitor: boolean; // SAP, Oracle, Microsoft, etc.
+  isComplementary?: boolean; // Complementar ao TOTVS
 }
 
 export interface CompanyIntelligence {
@@ -22,19 +23,83 @@ export interface CompanyIntelligence {
     estimatedValue?: string;
   };
   insights: string[];
+  partnershipScore?: number; // 0-100 (se for oportunidade de parceria)
+  complementarity?: {
+    hasComplementaryStack: boolean;
+    complementaryAreas: string[];
+    synergyScore: number; // 0-100
+  };
 }
 
-// Lista de concorrentes TOTVS (ERPs)
+// 🎯 STACK TECNOLÓGICO COMPLETO (ERP, CRM, BI, Cloud, BPM, eCommerce, Marketing)
+
+// ERPs Concorrentes
 const TOTVS_ERP_COMPETITORS = [
-  { name: 'SAP', keywords: ['sap', 's/4hana', 'sap business one', 'sap b1'] },
-  { name: 'Oracle', keywords: ['oracle', 'netsuite', 'oracle erp', 'jd edwards'] },
-  { name: 'Microsoft', keywords: ['dynamics', 'microsoft dynamics', 'dynamics 365', 'dynamics nav'] },
-  { name: 'Sage', keywords: ['sage', 'sage x3', 'sage 100', 'sage 300'] },
-  { name: 'Infor', keywords: ['infor', 'infor erp', 'infor ln'] },
-  { name: 'Sankhya', keywords: ['sankhya', 'sankhya erp'] },
-  { name: 'Senior', keywords: ['senior', 'senior erp', 'senior x'] },
-  { name: 'Linx', keywords: ['linx', 'linx erp', 'linx sistemas'] },
-  { name: 'Omie', keywords: ['omie', 'omie erp'] },
+  { name: 'SAP', keywords: ['sap', 's/4hana', 'sap business one', 'sap b1'], category: 'ERP' },
+  { name: 'Oracle', keywords: ['oracle', 'netsuite', 'oracle erp', 'jd edwards'], category: 'ERP' },
+  { name: 'Microsoft Dynamics', keywords: ['dynamics', 'microsoft dynamics', 'dynamics 365', 'dynamics nav'], category: 'ERP' },
+  { name: 'Sage', keywords: ['sage', 'sage x3', 'sage 100', 'sage 300'], category: 'ERP' },
+  { name: 'Infor', keywords: ['infor', 'infor erp', 'infor ln'], category: 'ERP' },
+  { name: 'Sankhya', keywords: ['sankhya', 'sankhya erp'], category: 'ERP' },
+  { name: 'Senior', keywords: ['senior', 'senior erp', 'senior x'], category: 'ERP' },
+  { name: 'Linx', keywords: ['linx', 'linx erp', 'linx sistemas'], category: 'ERP' },
+  { name: 'Omie', keywords: ['omie', 'omie erp'], category: 'ERP' },
+];
+
+// CRMs (Complementares ao TOTVS)
+const CRM_PLATFORMS = [
+  { name: 'Salesforce', keywords: ['salesforce', 'sales cloud', 'service cloud'], category: 'CRM', complementary: true },
+  { name: 'HubSpot', keywords: ['hubspot', 'hubspot crm'], category: 'CRM', complementary: true },
+  { name: 'Pipedrive', keywords: ['pipedrive'], category: 'CRM', complementary: true },
+  { name: 'Zoho CRM', keywords: ['zoho crm', 'zoho'], category: 'CRM', complementary: true },
+  { name: 'Microsoft Dynamics CRM', keywords: ['dynamics crm', 'dynamics 365 crm'], category: 'CRM', complementary: false },
+];
+
+// Ferramentas de BI
+const BI_PLATFORMS = [
+  { name: 'Power BI', keywords: ['power bi', 'powerbi'], category: 'BI', complementary: true },
+  { name: 'Tableau', keywords: ['tableau'], category: 'BI', complementary: true },
+  { name: 'Qlik', keywords: ['qlik', 'qlikview', 'qlik sense'], category: 'BI', complementary: true },
+  { name: 'Looker', keywords: ['looker', 'google looker'], category: 'BI', complementary: true },
+];
+
+// Cloud Platforms
+const CLOUD_PLATFORMS = [
+  { name: 'AWS', keywords: ['aws', 'amazon web services'], category: 'Cloud', complementary: true },
+  { name: 'Azure', keywords: ['azure', 'microsoft azure'], category: 'Cloud', complementary: true },
+  { name: 'Google Cloud', keywords: ['google cloud', 'gcp'], category: 'Cloud', complementary: true },
+];
+
+// BPM Platforms
+const BPM_PLATFORMS = [
+  { name: 'Pega', keywords: ['pega', 'pega bpm'], category: 'BPM', complementary: false },
+  { name: 'Appian', keywords: ['appian'], category: 'BPM', complementary: false },
+  { name: 'Bizagi', keywords: ['bizagi'], category: 'BPM', complementary: false },
+];
+
+// eCommerce Platforms
+const ECOMMERCE_PLATFORMS = [
+  { name: 'Shopify', keywords: ['shopify'], category: 'eCommerce', complementary: true },
+  { name: 'VTEX', keywords: ['vtex'], category: 'eCommerce', complementary: true },
+  { name: 'Magento', keywords: ['magento', 'adobe commerce'], category: 'eCommerce', complementary: true },
+];
+
+// Marketing Automation
+const MARKETING_PLATFORMS = [
+  { name: 'RD Station', keywords: ['rd station', 'rdstation'], category: 'Marketing', complementary: false }, // TOTVS tem
+  { name: 'Marketo', keywords: ['marketo', 'adobe marketo'], category: 'Marketing', complementary: true },
+  { name: 'Pardot', keywords: ['pardot', 'salesforce pardot'], category: 'Marketing', complementary: true },
+];
+
+// Consolidar todas as plataformas
+const ALL_TECH_PLATFORMS = [
+  ...TOTVS_ERP_COMPETITORS,
+  ...CRM_PLATFORMS,
+  ...BI_PLATFORMS,
+  ...CLOUD_PLATFORMS,
+  ...BPM_PLATFORMS,
+  ...ECOMMERCE_PLATFORMS,
+  ...MARKETING_PLATFORMS,
 ];
 
 // Produtos TOTVS (detectar se empresa já usa)
@@ -78,19 +143,20 @@ export function detectTechnologies(
     });
   }
 
-  // Detectar concorrentes TOTVS
-  for (const competitor of TOTVS_ERP_COMPETITORS) {
-    const detected = competitor.keywords.some(keyword => 
+  // Detectar TODAS as tecnologias (ERP, CRM, BI, Cloud, BPM, eCommerce, Marketing)
+  for (const platform of ALL_TECH_PLATFORMS) {
+    const detected = platform.keywords.some(keyword => 
       fullText.includes(keyword.toLowerCase())
     );
 
     if (detected) {
       technologies.push({
-        name: competitor.name,
-        category: 'ERP',
-        vendor: competitor.name,
+        name: platform.name,
+        category: platform.category as any,
+        vendor: platform.name,
         isTotvs: false,
-        isTotvsCompetitor: true
+        isTotvsCompetitor: platform.category === 'ERP' && !platform.name.includes('TOTVS'),
+        isComplementary: platform.complementary
       });
     }
   }
@@ -115,7 +181,63 @@ export function isSoftwareVendor(
 }
 
 /**
- * 🔥 ANÁLISE COMPLETA: VENDA vs. PARCERIA
+ * 🎯 CALCULA SCORE DE PARCERIA (0-100)
+ */
+function calculatePartnershipScore(
+  company: SimilarCompanyBySEO,
+  technologies: CompetitorTechnology[],
+  isVendor: boolean
+): number {
+  let score = 0;
+  
+  // Overlap de keywords (40 pontos)
+  score += Math.min((company.overlapScore / 100) * 40, 40);
+  
+  // É vendedor de software (30 pontos)
+  if (isVendor) score += 30;
+  
+  // Trabalha com tecnologias complementares (20 pontos)
+  const hasComplementary = technologies.some(t => t.isComplementary);
+  if (hasComplementary) score += 20;
+  
+  // Ranking no Google (10 pontos - quanto menor, melhor)
+  if (company.ranking) {
+    score += Math.max(10 - company.ranking, 0);
+  }
+  
+  return Math.round(Math.min(score, 100));
+}
+
+/**
+ * 🎯 ANALISA COMPLEMENTARIDADE DE STACK
+ */
+function analyzeComplementarity(
+  technologies: CompetitorTechnology[]
+): {
+  hasComplementaryStack: boolean;
+  complementaryAreas: string[];
+  synergyScore: number;
+} {
+  const complementaryTechs = technologies.filter(t => t.isComplementary);
+  const complementaryAreas = [...new Set(complementaryTechs.map(t => t.category))];
+  
+  // Score de sinergia baseado em quantas áreas complementares
+  let synergyScore = 0;
+  if (complementaryAreas.includes('CRM')) synergyScore += 25;
+  if (complementaryAreas.includes('BI')) synergyScore += 20;
+  if (complementaryAreas.includes('Cloud')) synergyScore += 20;
+  if (complementaryAreas.includes('eCommerce')) synergyScore += 20;
+  if (complementaryAreas.includes('Marketing')) synergyScore += 15;
+  
+  return {
+    hasComplementaryStack: complementaryTechs.length > 0,
+    complementaryAreas,
+    synergyScore: Math.min(synergyScore, 100)
+  };
+}
+
+/**
+ * 🔥 ANÁLISE COMPLETA: VENDA vs. PARCERIA (MELHORADA)
  */
 export function analyzeCompetitiveOpportunity(
   company: SimilarCompanyBySEO,
@@ -147,6 +269,9 @@ export function analyzeCompetitiveOpportunity(
     .filter(t => t.isTotvsCompetitor)
     .map(t => t.name);
 
+  // Analisar complementaridade de stack
+  const complementarity = analyzeComplementarity(detectedTechnologies);
+  
   // É vendedor de software?
   if (isVendor) {
     insights.push('🏢 Empresa é vendedora/consultora de software');
@@ -155,14 +280,26 @@ export function analyzeCompetitiveOpportunity(
       opportunityType = 'PARCERIA';
       reason = `Vendedor de software que trabalha com ${competitorNames.join(', ') || 'outras soluções'}`;
       priority = 'ALTA';
-      estimatedValue = 'Potencial de parceria estratégica';
+      
+      // Calcular score de parceria
+      const partnerScore = calculatePartnershipScore(company, detectedTechnologies, isVendor);
+      
+      estimatedValue = `Partnership Score: ${partnerScore}/100`;
       insights.push('🤝 OPORTUNIDADE DE PARCERIA: Revendedor/implementador');
-      insights.push(`💡 Trabalha com: ${detectedTechnologies.map(t => t.name).join(', ')}`);
+      insights.push(`💡 Trabalha com: ${detectedTechnologies.map(t => `${t.name} (${t.category})`).join(', ')}`);
+      
+      // Adicionar insights de complementaridade
+      if (complementarity.hasComplementaryStack) {
+        insights.push(`🔗 Stack complementar ao TOTVS: ${complementarity.complementaryAreas.join(', ')}`);
+        insights.push(`⚡ Sinergia Score: ${complementarity.synergyScore}/100`);
+      }
     } else {
       opportunityType = 'PARCERIA';
       reason = 'Vendedor de software sem stack definido';
       priority = 'MÉDIA';
-      estimatedValue = 'Potencial de parceria';
+      
+      const partnerScore = calculatePartnershipScore(company, detectedTechnologies, isVendor);
+      estimatedValue = `Partnership Score: ${partnerScore}/100`;
       insights.push('🤝 Possível parceiro TOTVS (não usa concorrente específico)');
     }
   }
@@ -194,6 +331,12 @@ export function analyzeCompetitiveOpportunity(
     insights.push('💡 Oportunidade de cross-sell/upsell');
   }
 
+  // Calcular partnership score se for parceria
+  let partnershipScore: number | undefined;
+  if (opportunityType === 'PARCERIA' || opportunityType === 'AMBOS') {
+    partnershipScore = calculatePartnershipScore(company, detectedTechnologies, isVendor);
+  }
+
   return {
     company,
     detectedTechnologies,
@@ -203,7 +346,9 @@ export function analyzeCompetitiveOpportunity(
       priority,
       estimatedValue
     },
-    insights
+    insights,
+    partnershipScore,
+    complementarity: complementarity.hasComplementaryStack ? complementarity : undefined
   };
 }
 
