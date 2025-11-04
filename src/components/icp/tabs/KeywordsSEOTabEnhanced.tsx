@@ -7,6 +7,8 @@ import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { performFullSEOAnalysis } from '@/services/seoAnalysis';
 import type { KeywordData, SimilarCompanyBySEO } from '@/services/seoAnalysis';
+import { analyzeSimilarCompanies, generateBattleCard } from '@/services/competitiveIntelligence';
+import type { CompanyIntelligence } from '@/services/competitiveIntelligence';
 
 interface KeywordsSEOTabProps {
   companyName?: string;
@@ -17,6 +19,7 @@ interface KeywordsSEOTabProps {
 export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: KeywordsSEOTabProps) {
   const { toast } = useToast();
   const [seoData, setSeoData] = useState<any>(savedData || null);
+  const [competitiveAnalysis, setCompetitiveAnalysis] = useState<any>(null);
 
   // 🔥 Análise SEO completa
   const seoMutation = useMutation({
@@ -34,10 +37,22 @@ export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: Keywo
     },
     onSuccess: (data) => {
       setSeoData(data);
-      toast({
-        title: '✅ Análise SEO concluída!',
-        description: `${data.profile.keywords.length} keywords | ${data.similarCompanies.length} empresas similares`,
-      });
+      
+      // 🔥 ANÁLISE COMPETITIVA DUPLA
+      if (data.similarCompanies.length > 0) {
+        const analysis = analyzeSimilarCompanies(data.similarCompanies);
+        setCompetitiveAnalysis(analysis);
+        
+        toast({
+          title: '✅ Análise SEO + Inteligência Competitiva concluída!',
+          description: `${data.profile.keywords.length} keywords | ${analysis.summary.vendaTotvsCount} oportunidades venda | ${analysis.summary.parceriaCount} oportunidades parceria`,
+        });
+      } else {
+        toast({
+          title: '✅ Análise SEO concluída!',
+          description: `${data.profile.keywords.length} keywords | ${data.similarCompanies.length} empresas similares`,
+        });
+      }
     },
     onError: (error) => {
       toast({
@@ -233,8 +248,185 @@ export function KeywordsSEOTabEnhanced({ companyName, domain, savedData }: Keywo
             </div>
           </Card>
 
-          {/* Empresas Similares por SEO */}
-          {seoData.similarCompanies.length > 0 && (
+          {/* 🔥 INTELIGÊNCIA COMPETITIVA DUPLA */}
+          {competitiveAnalysis && (
+            <>
+              {/* Summary Card */}
+              <Card className="p-6 bg-gradient-to-r from-green-50 to-blue-50 border-2 border-primary/30">
+                <h4 className="font-semibold mb-4 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Inteligência Competitiva Dupla
+                </h4>
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <span className="text-xs text-muted-foreground">Total Analisadas</span>
+                    <p className="text-2xl font-bold">{competitiveAnalysis.summary.totalAnalyzed}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">Oportunidades Venda TOTVS</span>
+                    <p className="text-2xl font-bold text-green-600">{competitiveAnalysis.summary.vendaTotvsCount}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">Oportunidades Parceria</span>
+                    <p className="text-2xl font-bold text-blue-600">{competitiveAnalysis.summary.parceriaCount}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">Revenue Estimado</span>
+                    <p className="text-lg font-bold text-primary">{competitiveAnalysis.summary.estimatedRevenue}</p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* 💰 OPORTUNIDADES DE VENDA TOTVS */}
+              {competitiveAnalysis.vendaTotvs.length > 0 && (
+                <Card className="p-6 border-2 border-green-200 bg-green-50/50">
+                  <h4 className="font-semibold mb-4 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-green-600" />
+                    💰 Oportunidades de Venda TOTVS
+                    <Badge variant="default" className="bg-green-600">
+                      {competitiveAnalysis.vendaTotvs.length} empresas
+                    </Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Empresas que usam <strong>concorrentes do TOTVS</strong> (SAP, Oracle, Microsoft, etc.) - Prospectar para migração!
+                  </p>
+                  
+                  <div className="space-y-3">
+                    {competitiveAnalysis.vendaTotvs.slice(0, 10).map((intel: CompanyIntelligence, idx: number) => (
+                      <div key={idx} className="border-2 border-green-300 rounded-lg p-4 bg-white hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">#{idx + 1}</span>
+                            <span className="font-semibold">{intel.company.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="default" className="bg-green-600 text-xs">
+                              Overlap: {intel.company.overlapScore}%
+                            </Badge>
+                            <Badge variant="default" className="bg-red-600 text-xs">
+                              {intel.opportunity.priority}
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        <a 
+                          href={intel.company.website} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline flex items-center gap-1 mb-2"
+                        >
+                          {intel.company.website}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        
+                        {/* Tecnologias detectadas */}
+                        {intel.detectedTechnologies.length > 0 && (
+                          <div className="mb-2">
+                            <span className="text-xs font-medium text-muted-foreground">Tecnologias:</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {intel.detectedTechnologies.map((tech, tidx) => (
+                                <Badge key={tidx} variant={tech.isTotvsCompetitor ? 'destructive' : 'secondary'} className="text-xs">
+                                  {tech.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Insights */}
+                        <div className="bg-green-50 rounded p-2 text-xs space-y-1">
+                          {intel.insights.map((insight, iidx) => (
+                            <p key={iidx}>{insight}</p>
+                          ))}
+                          <p className="font-medium text-green-700 mt-2">
+                            💰 {intel.opportunity.estimatedValue}
+                          </p>
+                        </div>
+                        
+                        {/* Keywords compartilhadas */}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {intel.company.sharedKeywords.slice(0, 5).map((kw: string, kidx: number) => (
+                            <Badge key={kidx} variant="outline" className="text-xs">
+                              {kw}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* 🤝 OPORTUNIDADES DE PARCERIA */}
+              {competitiveAnalysis.parceria.length > 0 && (
+                <Card className="p-6 border-2 border-blue-200 bg-blue-50/50">
+                  <h4 className="font-semibold mb-4 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-blue-600" />
+                    🤝 Oportunidades de Parceria
+                    <Badge variant="default" className="bg-blue-600">
+                      {competitiveAnalysis.parceria.length} empresas
+                    </Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Empresas que <strong>vendem software/serviços de TI</strong> - Parceria estratégica como revendedor/implementador TOTVS!
+                  </p>
+                  
+                  <div className="space-y-3">
+                    {competitiveAnalysis.parceria.slice(0, 10).map((intel: CompanyIntelligence, idx: number) => (
+                      <div key={idx} className="border-2 border-blue-300 rounded-lg p-4 bg-white hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">#{idx + 1}</span>
+                            <span className="font-semibold">{intel.company.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="default" className="bg-blue-600 text-xs">
+                              Overlap: {intel.company.overlapScore}%
+                            </Badge>
+                            <Badge variant="default" className="bg-orange-600 text-xs">
+                              {intel.opportunity.priority}
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        <a 
+                          href={intel.company.website} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline flex items-center gap-1 mb-2"
+                        >
+                          {intel.company.website}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        
+                        {/* Insights */}
+                        <div className="bg-blue-50 rounded p-2 text-xs space-y-1">
+                          {intel.insights.map((insight, iidx) => (
+                            <p key={iidx}>{insight}</p>
+                          ))}
+                          <p className="font-medium text-blue-700 mt-2">
+                            🤝 {intel.opportunity.reason}
+                          </p>
+                        </div>
+                        
+                        {/* Keywords compartilhadas */}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {intel.company.sharedKeywords.slice(0, 5).map((kw: string, kidx: number) => (
+                            <Badge key={kidx} variant="outline" className="text-xs">
+                              {kw}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+
+          {/* Empresas Similares por SEO (fallback se não houver análise competitiva) */}
+          {seoData.similarCompanies.length > 0 && !competitiveAnalysis && (
             <Card className="p-6">
               <h4 className="font-semibold mb-4 flex items-center gap-2">
                 <Target className="w-4 h-4 text-primary" />
