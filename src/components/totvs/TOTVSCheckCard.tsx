@@ -826,20 +826,25 @@ export default function TOTVSCheckCard({
 
         {/* ABA 1: KEYWORDS & SEO (PRIMEIRA - WEBSITE DISCOVERY) */}
         <TabsContent value="keywords" className="mt-0 overflow-y-auto">
-          <TabSaveWrapper
-            tabId="keywords"
-            tabName="Keywords & SEO"
-            hasUnsavedChanges={unsavedChanges.keywords}
-            onSave={() => saveTab('keywords')}
-            canSave={!!domain}
-            saveDisabledReason="Website/domain não disponível"
-          >
-            <KeywordsSEOTab
-              companyName={companyName}
-              domain={domain}
-              savedData={latestReport?.full_report?.keywords_seo_report}
-            />
-          </TabSaveWrapper>
+          <KeywordsSEOTab
+            companyName={companyName}
+            domain={domain}
+            savedData={latestReport?.full_report?.keywords_seo_report}
+            onDataChange={(data) => {
+              tabDataRef.current.keywords = data;
+              setUnsavedChanges(prev => ({ ...prev, keywords: true }));
+              setTabsStatus(prev => ({ ...prev, keywords: 'success' }));
+            }}
+            onLoading={(loading) => {
+              if (loading) {
+                setTabsStatus(prev => ({ ...prev, keywords: 'loading' }));
+              }
+            }}
+            onError={(error) => {
+              setTabsStatus(prev => ({ ...prev, keywords: 'error' }));
+              toast.error('❌ Erro na análise SEO', { description: error });
+            }}
+          />
         </TabsContent>
 
         {/* ABA 9: DECISORES & CONTATOS (NOVA - PHANTOMBUSTER) */}
