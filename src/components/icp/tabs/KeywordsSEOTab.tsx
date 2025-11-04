@@ -1,22 +1,6 @@
 // 🔥 VERSÃO MELHORADA: Usa KeywordsSEOTabEnhanced com análise SEO completa
 export { KeywordsSEOTabEnhanced as KeywordsSEOTab } from './KeywordsSEOTabEnhanced';
 
-/*
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Search, TrendingUp, ExternalLink, Globe, Target, BarChart3, Loader2 } from 'lucide-react';
-import { useSEOKeywords } from '@/hooks/useSEOKeywords';
-
-interface KeywordsSEOTabProps {
-  companyName?: string;
-  domain?: string;
-  savedData?: any;
-}
-
-export function KeywordsSEOTab({ companyName, domain, savedData }: KeywordsSEOTabProps) {
-  const { data: seoData, isLoading, error } = useSEOKeywords(companyName, !savedData);
-
   // Usar dados salvos se disponíveis
   const loadedFromHistory = !!savedData;
   const effectiveData = savedData || seoData;
@@ -243,7 +227,3 @@ export function KeywordsSEOTab({ companyName, domain, savedData }: KeywordsSEOTa
           )}
         </ul>
       </Card>
-    </div>
-  );
-}
-*/
