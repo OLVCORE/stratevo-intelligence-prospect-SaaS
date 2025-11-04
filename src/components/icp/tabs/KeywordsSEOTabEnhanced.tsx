@@ -33,12 +33,14 @@ export function KeywordsSEOTabEnhanced({
   onError
 }: KeywordsSEOTabProps) {
   const { toast } = useToast();
-  const [seoData, setSeoData] = useState<any>(savedData || null);
-  const [competitiveAnalysis, setCompetitiveAnalysis] = useState<any>(null);
-  const [digitalPresence, setDigitalPresence] = useState<DigitalPresence | null>(null);
-  const [discoveredDomain, setDiscoveredDomain] = useState<string | null>(null);
-  const [intelligenceReport, setIntelligenceReport] = useState<CompanyIntelligenceReport | null>(null);
-  const [websiteOptions, setWebsiteOptions] = useState<WebsiteSearchResult[]>([]);
+  
+  // 🔥 CRÍTICO: SEMPRE CARREGAR savedData ao retornar (evita perda de dados)
+  const [seoData, setSeoData] = useState<any>(savedData?.seoData || null);
+  const [competitiveAnalysis, setCompetitiveAnalysis] = useState<any>(savedData?.competitiveAnalysis || null);
+  const [digitalPresence, setDigitalPresence] = useState<DigitalPresence | null>(savedData?.digitalPresence || null);
+  const [discoveredDomain, setDiscoveredDomain] = useState<string | null>(savedData?.discoveredDomain || null);
+  const [intelligenceReport, setIntelligenceReport] = useState<CompanyIntelligenceReport | null>(savedData?.intelligenceReport || null);
+  const [websiteOptions, setWebsiteOptions] = useState<WebsiteSearchResult[]>(savedData?.websiteOptions || []);
 
   // 🔥 Análise SEO completa
   const seoMutation = useMutation({
@@ -64,8 +66,15 @@ export function KeywordsSEOTabEnhanced({
         const analysis = analyzeSimilarCompanies(data.similarCompanies);
         setCompetitiveAnalysis(analysis);
         
-        // 🚨 Notifica parent: dados prontos para salvar
-        onDataChange?.({ seoData: data, competitiveAnalysis: analysis });
+        // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
+        onDataChange?.({ 
+          seoData: data, 
+          competitiveAnalysis: analysis,
+          digitalPresence,
+          discoveredDomain,
+          intelligenceReport,
+          websiteOptions
+        });
         onLoading?.(false);
         
         toast({
@@ -73,8 +82,15 @@ export function KeywordsSEOTabEnhanced({
           description: `${data.profile.keywords.length} keywords | ${analysis.summary.vendaTotvsCount} oportunidades venda | ${analysis.summary.parceriaCount} oportunidades parceria`,
         });
       } else {
-        // 🚨 Notifica parent: dados prontos para salvar
-        onDataChange?.({ seoData: data, competitiveAnalysis: null });
+        // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
+        onDataChange?.({ 
+          seoData: data, 
+          competitiveAnalysis: null,
+          digitalPresence,
+          discoveredDomain,
+          intelligenceReport,
+          websiteOptions
+        });
         onLoading?.(false);
         
         toast({
@@ -142,8 +158,9 @@ export function KeywordsSEOTabEnhanced({
     },
     onSuccess: (data) => {
       setDigitalPresence(data);
-      if (data.website) {
-        setDiscoveredDomain(new URL(data.website).hostname.replace('www.', ''));
+      const newDiscoveredDomain = data.website ? new URL(data.website).hostname.replace('www.', '') : null;
+      if (newDiscoveredDomain) {
+        setDiscoveredDomain(newDiscoveredDomain);
       }
       onLoading?.(false);
       
@@ -160,8 +177,15 @@ export function KeywordsSEOTabEnhanced({
         description: `Encontrado: ${found.join(', ')} | Confiança: ${data.confidence}%`,
       });
 
-      // 🚨 Notifica parent: dados prontos para salvar
-      onDataChange?.({ digitalPresence: data });
+      // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
+      onDataChange?.({ 
+        digitalPresence: data,
+        discoveredDomain: newDiscoveredDomain,
+        seoData,
+        competitiveAnalysis,
+        intelligenceReport,
+        websiteOptions
+      });
     },
     onError: (error) => {
       onError?.((error as Error).message);
@@ -204,12 +228,14 @@ export function KeywordsSEOTabEnhanced({
         description: `Digital Health: ${data.digitalHealthScore}/100 | Google Compliance: ${data.googleCompliance.score}%`,
       });
 
-      // 🚨 Notifica parent: dados completos para Executive Summary
+      // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
       onDataChange?.({ 
         digitalPresence, 
+        discoveredDomain,
         seoData, 
         competitiveAnalysis,
-        intelligenceReport: data 
+        intelligenceReport: data,
+        websiteOptions
       });
     },
     onError: (error) => {
@@ -839,32 +865,56 @@ export function KeywordsSEOTabEnhanced({
             </div>
           </Card>
 
-          {/* Top Keywords */}
-          <Card className="p-6">
-            <h4 className="font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" />
+          {/* Top Keywords - TABELA COM GRID AMARELO */}
+          <Card className="p-6 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950">
+            <h4 className="text-xl font-black mb-4 flex items-center gap-2 text-slate-900 dark:text-white">
+              <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               Top Keywords ({seoData.profile.keywords.length})
             </h4>
-            <div className="space-y-2">
-              {seoData.profile.keywords.slice(0, 20).map((kw: KeywordData, idx: number) => (
-                <div key={idx} className="flex items-center justify-between p-2 bg-muted/30 rounded hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-primary">#{idx + 1}</span>
-                    <span className="text-sm">{kw.keyword}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {kw.source}
-                    </Badge>
-                    <Badge 
-                      variant={kw.relevance > 80 ? 'default' : 'secondary'} 
-                      className="text-xs"
-                    >
-                      {kw.relevance}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+            {/* TABELA COM GRID AMARELO - ORDENADA POR SCORE DESCENDENTE */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-yellow-500 dark:bg-yellow-600">
+                    <th className="border-2 border-yellow-600 dark:border-yellow-700 p-2 text-left font-black text-slate-900 dark:text-white w-16">#</th>
+                    <th className="border-2 border-yellow-600 dark:border-yellow-700 p-2 text-left font-black text-slate-900 dark:text-white">Keyword</th>
+                    <th className="border-2 border-yellow-600 dark:border-yellow-700 p-2 text-center font-black text-slate-900 dark:text-white w-32">Source</th>
+                    <th className="border-2 border-yellow-600 dark:border-yellow-700 p-2 text-center font-black text-slate-900 dark:text-white w-24">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seoData.profile.keywords
+                    .sort((a, b) => b.relevance - a.relevance)
+                    .slice(0, 50)
+                    .map((kw: KeywordData, idx: number) => (
+                      <tr key={idx} className="hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors">
+                        <td className="border-2 border-yellow-400 dark:border-yellow-600 p-2 text-center font-black text-blue-700 dark:text-blue-400">
+                          #{idx + 1}
+                        </td>
+                        <td className="border-2 border-yellow-400 dark:border-yellow-600 p-2 font-semibold text-slate-900 dark:text-white">
+                          {kw.keyword}
+                        </td>
+                        <td className="border-2 border-yellow-400 dark:border-yellow-600 p-2 text-center">
+                          <Badge variant="outline" className="text-xs font-bold bg-slate-100 dark:bg-slate-800">
+                            {kw.source}
+                          </Badge>
+                        </td>
+                        <td className="border-2 border-yellow-400 dark:border-yellow-600 p-2 text-center">
+                          <Badge 
+                            className={`text-xs font-black ${
+                              kw.relevance >= 90 ? 'bg-green-600 text-white' :
+                              kw.relevance >= 70 ? 'bg-blue-600 text-white' :
+                              kw.relevance >= 50 ? 'bg-yellow-600 text-white' :
+                              'bg-red-600 text-white'
+                            }`}
+                          >
+                            {kw.relevance}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
           </Card>
 

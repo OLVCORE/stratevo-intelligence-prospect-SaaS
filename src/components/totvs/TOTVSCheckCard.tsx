@@ -331,10 +331,10 @@ export default function TOTVSCheckCard({
               </p>
               <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800">
                 <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2">
-                  🚨 ATENÇÃO: PERDA DE CRÉDITOS!
+                  🚨 ATENÇÃO: PERDA DAS INFORMAÇÕES COLETADAS!
                 </p>
                 <p className="text-sm text-red-700 dark:text-red-300">
-                  Se você não salvar, <strong>todas as informações desta aba serão perdidas</strong> e os <strong>créditos já consumidos NÃO serão recuperados</strong>.
+                  Se você não salvar, <strong>todas as informações coletadas nesta aba serão perdidas</strong> e será necessário <strong>reprocessar a análise novamente</strong>, consumindo tempo e recursos adicionais.
                 </p>
               </div>
               <p className="text-sm text-muted-foreground">
