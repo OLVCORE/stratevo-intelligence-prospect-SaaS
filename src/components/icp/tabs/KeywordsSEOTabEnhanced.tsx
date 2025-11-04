@@ -476,10 +476,13 @@ export function KeywordsSEOTabEnhanced({
 
           {/* Botões de ação */}
           <div className="flex flex-col gap-2">
-            {/* 🎯 BOTÃO BUSCA OFICIAL TOP 10 - PRIORIDADE 1 */}
-            {!domain && !discoveredDomain && websiteOptions.length === 0 && (
+            {/* 🎯 BOTÃO BUSCA OFICIAL TOP 10 - SEMPRE VISÍVEL SE NÃO TEM WEBSITE */}
+            {!domain && !discoveredDomain && (
               <Button
-                onClick={() => officialSearchMutation.mutate()}
+                onClick={() => {
+                  setSimilarCompaniesOptions([]); // Limpa empresas similares
+                  officialSearchMutation.mutate();
+                }}
                 disabled={officialSearchMutation.isPending}
                 size="lg"
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 gap-2 font-bold"
@@ -498,10 +501,13 @@ export function KeywordsSEOTabEnhanced({
               </Button>
             )}
             
-            {/* 🔥 BOTÃO DISCOVERY AUTOMÁTICO - ALTERNATIVA */}
-            {!domain && !discoveredDomain && websiteOptions.length === 0 && (
+            {/* 🔥 BOTÃO DISCOVERY AUTOMÁTICO - SEMPRE VISÍVEL SE NÃO TEM WEBSITE */}
+            {!domain && !discoveredDomain && (
               <Button
-                onClick={() => discoveryMutation.mutate()}
+                onClick={() => {
+                  setSimilarCompaniesOptions([]); // Limpa empresas similares
+                  discoveryMutation.mutate();
+                }}
                 disabled={discoveryMutation.isPending}
                 size="sm"
                 variant="outline"
