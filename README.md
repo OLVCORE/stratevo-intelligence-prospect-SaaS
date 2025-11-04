@@ -1,228 +1,73 @@
-# 🚀 OLV Intelligence Prospect v2
+# Welcome to your Lovable project
 
-> Plataforma B2B SaaS de Prospecção & Inteligência com dados reais, multi-tenancy e automação SDR.
+## Project info
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
-[![Supabase](https://img.shields.io/badge/Supabase-2.39-green)](https://supabase.com/)
-[![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
+**URL**: https://lovable.dev/projects/83aa9319-3cdb-4039-89a3-d5632b977732
 
----
+## How can I edit this code?
 
-## 📋 Visão Geral
+There are several ways of editing your application.
 
-Plataforma completa para prospecção B2B com:
+**Use Lovable**
 
-- 🔍 **Busca inteligente** por CNPJ/Website
-- 🌐 **Enriquecimento automático** (ReceitaWS, Google, Apollo, Hunter)
-- 💬 **SDR automatizado** (Email + WhatsApp)
-- 📊 **Analytics 360°** com cache materializado (SLA < 1.5s)
-- 🔔 **Alertas proativos** (5 tipos de eventos)
-- 📄 **Relatórios PDF** profissionais
-- 🎯 **Playbooks A/B** para outreach
-- 🛡️ **Multi-tenancy** com RLS e permissões
+Simply visit the [Lovable Project](https://lovable.dev/projects/83aa9319-3cdb-4039-89a3-d5632b977732) and start prompting.
 
----
+Changes made via Lovable will be committed automatically to this repo.
 
-## 🏗️ Arquitetura
+**Use your preferred IDE**
 
-### Frontend
-- **Framework:** Next.js 14 (App Router)
-- **UI:** React 18 + TypeScript + Tailwind CSS + shadcn/ui
-- **State:** Zustand
-- **Charts:** Recharts
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-### Backend
-- **Database:** Supabase (Postgres)
-- **Validation:** Zod
-- **PDF:** @react-pdf/renderer
-- **Email:** Nodemailer
-- **WhatsApp:** Twilio
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
-### Segurança
-- **Multi-Tenancy:** RLS + Policies
-- **LGPD:** Privacy-by-design
-- **Audit:** Logs completos
-- **CI/CD:** Pipeline automatizado
+Follow these steps:
 
----
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
 
-## 🚀 Quick Start
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
 
-### 1. Pré-requisitos
-- Node.js >= 18
-- npm >= 9
-- Conta Supabase (grátis)
+# Step 3: Install the necessary dependencies.
+npm i
 
-### 2. Instalação
-
-```bash
-# Clone o repositório
-git clone <seu-repo>
-cd olv-intelligence-prospect-v2
-
-# Instalar dependências
-npm install
-npx playwright install
-npx husky install
-```
-
-### 3. Configuração
-
-```bash
-# Copiar exemplo de ENV
-cp .env.example .env.local
-
-# Editar com suas chaves
-# (ver ENV-SETUP.md para detalhes)
-```
-
-### 4. Banco de Dados
-
-Execute as migrations no Supabase SQL Editor (em ordem):
-1. `lib/supabase/migrations/001_ciclo1_companies.sql`
-2. ... até ...
-11. `lib/supabase/migrations/011_batch3_sdr_decisores.sql`
-
-### 5. Iniciar
-
-```bash
-# Desenvolvimento
+# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
-
-# Acessar
-http://localhost:3000
 ```
 
----
+**Edit a file directly in GitHub**
 
-## 📚 Documentação
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-### Guias Principais
-- **`LEIA-ME-PRIMEIRO.md`** - ⭐ Comece aqui!
-- **`SETUP-COMPLETO.md`** - Setup detalhado
-- **`DEPLOY-VERCEL-GUIA.md`** - Deploy em produção
+**Use GitHub Codespaces**
 
-### Ciclos Implementados
-- `CICLO1-RESUMO.md` até `CICLO11-RESUMO.md`
-- Cada ciclo tem: RESUMO + DOD + TESTE-DE-MESA
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-### Integração Multi-Tenant
-- `BATCH3-GUIA-FINALIZACAO.md` até `BATCH7-ALERTAS-GUIA.md`
-- Aplicar padrões de proteção em rotas
+## What technologies are used for this project?
 
----
+This project is built with:
 
-## 🧪 Testes
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
 
-```bash
-# Validação completa
-npm run ci:full
+## How can I deploy this project?
 
-# Testes individuais
-npm run doctor           # Valida rotas
-npm run test:smoke       # E2E básico
-npm run test:tenant      # Isolamento
-npm run ci:perf          # Performance
-npm run ci:tenant        # Guard multi-tenant
-```
+Simply open [Lovable](https://lovable.dev/projects/83aa9319-3cdb-4039-89a3-d5632b977732) and click on Share -> Publish.
 
----
+## Can I connect a custom domain to my Lovable project?
 
-## 🔐 Segurança
+Yes, you can!
 
-### Multi-Tenancy
-- ✅ RLS habilitada em 17 tabelas
-- ✅ 20+ políticas SQL por papel
-- ✅ Workspace Switcher (isolamento UI)
-- ✅ Guardrails CI (bloqueia vazamentos)
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
-### LGPD
-- ✅ Privacy-by-design
-- ✅ Message body opcional
-- ✅ Retention configurável
-- ✅ Audit trail completo
-
----
-
-## 📊 Funcionalidades
-
-### Core
-- ✅ Busca por CNPJ/Website
-- ✅ Enriquecimento (Digital + Tech Stack)
-- ✅ Decisores (Apollo, Hunter, PhantomBuster)
-- ✅ Maturidade (6 pilares)
-- ✅ FIT TOTVS (6 áreas)
-
-### SDR
-- ✅ Inbox unificado (Email + WhatsApp)
-- ✅ Templates parametrizados
-- ✅ Playbooks multi-step
-- ✅ A/B testing
-- ✅ Webhooks inbound
-
-### Analytics
-- ✅ Funil de conversão
-- ✅ Performance de playbooks
-- ✅ Heatmap de engajamento
-- ✅ Eficiência por persona
-
-### Alertas
-- ✅ 5 tipos de eventos
-- ✅ Notificações multi-canal
-- ✅ Digests diário/semanal
-
----
-
-## 🚢 Deploy
-
-### Vercel (Recomendado)
-
-```bash
-# Instalar Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel --prod
-```
-
-Ver guia completo: `DEPLOY-VERCEL-GUIA.md`
-
----
-
-## 🎯 Status do Projeto
-
-- ✅ **11 ciclos** funcionais (100%)
-- ✅ **Multi-tenancy** estruturado
-- 🔄 **Integração** em progresso (30%)
-- ✅ **Documentação** completa
-- ✅ **CI/CD** operacional
-
-**Versão:** 2.11.0  
-**Status:** Fundação Production-Ready
-
----
-
-## 📞 Suporte
-
-Para dúvidas ou problemas:
-1. Consulte `LEIA-ME-PRIMEIRO.md`
-2. Verifique `/_status` (diagnóstico)
-3. Execute `npm run doctor`
-4. Veja logs específicos de cada ciclo
-
----
-
-## 📜 Licença
-
-Proprietary - © 2025 OLV
-
----
-
-## 🙏 Créditos
-
-Desenvolvido seguindo metodologia de ciclos curtos com:
-- ✅ Dados reais (zero mocks)
-- ✅ Testes em cada ciclo
-- ✅ Definition of Done (DoD)
-- ✅ Pipeline CI/CD
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)

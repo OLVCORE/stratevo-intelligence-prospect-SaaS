@@ -1,0 +1,47 @@
+import * as React from "react";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+
+import { cn } from "@/lib/utils";
+
+const TooltipProvider = TooltipPrimitive.Provider;
+
+const Tooltip = TooltipPrimitive.Root;
+
+const TooltipTrigger = TooltipPrimitive.Trigger;
+
+const TooltipContent = React.forwardRef<
+  React.ElementRef<typeof TooltipPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
+>(
+  (
+    {
+      className,
+      side = "right",
+      align = "center",
+      sideOffset = 8,
+      // Enable smarter positioning by default
+      ...props
+    },
+    ref
+  ) => (
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Content
+        ref={ref}
+        side={side}
+        align={align}
+        sideOffset={sideOffset}
+        avoidCollisions
+        collisionPadding={8}
+        sticky="always"
+        className={cn(
+          "z-[99999] max-w-xs overflow-hidden rounded-lg border-2 border-primary/20 bg-popover/95 backdrop-blur-sm px-4 py-2.5 text-sm font-medium text-popover-foreground shadow-xl shadow-primary/10 whitespace-normal break-words pointer-events-auto animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          className,
+        )}
+        {...props}
+      />
+    </TooltipPrimitive.Portal>
+  )
+);
+TooltipContent.displayName = TooltipPrimitive.Content.displayName;
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };

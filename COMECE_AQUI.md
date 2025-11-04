@@ -227,3 +227,4 @@ supabase functions logs enrich-receita-federal --follow
 **Status:** ✅ Migração completa de stratevo-v2 → olv-intelligence-prospect-v2  
 **Próximo passo:** Abrir projeto correto e usar PROMPT_PARA_NOVA_CONVERSA.txt
 
+
