@@ -27,6 +27,7 @@ import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
 import { TabSaveWrapper } from './TabSaveWrapper';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { saveAllTabs, hasNonCompleted, getStatuses, getStatusCounts } from '@/components/icp/tabs/tabsRegistry';
+import { createSnapshotFromFullReport, loadSnapshot, isReportClosed, generatePdfFromSnapshot, type Snapshot } from '@/components/icp/tabs/snapshotReport';
 import { toast } from 'sonner';
 import {
   RefreshCw,
@@ -115,6 +116,11 @@ export default function TOTVSCheckCard({
 
   // 🔗 REGISTRY: Estado para diálogo de confirmação ao fechar
   const [showCloseConfirmDialog, setShowCloseConfirmDialog] = useState(false);
+
+  // 🔒 SNAPSHOT: Estado para snapshot e modo read-only
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
+  const readOnly = isReportClosed(snapshot);
   
   // Render do dot de status
   const renderStatusDot = (tabId: string) => {
@@ -304,6 +310,43 @@ export default function TOTVSCheckCard({
     }
   }, [latestReport]);
 
+  // 🔒 SNAPSHOT: Carregar snapshot para verificar modo read-only
+  useEffect(() => {
+    let mounted = true;
+    
+    // Precisa ter companyId para buscar o icpAnalysisResultId
+    if (!companyId) return;
+    
+    (async () => {
+      try {
+        setIsLoadingSnapshot(true);
+        
+        // Buscar icp_analysis_results pelo companyId
+        const { data: icpResult } = await supabase
+          .from('icp_analysis_results')
+          .select('id, analysis_data')
+          .eq('cnpj', cnpj)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (mounted && icpResult?.analysis_data) {
+          const snap = icpResult.analysis_data as Snapshot;
+          setSnapshot(snap);
+          console.log('[TOTVS] 🔒 Snapshot carregado - modo read-only:', isReportClosed(snap));
+        } else if (mounted) {
+          console.log('[TOTVS] ℹ️ Nenhum snapshot encontrado (relatório editável)');
+        }
+      } catch (e) {
+        console.error('[TOTVS] ❌ Erro ao carregar snapshot:', e);
+      } finally {
+        if (mounted) setIsLoadingSnapshot(false);
+      }
+    })();
+    
+    return () => { mounted = false; };
+  }, [companyId, cnpj]);
+
   // Buscar dados de empresas similares da tabela similar_companies
   const { data: similarCompaniesData } = useQuery({
     queryKey: ['similar-companies-count', companyId],
@@ -365,6 +408,68 @@ export default function TOTVSCheckCard({
     // Aqui você pode adicionar lógica adicional se necessário (ex: fechar modal)
   };
 
+  // 🔒 SNAPSHOT: Handler para aprovar e mover para pool
+  const handleApproveAndMoveToPool = async () => {
+    try {
+      console.log('[TOTVS] 🎯 Iniciando aprovação e criação de snapshot...');
+      
+      // Validação: precisa ter stcHistoryId e companyId
+      if (!latestReport?.id) {
+        toast.error('Erro', {
+          description: 'Não há relatório para aprovar. Execute as análises primeiro.',
+        });
+        return;
+      }
+
+      // Buscar icpAnalysisResultId
+      const { data: icpResult } = await supabase
+        .from('icp_analysis_results')
+        .select('id')
+        .eq('cnpj', cnpj)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!icpResult?.id) {
+        toast.error('Erro', {
+          description: 'Não foi possível encontrar o registro ICP para esta empresa.',
+        });
+        return;
+      }
+
+      // 1) Salvar todas as abas registradas
+      console.log('[TOTVS] 💾 Salvando todas as abas...');
+      await saveAllTabs();
+      
+      // 2) Criar snapshot final
+      console.log('[TOTVS] 📸 Criando snapshot final...');
+      const snap = await createSnapshotFromFullReport({
+        icpAnalysisResultId: icpResult.id,
+        stcHistoryId: latestReport.id,
+      });
+      
+      setSnapshot(snap);
+      
+      // 3) Gerar PDF executivo (placeholder)
+      console.log('[TOTVS] 📄 Gerando PDF executivo...');
+      await generatePdfFromSnapshot(snap);
+      
+      // 4) TODO: Mover para pipeline (implementar depois)
+      // await moveToPipeline({ companyId, icpAnalysisResultId: icpResult.id, snapshot: snap });
+      
+      toast.success('Relatório aprovado!', {
+        description: `Snapshot criado (versão ${snap.version}). Relatório em modo somente leitura.`,
+      });
+      
+      console.log('[TOTVS] ✅ Relatório aprovado e consolidado com sucesso!');
+    } catch (e: any) {
+      console.error('[TOTVS] ❌ Erro ao aprovar relatório:', e);
+      toast.error('Erro ao aprovar relatório', {
+        description: e.message || 'Erro desconhecido. Verifique o console.',
+      });
+    }
+  };
+
   // ✅ SEMPRE MOSTRAR AS 8 ABAS (mesmo sem STC)
   // Se não tem dados do STC, mostrar apenas as outras abas funcionando
 
@@ -376,6 +481,30 @@ export default function TOTVSCheckCard({
 
   return (
     <Card className="p-6">
+      {/* 🔒 AVISO DE MODO READ-ONLY */}
+      {readOnly && snapshot && (
+        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-2 border-blue-500 dark:border-blue-600 rounded-xl">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-bold text-blue-900 dark:text-blue-100 mb-1">
+                🔒 Relatório Fechado (Somente Leitura)
+              </h4>
+              <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                Este relatório foi aprovado e consolidado. Nenhuma análise que consome créditos será executada.
+              </p>
+              <div className="flex items-center gap-4 text-xs text-blue-700 dark:text-blue-300">
+                <span>📸 Versão: {snapshot.version}</span>
+                <span>📅 Fechado em: {new Date(snapshot.closed_at).toLocaleString('pt-BR')}</span>
+                <span>📁 {Object.keys(snapshot.tabs).length} abas consolidadas</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 🚨 ALERT DIALOG - MUDANÇAS NÃO SALVAS */}
       <AlertDialog open={showUnsavedAlert} onOpenChange={setShowUnsavedAlert}>
         <AlertDialogContent className="max-w-md">
@@ -954,14 +1083,27 @@ export default function TOTVSCheckCard({
               Salva todas as abas registradas no sistema de uma vez
             </p>
           </div>
-          <Button
-            onClick={handleSalvarNoSistema}
-            size="lg"
-            className="gap-2 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 font-bold shadow-lg"
-          >
-            <Save className="w-5 h-5" />
-            Salvar no Sistema
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleSalvarNoSistema}
+              size="lg"
+              disabled={readOnly}
+              className="gap-2 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 font-bold shadow-lg disabled:opacity-50"
+            >
+              <Save className="w-5 h-5" />
+              Salvar no Sistema
+            </Button>
+            {!readOnly && hasSaved && (
+              <Button
+                onClick={handleApproveAndMoveToPool}
+                size="lg"
+                className="gap-2 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 font-bold shadow-lg"
+              >
+                <CheckCircle className="w-5 h-5" />
+                Aprovar e Mover para Pool
+              </Button>
+            )}
+          </div>
         </div>
         
         {/* Preview de status das abas */}
