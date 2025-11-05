@@ -69,7 +69,17 @@ function isPdfOrNews(url: string) {
 
 function isGovOrRegistry(url: string) {
   return /\.gov\.br/i.test(url) || 
-    /receita\.fazenda|jucesp|jusbrasil|cvm\.gov|escavador|serasa/i.test(url);
+    /receita\.fazenda|jucesp|jusbrasil|cvm\.gov|escavador|serasa|reclameaqui/i.test(url);
+}
+
+function isCdnOrAsset(url: string) {
+  // Penalizar CDNs, assets, imagens, wordpress internals
+  return /\/img\/|\/image\/|\/wp-content\/|\/assets\/|\/static\/|imgcache|cloudflare|cloudfront|akamai/i.test(url);
+}
+
+function isInternalPage(url: string) {
+  // Penalizar páginas internas (produto, categoria, etc)
+  return /\/produto\/|\/product\/|\/categoria\/|\/category\/|\/blog\/|\/artigo\//i.test(url);
 }
 
 function scoreResult(params: {
@@ -108,6 +118,18 @@ function scoreResult(params: {
   // Penalizações
   if (isPdfOrNews(url)) s -= 40;
   if (isGovOrRegistry(url)) s -= 30;
+  if (isCdnOrAsset(url)) s -= 35;
+  if (isInternalPage(url)) s -= 20;
+
+  // Bonificação extra para domínio raiz limpo (sem path ou path = '/')
+  try {
+    const u = new URL(url);
+    if (u.pathname === '/' || u.pathname === '') {
+      s += 10; // Bônus para homepage/raiz
+    }
+  } catch {
+    // URL inválida, ignorar
+  }
 
   return s;
 }
@@ -231,6 +253,54 @@ async function serperSearchOnce(query: string): Promise<any> {
   return data;
 }
 
+// -------------------- validação de domínio (Hunter.io) --------------------
+
+async function validateDomainWithHunter(domain: string): Promise<{
+  valid: boolean;
+  confidence: number;
+  pattern?: string;
+}> {
+  console.log('[HUNTER] 🔍 Validando domínio:', domain);
+  
+  const hunterKey = import.meta.env.VITE_HUNTER_API_KEY;
+  if (!hunterKey) {
+    console.warn('[HUNTER] ⚠️ API Key não configurada, pulando validação');
+    return { valid: false, confidence: 0 };
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${hunterKey}&limit=1`
+    );
+
+    if (!response.ok) {
+      console.warn('[HUNTER] ⚠️ Erro na API:', response.status);
+      return { valid: false, confidence: 0 };
+    }
+
+    const data = await response.json();
+    
+    if (data.data?.emails?.length > 0 || data.data?.pattern) {
+      console.log('[HUNTER] ✅ Domínio validado:', {
+        emails: data.data.emails?.length || 0,
+        pattern: data.data.pattern,
+      });
+      
+      return {
+        valid: true,
+        confidence: 20, // Bônus de +20 pontos por validação Hunter
+        pattern: data.data.pattern,
+      };
+    }
+
+    console.log('[HUNTER] ℹ️ Nenhum email encontrado para este domínio');
+    return { valid: false, confidence: -10 }; // Penalização leve se Hunter não encontrou nada
+  } catch (error) {
+    console.error('[HUNTER] ❌ Erro ao validar domínio:', error);
+    return { valid: false, confidence: 0 }; // Sem penalização se API falhou
+  }
+}
+
 // -------------------- pipeline principal --------------------
 
 export async function deterministicDiscovery(input: DiscoveryInputs): Promise<DiscoveryResult> {
@@ -284,11 +354,32 @@ export async function deterministicDiscovery(input: DiscoveryInputs): Promise<Di
         preferBr,
       }),
     }))
-    // Tirar PDF/News antes de ordenar
-    .filter(r => !isPdfOrNews(r.url) && !isGovOrRegistry(r.url))
+    // Tirar PDF/News/Gov/CDN antes de ordenar
+    .filter(r => 
+      !isPdfOrNews(r.url) && 
+      !isGovOrRegistry(r.url) && 
+      !isCdnOrAsset(r.url)
+    )
     .sort((a, b) => b.score - a.score);
 
   console.log('[DISCOVERY] 🏆 Resultados ranqueados:', ranked.length);
+
+  // 2.5) Validar top 3 candidatos com Hunter.io (bônus de confiança)
+  const topCandidates = ranked.slice(0, 3);
+  for (const candidate of topCandidates) {
+    const domain = extractRootDomain(candidate.url);
+    if (domain) {
+      const validation = await validateDomainWithHunter(domain);
+      candidate.score += validation.confidence;
+      
+      if (validation.valid) {
+        console.log('[DISCOVERY] ✅ Domínio validado pelo Hunter:', domain, `+${validation.confidence} pontos`);
+      }
+    }
+  }
+
+  // Re-ordenar após validação Hunter
+  ranked.sort((a, b) => b.score - a.score);
 
   // 3) Escolher domínio raiz mais provável
   let domainUrl = '';
