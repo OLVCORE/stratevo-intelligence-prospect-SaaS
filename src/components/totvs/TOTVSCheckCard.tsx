@@ -28,6 +28,7 @@ import { TabSaveWrapper } from './TabSaveWrapper';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { saveAllTabs, hasNonCompleted, getStatuses, getStatusCounts } from '@/components/icp/tabs/tabsRegistry';
 import { createSnapshotFromFullReport, loadSnapshot, isReportClosed, generatePdfFromSnapshot, type Snapshot } from '@/components/icp/tabs/snapshotReport';
+import SaveBar from './SaveBar';
 import { toast } from 'sonner';
 import {
   RefreshCw,
@@ -120,6 +121,7 @@ export default function TOTVSCheckCard({
   // 🔒 SNAPSHOT: Estado para snapshot e modo read-only
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const readOnly = isReportClosed(snapshot);
   
   // Render do dot de status
@@ -385,19 +387,25 @@ export default function TOTVSCheckCard({
   const handleSalvarNoSistema = async () => {
     console.log('[REGISTRY] 💾 Iniciando salvamento em lote de todas as abas...');
     
-    const results = await saveAllTabs();
-    const failures = results.filter(r => r.status === 'rejected');
+    setIsSaving(true);
     
-    if (failures.length > 0) {
-      console.error('[REGISTRY] ❌ Falhas ao salvar algumas abas:', failures);
-      toast.error('Algumas abas falharam ao salvar', {
-        description: `${failures.length} aba(s) com erro. Verifique o console.`,
-      });
-    } else {
-      console.log('[REGISTRY] ✅ Todas as abas salvas com sucesso!');
-      toast.success('Relatório salvo no sistema', {
-        description: 'Todas as abas foram salvas com sucesso.',
-      });
+    try {
+      const results = await saveAllTabs();
+      const failures = results.filter(r => r.status === 'rejected');
+      
+      if (failures.length > 0) {
+        console.error('[REGISTRY] ❌ Falhas ao salvar algumas abas:', failures);
+        toast.error('Algumas abas falharam ao salvar', {
+          description: `${failures.length} aba(s) com erro. Verifique o console.`,
+        });
+      } else {
+        console.log('[REGISTRY] ✅ Todas as abas salvas com sucesso!');
+        toast.success('Relatório salvo no sistema', {
+          description: 'Todas as abas foram salvas com sucesso.',
+        });
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -481,9 +489,19 @@ export default function TOTVSCheckCard({
 
   return (
     <Card className="p-6">
+      {/* 🎯 SAVEBAR: Barra fixa de ações críticas (SPEC #005) */}
+      <SaveBar
+        statuses={getStatuses()}
+        onSaveAll={handleSalvarNoSistema}
+        onApprove={handleApproveAndMoveToPool}
+        onExportPdf={undefined} // TODO: Implementar exportação de PDF
+        readOnly={readOnly}
+        isSaving={isSaving}
+      />
+
       {/* 🔒 AVISO DE MODO READ-ONLY */}
       {readOnly && snapshot && (
-        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-2 border-blue-500 dark:border-blue-600 rounded-xl">
+        <div className="mt-6 mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-2 border-blue-500 dark:border-blue-600 rounded-xl">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
               <CheckCircle className="w-6 h-6 text-white" />
@@ -1073,75 +1091,6 @@ export default function TOTVSCheckCard({
           />
         </TabsContent>
       </Tabs>
-
-      {/* 🔗 REGISTRY: Botão de salvar todas as abas + Status */}
-      <div className="mt-6 p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950 rounded-lg border-2 border-blue-500 dark:border-blue-600">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h4 className="font-bold text-lg mb-1">💾 Salvamento em Lote</h4>
-            <p className="text-sm text-muted-foreground">
-              Salva todas as abas registradas no sistema de uma vez
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={handleSalvarNoSistema}
-              size="lg"
-              disabled={readOnly}
-              className="gap-2 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 font-bold shadow-lg disabled:opacity-50"
-            >
-              <Save className="w-5 h-5" />
-              Salvar no Sistema
-            </Button>
-            {!readOnly && hasSaved && (
-              <Button
-                onClick={handleApproveAndMoveToPool}
-                size="lg"
-                className="gap-2 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 font-bold shadow-lg"
-              >
-                <CheckCircle className="w-5 h-5" />
-                Aprovar e Mover para Pool
-              </Button>
-            )}
-          </div>
-        </div>
-        
-        {/* Preview de status das abas */}
-        <div className="flex items-center gap-4 text-xs">
-          {(() => {
-            const counts = getStatusCounts();
-            return (
-              <>
-                {counts.completed > 0 && (
-                  <Badge className="bg-emerald-600">
-                    ✅ {counts.completed} completa(s)
-                  </Badge>
-                )}
-                {counts.draft > 0 && (
-                  <Badge className="bg-amber-600">
-                    🟡 {counts.draft} rascunho(s)
-                  </Badge>
-                )}
-                {counts.processing > 0 && (
-                  <Badge className="bg-blue-600 animate-pulse">
-                    🔵 {counts.processing} processando
-                  </Badge>
-                )}
-                {counts.error > 0 && (
-                  <Badge className="bg-rose-600">
-                    ❌ {counts.error} erro(s)
-                  </Badge>
-                )}
-                {counts.total === 0 && (
-                  <span className="text-muted-foreground italic">
-                    Nenhuma aba registrada ainda
-                  </span>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      </div>
 
       {/* 🔗 REGISTRY: Diálogo de confirmação ao detectar rascunhos */}
       <AlertDialog open={showCloseConfirmDialog} onOpenChange={setShowCloseConfirmDialog}>
