@@ -192,31 +192,56 @@ function classifySocial(url: string): {
 
 // -------------------- queries determinísticas --------------------
 
+// 🛡️ HF-STACK-1.A: Blocklist de hosts de diretórios/agregadores
+const BLOCKLIST_HOSTS = [
+  'econodata.com.br',
+  'cnpj.biz',
+  'cnpj.ws',
+  'serasa.com.br',
+  'guiadeempresas',
+  'escavador.com',
+  'telelistas.net',
+  'economia.uol.com.br',
+  'biz.yahoo.com',
+  'dun-bradstreet',
+  'empresascnpj.com',
+];
+
+function isDirectoryHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return BLOCKLIST_HOSTS.some(b => host.includes(b));
+  } catch {
+    return false;
+  }
+}
+
 function buildQueries(input: DiscoveryInputs) {
   const raz = (input.razaoSocial || '').trim();
-  const cnpjDigits = stripCnpjDigits(input.cnpj);
   
-  // Query principal (assertiva) - Razão Social + CNPJ
-  const q1 = `"${raz}" ${cnpjDigits}`;
+  // 🛡️ HF-STACK-1.A: Query SEM CNPJ (evita viés para diretórios)
+  // Foco em "site oficial" + TLDs corporativos + exclusão de agregadores
   
-  // Socials focadas (uma consulta ampla com ORs)
-  const q2 = `"${raz}" (${[
+  // Query 1: Site oficial + whitelist TLD
+  const q1 = `"${raz}" "site oficial"`;
+  
+  // Query 2: Foco .com.br com exclusões de diretórios
+  const q2 = `"${raz}" site:*.com.br -econodata.com.br -cnpj.biz -cnpj.ws -serasa.com.br -guiadeempresas -telelistas -escavador -economia.uol.com.br`;
+  
+  // Query 3: TLDs genéricos com exclusões
+  const q3 = `"${raz}" (site:.com OR site:.com.br) -econodata.com.br -cnpj.biz -serasa -guiadeempresas`;
+  
+  // Query 4: Redes sociais (para confirmação posterior)
+  const q4 = `"${raz}" (${[
     'site:linkedin.com',
     'site:instagram.com',
     'site:facebook.com',
     'site:x.com',
     'site:twitter.com',
     'site:youtube.com',
-    'site:tiktok.com',
-    'site:github.com',
-    'site:glassdoor.com',
-    'site:crunchbase.com',
   ].join(' OR ')})`;
   
-  // Foco Brasil
-  const q3 = `"${raz}" site:*.com.br`;
-  
-  return [q1, q2, q3];
+  return [q1, q2, q3, q4];
 }
 
 // -------------------- integração com Serper --------------------
@@ -340,8 +365,10 @@ export async function deterministicDiscovery(input: DiscoveryInputs): Promise<Di
   console.log('[DISCOVERY] 📊 Total de resultados brutos:', results.length);
 
   // 2) Rankear resultados para site oficial
+  // 🛡️ HF-STACK-1.A: Filtrar diretórios/agregadores antes de ranquear
   const ranked = results
     .filter(r => !!r.url)
+    .filter(r => !isDirectoryHost(r.url)) // Remove diretórios/agregadores primeiro
     .map(r => ({
       ...r,
       score: scoreResult({

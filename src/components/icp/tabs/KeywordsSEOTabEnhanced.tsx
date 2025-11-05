@@ -11,6 +11,7 @@ import { registerTab, unregisterTab } from './tabsRegistry';
 import { deterministicDiscovery, buildDiscoveryCacheKey, type DiscoveryInputs, type DiscoveryResult } from './discovery/deterministicDiscovery';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { DISABLE_AUTO_DISCOVERY, SAFE_MODE } from '@/lib/flags';
 import { performFullSEOAnalysis } from '@/services/seoAnalysis';
 import type { KeywordData, SimilarCompanyBySEO } from '@/services/seoAnalysis';
 import { analyzeSimilarCompanies, generateBattleCard } from '@/services/competitiveIntelligence';
@@ -275,12 +276,12 @@ export function KeywordsSEOTabEnhanced({
 
   // 🔥 ANTI-REPROCESSO: Wrapper para smartDiscoveryMutation
   const handleSmartDiscovery = () => {
-    // 🛡️ SPEC #SAFE-00: Noise Suppressor - desabilitar auto-discovery durante diagnóstico
-    if (DISABLE_AUTO_DISCOVERY) {
-      console.info('[SAFE] ⏸️ Auto discovery desabilitado (VITE_DISABLE_AUTO_DISCOVERY=1)');
+    // 🛡️ HF-STACK-1.A: Discovery manual-only (respeita SAFE MODE + flags)
+    if (DISABLE_AUTO_DISCOVERY || SAFE_MODE) {
+      console.info('[SAFE] ⏸️ Auto discovery desabilitado (SAFE MODE ou DISABLE_AUTO_DISCOVERY)');
       toast({
         title: '⏸️ Discovery Desabilitado',
-        description: 'Auto-discovery está desabilitado para economia de créditos. Para ativar, remova VITE_DISABLE_AUTO_DISCOVERY do .env.local.',
+        description: 'Auto-discovery está desabilitado em modo seguro. Para ativar, desative SAFE_MODE no .env.local.',
         duration: 5000
       });
       return;

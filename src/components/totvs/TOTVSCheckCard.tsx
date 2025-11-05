@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useBeforeUnload } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -104,6 +105,16 @@ export default function TOTVSCheckCard({
   
   // Track de dados por aba (para salvar)
   const tabDataRef = useRef<Record<string, any>>({});
+  
+  // 🛡️ HF-STACK-1.B: Bloqueio de navegação com alterações não salvas
+  const hasDirty = Object.values(unsavedChanges).some(v => v === true);
+  useBeforeUnload(
+    useCallback((e) => {
+      if (!hasDirty) return;
+      e.preventDefault();
+      e.returnValue = ''; // Padrão para mostrar prompt nativo
+    }, [hasDirty])
+  );
   
   // 🎨 SISTEMA DE SEMÁFOROS (4 cores)
   const [tabsStatus, setTabsStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({
@@ -551,20 +562,20 @@ export default function TOTVSCheckCard({
               </AlertDialogTitle>
             </div>
             <AlertDialogDescription className="pt-3 space-y-2">
-              <p className="text-base">
+              <div className="text-base">
                 Você tem <strong>alterações não salvas</strong> nesta aba.
-              </p>
-              <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800">
-                <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2">
-                  🚨 ATENÇÃO: PERDA DAS INFORMAÇÕES COLETADAS!
-                </p>
-                <p className="text-sm text-red-700 dark:text-red-300">
-                  Se você não salvar, <strong>todas as informações coletadas nesta aba serão perdidas</strong> e será necessário <strong>reprocessar a análise novamente</strong>, consumindo tempo e recursos adicionais.
-                </p>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800">
+                <div className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2">
+                  🚨 ATENÇÃO: PERDA DAS INFORMAÇÕES COLETADAS!
+                </div>
+                <div className="text-sm text-red-700 dark:text-red-300">
+                  Se você não salvar, <strong>todas as informações coletadas nesta aba serão perdidas</strong> e será necessário <strong>reprocessar a análise novamente</strong>, consumindo tempo e recursos adicionais.
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground">
                 O que você deseja fazer?
-              </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
