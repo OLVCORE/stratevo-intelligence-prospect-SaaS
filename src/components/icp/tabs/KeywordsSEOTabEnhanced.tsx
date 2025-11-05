@@ -7,6 +7,7 @@ import { Search, TrendingUp, ExternalLink, Globe, Target, BarChart3, Loader2, Sp
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
 import { useReportAutosave } from './useReportAutosave';
 import { TabStatusBadge } from './TabIndicator';
+import { registerTab, unregisterTab } from './tabsRegistry';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { performFullSEOAnalysis } from '@/services/seoAnalysis';
@@ -90,6 +91,51 @@ export function KeywordsSEOTabEnhanced({
       console.log('[KEYWORDS] ✅ Reidratação concluída!');
     }
   }, [tabData]);
+
+  // 🔗 REGISTRY: Registrar aba no registry global para salvar em lote
+  useEffect(() => {
+    if (!stcHistoryId) return; // Só registra se tem ID de histórico
+
+    registerTab('keywords', {
+      flushSave: async () => {
+        // Coleta todos os dados atuais
+        const currentData = {
+          seoData,
+          digitalPresence,
+          intelligenceReport,
+          discoveredDomain,
+          allWebsiteResults,
+          similarCompaniesOptions,
+          competitiveAnalysis,
+          websiteOptions,
+        };
+        
+        // Mantém status atual (ou força 'completed' se preferir)
+        const currentStatus = autosaveStatus === 'completed' ? 'completed' : 'draft';
+        
+        console.log('[KEYWORDS] 📤 Registry: flushSave() chamado com status:', currentStatus);
+        await flushSave(currentData, currentStatus);
+      },
+      getStatus: () => autosaveStatus,
+    });
+
+    // Cleanup ao desmontar
+    return () => {
+      unregisterTab('keywords');
+    };
+  }, [
+    stcHistoryId,
+    seoData,
+    digitalPresence,
+    intelligenceReport,
+    discoveredDomain,
+    allWebsiteResults,
+    similarCompaniesOptions,
+    competitiveAnalysis,
+    websiteOptions,
+    autosaveStatus,
+    flushSave,
+  ]);
 
   // 🔥 Análise SEO completa
   const seoMutation = useMutation({

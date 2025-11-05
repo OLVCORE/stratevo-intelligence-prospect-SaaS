@@ -26,6 +26,7 @@ import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
 import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
 import { TabSaveWrapper } from './TabSaveWrapper';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
+import { saveAllTabs, hasNonCompleted, getStatuses, getStatusCounts } from '@/components/icp/tabs/tabsRegistry';
 import { toast } from 'sonner';
 import {
   RefreshCw,
@@ -111,6 +112,9 @@ export default function TOTVSCheckCard({
     products: 'idle',
     executive: 'idle',
   });
+
+  // 🔗 REGISTRY: Estado para diálogo de confirmação ao fechar
+  const [showCloseConfirmDialog, setShowCloseConfirmDialog] = useState(false);
   
   // Render do dot de status
   const renderStatusDot = (tabId: string) => {
@@ -332,6 +336,33 @@ export default function TOTVSCheckCard({
     
     setEnabled(true);
     refetch();
+  };
+
+  // 🔗 REGISTRY: Handler para salvar todas as abas em lote
+  const handleSalvarNoSistema = async () => {
+    console.log('[REGISTRY] 💾 Iniciando salvamento em lote de todas as abas...');
+    
+    const results = await saveAllTabs();
+    const failures = results.filter(r => r.status === 'rejected');
+    
+    if (failures.length > 0) {
+      console.error('[REGISTRY] ❌ Falhas ao salvar algumas abas:', failures);
+      toast.error('Algumas abas falharam ao salvar', {
+        description: `${failures.length} aba(s) com erro. Verifique o console.`,
+      });
+    } else {
+      console.log('[REGISTRY] ✅ Todas as abas salvas com sucesso!');
+      toast.success('Relatório salvo no sistema', {
+        description: 'Todas as abas foram salvas com sucesso.',
+      });
+    }
+  };
+
+  // 🔗 REGISTRY: Confirmar e salvar antes de sair
+  const handleConfirmAndSave = async () => {
+    await handleSalvarNoSistema();
+    setShowCloseConfirmDialog(false);
+    // Aqui você pode adicionar lógica adicional se necessário (ex: fechar modal)
   };
 
   // ✅ SEMPRE MOSTRAR AS 8 ABAS (mesmo sem STC)
@@ -913,6 +944,106 @@ export default function TOTVSCheckCard({
           />
         </TabsContent>
       </Tabs>
+
+      {/* 🔗 REGISTRY: Botão de salvar todas as abas + Status */}
+      <div className="mt-6 p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950 rounded-lg border-2 border-blue-500 dark:border-blue-600">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h4 className="font-bold text-lg mb-1">💾 Salvamento em Lote</h4>
+            <p className="text-sm text-muted-foreground">
+              Salva todas as abas registradas no sistema de uma vez
+            </p>
+          </div>
+          <Button
+            onClick={handleSalvarNoSistema}
+            size="lg"
+            className="gap-2 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 font-bold shadow-lg"
+          >
+            <Save className="w-5 h-5" />
+            Salvar no Sistema
+          </Button>
+        </div>
+        
+        {/* Preview de status das abas */}
+        <div className="flex items-center gap-4 text-xs">
+          {(() => {
+            const counts = getStatusCounts();
+            return (
+              <>
+                {counts.completed > 0 && (
+                  <Badge className="bg-emerald-600">
+                    ✅ {counts.completed} completa(s)
+                  </Badge>
+                )}
+                {counts.draft > 0 && (
+                  <Badge className="bg-amber-600">
+                    🟡 {counts.draft} rascunho(s)
+                  </Badge>
+                )}
+                {counts.processing > 0 && (
+                  <Badge className="bg-blue-600 animate-pulse">
+                    🔵 {counts.processing} processando
+                  </Badge>
+                )}
+                {counts.error > 0 && (
+                  <Badge className="bg-rose-600">
+                    ❌ {counts.error} erro(s)
+                  </Badge>
+                )}
+                {counts.total === 0 && (
+                  <span className="text-muted-foreground italic">
+                    Nenhuma aba registrada ainda
+                  </span>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* 🔗 REGISTRY: Diálogo de confirmação ao detectar rascunhos */}
+      <AlertDialog open={showCloseConfirmDialog} onOpenChange={setShowCloseConfirmDialog}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-xl">
+              <AlertTriangle className="w-6 h-6 text-amber-500" />
+              Abas não salvas detectadas
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Existem abas com dados em rascunho que ainda não foram salvas no sistema.
+              Se você sair agora, esses dados serão perdidos e você precisará reprocessar as análises (consumindo créditos novamente).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {/* Detalhes dos status */}
+          <div className="my-4 p-4 bg-slate-900/60 dark:bg-slate-800/60 rounded-lg border border-slate-700">
+            <p className="text-sm font-semibold mb-2">Status das abas:</p>
+            <pre className="text-xs overflow-auto max-h-48">
+              {JSON.stringify(getStatuses(), null, 2)}
+            </pre>
+          </div>
+
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setShowCloseConfirmDialog(false)}>
+              Cancelar
+            </AlertDialogCancel>
+            <Button
+              variant="outline"
+              onClick={() => setShowCloseConfirmDialog(false)}
+              className="gap-2"
+            >
+              Sair sem salvar
+            </Button>
+            <AlertDialogAction
+              onClick={handleConfirmAndSave}
+              className="gap-2 bg-gradient-to-r from-green-600 to-emerald-700"
+            >
+              <Save className="w-4 h-4" />
+              Salvar tudo e continuar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
