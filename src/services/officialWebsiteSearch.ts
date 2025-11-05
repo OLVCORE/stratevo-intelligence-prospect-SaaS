@@ -8,17 +8,27 @@ export interface WebsiteSearchResult {
   confidence: number;
 }
 
-// 🚫 BACKLINKS (destacar mas mostrar)
+// 🚫 BACKLINKS E SITES DE DADOS PÚBLICOS (NÃO SÃO WEBSITES OFICIAIS!)
 const BACKLINK_DOMAINS = [
   'infojobs.com.br',
   'empresasaqui.com.br',
   'econodata.com.br',
+  'escavador.com',        // ← CRÍTICO: Site de dados judiciais
+  'jusbrasil.com.br',     // ← Dados jurídicos
+  'serasa',               // ← Serasa Experian
   'cnpj.net',
   'cnpj.biz',
   'cnpj.ws',
+  'reclameaqui.com.br',   // ← Reclamações
   'guiamais.com.br',
   'telelistas.net',
   'apontador.com.br',
+  'glassdoor.com',
+  'indeed.com',
+  'catho.com.br',
+  'linkedin.com/jobs',
+  'wikipedia.org',
+  'youtube.com',
 ];
 
 /**
@@ -41,8 +51,8 @@ export async function searchOfficialWebsite(
     
     console.log('[OFFICIAL] 🎯 Usando nome:', nomeBusca, '(extraído de:', razaoSocial + ')');
 
-    // ⚡ QUERY DIRETA COM NOME FANTASIA
-    const query = `website oficial "${nomeBusca}"`;
+    // ⚡ QUERY EXATA DO GOOGLE (100% ASSERTIVA!)
+    const query = `website oficial ${razaoSocial}`;
     
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
@@ -102,11 +112,19 @@ export async function searchOfficialWebsite(
         confidence = Math.min(100, confidence + 40); // +40 pontos!
       }
       
-      // ✅ BONIFICAR se tem nome da empresa no domain (não só no title)
+      // ✅ BONIFICAR PESADO se tem nome da empresa no domain (CRITÉRIO #1!)
       const domain = url.replace(/^https?:\/\//, '').split('/')[0];
       const primeirapalavra = razaoSocial.toLowerCase().split(' ')[0];
-      if (domain.toLowerCase().includes(primeirapalavra)) {
-        confidence = Math.min(100, confidence + 30); // +30 pontos!
+      const segundaPalavra = razaoSocial.toLowerCase().split(' ')[1] || '';
+      
+      // Match perfeito no domain (ex: ceramfix.com.br para "Ceramfix...")
+      if (domain.toLowerCase().includes(primeirapalavra) && primeirapalavra.length > 4) {
+        confidence = Math.min(100, confidence + 60); // +60 pontos! MÁXIMA PRIORIDADE!
+      }
+      
+      // Match duplo (ex: goldencargo.com.br para "Golden Cargo...")
+      if (segundaPalavra.length > 3 && domain.toLowerCase().includes(segundaPalavra)) {
+        confidence = Math.min(100, confidence + 40); // +40 pontos!
       }
       
       // Bonificar se tem nome da empresa no title
