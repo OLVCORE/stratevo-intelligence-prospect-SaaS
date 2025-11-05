@@ -431,3 +431,4 @@ Após adicionar as variáveis no Vercel, seu app estará 100% funcional! 🚀
 3. ✅ Testar funcionalidades
 4. ✅ Deploy das Edge Functions no Supabase (separadamente)
 
+

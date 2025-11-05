@@ -228,3 +228,4 @@ supabase functions logs enrich-receita-federal --follow
 **Próximo passo:** Abrir projeto correto e usar PROMPT_PARA_NOVA_CONVERSA.txt
 
 
+

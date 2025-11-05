@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Search, TrendingUp, ExternalLink, Globe, Target, BarChart3, Loader2, Sparkles, RefreshCw, Save, AlertTriangle, Zap, ChevronDown, Edit } from 'lucide-react';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
+import { useReportAutosave } from './useReportAutosave';
+import { TabStatusBadge } from './TabIndicator';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { performFullSEOAnalysis } from '@/services/seoAnalysis';
@@ -20,6 +22,7 @@ interface KeywordsSEOTabProps {
   domain?: string;
   savedData?: any;
   cnpj?: string;
+  stcHistoryId?: string; // ID do registro em stc_verification_history para autosave
   onDataChange?: (data: any) => void;
   onLoading?: (loading: boolean) => void;
   onError?: (error: string) => void;
@@ -30,6 +33,7 @@ export function KeywordsSEOTabEnhanced({
   domain, 
   savedData,
   cnpj,
+  stcHistoryId,
   onDataChange,
   onLoading,
   onError
@@ -48,6 +52,45 @@ export function KeywordsSEOTabEnhanced({
   const [similarCompaniesOptions, setSimilarCompaniesOptions] = useState<any[]>([]);
   const [allWebsiteResults, setAllWebsiteResults] = useState<WebsiteSearchResult[]>([]);
 
+  // 🔥 AUTOSAVE: Hook para persistência automática da aba
+  const cacheKey = `${cnpj || ''}|${domain || ''}|${discoveredDomain || ''}|${companyName || ''}`;
+  const { 
+    tabData, 
+    status: autosaveStatus, 
+    scheduleSave, 
+    flushSave, 
+    shouldSkipExpensiveProcessing,
+    isLoading: isLoadingAutosave
+  } = stcHistoryId 
+    ? useReportAutosave({ 
+        stcHistoryId, 
+        tabKey: 'keywords', 
+        cacheKey,
+        initialData: savedData 
+      })
+    : {
+        tabData: savedData,
+        status: 'draft' as const,
+        scheduleSave: async () => {},
+        flushSave: async () => {},
+        shouldSkipExpensiveProcessing: false,
+        isLoading: false
+      };
+
+  // 🔥 Reidratar dados salvos ao montar componente
+  useEffect(() => {
+    if (tabData && Object.keys(tabData).length > 0) {
+      console.log('[KEYWORDS] 📦 Reidratando dados salvos...', tabData);
+      if (tabData.seoData) setSeoData(tabData.seoData);
+      if (tabData.digitalPresence) setDigitalPresence(tabData.digitalPresence);
+      if (tabData.intelligenceReport) setIntelligenceReport(tabData.intelligenceReport);
+      if (tabData.discoveredDomain) setDiscoveredDomain(tabData.discoveredDomain);
+      if (tabData.allWebsiteResults) setAllWebsiteResults(tabData.allWebsiteResults);
+      if (tabData.similarCompaniesOptions) setSimilarCompaniesOptions(tabData.similarCompaniesOptions);
+      console.log('[KEYWORDS] ✅ Reidratação concluída!');
+    }
+  }, [tabData]);
+
   // 🔥 Análise SEO completa
   const seoMutation = useMutation({
     mutationFn: async () => {
@@ -59,12 +102,25 @@ export function KeywordsSEOTabEnhanced({
     },
     onMutate: () => {
       onLoading?.(true); // 🟡 Notifica parent: loading
+      
+      // 🔥 AUTOSAVE: Marca como 'processing'
+      if (stcHistoryId) {
+        flushSave({
+          seoData,
+          digitalPresence,
+          discoveredDomain,
+          intelligenceReport,
+          allWebsiteResults,
+          similarCompaniesOptions
+        }, 'processing');
+      }
+      
       toast({
         title: '🔍 Analisando SEO...',
         description: 'Extraindo keywords e buscando empresas similares',
       });
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setSeoData(data);
       
       // 🔥 ANÁLISE COMPETITIVA DUPLA
@@ -72,15 +128,25 @@ export function KeywordsSEOTabEnhanced({
         const analysis = analyzeSimilarCompanies(data.similarCompanies);
         setCompetitiveAnalysis(analysis);
         
-        // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
-        onDataChange?.({ 
+        const savedPayload = { 
           seoData: data, 
           competitiveAnalysis: analysis,
           digitalPresence,
           discoveredDomain,
           intelligenceReport,
-          websiteOptions
-        });
+          websiteOptions,
+          allWebsiteResults,
+          similarCompaniesOptions
+        };
+        
+        // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
+        onDataChange?.(savedPayload);
+        
+        // 🔥 AUTOSAVE: Flush save imediato após sucesso
+        if (stcHistoryId) {
+          await flushSave(savedPayload, 'completed');
+        }
+        
         onLoading?.(false);
         
         toast({
@@ -88,15 +154,25 @@ export function KeywordsSEOTabEnhanced({
           description: `${data.profile.keywords.length} keywords | ${analysis.summary.vendaTotvsCount} oportunidades venda | ${analysis.summary.parceriaCount} oportunidades parceria`,
         });
       } else {
-        // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
-        onDataChange?.({ 
+        const savedPayload = { 
           seoData: data, 
           competitiveAnalysis: null,
           digitalPresence,
           discoveredDomain,
           intelligenceReport,
-          websiteOptions
-        });
+          websiteOptions,
+          allWebsiteResults,
+          similarCompaniesOptions
+        };
+        
+        // 🚨 CRÍTICO: Salva TODOS os estados para evitar perda ao trocar abas
+        onDataChange?.(savedPayload);
+        
+        // 🔥 AUTOSAVE: Flush save imediato após sucesso
+        if (stcHistoryId) {
+          await flushSave(savedPayload, 'completed');
+        }
+        
         onLoading?.(false);
         
         toast({
@@ -108,6 +184,19 @@ export function KeywordsSEOTabEnhanced({
     onError: (error) => {
       onError?.((error as Error).message); // 🔴 Notifica parent: erro
       onLoading?.(false);
+      
+      // 🔥 AUTOSAVE: Marca como 'error'
+      if (stcHistoryId) {
+        flushSave({
+          seoData,
+          digitalPresence,
+          discoveredDomain,
+          intelligenceReport,
+          allWebsiteResults,
+          similarCompaniesOptions
+        }, 'error');
+      }
+      
       toast({
         title: '❌ Erro na análise SEO',
         description: (error as Error).message,
@@ -115,6 +204,19 @@ export function KeywordsSEOTabEnhanced({
       });
     }
   });
+
+  // 🔥 ANTI-REPROCESSO: Wrapper para seoMutation com verificação de cache
+  const handleSEOAnalysis = () => {
+    if (shouldSkipExpensiveProcessing && seoData) {
+      toast({
+        title: '💾 Análise já realizada',
+        description: 'Os dados já foram analisados recentemente. Use "Reprocessar" se desejar atualizar.',
+        duration: 5000
+      });
+      return;
+    }
+    seoMutation.mutate();
+  };
 
   // 🏢 BUSCA EMPRESAS SIMILARES - TOP 10 (CNAE + NCM + Keywords)
   const similarCompaniesMutation = useMutation({
@@ -491,6 +593,13 @@ export function KeywordsSEOTabEnhanced({
             saveDisabled={!seoData && !digitalPresence && !intelligenceReport}
             hasUnsavedChanges={hasUnsaved}
           />
+
+          {/* 🎯 INDICADOR DE STATUS AUTOSAVE */}
+          {stcHistoryId && (
+            <div className="flex items-center justify-end mb-2">
+              <TabStatusBadge status={autosaveStatus} />
+            </div>
+          )}
           
           {/* 📝 BOTÃO EDITAR WEBSITE - FICA NA BARRA EXTRA */}
           {(discoveredDomain || domain) && !isEditingWebsite && (
@@ -563,7 +672,7 @@ export function KeywordsSEOTabEnhanced({
               <div className="flex flex-col gap-2">
                 {!seoData && (
                   <Button
-                    onClick={() => seoMutation.mutate()}
+                    onClick={handleSEOAnalysis}
                     disabled={seoMutation.isPending}
                     size="lg"
                     className="w-full bg-gradient-to-r from-primary to-primary/80 gap-2"
@@ -623,9 +732,10 @@ export function KeywordsSEOTabEnhanced({
                     size="sm"
                     disabled={seoMutation.isPending}
                     className="w-full"
+                    title="Forçar reprocessamento (ignora cache)"
                   >
                     <RefreshCw className={`h-4 w-4 mr-2 ${seoMutation.isPending ? 'animate-spin' : ''}`} />
-                    Atualizar Análise SEO
+                    Reprocessar Análise SEO
                   </Button>
                 )}
                 

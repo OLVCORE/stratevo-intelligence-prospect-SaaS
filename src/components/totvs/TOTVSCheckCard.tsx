@@ -25,6 +25,7 @@ import { RecommendedProductsTab } from '@/components/icp/tabs/RecommendedProduct
 import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
 import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
 import { TabSaveWrapper } from './TabSaveWrapper';
+import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { toast } from 'sonner';
 import {
   RefreshCw,
@@ -420,9 +421,10 @@ export default function TOTVSCheckCard({
         <TabsList className="grid w-full grid-cols-9 mb-6 h-auto">
           {/* 🔄 NOVA ORDEM: Keywords PRIMEIRO, Executive ÚLTIMO */}
           <TabsTrigger value="keywords" className="flex flex-col items-center gap-1 text-xs py-2">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <Globe className="w-3 h-3" />
               <span className="text-[10px]">Keywords</span>
+              <TabIndicator status={latestReport?.full_report?.__status?.keywords?.status || 'draft'} />
             </div>
             {renderStatusDot('keywords')}
           </TabsTrigger>
@@ -881,6 +883,7 @@ export default function TOTVSCheckCard({
               companyName={companyName}
               domain={domain}
               cnpj={cnpj}
+              stcHistoryId={latestReport?.id}
               savedData={latestReport?.full_report?.keywords_seo_report}
               onDataChange={(data) => {
                 tabDataRef.current.keywords = data;
