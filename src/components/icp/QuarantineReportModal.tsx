@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { DiscardCompanyModal } from '@/components/icp/DiscardCompanyModal';
+import { ReportHistoryModal } from '@/components/icp/ReportHistoryModal';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -42,6 +43,7 @@ export function QuarantineReportModal({
   const { data: latestReport, isLoading: loadingHistory } = useLatestSTCReport(companyId, companyName);
 
   const [showDiscard, setShowDiscard] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [stcResult, setStcResult] = useState<any | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -335,6 +337,16 @@ export function QuarantineReportModal({
               <Button
                 variant="outline"
                 size="icon"
+                onClick={() => setShowHistory(true)}
+                title="Ver histórico de relatórios"
+                className="h-9 w-9"
+              >
+                <History className="w-4 h-4" />
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="icon"
                 onClick={handleToggleExpand}
                 title={isExpanded ? 'Minimizar' : 'Maximizar'}
                 className="h-9 w-9"
@@ -400,6 +412,21 @@ export function QuarantineReportModal({
           </div>
         </div>
       </DialogContent>
+      
+      {/* Modal de Histórico de Relatórios */}
+      <ReportHistoryModal
+        open={showHistory}
+        onOpenChange={setShowHistory}
+        companyName={companyName}
+        companyId={companyId}
+        onSelectReport={(reportId) => {
+          toast.info('Carregando relatório selecionado...');
+          setShowHistory(false);
+          // Recarregar o relatório selecionado
+          window.location.reload();
+        }}
+      />
+      
       {/* Modal de Descarte com motivos */}
       <DiscardCompanyModal
         open={showDiscard}
