@@ -21,6 +21,18 @@ serve(async (req) => {
     const body: DecisorRequest = await req.json();
     const { companyName, linkedinCompanyUrl, positions } = body;
 
+    if (!companyName || companyName.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'companyName é obrigatório', decisors: [] }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Se positions não vier, usa uma lista padrão de cargos executivos
+    const effectivePositions = Array.isArray(positions) && positions.length > 0
+      ? positions
+      : ['CEO', 'CFO', 'CIO', 'CTO', 'COO', 'Diretor', 'VP'];
+
     console.log('[PHANTOM-DECISORS] 🔍 Buscando decisores:', companyName);
 
     // Obter chaves do PhantomBuster
@@ -43,7 +55,7 @@ serve(async (req) => {
     // 🔥 ESTRATÉGIA 1: LinkedIn People Search Export (Agent oficial)
     // Busca por: "Company: [NOME]" + "Title: CEO OR CFO OR CIO"
     
-    const searchQuery = positions.map(pos => `"${pos}"`).join(' OR ');
+    const searchQuery = effectivePositions.map(pos => `"${pos}"`).join(' OR ');
     
     const launchResponse = await fetch('https://api.phantombuster.com/api/v2/agents/launch', {
       method: 'POST',
