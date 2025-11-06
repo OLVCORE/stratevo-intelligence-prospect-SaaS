@@ -12,6 +12,7 @@ import { deterministicDiscovery, buildDiscoveryCacheKey, type DiscoveryInputs, t
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { DISABLE_AUTO_DISCOVERY, SAFE_MODE } from '@/lib/flags';
+import { useBackendJob } from '@/hooks/useBackendJob';
 import { performFullSEOAnalysis } from '@/services/seoAnalysis';
 import type { KeywordData, SimilarCompanyBySEO } from '@/services/seoAnalysis';
 import { analyzeSimilarCompanies, generateBattleCard } from '@/services/competitiveIntelligence';
@@ -42,6 +43,9 @@ export function KeywordsSEOTabEnhanced({
   onError
 }: KeywordsSEOTabProps) {
   const { toast } = useToast();
+  
+  // 🔥 BACKEND JOB: Sistema enterprise de processamento
+  const { triggerJob, status: jobStatus, progress, result: jobResult, isProcessing } = useBackendJob(stcHistoryId || null);
   
   // 🔥 CRÍTICO: SEMPRE CARREGAR savedData ao retornar (evita perda de dados)
   const [seoData, setSeoData] = useState<any>(savedData?.seoData || null);
