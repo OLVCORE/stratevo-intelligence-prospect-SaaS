@@ -401,23 +401,54 @@ export default function TOTVSCheckCard({
   const handleSalvarNoSistema = async () => {
     console.log('[REGISTRY] 💾 Iniciando salvamento em lote de todas as abas...');
     
+    // 🔧 SPEC #BOTÕES-UNIF: Validar se há abas registradas
+    const statuses = getStatuses();
+    const registeredCount = Object.keys(statuses).length;
+    
+    console.log('[REGISTRY] 📊 Abas registradas:', registeredCount, statuses);
+    
+    if (registeredCount === 0) {
+      console.warn('[REGISTRY] ⚠️ Nenhuma aba registrada para salvar');
+      toast.warning('Nenhuma aba para salvar', {
+        description: 'Navegue pelas abas e processe as análises antes de salvar.',
+        duration: 5000,
+      });
+      return;
+    }
+    
     setIsSaving(true);
+    
+    // Toast de início
+    toast.info('💾 Salvando relatório...', {
+      description: `Salvando ${registeredCount} aba(s) registrada(s)`,
+    });
     
     try {
       const results = await saveAllTabs();
+      const successes = results.filter(r => r.status === 'fulfilled');
       const failures = results.filter(r => r.status === 'rejected');
       
       if (failures.length > 0) {
         console.error('[REGISTRY] ❌ Falhas ao salvar algumas abas:', failures);
         toast.error('Algumas abas falharam ao salvar', {
-          description: `${failures.length} aba(s) com erro. Verifique o console.`,
+          description: `${successes.length} salva(s) com sucesso, ${failures.length} com erro. Verifique o console.`,
         });
       } else {
         console.log('[REGISTRY] ✅ Todas as abas salvas com sucesso!');
-        toast.success('Relatório salvo no sistema', {
-          description: 'Todas as abas foram salvas com sucesso.',
+        toast.success('✅ Relatório salvo no sistema!', {
+          description: `${successes.length} aba(s) salva(s) com sucesso.`,
+          duration: 5000,
         });
+        
+        // Invalidar cache para recarregar dados
+        queryClient.invalidateQueries({ queryKey: ['stc-history'] });
       }
+    } catch (error) {
+      console.error('[REGISTRY] ❌ Erro crítico ao salvar:', error);
+      toast.error('Erro ao salvar relatório', {
+        description: (error as Error)?.message || 'Erro desconhecido',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }

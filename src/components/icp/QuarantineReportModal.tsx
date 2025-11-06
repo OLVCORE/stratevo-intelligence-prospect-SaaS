@@ -366,51 +366,22 @@ export function QuarantineReportModal({
 
           {/* Footer fixo */}
           <div className="shrink-0 border-t bg-muted/30 p-4">
-            <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
-              <Button 
-                variant="outline" 
-                onClick={handleSaveToSystem} 
-                disabled={isSaving || !stcResult}
-                className="gap-2"
-                size="sm"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  <>
-                    <Database className="w-4 h-4" />
-                    Salvar no Sistema
-                  </>
-                )}
-              </Button>
-              
-              <Button 
-                variant="default" 
-                onClick={handleSendToPipeline} 
-                disabled={isSendingToPipeline || !companyId}
-                className="gap-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600"
-                size="sm"
-              >
-                {isSendingToPipeline ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Enviar para Pipeline
-                  </>
-                )}
-              </Button>
-              
+            {/* 💡 SPEC #BOTÕES-UNIF: Aviso para usar SaveBar */}
+            <div className="mb-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-400 dark:border-blue-600 rounded-lg">
+              <p className="text-sm font-bold text-blue-900 dark:text-blue-100 flex items-center gap-2 mb-2">
+                💡 Use a <strong>SaveBar (barra no topo)</strong> para:
+              </p>
+              <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1 ml-4 list-disc">
+                <li><strong>Salvar Relatório</strong> → Salva todas as abas processadas (full_report)</li>
+                <li><strong>Aprovar & Mover para Pool</strong> → Cria snapshot final e envia para pipeline</li>
+              </ul>
+            </div>
+            
+            <DialogFooter className="gap-2 sm:gap-2">
               <Button 
                 variant="destructive" 
-                onClick={handleReject} 
-                className="gap-2"
+                onClick={() => setShowDiscard(true)} 
+                className="gap-2 flex-1"
                 size="sm"
               >
                 <XCircle className="w-4 h-4" />
@@ -418,12 +389,12 @@ export function QuarantineReportModal({
               </Button>
               
               <Button 
-                onClick={handleApprove} 
-                className="gap-2"
+                variant="outline"
+                onClick={() => onOpenChange(false)} 
+                className="gap-2 flex-1"
                 size="sm"
               >
-                <CheckCircle className="w-4 h-4" />
-                Aprovar e Mover para Pool
+                Fechar
               </Button>
             </DialogFooter>
           </div>

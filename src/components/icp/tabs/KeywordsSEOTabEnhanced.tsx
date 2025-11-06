@@ -96,9 +96,7 @@ export function KeywordsSEOTabEnhanced({
 
   // 🔗 REGISTRY: Registrar aba no registry global para salvar em lote
   useEffect(() => {
-    if (!stcHistoryId) return; // Só registra se tem ID de histórico
-
-    console.info('[REGISTRY] ✅ Registered: keywords');
+    console.info('[REGISTRY] ✅ Registering: keywords', { hasStcHistoryId: !!stcHistoryId });
 
     registerTab('keywords', {
       flushSave: async () => {
@@ -114,11 +112,19 @@ export function KeywordsSEOTabEnhanced({
           websiteOptions,
         };
         
-        // Mantém status atual (ou força 'completed' se preferir)
-        const currentStatus = autosaveStatus === 'completed' ? 'completed' : 'draft';
+        console.log('[KEYWORDS] 📤 Registry: flushSave() chamado');
         
-        console.log('[KEYWORDS] 📤 Registry: flushSave() chamado com status:', currentStatus);
-        await flushSave(currentData, currentStatus);
+        // 🔧 SPEC #BOTÕES-UNIF: Salvar mesmo sem stcHistoryId
+        if (stcHistoryId) {
+          // Com ID de histórico: salvar no Supabase via autosave
+          const currentStatus = autosaveStatus === 'completed' ? 'completed' : 'draft';
+          console.log('[KEYWORDS] 💾 Salvando via autosave com status:', currentStatus);
+          await flushSave(currentData, currentStatus);
+        } else {
+          // Sem ID de histórico: notificar via onDataChange (parent salva)
+          console.log('[KEYWORDS] 💾 Salvando via onDataChange (sem stcHistoryId)');
+          onDataChange?.(currentData);
+        }
       },
       getStatus: () => autosaveStatus,
     });
@@ -140,6 +146,7 @@ export function KeywordsSEOTabEnhanced({
     websiteOptions,
     autosaveStatus,
     flushSave,
+    onDataChange,
   ]);
 
   // 🔥 Análise SEO completa
