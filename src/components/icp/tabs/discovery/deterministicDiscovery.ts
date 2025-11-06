@@ -219,20 +219,16 @@ function isDirectoryHost(url: string): boolean {
 function buildQueries(input: DiscoveryInputs) {
   const raz = (input.razaoSocial || '').trim();
   
-  // 🛡️ HF-STACK-1.A: Query SEM CNPJ (evita viés para diretórios)
-  // Foco em "site oficial" + TLDs corporativos + exclusão de agregadores
+  // 🔧 HOTFIX: Queries balanceadas (encontrar resultados SEM poluir com diretórios)
   
-  // Query 1: Site oficial + whitelist TLD
-  const q1 = `"${raz}" "site oficial"`;
+  // Query 1: Simples e direta (empresa + Brasil)
+  const q1 = `"${raz}"`;
   
-  // Query 2: Foco .com.br com exclusões de diretórios
-  const q2 = `"${raz}" site:*.com.br -econodata.com.br -cnpj.biz -cnpj.ws -serasa.com.br -guiadeempresas -telelistas -escavador -economia.uol.com.br`;
+  // Query 2: Foco .com.br (Brasil)
+  const q2 = `"${raz}" site:*.com.br`;
   
-  // Query 3: TLDs genéricos com exclusões
-  const q3 = `"${raz}" (site:.com OR site:.com.br) -econodata.com.br -cnpj.biz -serasa -guiadeempresas`;
-  
-  // Query 4: Redes sociais (para confirmação posterior)
-  const q4 = `"${raz}" (${[
+  // Query 3: Redes sociais (para confirmação e perfis)
+  const q3 = `"${raz}" (${[
     'site:linkedin.com',
     'site:instagram.com',
     'site:facebook.com',
@@ -240,6 +236,9 @@ function buildQueries(input: DiscoveryInputs) {
     'site:twitter.com',
     'site:youtube.com',
   ].join(' OR ')})`;
+  
+  // Query 4: Site oficial explícito (pode ter menos resultados mas mais precisos)
+  const q4 = `"${raz}" "site oficial" OR "website oficial"`;
   
   return [q1, q2, q3, q4];
 }
