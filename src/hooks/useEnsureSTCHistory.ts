@@ -38,22 +38,12 @@ export function useEnsureSTCHistory(params: STCHistoryParams) {
       try {
         console.info('[STC] 📝 Criando registro inicial para:', companyName);
 
+        // INSERT MINIMALISTA - só colunas garantidas
         const { data, error: insertError } = await supabase
           .from('stc_verification_history')
           .insert({
-            company_id: companyId || null,
             company_name: companyName,
             cnpj: cnpj || null,
-            status: 'draft',
-            confidence: '0%',
-            triple_matches: 0,
-            double_matches: 0,
-            single_matches: 0,
-            total_score: 0,
-            evidences: [],
-            sources_consulted: 0,
-            queries_executed: 0,
-            verification_duration_ms: null,
             full_report: {
               __meta: {
                 created_at: new Date().toISOString(),
