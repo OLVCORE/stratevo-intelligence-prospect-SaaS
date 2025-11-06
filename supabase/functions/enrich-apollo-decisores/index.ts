@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface EnrichApolloRequest {
-  companyId: string;
+  companyId?: string; // optional: only update DB when provided
   companyName: string;
   domain?: string;
 }
@@ -148,36 +148,40 @@ serve(async (req) => {
     console.log('[ENRICH-APOLLO] Influencers:', influencers.length);
     console.log('[ENRICH-APOLLO] Users:', users.length);
 
-    // Atualizar empresa no banco
-    const updateData = {
-      decisores: decisores,
-      decision_makers_count: decisionMakers.length,
-      influencers_count: influencers.length,
-      apollo_enriched_at: new Date().toISOString()
-    };
+    // Atualizar empresa no banco (apenas se companyId for fornecido)
+    if (companyId) {
+      const updateData = {
+        decisores: decisores,
+        decision_makers_count: decisionMakers.length,
+        influencers_count: influencers.length,
+        apollo_enriched_at: new Date().toISOString()
+      };
 
-    const { error: updateError } = await supabaseClient
-      .from('suggested_companies')
-      .update(updateData)
-      .eq('id', companyId);
-
-    if (updateError) {
-      console.error('[ENRICH-APOLLO] Erro ao atualizar banco:', updateError);
-      throw updateError;
-    }
-
-    // Se encontrou CEO/CFO/CIO, salvar email principal
-    const mainDecisionMaker = decisionMakers.find(d => 
-      d.title?.toLowerCase().includes('ceo') ||
-      d.title?.toLowerCase().includes('cfo') ||
-      d.title?.toLowerCase().includes('cio')
-    );
-
-    if (mainDecisionMaker?.email) {
-      await supabaseClient
+      const { error: updateError } = await supabaseClient
         .from('suggested_companies')
-        .update({ email: mainDecisionMaker.email })
+        .update(updateData)
         .eq('id', companyId);
+
+      if (updateError) {
+        console.error('[ENRICH-APOLLO] Erro ao atualizar banco:', updateError);
+        throw updateError;
+      }
+
+      // Se encontrou CEO/CFO/CIO, salvar email principal
+      const mainDecisionMaker = decisionMakers.find(d => 
+        d.title?.toLowerCase().includes('ceo') ||
+        d.title?.toLowerCase().includes('cfo') ||
+        d.title?.toLowerCase().includes('cio')
+      );
+
+      if (mainDecisionMaker?.email) {
+        await supabaseClient
+          .from('suggested_companies')
+          .update({ email: mainDecisionMaker.email })
+          .eq('id', companyId);
+      }
+    } else {
+      console.log('[ENRICH-APOLLO] companyId não informado — retornando apenas os decisores (sem atualizar DB)');
     }
 
     console.log('[ENRICH-APOLLO] Empresa atualizada com sucesso');
