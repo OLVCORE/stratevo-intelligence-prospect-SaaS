@@ -70,10 +70,11 @@ export function useLatestSTCReport(companyId?: string, companyName?: string) {
       if (companyId) {
         query = query.eq('company_id', companyId);
       } else if (companyName) {
-        query = query.ilike('company_name', companyName);
+        // FIX: usar eq() em vez de ilike() para evitar 406 com caracteres especiais
+        query = query.eq('company_name', companyName);
       }
 
-      const { data, error } = await query.single();
+      const { data, error } = await query.maybeSingle();
 
       // Se tabela não existir ou registro não encontrado, retornar null (não é crítico)
       if (error) {

@@ -194,17 +194,28 @@ function classifySocial(url: string): {
 
 // 🛡️ HF-STACK-1.A: Blocklist de hosts de diretórios/agregadores
 const BLOCKLIST_HOSTS = [
+  // Diretórios CNPJ
   'econodata.com.br',
   'cnpj.biz',
   'cnpj.ws',
+  'cnpja.com',
+  'cnpjbrasil.com',
+  'cnpjtotal.com.br',
+  'empresascnpj.com',
+  'cnpj.rocks',
+  // Agregadores e diretórios
   'serasa.com.br',
   'guiadeempresas',
   'escavador.com',
   'telelistas.net',
+  'portaldastransportadoras.com.br',
+  'guiadeindustrias.com.br',
+  'guiaempresas.com.br',
+  'getin.com.br',
+  // News
   'economia.uol.com.br',
   'biz.yahoo.com',
   'dun-bradstreet',
-  'empresascnpj.com',
 ];
 
 function isDirectoryHost(url: string): boolean {
