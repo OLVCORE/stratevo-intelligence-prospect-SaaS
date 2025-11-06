@@ -240,32 +240,42 @@ function isDirectoryHost(url: string): boolean {
 function buildQueries(input: DiscoveryInputs) {
   const raz = (input.razaoSocial || '').trim();
   
-  // 🔥 EXTRAIR APENAS NOME PRINCIPAL (remover S.A., Ltda, Indústria, etc)
+  // 🔥 EXTRAIR APENAS NOME PRINCIPAL (primeira palavra significativa)
   const mainName = raz
     .replace(/\s+(S\.?A\.?|Ltda\.?|LTDA|ME|EPP|EIRELI)(\s|$)/gi, '')
-    .replace(/\s+(Indústria|Comércio|Serviços|Transportes|Logística)(\s|de\s|e\s)/gi, ' ')
+    .replace(/\s+(Indústria|Comércio|Serviços|Transportes|Logística|de|e|do|da|dos|das)(\s+)/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .split(' ')[0]; // Pega só primeira palavra principal
+    .split(' ')[0];
   
-  console.log(`[QUERY] 🎯 Nome simplificado: "${mainName}" (original: "${raz}")`);
+  console.log(`[QUERY] 🎯 Nome principal: "${mainName}" (razão social: "${raz}")`);
   
-  // Blocklist explícito para queries
-  const blocklist = '-jusbrasil -escavador -econodata -serasa -cnpj.biz -telelistas -guiadeempresas -salario.com.br';
+  // Blocklist EXPLÍCITO nas queries
+  const blocklist = [
+    '-jusbrasil',
+    '-escavador',
+    '-econodata',
+    '-serasa',
+    '-cnpj',
+    '-telelistas',
+    '-guiadeempresas',
+    '-salario.com.br',
+    '-pesquisaempresas',
+    '-enderecofiscal',
+    '-diariooficial',
+  ].join(' ');
   
-  // Query 1: Nome principal + site oficial + blocklist
+  // 🎯 STRATEGY: Igual a busca manual no Google
+  // Query 1: Nome principal + "site oficial" (encontra o domínio)
   const q1 = `"${mainName}" "site oficial" ${blocklist}`;
   
-  // Query 2: Nome principal + .com.br + blocklist
+  // Query 2: Nome principal com TLD brasileiro
   const q2 = `"${mainName}" site:*.com.br ${blocklist}`;
   
-  // Query 3: Redes sociais (APENAS para o nome principal)
+  // Query 3: Redes sociais (validação)
   const q3 = `"${mainName}" (site:linkedin.com OR site:instagram.com OR site:facebook.com)`;
   
-  // Query 4: Nome completo como fallback (mas com blocklist)
-  const q4 = `"${raz}" ${blocklist}`;
-  
-  return [q1, q2, q3, q4];
+  return [q1, q2, q3];
 }
 
 // -------------------- integração com Serper --------------------
