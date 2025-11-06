@@ -511,6 +511,11 @@ export function KeywordsSEOTabEnhanced({
         // 🔥 AUTOSAVE: Flush save imediato
         if (stcHistoryId) {
           await flushSave(savedPayload, 'completed');
+          console.info('[KEYWORDS] ✅ Discovery salvo no Supabase');
+        } else {
+          // Fallback: notificar parent
+          onDataChange?.(savedPayload);
+          console.info('[KEYWORDS] ✅ Discovery salvo localmente (sem stcHistoryId)');
         }
         
         console.info('[KEYWORDS] ✅ Discovery concluído e salvo');

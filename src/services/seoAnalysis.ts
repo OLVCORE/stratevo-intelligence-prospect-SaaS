@@ -2,7 +2,7 @@
 
 // Não precisa de Supabase - funciona com APIs diretas (Jina AI + Serper)
 
-// 🚫 FILTRO: Domínios inválidos (portais, redes sociais, blogs)
+// 🚫 FILTRO: Domínios inválidos (portais, redes sociais, blogs, agregadores)
 const INVALID_DOMAINS = [
   'wikipedia.org', 'wiki', 
   'youtube.com', 'youtu.be',
@@ -21,6 +21,19 @@ const INVALID_DOMAINS = [
   'stackoverflow.com',
   'medium.com',
   'reddit.com',
+  // AGREGADORES E DIRETÓRIOS (HF-STACK-2)
+  'econodata.com.br',
+  'cnpj.biz',
+  'cnpj.ws',
+  'cnpja.com',
+  'cnpjbrasil.com',
+  'cnpjtotal.com.br',
+  'portaldastransportadoras.com.br',
+  'guiadeindustrias.com.br',
+  'guiadeempresas',
+  'telelistas.net',
+  'escavador.com',
+  'serasa.com.br',
 ];
 
 // ✅ VALIDADOR: Só aceitar empresas REAIS
