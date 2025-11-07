@@ -25,18 +25,29 @@ CREATE TABLE IF NOT EXISTS discarded_companies (
   original_icp_temperature TEXT
 );
 
-CREATE INDEX idx_discarded_company ON discarded_companies(company_id);
-CREATE INDEX idx_discarded_reason ON discarded_companies(discard_reason_id);
-CREATE INDEX idx_discarded_category ON discarded_companies(discard_category);
-CREATE INDEX idx_discarded_date ON discarded_companies(discarded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_discarded_company ON discarded_companies(company_id);
+CREATE INDEX IF NOT EXISTS idx_discarded_reason ON discarded_companies(discard_reason_id);
+CREATE INDEX IF NOT EXISTS idx_discarded_category ON discarded_companies(discard_category);
+CREATE INDEX IF NOT EXISTS idx_discarded_date ON discarded_companies(discarded_at DESC);
 
 ALTER TABLE discarded_companies ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow authenticated to manage discarded" 
-ON discarded_companies FOR ALL 
-TO authenticated 
-USING (true) 
-WITH CHECK (true);
+-- Policy idempotente (verifica se existe antes de criar)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'discarded_companies'
+      AND policyname = 'Allow authenticated to manage discarded'
+  ) THEN
+    CREATE POLICY "Allow authenticated to manage discarded"
+      ON discarded_companies FOR ALL
+      TO authenticated
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+END$$;
 
 COMMENT ON TABLE discarded_companies IS 'Histórico de empresas descartadas (arquivo morto)';
 
