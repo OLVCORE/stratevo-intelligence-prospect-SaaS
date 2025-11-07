@@ -1145,29 +1145,56 @@ export default function ICPQuarantine() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - CLICÁVEIS PARA FILTRAR */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-all hover:shadow-lg hover:scale-105"
+          onClick={() => setStatusFilter('pendente')}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold">{companies.filter(c => c.status === 'pendente').length}</div>
-            <p className="text-sm text-muted-foreground">Pendentes</p>
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" />
+              Pendentes
+            </p>
           </CardContent>
         </Card>
-        <Card>
+        
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-all hover:shadow-lg hover:scale-105"
+          onClick={() => setTempFilter('hot')}
+        >
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-red-500">{companies.filter(c => c.temperatura === 'hot').length}</div>
+            <div className="text-2xl font-bold text-red-500 flex items-center gap-2">
+              <Flame className="w-6 h-6" />
+              {companies.filter(c => c.temperatura === 'hot').length}
+            </div>
             <p className="text-sm text-muted-foreground">Hot Leads</p>
           </CardContent>
         </Card>
-        <Card>
+        
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-all hover:shadow-lg hover:scale-105"
+          onClick={() => setStatusFilter('aprovada')}
+        >
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{companies.filter(c => c.status === 'aprovada').length}</div>
+            <div className="text-2xl font-bold text-green-500 flex items-center gap-2">
+              <CheckCircle className="w-6 h-6" />
+              {companies.filter(c => c.status === 'aprovada').length}
+            </div>
             <p className="text-sm text-muted-foreground">Aprovadas</p>
           </CardContent>
         </Card>
-        <Card>
+        
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-all hover:shadow-lg hover:scale-105"
+          onClick={() => setStatusFilter('descartada')}
+        >
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{companies.filter(c => c.status === 'descartada').length}</div>
+            <div className="text-2xl font-bold text-orange-500 flex items-center gap-2">
+              <XCircle className="w-6 h-6" />
+              {companies.filter(c => c.status === 'descartada').length}
+            </div>
             <p className="text-sm text-muted-foreground">Descartadas</p>
           </CardContent>
         </Card>
