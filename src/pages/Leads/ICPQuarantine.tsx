@@ -919,30 +919,31 @@ export default function ICPQuarantine() {
         const isNoGo = totvsResult?.status === 'no-go';
         const isGo = totvsResult?.status === 'go';
         
-        // 2. Decisores (só se GO)
+        // 2. Decisores (SEMPRE - GO ou NO-GO)
+        // Custo baixo e pode ser útil no futuro mesmo se NO-GO
         let decisors = null;
-        if (isGo) {
-          try {
-            const { data: decisorsData } = await supabase.functions.invoke('enrich-apollo-decisores', {
-              body: {
-                companyName: company.razao_social,
-                linkedinUrl: company.linkedin_url || '',
-              },
-            });
-            decisors = decisorsData;
-          } catch (err) {
-            console.warn(`[BATCH] ⚠️ Decisores falhou (continuando):`, err);
-          }
+        try {
+          const { data: decisorsData } = await supabase.functions.invoke('enrich-apollo-decisores', {
+            body: {
+              companyName: company.razao_social,
+              linkedinUrl: company.linkedin_url || '',
+            },
+          });
+          decisors = decisorsData;
+          console.log(`[BATCH] ✅ Decisores extraídos: ${decisorsData?.decisores?.length || 0}`);
+        } catch (err) {
+          console.warn(`[BATCH] ⚠️ Decisores falhou (continuando):`, err);
         }
         
-        // 3. Digital (se tem website)
+        // 3. Digital (SEMPRE - se tem website dos decisores)
         let digital = null;
-        if (isGo && decisors?.companyData?.website) {
+        if (decisors?.companyData?.website) {
           digital = {
             website: decisors.companyData.website,
             linkedin: decisors.companyData.linkedinUrl,
             discovered_at: new Date().toISOString(),
           };
+          console.log(`[BATCH] ✅ Digital descoberto: ${digital.website}`);
         }
         
         // 4. Salvar relatório completo

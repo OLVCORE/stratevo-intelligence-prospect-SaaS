@@ -323,10 +323,24 @@ export default function TOTVSCheckCard({
   const savedDetectionReport = (latestReport?.full_report as any)?.detection_report;
   const freshData = liveData?.data || liveData;
   
+  // 🔥 FALLBACK: Se full_report existe mas detection_report está vazio,
+  // pode ser que os dados estejam diretamente em full_report
+  const fallbackData = latestReport?.full_report && !savedDetectionReport 
+    ? latestReport.full_report 
+    : null;
+  
   // Priorizar dados SALVOS (evita desperdício de créditos)
-  // Só usar freshData se não tem savedDetectionReport
-  const data = savedDetectionReport || freshData;
-  const isLoading = isLoadingLive && !savedDetectionReport;
+  // Ordem: savedDetectionReport → fallbackData → freshData
+  const data = savedDetectionReport || fallbackData || freshData;
+  const isLoading = isLoadingLive && !savedDetectionReport && !fallbackData;
+  
+  console.log('[TOTVS] 🔍 Data source resolution:', {
+    hasSavedDetection: !!savedDetectionReport,
+    hasFallback: !!fallbackData,
+    hasFresh: !!freshData,
+    finalData: !!data,
+    source: savedDetectionReport ? 'savedDetection' : (fallbackData ? 'fallback' : (freshData ? 'fresh' : 'NONE')),
+  });
   
   // 🐛 DEBUG: Log para diagnóstico (EXPANDIDO)
   useEffect(() => {
@@ -373,7 +387,21 @@ export default function TOTVSCheckCard({
   useEffect(() => {
     if (latestReport?.full_report) {
       const report = latestReport.full_report;
+      
+      console.log('[TOTVS] 📦 Full report recebido:', {
+        hasDetection: !!report.detection_report,
+        hasDecisors: !!report.decisors_report,
+        hasKeywords: !!report.keywords_seo_report,
+        hasCompetitors: !!report.competitors_report,
+        hasSimilar: !!report.similar_companies_report,
+        hasClients: !!report.clients_report,
+        has360: !!report.analysis_report,
+        hasProducts: !!report.products_report,
+        hasExecutive: !!report.executive_report,
+      });
+      
       if (report.keywords_report) tabDataRef.current.keywords = report.keywords_report;
+      if (report.keywords_seo_report) tabDataRef.current.keywords = report.keywords_seo_report;
       if (report.detection_report) tabDataRef.current.detection = report.detection_report;
       if (report.competitors_report) tabDataRef.current.competitors = report.competitors_report;
       if (report.similar_companies_report) tabDataRef.current.similar = report.similar_companies_report;
@@ -387,6 +415,13 @@ export default function TOTVSCheckCard({
       if (report.decisors_report?.companyData?.website) {
         setDiscoveredWebsite(report.decisors_report.companyData.website);
         console.log('[TOTVS] 🌐 Website descoberto pelos decisores:', report.decisors_report.companyData.website);
+      }
+      
+      // 🔥 CRITICAL: Se tem detection_report, marcar TOTVS como salvo
+      if (report.detection_report) {
+        setTotvsSaved(true);
+        setEnabled(true); // Marca como habilitado para mostrar dados
+        console.log('[TOTVS] ✅ TOTVS marcado como salvo (dados do histórico)');
       }
       
       console.log('[TOTVS] ✅ Dados salvos carregados em tabDataRef');
