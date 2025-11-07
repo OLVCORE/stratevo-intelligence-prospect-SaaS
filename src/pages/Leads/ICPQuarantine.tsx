@@ -979,9 +979,14 @@ export default function ICPQuarantine() {
             company_name: company.razao_social,
             cnpj: company.cnpj,
             status: totvsResult.status,
-            // ✅ APENAS 2 COLUNAS + full_report
-            // MOTIVO: PGRST204 - Múltiplas colunas não existem no schema
-            // TODOS os dados ficam em full_report
+            confidence: totvsResult.confidence || 'medium',
+            triple_matches: totvsResult.triple_matches || 0,
+            double_matches: totvsResult.double_matches || 0,
+            single_matches: totvsResult.single_matches || 0,
+            total_score: totvsResult.total_weight || 0,
+            evidences: totvsResult.evidences || [],
+            sources_consulted: totvsResult.methodology?.searched_sources || 0,
+            queries_executed: totvsResult.methodology?.total_queries || 0,
             full_report: fullReport,
           })
           .select()
