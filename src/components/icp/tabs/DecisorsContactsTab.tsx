@@ -125,7 +125,7 @@ export function DecisorsContactsTab({
           <Button
             onClick={() => linkedinMutation.mutate()}
             disabled={linkedinMutation.isPending}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            variant="default"
           >
             {linkedinMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -276,10 +276,10 @@ export function DecisorsContactsTab({
                         <div className="flex items-center gap-2 mb-1">
                           <h5 className="font-semibold text-lg">{decisor.name}</h5>
                           {decisor.buying_power === 'decision-maker' && (
-                            <Badge className="bg-indigo-900/30 text-indigo-300 border border-indigo-700 text-xs">Decision Maker</Badge>
+                            <Badge variant="default" className="text-xs">Decision Maker</Badge>
                           )}
                           {decisor.buying_power === 'influencer' && (
-                            <Badge className="bg-slate-700/50 text-slate-300 border border-slate-600 text-xs">Influencer</Badge>
+                            <Badge variant="secondary" className="text-xs">Influencer</Badge>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">{decisor.title || decisor.position}</p>
@@ -290,14 +290,14 @@ export function DecisorsContactsTab({
                           </p>
                         )}
                       </div>
-                      <Badge className="bg-slate-700 text-slate-400 border border-slate-600 text-xs">Apollo</Badge>
+                      <Badge variant="outline" className="text-xs">Apollo</Badge>
                     </div>
 
                     {/* Contatos */}
                     <div className="space-y-2 mb-3">
                       {decisor.email && decisor.email !== 'email_not_unlocked@domain.com' && (
                         <div className="flex items-center gap-2 text-sm">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
                           <Mail className="w-4 h-4 text-slate-400" />
                           <a href={`mailto:${decisor.email}`} className="text-primary hover:underline font-medium" target="_blank" rel="noopener noreferrer">
                             {decisor.email}
@@ -307,7 +307,7 @@ export function DecisorsContactsTab({
                       )}
                       {decisor.email === 'email_not_unlocked@domain.com' && (
                         <div className="flex items-center gap-2 text-sm">
-                          <AlertCircle className="w-4 h-4 text-amber-500" />
+                          <AlertCircle className="w-4 h-4 text-muted-foreground" />
                           <span className="text-muted-foreground text-xs">Email bloqueado - upgrade Apollo necessário</span>
                         </div>
                       )}
