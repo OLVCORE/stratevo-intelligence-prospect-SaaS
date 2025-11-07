@@ -124,7 +124,7 @@ export function DecisorsContactsTab({
           <Button
             onClick={() => linkedinMutation.mutate()}
             disabled={linkedinMutation.isPending}
-            className="bg-gradient-to-r from-purple-600 to-blue-600"
+            className="bg-purple-600 hover:bg-purple-700"
           >
             {linkedinMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
