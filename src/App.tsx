@@ -42,6 +42,7 @@ const CompanyDiscoveryPage = lazy(() => import("./pages/CompanyDiscoveryPage"));
 const CentralICPHome = lazy(() => import("./pages/CentralICP/Home"));
 const IndividualAnalysis = lazy(() => import("./pages/CentralICP/IndividualAnalysis"));
 const BatchAnalysis = lazy(() => import("./pages/CentralICP/BatchAnalysis"));
+const BatchTOTVSAnalysis = lazy(() => import("./pages/CentralICP/BatchTOTVSAnalysis"));
 const ResultsDashboard = lazy(() => import("./pages/CentralICP/ResultsDashboard"));
 const AuditCompliance = lazy(() => import("./pages/CentralICP/AuditCompliance"));
 const SalesIntelligenceFeed = lazy(() => import("./pages/SalesIntelligence/Feed"));
@@ -557,6 +558,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <BatchAnalysis />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/batch-totvs"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <BatchTOTVSAnalysis />
                   </AppLayout>
                 </ProtectedRoute>
               }
