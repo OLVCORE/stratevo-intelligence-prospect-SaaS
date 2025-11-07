@@ -20,7 +20,8 @@ import {
   Building2,
   Sparkles,
   Search,
-  CheckCircle
+  CheckCircle,
+  Undo2
 } from 'lucide-react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { useState } from 'react';
@@ -38,6 +39,7 @@ interface QuarantineActionsMenuProps {
   onBulkDiscoverCNPJ?: () => Promise<void>;
   onBulkApprove?: () => Promise<void>;
   onReverifyAllV2?: () => void;
+  onRestoreDiscarded?: () => Promise<void>;
   isProcessing?: boolean;
   isReverifying?: boolean;
   selectedItems?: any[];
@@ -57,12 +59,14 @@ export function QuarantineActionsMenu({
   onBulkDiscoverCNPJ,
   onBulkApprove,
   onReverifyAllV2,
+  onRestoreDiscarded,
   isProcessing = false,
   isReverifying = false,
   selectedItems = [],
   totalCompanies = []
 }: QuarantineActionsMenuProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const handleDelete = async () => {
     try {
@@ -286,6 +290,29 @@ export function QuarantineActionsMenu({
             >
               <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
               Aprovar e Mover para Pool
+            </DropdownMenuItem>
+          )}
+          
+          {onRestoreDiscarded && (
+            <DropdownMenuItem 
+              onClick={async () => {
+                if (!onRestoreDiscarded || isRestoring) return;
+                setIsRestoring(true);
+                try {
+                  await onRestoreDiscarded();
+                } finally {
+                  setIsRestoring(false);
+                }
+              }}
+              disabled={isRestoring || isProcessing}
+              className="transition-all duration-200 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:shadow-md hover:border-l-2 hover:border-blue-500"
+            >
+              {isRestoring ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Undo2 className="h-4 w-4 mr-2 text-blue-600" />
+              )}
+              Restaurar Empresas Descartadas
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>

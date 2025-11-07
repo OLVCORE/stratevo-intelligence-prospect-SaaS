@@ -18,6 +18,7 @@ import { useQuarantineCompanies, useApproveQuarantineBatch, useRejectQuarantine,
 import { useDeleteQuarantineBatch } from '@/hooks/useDeleteQuarantineBatch';
 import { useRefreshQuarantineBatch } from '@/hooks/useRefreshQuarantineBatch';
 import { useReverifyAllCompanies } from '@/hooks/useReverifyAllCompanies';
+import { useRestoreAllBatchDiscarded } from '@/hooks/useRestoreDiscarded';
 import { QuarantineActionsMenu } from '@/components/icp/QuarantineActionsMenu';
 import { QuarantineRowActions } from '@/components/icp/QuarantineRowActions';
 import TOTVSCheckCard from '@/components/totvs/TOTVSCheckCard';
@@ -65,6 +66,7 @@ export default function ICPQuarantine() {
   const { mutate: deleteBatch, isPending: isDeleting } = useDeleteQuarantineBatch();
   const { mutate: refreshBatch, isPending: isRefreshing } = useRefreshQuarantineBatch();
   const { mutate: reverifyAll, isPending: isReverifying } = useReverifyAllCompanies();
+  const { mutate: restoreAllDiscarded, isPending: isRestoring } = useRestoreAllBatchDiscarded();
 
   const queryClient = useQueryClient();
 
@@ -1003,30 +1005,15 @@ export default function ICPQuarantine() {
           fullReportKeys: savedReport.full_report ? Object.keys(savedReport.full_report) : [],
         });
         
-        // 5. Auto-descartar se NO-GO
+        // 5. Contabilizar GO/NO-GO (SEM auto-descartar!)
+        // ✅ MUDANÇA: Empresas NO-GO ficam na quarentena para revisão manual
+        // Usuario decide se descarta ou não (pode haver falsos positivos)
         if (isNoGo) {
-          await supabase.from('discarded_companies').insert({
-            company_id: company.company_id || company.id,
-            company_name: company.razao_social,
-            cnpj: company.cnpj,
-            discard_reason_id: 'totvs_client',
-            discard_reason_label: '⚠️ Já é cliente TOTVS (Batch Automático)',
-            discard_category: 'blocker',
-            stc_status: totvsResult.status,
-            stc_triple_matches: totvsResult.triple_matches || 0,
-            stc_double_matches: totvsResult.double_matches || 0,
-            stc_total_score: totvsResult.total_weight || 0,
-          });
-          
-          // Marcar como descartada na quarentena
-          await supabase
-            .from('icp_analysis_results')
-            .update({ status: 'descartada' })
-            .eq('id', company.id);
-          
           noGo++;
+          console.log(`[BATCH] ⚠️ ${company.razao_social}: NO-GO detectado (permanece na quarentena para revisão)`);
         } else {
           go++;
+          console.log(`[BATCH] ✅ ${company.razao_social}: GO confirmado`);
         }
         
         console.log(`[BATCH] ✅ ${company.razao_social}: ${totvsResult.status} (${totvsResult.evidences?.length || 0} evidências)`);
@@ -1207,6 +1194,7 @@ export default function ICPQuarantine() {
                 onBulkTotvsCheck={handleBulkTotvsCheck}
                 onBulkDiscoverCNPJ={handleBulkDiscoverCNPJ}
                 onBulkApprove={handleBulkApprove}
+                onRestoreDiscarded={() => restoreAllDiscarded()}
                 onReverifyAllV2={() => reverifyAll(filteredCompanies.map(c => ({
                   id: c.company_id || c.id,
                   razao_social: c.razao_social,
