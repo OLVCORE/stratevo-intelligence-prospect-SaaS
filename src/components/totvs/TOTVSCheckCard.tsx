@@ -311,29 +311,45 @@ export default function TOTVSCheckCard({
 
   // Usar relatório salvo como fonte principal se existir
   // 🔥 CRÍTICO: liveData vem como { data: {...} } do Supabase Edge Function
-  const data = (latestReport?.full_report as any) || liveData?.data || liveData;
+  // 🚨 FIX: Se latestReport não tem evidences, usar liveData
+  const savedData = latestReport?.full_report as any;
+  const freshData = liveData?.data || liveData;
+  
+  // Priorizar dados FRESCOS se savedData não tem evidências
+  const data = (savedData?.evidences?.length > 0 ? savedData : freshData) || savedData || freshData;
   const isLoading = isLoadingLive && !latestReport?.full_report;
   
   // 🐛 DEBUG: Log para diagnóstico (EXPANDIDO)
   useEffect(() => {
+    const savedEvidencesCount = savedData?.evidences?.length || 0;
+    const freshEvidencesCount = freshData?.evidences?.length || 0;
+    
     console.log('[TOTVS-CARD] 🔍 Data sources:', {
       hasLatestReport: !!latestReport?.full_report,
       hasLiveData: !!liveData,
+      savedEvidences: savedEvidencesCount,
+      freshEvidences: freshEvidencesCount,
+      usingSource: savedEvidencesCount > 0 ? 'SAVED' : (freshEvidencesCount > 0 ? 'FRESH' : 'NONE'),
       liveDataStructure: liveData ? Object.keys(liveData) : null,
       dataStructure: data ? Object.keys(data) : null,
       evidencesCount: data?.evidences?.length || 0,
     });
     
-    // 🔍 EXPANDIR liveData completo
-    if (liveData) {
-      console.log('[TOTVS-CARD] 📦 liveData COMPLETO:', JSON.stringify(liveData, null, 2));
+    // 🔍 EXPANDIR liveData completo (se tem evidências)
+    if (liveData && freshEvidencesCount > 0) {
+      console.log('[TOTVS-CARD] 📦 liveData TEM EVIDÊNCIAS:', JSON.stringify(liveData, null, 2));
     }
     
     // 🔍 EXPANDIR data completo
     if (data) {
-      console.log('[TOTVS-CARD] 📦 data COMPLETO:', JSON.stringify(data, null, 2).substring(0, 2000));
+      console.log('[TOTVS-CARD] 📦 data sendo usado:', JSON.stringify(data, null, 2).substring(0, 2000));
     }
-  }, [latestReport, liveData, data]);
+    
+    // 🚨 ALERTA se tem dados frescos mas não está usando
+    if (freshEvidencesCount > 0 && savedEvidencesCount === 0 && data === savedData) {
+      console.error('[TOTVS-CARD] 🚨 ERRO: liveData TEM evidências mas está usando savedData VAZIO!');
+    }
+  }, [latestReport, liveData, data, savedData, freshData]);
 
   // Flags de abas salvas
   const hasSaved = !!latestReport?.full_report;
