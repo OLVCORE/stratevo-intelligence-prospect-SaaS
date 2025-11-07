@@ -37,24 +37,26 @@ export const useSimpleTOTVSCheck = ({
 
       console.log('[HOOK] Resultado:', data);
       
-      // AUTO-SALVAR NO HISTÓRICO STC (se tabela existir)
-      if (data?.data && companyId) {
+      // 💾 AUTO-SALVAR NO HISTÓRICO STC + FULL_REPORT (evitar desperdício de créditos!)
+      if (data && companyId) {
         try {
-          const result = data.data;
+          const result = data.data || data;
+          
+          // 1) Salvar na tabela simple_totvs_checks (já existe)
           const { error: insertError } = await supabase.from('stc_verification_history').insert({
             company_id: companyId,
             company_name: companyName || 'N/A',
             cnpj: cnpj || null,
             status: result.status || 'unknown',
             confidence: result.confidence || 'low',
-            triple_matches: result.tripleMatches || 0,
-            double_matches: result.doubleMatches || 0,
-            single_matches: result.singleMatches || 0,
-            total_score: result.totalScore || 0,
+            triple_matches: result.triple_matches || 0,
+            double_matches: result.double_matches || 0,
+            single_matches: result.single_matches || 0,
+            total_score: result.total_weight || 0,
             evidences: result.evidences || [],
-            sources_consulted: result.sourcesConsulted || 0,
-            queries_executed: result.queriesExecuted || 0,
-            verification_duration_ms: result.verificationDurationMs || 0
+            sources_consulted: result.methodology?.searched_sources || 0,
+            queries_executed: result.methodology?.total_queries || 0,
+            verification_duration_ms: parseInt(result.methodology?.execution_time) || 0
           });
           
           if (insertError) {
@@ -65,6 +67,30 @@ export const useSimpleTOTVSCheck = ({
             }
           } else {
             console.log('[STC] ✅ Verificação salva no histórico');
+          }
+          
+          // 2) 💾 CRÍTICO: Salvar também em full_report.detection_report
+          // Isso garante que dados não serão perdidos e créditos não serão desperdiçados!
+          const { data: existingReport } = await supabase
+            .from('stc_verification_history')
+            .select('id, full_report')
+            .eq('company_id', companyId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          
+          if (existingReport) {
+            const updatedFullReport = {
+              ...(existingReport.full_report || {}),
+              detection_report: result // 🔥 SALVA RESULTADO COMPLETO AQUI!
+            };
+            
+            await supabase
+              .from('stc_verification_history')
+              .update({ full_report: updatedFullReport })
+              .eq('id', existingReport.id);
+            
+            console.log('[STC] 💾 TOTVS Check salvo em full_report.detection_report');
           }
         } catch (historyError: any) {
           console.warn('[STC] ⚠️ Erro ao salvar histórico (não crítico):', historyError.message);

@@ -311,45 +311,41 @@ export default function TOTVSCheckCard({
 
   // Usar relatório salvo como fonte principal se existir
   // 🔥 CRÍTICO: liveData vem como { data: {...} } do Supabase Edge Function
-  // 🚨 FIX: Se latestReport não tem evidences, usar liveData
-  const savedData = latestReport?.full_report as any;
+  // 💾 SALVAMENTO: Dados salvos ficam em full_report.detection_report
+  const savedDetectionReport = (latestReport?.full_report as any)?.detection_report;
   const freshData = liveData?.data || liveData;
   
-  // Priorizar dados FRESCOS se savedData não tem evidências
-  const data = (savedData?.evidences?.length > 0 ? savedData : freshData) || savedData || freshData;
-  const isLoading = isLoadingLive && !latestReport?.full_report;
+  // Priorizar dados SALVOS (evita desperdício de créditos)
+  // Só usar freshData se não tem savedDetectionReport
+  const data = savedDetectionReport || freshData;
+  const isLoading = isLoadingLive && !savedDetectionReport;
   
   // 🐛 DEBUG: Log para diagnóstico (EXPANDIDO)
   useEffect(() => {
-    const savedEvidencesCount = savedData?.evidences?.length || 0;
+    const savedEvidencesCount = savedDetectionReport?.evidences?.length || 0;
     const freshEvidencesCount = freshData?.evidences?.length || 0;
     
     console.log('[TOTVS-CARD] 🔍 Data sources:', {
-      hasLatestReport: !!latestReport?.full_report,
+      hasDetectionReport: !!savedDetectionReport,
       hasLiveData: !!liveData,
       savedEvidences: savedEvidencesCount,
       freshEvidences: freshEvidencesCount,
-      usingSource: savedEvidencesCount > 0 ? 'SAVED' : (freshEvidencesCount > 0 ? 'FRESH' : 'NONE'),
-      liveDataStructure: liveData ? Object.keys(liveData) : null,
-      dataStructure: data ? Object.keys(data) : null,
+      usingSource: savedDetectionReport ? 'SAVED (detection_report)' : (freshData ? 'FRESH (liveData)' : 'NONE'),
       evidencesCount: data?.evidences?.length || 0,
     });
-    
-    // 🔍 EXPANDIR liveData completo (se tem evidências)
-    if (liveData && freshEvidencesCount > 0) {
-      console.log('[TOTVS-CARD] 📦 liveData TEM EVIDÊNCIAS:', JSON.stringify(liveData, null, 2));
-    }
     
     // 🔍 EXPANDIR data completo
     if (data) {
       console.log('[TOTVS-CARD] 📦 data sendo usado:', JSON.stringify(data, null, 2).substring(0, 2000));
     }
     
-    // 🚨 ALERTA se tem dados frescos mas não está usando
-    if (freshEvidencesCount > 0 && savedEvidencesCount === 0 && data === savedData) {
-      console.error('[TOTVS-CARD] 🚨 ERRO: liveData TEM evidências mas está usando savedData VAZIO!');
+    // 💰 LOG ECONOMIA DE CRÉDITOS
+    if (savedDetectionReport) {
+      console.log('[TOTVS-CARD] 💰 ECONOMIA: Usando dados salvos (0 créditos consumidos)');
+    } else if (freshData) {
+      console.log('[TOTVS-CARD] 💸 CONSUMO: Busca nova executada (~150 créditos)');
     }
-  }, [latestReport, liveData, data, savedData, freshData]);
+  }, [latestReport, liveData, data, savedDetectionReport, freshData]);
 
   // Flags de abas salvas
   const hasSaved = !!latestReport?.full_report;
