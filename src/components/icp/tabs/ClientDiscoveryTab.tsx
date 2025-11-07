@@ -6,8 +6,9 @@ import { Users, Building2, MapPin, TrendingUp, ExternalLink, Search, Loader2 } f
 import { useCompanySimilar } from '@/hooks/useCompanySimilar';
 import { useClientDiscoveryWave7 } from '@/hooks/useClientDiscoveryWave7';
 import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast as sonnerToast } from 'sonner';
+import { registerTab, unregisterTab } from './tabsRegistry';
 
 interface ClientDiscoveryTabProps {
   companyId?: string;
@@ -15,10 +16,11 @@ interface ClientDiscoveryTabProps {
   cnpj?: string;
   domain?: string;
   savedData?: any[];
+  stcHistoryId?: string;
   onDataChange?: (data: any) => void;
 }
 
-export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, savedData, onDataChange }: ClientDiscoveryTabProps) {
+export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, savedData, stcHistoryId, onDataChange }: ClientDiscoveryTabProps) {
   const { toast } = useToast();
   const { data: similarCompanies, isLoading, refetch } = useCompanySimilar(companyId);
   const { mutate: executeWave7, isPending: isExecutingWave7 } = useClientDiscoveryWave7();
@@ -28,6 +30,26 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
   // Usar dados salvos se disponíveis
   const loadedFromHistory = !!savedData;
   const directClients = savedData || similarCompanies || [];
+  
+  // 🔗 REGISTRY: Registrar aba para SaveBar global
+  useEffect(() => {
+    console.info('[REGISTRY] ✅ Registering: clients');
+    
+    registerTab('clients', {
+      flushSave: async () => {
+        const currentData = { directClients, wave7Results };
+        console.log('[CLIENTS] 📤 Registry: flushSave() chamado');
+        onDataChange?.(currentData);
+        sonnerToast.success('✅ Client Discovery Salvo!');
+      },
+      getStatus: () => directClients.length > 0 ? 'completed' : 'draft',
+    });
+
+    return () => {
+      console.info('[REGISTRY] 🧹 Unregistered: clients');
+      unregisterTab('clients');
+    };
+  }, [directClients, wave7Results, onDataChange]);
   
   // 🔄 RESET
   const handleReset = () => {
@@ -295,8 +317,8 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
             {/* Resultados Wave7 */}
             {wave7Results && wave7Results.discovered_clients.length > 0 && (
               <div className="mt-6 space-y-4">
-                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <h4 className="font-semibold text-green-700 dark:text-green-400 mb-2 flex items-center gap-2">
+                <div className="p-4 bg-muted dark:bg-muted/20 rounded-lg">
+                  <h4 className="font-semibold text-muted-foreground dark:text-muted-foreground mb-2 flex items-center gap-2">
                     <Users className="w-5 h-5" />
                     ✅ Wave7 Concluída!
                   </h4>
@@ -313,11 +335,11 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
                 {/* Lista de clientes descobertos */}
                 <div className="space-y-3">
                   {wave7Results.discovered_clients.map((client: any, index: number) => (
-                    <Card key={index} className="p-4 hover:bg-accent/50 transition-colors border-green-200 dark:border-green-800">
+                    <Card key={index} className="p-4 hover:bg-accent/50 transition-colors border-border dark:border-border">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h4 className="font-semibold flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-green-600" />
+                            <Building2 className="w-4 h-4 text-muted-foreground" />
                             {client.name}
                           </h4>
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -326,7 +348,7 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
                                 CNPJ: {client.cnpj}
                               </Badge>
                             )}
-                            <Badge variant="default" className="text-xs bg-green-600">
+                            <Badge variant="default" className="text-xs bg-muted">
                               {client.relationship || 'Cliente do cliente'}
                             </Badge>
                             <Badge variant="secondary" className="text-xs">

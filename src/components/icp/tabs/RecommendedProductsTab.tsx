@@ -198,7 +198,7 @@ export function RecommendedProductsTab({
             <div className="mb-4">
               <span className="text-sm font-medium mb-2 block">Por que recomendamos:</span>
               <p className="text-sm text-muted-foreground flex items-start gap-2">
-                <CheckCircle className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                <CheckCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                 {product.reason}
               </p>
             </div>
@@ -209,7 +209,7 @@ export function RecommendedProductsTab({
               <ul className="space-y-1">
                 {product.benefits.map((benefit: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <CheckCircle className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                    <CheckCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                     {benefit}
                   </li>
                 ))}
@@ -258,7 +258,7 @@ export function RecommendedProductsTab({
       {stack_suggestion && (
         <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
           <h4 className="font-semibold mb-3 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-green-600" />
+            <Sparkles className="w-4 h-4 text-muted-foreground" />
             Stack TOTVS Sugerido
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

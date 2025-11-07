@@ -100,14 +100,14 @@ export function ExecutiveSummaryTab({
       <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10">
         <div className="flex items-center gap-4">
           <div className={`p-4 rounded-full ${
-            decision.status === 'GO' ? 'bg-green-100 dark:bg-green-900/20' :
+            decision.status === 'GO' ? 'bg-muted dark:bg-muted/20' :
             decision.status === 'QUARENTENA' ? 'bg-yellow-100 dark:bg-yellow-900/20' :
-            'bg-red-100 dark:bg-red-900/20'
+            'bg-muted dark:bg-muted/20'
           }`}>
             <DecisionIcon className={`w-8 h-8 ${
-              decision.status === 'GO' ? 'text-green-600 dark:text-green-400' :
+              decision.status === 'GO' ? 'text-muted-foreground dark:text-muted-foreground' :
               decision.status === 'QUARENTENA' ? 'text-yellow-600 dark:text-yellow-400' :
-              'text-red-600 dark:text-red-400'
+              'text-muted-foreground dark:text-muted-foreground'
             }`} />
           </div>
           <div className="flex-1">
@@ -176,7 +176,7 @@ export function ExecutiveSummaryTab({
         </h4>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${totvsConfidence >= 70 ? 'bg-red-500' : 'bg-gray-300'}`} />
+            <div className={`w-3 h-3 rounded-full ${totvsConfidence >= 70 ? 'bg-muted' : 'bg-gray-300'}`} />
             <div className="flex-1">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm font-medium">Alta (70-100%)</span>
@@ -184,7 +184,7 @@ export function ExecutiveSummaryTab({
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-red-500 transition-all" 
+                  className="h-full bg-muted transition-all" 
                   style={{ width: `${Math.min(totvsConfidence, 100)}%` }}
                 />
               </div>
@@ -208,7 +208,7 @@ export function ExecutiveSummaryTab({
           </div>
 
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${totvsConfidence < 40 ? 'bg-green-500' : 'bg-gray-300'}`} />
+            <div className={`w-3 h-3 rounded-full ${totvsConfidence < 40 ? 'bg-muted' : 'bg-gray-300'}`} />
             <div className="flex-1">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm font-medium">Baixa (0-39%)</span>
@@ -216,7 +216,7 @@ export function ExecutiveSummaryTab({
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-green-500 transition-all" 
+                  className="h-full bg-muted transition-all" 
                   style={{ width: `${totvsConfidence < 40 ? Math.min(totvsConfidence / 0.4, 100) : 0}%` }}
                 />
               </div>

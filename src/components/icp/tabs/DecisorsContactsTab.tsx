@@ -1,5 +1,5 @@
 // 👔 ABA DECISORES & CONTATOS - Apollo + Corporate Theme
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { toast as sonnerToast } from 'sonner';
 import { performFullLinkedInAnalysis } from '@/services/phantomBusterEnhanced';
 import { corporateTheme } from '@/lib/theme/corporateTheme';
 import type { LinkedInProfileData } from '@/services/phantomBusterEnhanced';
+import { registerTab, unregisterTab } from './tabsRegistry';
 
 interface DecisorsContactsTabProps {
   companyId?: string;
@@ -20,6 +21,7 @@ interface DecisorsContactsTabProps {
   linkedinUrl?: string;
   domain?: string;
   savedData?: any;
+  stcHistoryId?: string;
   onDataChange?: (data: any) => void;
 }
 
@@ -29,6 +31,7 @@ export function DecisorsContactsTab({
   linkedinUrl, 
   domain,
   savedData,
+  stcHistoryId,
   onDataChange 
 }: DecisorsContactsTabProps) {
   const { toast } = useToast();
@@ -36,12 +39,37 @@ export function DecisorsContactsTab({
   const [customLinkedInUrl, setCustomLinkedInUrl] = useState(linkedinUrl || '');
   const [customApolloUrl, setCustomApolloUrl] = useState('');
   
+  // 🔗 REGISTRY: Registrar aba para SaveBar global
+  useEffect(() => {
+    console.info('[REGISTRY] ✅ Registering: decisores');
+    
+    registerTab('decisores', {
+      flushSave: async () => {
+        const currentData = {
+          analysisData,
+          customLinkedInUrl,
+          customApolloUrl,
+        };
+        
+        console.log('[DECISORES] 📤 Registry: flushSave() chamado');
+        onDataChange?.(currentData);
+        sonnerToast.success('✅ Decisores & Contatos Salvos!');
+      },
+      getStatus: () => analysisData ? 'completed' : 'draft',
+    });
+
+    return () => {
+      console.info('[REGISTRY] 🧹 Unregistered: decisores');
+      unregisterTab('decisores');
+    };
+  }, [analysisData, customLinkedInUrl, customApolloUrl, onDataChange]);
+  
   // 🔄 RESET
   const handleReset = () => {
     setAnalysisData(null);
   };
 
-  // 💾 SALVAR
+  // 💾 SALVAR (mantido para compatibilidade com FloatingNavigation)
   const handleSave = () => {
     onDataChange?.(analysisData);
     sonnerToast.success('✅ Decisores & Contatos Salvos!');
@@ -111,8 +139,8 @@ export function DecisorsContactsTab({
       <Card className="p-6 bg-slate-800 border border-slate-600">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="p-4 rounded-full bg-purple-900/30">
-              <Users className="w-8 h-8 text-purple-400" />
+            <div className="p-4 rounded-full bg-muted/30">
+              <Users className="w-8 h-8 text-muted-foreground" />
             </div>
             <div>
               <h3 className="text-lg font-semibold mb-1 text-slate-200">Decisores & Contatos</h3>
@@ -162,7 +190,7 @@ export function DecisorsContactsTab({
       {/* Loading */}
       {linkedinMutation.isPending && (
         <Card className="p-12 text-center">
-          <Loader2 className="w-16 h-16 mx-auto mb-4 animate-spin text-purple-600" />
+          <Loader2 className="w-16 h-16 mx-auto mb-4 animate-spin text-muted-foreground" />
           <p className="font-medium mb-2">Analisando LinkedIn...</p>
           <p className="text-sm text-muted-foreground">
             Extraindo decisores, emails e dados da empresa (30-60s)
@@ -222,7 +250,7 @@ export function DecisorsContactsTab({
           {analysisData.companyData && (
             <Card className="p-6 bg-gradient-to-r from-blue-50 to-purple-50">
               <h4 className="font-semibold mb-4 flex items-center gap-2">
-                <Linkedin className="w-5 h-5 text-blue-600" />
+                <Linkedin className="w-5 h-5 text-muted-foreground" />
                 Presença no LinkedIn
               </h4>
               
@@ -261,16 +289,16 @@ export function DecisorsContactsTab({
           {analysisData.decisorsWithEmails.length > 0 && (
             <Card className="p-6">
               <h4 className="font-semibold mb-4 flex items-center gap-2">
-                <Users className="w-5 h-5 text-purple-600" />
+                <Users className="w-5 h-5 text-muted-foreground" />
                 Decisores Identificados
-                <Badge variant="default" className="bg-purple-600">
+                <Badge variant="default" className="bg-muted">
                   {analysisData.decisorsWithEmails.length} pessoas
                 </Badge>
               </h4>
 
               <div className="space-y-4">
                 {analysisData.decisorsWithEmails.map((decisor: any, idx: number) => (
-                  <div key={idx} className="border border-slate-600 rounded-lg p-4 bg-slate-800 hover:border-purple-500 transition-all">
+                  <div key={idx} className="border border-slate-600 rounded-lg p-4 bg-slate-800 hover:border-border transition-all">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -314,14 +342,14 @@ export function DecisorsContactsTab({
                       
                       {decisor.phone && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Phone className="w-4 h-4 text-purple-600" />
+                          <Phone className="w-4 h-4 text-muted-foreground" />
                           <a href={`tel:${decisor.phone}`} className="text-primary hover:underline font-medium">{decisor.phone}</a>
                         </div>
                       )}
                       
                       {decisor.linkedin_url && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Linkedin className="w-4 h-4 text-blue-600" />
+                          <Linkedin className="w-4 h-4 text-muted-foreground" />
                           <a href={decisor.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                             Ver perfil LinkedIn
                           </a>
@@ -353,13 +381,13 @@ export function DecisorsContactsTab({
           {analysisData.insights.length > 0 && (
             <Card className="p-6 bg-slate-800 border border-slate-600">
               <h4 className="font-semibold mb-4 flex items-center gap-2 text-slate-200">
-                <Sparkles className="w-5 h-5 text-purple-400" />
+                <Sparkles className="w-5 h-5 text-muted-foreground" />
                 Insights Estratégicos
               </h4>
               <ul className="space-y-2 text-sm text-slate-300">
                 {analysisData.insights.map((insight: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="text-purple-400 mt-1">•</span>
+                    <span className="text-muted-foreground mt-1">•</span>
                     <span>{insight}</span>
                   </li>
                 ))}

@@ -8,6 +8,7 @@ import { useCompetitorSearch } from '@/hooks/useCompetitorSearch';
 import { useCompetitorAnalysis } from '@/hooks/useCompetitorAnalysis';
 import { useLatestSTCReport } from '@/hooks/useSTCHistory';
 import { useState, useEffect } from 'react';
+import { registerTab, unregisterTab } from './tabsRegistry';
 
 interface CompetitorsTabProps {
   companyId?: string;
@@ -15,16 +16,36 @@ interface CompetitorsTabProps {
   cnpj?: string;
   domain?: string;
   savedData?: any;
+  stcHistoryId?: string;
   similarCompanies?: any[]; // Empresas similares da aba Keywords
   onDataChange?: (data: any) => void;
 }
 
-export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData, similarCompanies, onDataChange }: CompetitorsTabProps) {
+export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData, stcHistoryId, similarCompanies, onDataChange }: CompetitorsTabProps) {
   const [hasSearched, setHasSearched] = useState(false);
   const [externalData, setExternalData] = useState<any | null>(savedData || null);
   const { mutateAsync: searchCompetitors, data: searchData, isPending } = useCompetitorSearch();
   const { data: internalCompetitors, isLoading: loadingInternal } = useCompetitorAnalysis(companyId);
   const { data: latestReport } = useLatestSTCReport(companyId, companyName);
+  
+  // 🔗 REGISTRY: Registrar aba para SaveBar global
+  useEffect(() => {
+    console.info('[REGISTRY] ✅ Registering: competitors');
+    
+    registerTab('competitors', {
+      flushSave: async () => {
+        console.log('[COMPETITORS] 📤 Registry: flushSave() chamado');
+        onDataChange?.(externalData);
+        toast.success('✅ Análise de Concorrentes Salva!');
+      },
+      getStatus: () => externalData ? 'completed' : 'draft',
+    });
+
+    return () => {
+      console.info('[REGISTRY] 🧹 Unregistered: competitors');
+      unregisterTab('competitors');
+    };
+  }, [externalData, onDataChange]);
   
   // 🔄 RESET
   const handleReset = () => {
@@ -86,7 +107,7 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
           <p className="text-sm text-muted-foreground mb-4">
             Identificar soluções ERP que a empresa pode estar usando (concorrentes TOTVS)
           </p>
-          <Button onClick={handleSearch}>
+          <Button onClick={handleSearch} variant="default">
             <Search className="w-4 h-4 mr-2" />
             Buscar Concorrentes
           </Button>
@@ -131,11 +152,11 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
       {/* Concorrentes ERP Detectados Internamente */}
       {hasInternalData && (
         <>
-          <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
+          <Card className="p-4 bg-muted/50">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-green-600" />
+                  <Zap className="w-5 h-5 text-muted-foreground" />
                   ERPs Detectados
                 </h3>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -147,15 +168,15 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
 
           <div className="space-y-3">
             {internalCompetitors.map((competitor, index) => (
-              <Card key={`internal-${index}`} className="p-4 border-green-200 dark:border-green-800">
+              <Card key={`internal-${index}`} className="p-4 border-border dark:border-border">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <h4 className="font-semibold flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-green-600" />
+                      <Building2 className="w-4 h-4 text-muted-foreground" />
                       {competitor.name}
                     </h4>
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="default" className="text-xs bg-green-600">
+                      <Badge variant="default" className="text-xs bg-muted">
                         {competitor.confidence}% confiança
                       </Badge>
                       <Badge variant="outline" className="text-xs">
@@ -268,8 +289,8 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
 
       {/* 🏢 EMPRESAS SIMILARES (movidas da aba Keywords) */}
       {similarCompanies && similarCompanies.length > 0 && (
-        <div className="mt-4 p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-3 border-purple-500 dark:border-purple-600 rounded-xl shadow-lg">
-          <p className="text-lg font-black text-purple-900 dark:text-purple-100 mb-4 flex items-center gap-2">
+        <div className="mt-4 p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-3 border-border dark:border-border rounded-xl shadow-lg">
+          <p className="text-lg font-black text-muted-foreground dark:text-muted-foreground mb-4 flex items-center gap-2">
             <Target className="w-6 h-6" />
             🏢 Empresas Similares ({similarCompanies.length} encontradas)
           </p>
@@ -277,15 +298,15 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
             {similarCompanies.map((company, idx) => (
               <div
                 key={idx}
-                className="p-4 bg-white dark:bg-slate-900 rounded-lg border-2 border-purple-300 dark:border-purple-700 hover:border-purple-500 hover:shadow-lg transition-all"
+                className="p-4 bg-white dark:bg-slate-900 rounded-lg border-2 border-border dark:border-border hover:border-border hover:shadow-lg transition-all"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="font-black text-base text-purple-700 dark:text-purple-400">#{idx + 1}</span>
+                      <span className="font-black text-base text-muted-foreground dark:text-muted-foreground">#{idx + 1}</span>
                     </div>
                     <p className="font-bold text-base text-slate-900 dark:text-white mb-1">{company.title}</p>
-                    <p className="text-sm text-purple-600 dark:text-purple-400 mb-2 break-all">{company.url}</p>
+                    <p className="text-sm text-muted-foreground dark:text-muted-foreground mb-2 break-all">{company.url}</p>
                     <p className="text-sm text-slate-700 dark:text-slate-300">{company.snippet}</p>
                     
                     <div className="mt-3 flex gap-2">
@@ -296,7 +317,7 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
                           });
                         }}
                         size="sm"
-                        className="bg-green-600 hover:bg-green-700"
+                        className="bg-muted hover:bg-muted"
                       >
                         ➕ Adicionar à Quarentena
                       </Button>

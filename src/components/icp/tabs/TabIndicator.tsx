@@ -16,22 +16,22 @@ export function TabIndicator({ status = 'draft' }: TabIndicatorProps) {
 
   const config = {
     completed: { 
-      color: 'bg-emerald-500', 
+      color: 'bg-muted', 
       label: '✅ Relatório salvo',
       ring: 'ring-2 ring-emerald-500/20'
     },
     processing: { 
-      color: 'bg-blue-500 animate-pulse', 
+      color: 'bg-muted animate-pulse', 
       label: '🔵 Processando…',
       ring: 'ring-2 ring-blue-500/20'
     },
     draft: { 
-      color: 'bg-amber-500', 
+      color: 'bg-muted', 
       label: '🟡 Relatório não salvo',
       ring: 'ring-2 ring-amber-500/20'
     },
     error: { 
-      color: 'bg-rose-500', 
+      color: 'bg-muted', 
       label: '❌ Erro ao salvar',
       ring: 'ring-2 ring-rose-500/20'
     },
@@ -62,22 +62,22 @@ interface TabStatusBadgeProps {
 export function TabStatusBadge({ status = 'draft' }: TabStatusBadgeProps) {
   const config = {
     completed: { 
-      className: 'bg-emerald-600 text-white', 
+      className: 'bg-muted text-white', 
       icon: '✅',
       label: 'Salvo'
     },
     processing: { 
-      className: 'bg-blue-600 text-white animate-pulse', 
+      className: 'bg-muted text-white animate-pulse', 
       icon: '⏳',
       label: 'Processando…'
     },
     draft: { 
-      className: 'bg-amber-600 text-white', 
+      className: 'bg-muted text-white', 
       icon: '⚠️',
       label: 'Não salvo'
     },
     error: { 
-      className: 'bg-rose-600 text-white', 
+      className: 'bg-muted text-white', 
       icon: '❌',
       label: 'Erro'
     },
