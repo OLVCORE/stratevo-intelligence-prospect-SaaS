@@ -28,7 +28,7 @@ import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
 import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
 import { TabSaveWrapper } from './TabSaveWrapper';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
-import { useSaveRegistry } from '@/hooks/useSaveRegistry';
+import { registerTab as registerTabInGlobal, unregisterTab as unregisterTabInGlobal } from '@/components/icp/tabs/tabsRegistry';
 import { saveAllTabs, hasNonCompleted, getStatuses, getStatusCounts } from '@/components/icp/tabs/tabsRegistry';
 import { createSnapshotFromFullReport, loadSnapshot, isReportClosed, generatePdfFromSnapshot, type Snapshot } from '@/components/icp/tabs/snapshotReport';
 import SaveBar from './SaveBar';
@@ -117,7 +117,6 @@ export default function TOTVSCheckCard({
   const tabDataRef = useRef<Record<string, any>>({});
   
   // 🔐 REGISTRAR ABA TOTVS no tabsRegistry para SaveBar funcionar
-  const { registerTab, unregisterTab } = useSaveRegistry();
   const [totvsSaved, setTotvsSaved] = useState(false);
   
   useEffect(() => {
@@ -125,7 +124,7 @@ export default function TOTVSCheckCard({
     
     console.log('[TOTVS-REG] 📝 Registrando aba TOTVS no tabsRegistry');
     
-    registerTab('detection', {
+    registerTabInGlobal('detection', {
       validate: async () => ({ success: true }), // Sempre válido se tem dados
       save: async () => {
         console.log('[TOTVS-SAVE] 💾 Salvando aba TOTVS...');
@@ -142,9 +141,9 @@ export default function TOTVSCheckCard({
     
     return () => {
       console.log('[TOTVS-REG] 🧹 Desregistrando aba TOTVS');
-      unregisterTab('detection');
+      unregisterTabInGlobal('detection');
     };
-  }, [data, registerTab, unregisterTab]);
+  }, [data]);
   
   // Compartilhar dados entre abas (Keywords → Competitors)
   const [sharedSimilarCompanies, setSharedSimilarCompanies] = useState<any[]>([]);
