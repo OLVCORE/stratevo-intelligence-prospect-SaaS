@@ -275,10 +275,10 @@ export function DecisorsContactsTab({
                         <div className="flex items-center gap-2 mb-1">
                           <h5 className="font-semibold text-lg">{decisor.name}</h5>
                           {decisor.buying_power === 'decision-maker' && (
-                            <Badge className="bg-red-600 text-xs">Decision Maker</Badge>
+                            <Badge className="bg-purple-700 text-white text-xs">Decision Maker</Badge>
                           )}
                           {decisor.buying_power === 'influencer' && (
-                            <Badge variant="secondary" className="text-xs">Influencer</Badge>
+                            <Badge className="bg-slate-600 text-slate-200 text-xs">Influencer</Badge>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">{decisor.title || decisor.position}</p>
@@ -289,7 +289,7 @@ export function DecisorsContactsTab({
                           </p>
                         )}
                       </div>
-                      <Badge variant="default" className="bg-blue-600 text-xs">Apollo</Badge>
+                      <Badge className="bg-slate-700 text-slate-300 text-xs border border-slate-600">Apollo</Badge>
                     </div>
 
                     {/* Contatos */}
