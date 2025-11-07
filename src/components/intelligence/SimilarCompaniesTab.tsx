@@ -2393,10 +2393,11 @@ function useSimilarCompaniesRegistry(data: any, onDataChange?: (data: any) => vo
     registerTab('similar', {
       flushSave: async () => {
         console.log('[SIMILAR] 📤 Registry: flushSave() chamado');
-        onDataChange?.(data?.similar_companies);
+        const dataToSave = data?.similar_companies || { skipped: true, reason: 'Análise opcional não executada' };
+        onDataChange?.(dataToSave);
         sonnerToast.success('✅ Empresas Similares Salvas!');
       },
-      getStatus: () => data?.similar_companies?.length > 0 ? 'completed' : 'draft',
+      getStatus: () => 'completed', // ✅ SEMPRE completed (aba opcional)
     });
 
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis

@@ -35,10 +35,14 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
     registerTab('competitors', {
       flushSave: async () => {
         console.log('[COMPETITORS] 📤 Registry: flushSave() chamado');
-        onDataChange?.(externalData);
+        
+        // ✅ AUTO-COMPLETE: Se não tem dados, marcar como 'completed' vazio
+        // Permite avançar sem bloquear o fluxo
+        const dataToSave = externalData || { skipped: true, reason: 'Análise opcional não executada' };
+        onDataChange?.(dataToSave);
         toast.success('✅ Análise de Concorrentes Salva!');
       },
-      getStatus: () => externalData ? 'completed' : 'draft',
+      getStatus: () => 'completed', // ✅ SEMPRE completed (aba opcional)
     });
 
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis

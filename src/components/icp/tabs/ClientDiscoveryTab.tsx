@@ -37,12 +37,14 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
     
     registerTab('clients', {
       flushSave: async () => {
-        const currentData = { directClients, wave7Results };
+        const currentData = directClients.length > 0 
+          ? { directClients, wave7Results } 
+          : { skipped: true, reason: 'Análise opcional não executada' };
         console.log('[CLIENTS] 📤 Registry: flushSave() chamado');
         onDataChange?.(currentData);
         sonnerToast.success('✅ Client Discovery Salvo!');
       },
-      getStatus: () => directClients.length > 0 ? 'completed' : 'draft',
+      getStatus: () => 'completed', // ✅ SEMPRE completed (aba opcional)
     });
 
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis

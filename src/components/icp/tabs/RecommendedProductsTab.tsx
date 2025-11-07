@@ -59,10 +59,11 @@ export function RecommendedProductsTab({
     registerTab('products', {
       flushSave: async () => {
         console.log('[PRODUCTS] 📤 Registry: flushSave() chamado');
-        onDataChange?.(productGapsData);
+        const dataToSave = productGapsData || { skipped: true, reason: 'Análise opcional não executada' };
+        onDataChange?.(dataToSave);
         toast.success('✅ Produtos Recomendados Salvos!');
       },
-      getStatus: () => productGapsData ? 'completed' : 'draft',
+      getStatus: () => 'completed', // ✅ SEMPRE completed (aba opcional)
     });
 
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis

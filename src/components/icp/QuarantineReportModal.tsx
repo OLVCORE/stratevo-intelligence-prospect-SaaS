@@ -305,6 +305,23 @@ export function QuarantineReportModal({
                 </DialogDescription>
               </div>
             </div>
+            
+            {/* 🔧 Botão Expandir/Minimizar (recuperado) */}
+            <div className="flex items-center gap-2 shrink-0 ml-4">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleToggleExpand}
+                title={isExpanded ? 'Minimizar' : 'Expandir Tela Cheia'}
+                className="h-9 w-9"
+              >
+                {isExpanded ? (
+                  <Minimize2 className="w-4 h-4" />
+                ) : (
+                  <Maximize2 className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Conteúdo scrollable */}

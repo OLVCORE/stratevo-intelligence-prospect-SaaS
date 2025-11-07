@@ -281,10 +281,11 @@ export function Analysis360Tab({
     registerTab('360', {
       flushSave: async () => {
         console.log('[360] 📤 Registry: flushSave() chamado');
-        onDataChange?.(data);
+        const dataToSave = data || { skipped: true, reason: 'Análise opcional não executada' };
+        onDataChange?.(dataToSave);
         sonnerToast.success('✅ Análise 360° Salva!');
       },
-      getStatus: () => data ? 'completed' : 'draft',
+      getStatus: () => 'completed', // ✅ SEMPRE completed (aba opcional)
     });
 
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis

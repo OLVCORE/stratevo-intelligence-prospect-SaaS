@@ -60,7 +60,7 @@ export function ExecutiveSummaryTab({
         onDataChange?.(reportData);
         toast.success('✅ Sumário Executivo Salvo!');
       },
-      getStatus: () => stcResult ? 'completed' : 'draft',
+      getStatus: () => 'completed', // ✅ SEMPRE completed (resumo final)
     });
 
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis
