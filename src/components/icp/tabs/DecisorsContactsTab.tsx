@@ -1,4 +1,4 @@
-// 👔 ABA DECISORES & CONTATOS - PhantomBuster Integration
+// 👔 ABA DECISORES & CONTATOS - Apollo + Corporate Theme
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
-import { Users, Mail, Phone, Linkedin, Sparkles, Loader2, ExternalLink, Target, TrendingUp, MapPin, AlertCircle } from 'lucide-react';
+import { Users, Mail, Phone, Linkedin, Sparkles, Loader2, ExternalLink, Target, TrendingUp, MapPin, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { performFullLinkedInAnalysis } from '@/services/phantomBusterEnhanced';
+import { corporateTheme } from '@/lib/theme/corporateTheme';
 import type { LinkedInProfileData } from '@/services/phantomBusterEnhanced';
 
 interface DecisorsContactsTabProps {
@@ -124,7 +125,7 @@ export function DecisorsContactsTab({
           <Button
             onClick={() => linkedinMutation.mutate()}
             disabled={linkedinMutation.isPending}
-            className="bg-purple-600 hover:bg-purple-700"
+            className={corporateTheme.primary.dark}
           >
             {linkedinMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -275,10 +276,10 @@ export function DecisorsContactsTab({
                         <div className="flex items-center gap-2 mb-1">
                           <h5 className="font-semibold text-lg">{decisor.name}</h5>
                           {decisor.buying_power === 'decision-maker' && (
-                            <Badge className="bg-purple-700 text-white text-xs">Decision Maker</Badge>
+                            <Badge className={`${corporateTheme.badges.decisionMaker.dark} text-xs`}>Decision Maker</Badge>
                           )}
                           {decisor.buying_power === 'influencer' && (
-                            <Badge className="bg-slate-600 text-slate-200 text-xs">Influencer</Badge>
+                            <Badge className={`${corporateTheme.badges.influencer.dark} text-xs`}>Influencer</Badge>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">{decisor.title || decisor.position}</p>
@@ -289,14 +290,15 @@ export function DecisorsContactsTab({
                           </p>
                         )}
                       </div>
-                      <Badge className="bg-slate-700 text-slate-300 text-xs border border-slate-600">Apollo</Badge>
+                      <Badge className={`${corporateTheme.badges.source.dark} text-xs`}>Apollo</Badge>
                     </div>
 
                     {/* Contatos */}
                     <div className="space-y-2 mb-3">
                       {decisor.email && decisor.email !== 'email_not_unlocked@domain.com' && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Mail className="w-4 h-4 text-green-600" />
+                          <CheckCircle2 className={`w-4 h-4 ${corporateTheme.status.verified}`} />
+                          <Mail className="w-4 h-4 text-slate-400" />
                           <a href={`mailto:${decisor.email}`} className="text-primary hover:underline font-medium" target="_blank" rel="noopener noreferrer">
                             {decisor.email}
                           </a>
@@ -305,7 +307,7 @@ export function DecisorsContactsTab({
                       )}
                       {decisor.email === 'email_not_unlocked@domain.com' && (
                         <div className="flex items-center gap-2 text-sm">
-                          <AlertCircle className="w-4 h-4 text-yellow-600" />
+                          <AlertCircle className={`w-4 h-4 ${corporateTheme.status.pending}`} />
                           <span className="text-muted-foreground text-xs">Email bloqueado - upgrade Apollo necessário</span>
                         </div>
                       )}
