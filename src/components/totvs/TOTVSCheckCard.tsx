@@ -1424,11 +1424,48 @@ export default function TOTVSCheckCard({
         onOpenChange={setShowHistoryModal}
         companyName={companyName || 'Empresa'}
         companyId={companyId}
-        onSelectReport={(reportId) => {
-          toast.info('Carregando relatório selecionado...');
-          setShowHistoryModal(false);
-          // Recarregar a página para aplicar o relatório selecionado
-          window.location.reload();
+        onSelectReport={async (reportId) => {
+          try {
+            toast.info('📂 Carregando relatório selecionado...');
+            setShowHistoryModal(false);
+            
+            // Buscar o relatório completo do banco
+            const { data: selectedReport, error } = await supabase
+              .from('stc_verification_history')
+              .select('*')
+              .eq('id', reportId)
+              .single();
+            
+            if (error) throw error;
+            
+            // Carregar dados do full_report em tabDataRef
+            if (selectedReport?.full_report) {
+              const report = selectedReport.full_report;
+              
+              // Carregar cada aba
+              if (report.detection) tabDataRef.current.detection = report.detection;
+              if (report.decisors_report) tabDataRef.current.decisors = report.decisors_report;
+              if (report.keywords_seo_report) tabDataRef.current.keywords = report.keywords_seo_report;
+              if (report.competitors_report) tabDataRef.current.competitors = report.competitors_report;
+              if (report.similar_companies_report) tabDataRef.current.similar = report.similar_companies_report;
+              if (report.clients_report) tabDataRef.current.clients = report.clients_report;
+              if (report.analysis_report) tabDataRef.current.analysis = report.analysis_report;
+              if (report.products_report) tabDataRef.current.products = report.products_report;
+              if (report.executive_report) tabDataRef.current.executive = report.executive_report;
+              
+              console.log('[HISTORY] ✅ Relatório carregado:', reportId);
+            }
+            
+            // Forçar re-render
+            queryClient.invalidateQueries({ queryKey: ['latest-stc-report'] });
+            
+            toast.success('✅ Relatório carregado do histórico!', {
+              description: `Salvo em ${new Date(selectedReport.created_at).toLocaleString('pt-BR')}`,
+            });
+          } catch (error: any) {
+            console.error('[HISTORY] ❌ Erro ao carregar relatório:', error);
+            toast.error('Erro ao carregar relatório', { description: error.message });
+          }
         }}
       />
     </Card>

@@ -400,11 +400,33 @@ export function QuarantineReportModal({
         onOpenChange={setShowHistory}
         companyName={companyName}
         companyId={companyId}
-        onSelectReport={(reportId) => {
-          toast.info('Carregando relatório selecionado...');
-          setShowHistory(false);
-          // Recarregar o relatório selecionado
-          window.location.reload();
+        onSelectReport={async (reportId) => {
+          try {
+            toast.info('📂 Carregando relatório selecionado...');
+            setShowHistory(false);
+            
+            // Buscar o relatório completo do banco
+            const { data: selectedReport, error } = await supabase
+              .from('stc_verification_history')
+              .select('*')
+              .eq('id', reportId)
+              .single();
+            
+            if (error) throw error;
+            
+            // Aplicar dados do relatório selecionado
+            if (selectedReport?.full_report) {
+              setStcResult(selectedReport.full_report);
+              console.log('[HISTORY] ✅ Relatório aplicado:', reportId);
+            }
+            
+            toast.success('✅ Relatório carregado do histórico!', {
+              description: `Salvo em ${new Date(selectedReport.created_at).toLocaleString('pt-BR')}`,
+            });
+          } catch (error: any) {
+            console.error('[HISTORY] ❌ Erro ao carregar relatório:', error);
+            toast.error('Erro ao carregar relatório', { description: error.message });
+          }
         }}
       />
       
