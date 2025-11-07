@@ -313,6 +313,17 @@ export default function TOTVSCheckCard({
   // 🔥 CRÍTICO: liveData vem como { data: {...} } do Supabase Edge Function
   const data = (latestReport?.full_report as any) || liveData?.data || liveData;
   const isLoading = isLoadingLive && !latestReport?.full_report;
+  
+  // 🐛 DEBUG: Log para diagnóstico
+  useEffect(() => {
+    console.log('[TOTVS-CARD] 🔍 Data sources:', {
+      hasLatestReport: !!latestReport?.full_report,
+      hasLiveData: !!liveData,
+      liveDataStructure: liveData ? Object.keys(liveData) : null,
+      dataStructure: data ? Object.keys(data) : null,
+      evidencesCount: data?.evidences?.length || 0,
+    });
+  }, [latestReport, liveData, data]);
 
   // Flags de abas salvas
   const hasSaved = !!latestReport?.full_report;
