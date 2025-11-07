@@ -5,7 +5,7 @@
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { CheckCircle2, AlertCircle, Loader2, Save, FileText, Send, Shield } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Save, FileText, Send, Shield, History } from 'lucide-react';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { isDiagEnabled, dlog, dgroup, dgroupEnd, dtable } from '@/lib/diag';
 import { SAFE_MODE, BLOCK_WRITES } from '@/lib/flags';
@@ -17,6 +17,7 @@ interface SaveBarProps {
   onSaveAll: () => Promise<void>;
   onApprove: () => Promise<void>;
   onExportPdf?: () => void;
+  onShowHistory?: () => void; // 📜 Callback para abrir modal de histórico
   readOnly?: boolean;
   isSaving?: boolean;
 }
@@ -26,6 +27,7 @@ export default function SaveBar({
   onSaveAll,
   onApprove,
   onExportPdf,
+  onShowHistory,
   readOnly = false,
   isSaving = false,
 }: SaveBarProps) {
@@ -146,6 +148,20 @@ export default function SaveBar({
               <Shield className="w-3 h-3" />
               {BLOCK_WRITES ? 'writes bloqueadas' : 'modo seguro'}
             </span>
+          )}
+
+          {/* 📜 Botão Histórico (SECONDARY - opcional) */}
+          {onShowHistory && (
+            <Button
+              onClick={onShowHistory}
+              variant="outline"
+              size="sm"
+              className="gap-2 font-semibold"
+              title="Ver histórico de relatórios salvos"
+            >
+              <History className="w-4 h-4" />
+              Histórico
+            </Button>
           )}
 
           {/* 📄 Botão Exportar PDF (SECONDARY - opcional) */}

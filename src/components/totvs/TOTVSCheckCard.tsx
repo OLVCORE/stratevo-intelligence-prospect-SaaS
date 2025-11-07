@@ -31,6 +31,7 @@ import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { registerTab as registerTabInGlobal, unregisterTab as unregisterTabInGlobal } from '@/components/icp/tabs/tabsRegistry';
 import { saveAllTabs, hasNonCompleted, getStatuses, getStatusCounts } from '@/components/icp/tabs/tabsRegistry';
 import { createSnapshotFromFullReport, loadSnapshot, isReportClosed, generatePdfFromSnapshot, type Snapshot } from '@/components/icp/tabs/snapshotReport';
+import { ReportHistoryModal } from '@/components/icp/ReportHistoryModal';
 import SaveBar from './SaveBar';
 import { toast } from 'sonner';
 import { isDiagEnabled, dlog, dgroup, dgroupEnd, dtable } from '@/lib/diag';
@@ -147,6 +148,9 @@ export default function TOTVSCheckCard({
 
   // 🔗 REGISTRY: Estado para diálogo de confirmação ao fechar
   const [showCloseConfirmDialog, setShowCloseConfirmDialog] = useState(false);
+
+  // 📜 HISTÓRICO: Estado para modal de histórico de relatórios
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   // 🔒 SNAPSHOT: Estado para snapshot e modo read-only
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -675,6 +679,7 @@ export default function TOTVSCheckCard({
         onSaveAll={handleSalvarNoSistema}
         onApprove={handleApproveAndMoveToPool}
         onExportPdf={undefined} // TODO: Implementar exportação de PDF
+        onShowHistory={() => setShowHistoryModal(true)} // 📜 Abrir modal de histórico
         readOnly={readOnly}
         isSaving={isSaving}
       />
@@ -1410,6 +1415,20 @@ export default function TOTVSCheckCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 📜 MODAL DE HISTÓRICO DE RELATÓRIOS */}
+      <ReportHistoryModal
+        open={showHistoryModal}
+        onOpenChange={setShowHistoryModal}
+        companyName={companyName || 'Empresa'}
+        companyId={companyId}
+        onSelectReport={(reportId) => {
+          toast.info('Carregando relatório selecionado...');
+          setShowHistoryModal(false);
+          // Recarregar a página para aplicar o relatório selecionado
+          window.location.reload();
+        }}
+      />
     </Card>
   );
 }

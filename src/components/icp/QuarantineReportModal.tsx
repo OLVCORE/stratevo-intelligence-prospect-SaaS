@@ -294,12 +294,6 @@ export function QuarantineReportModal({
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-lg font-semibold truncate flex items-center gap-2">
                   Relatório de Verificação TOTVS
-                  {loadedFromHistory && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full">
-                      <History className="w-3 h-3" />
-                      Histórico
-                    </span>
-                  )}
                 </DialogTitle>
                 <DialogDescription className="text-sm mt-1 truncate">
                   {companyName}
