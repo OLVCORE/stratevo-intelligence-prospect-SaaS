@@ -3,8 +3,10 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
-import { Users, Mail, Phone, Linkedin, Sparkles, Loader2, ExternalLink, Target, TrendingUp } from 'lucide-react';
+import { Users, Mail, Phone, Linkedin, Sparkles, Loader2, ExternalLink, Target, TrendingUp, MapPin, AlertCircle } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
@@ -30,6 +32,8 @@ export function DecisorsContactsTab({
 }: DecisorsContactsTabProps) {
   const { toast } = useToast();
   const [analysisData, setAnalysisData] = useState<any>(savedData || null);
+  const [customLinkedInUrl, setCustomLinkedInUrl] = useState(linkedinUrl || '');
+  const [customApolloUrl, setCustomApolloUrl] = useState('');
   
   // 🔄 RESET
   const handleReset = () => {
@@ -47,7 +51,11 @@ export function DecisorsContactsTab({
     mutationFn: async () => {
       if (!companyName) throw new Error('Nome da empresa não disponível');
       
-      return await performFullLinkedInAnalysis(companyName, linkedinUrl, domain);
+      // Usar URLs customizadas se fornecidas
+      const linkedinToUse = customLinkedInUrl || linkedinUrl;
+      const domainToUse = domain;
+      
+      return await performFullLinkedInAnalysis(companyName, linkedinToUse, domainToUse);
     },
     onMutate: () => {
       toast({
@@ -99,15 +107,15 @@ export function DecisorsContactsTab({
       )}
       
       {/* Header */}
-      <Card className="p-6 bg-gradient-to-br from-purple-50 to-blue-50">
+      <Card className="p-6 bg-slate-800 border border-slate-600">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="p-4 rounded-full bg-purple-100">
-              <Users className="w-8 h-8 text-purple-600" />
+            <div className="p-4 rounded-full bg-purple-900/30">
+              <Users className="w-8 h-8 text-purple-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-1">Decisores & Contatos</h3>
-              <p className="text-sm text-muted-foreground">
+              <h3 className="text-lg font-semibold mb-1 text-slate-200">Decisores & Contatos</h3>
+              <p className="text-sm text-slate-400">
                 Mapeamento de tomadores de decisão via PhantomBuster + LinkedIn
               </p>
             </div>
@@ -125,6 +133,28 @@ export function DecisorsContactsTab({
             )}
             Extrair Decisores
           </Button>
+        </div>
+        
+        {/* Campos editáveis - LinkedIn e Apollo URLs */}
+        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-600">
+          <div>
+            <Label className="text-slate-300 text-xs mb-2">LinkedIn Company URL (opcional)</Label>
+            <Input 
+              value={customLinkedInUrl} 
+              onChange={(e) => setCustomLinkedInUrl(e.target.value)}
+              placeholder="https://linkedin.com/company/..."
+              className="bg-slate-700 border-slate-600 text-slate-200"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-300 text-xs mb-2">Apollo Company URL (opcional)</Label>
+            <Input 
+              value={customApolloUrl} 
+              onChange={(e) => setCustomApolloUrl(e.target.value)}
+              placeholder="https://app.apollo.io/#/organizations/..."
+              className="bg-slate-700 border-slate-600 text-slate-200"
+            />
+          </div>
         </div>
       </Card>
 
@@ -239,47 +269,71 @@ export function DecisorsContactsTab({
 
               <div className="space-y-4">
                 {analysisData.decisorsWithEmails.map((decisor: any, idx: number) => (
-                  <div key={idx} className="border-2 border-purple-200 rounded-lg p-4 bg-white hover:shadow-md transition-all">
+                  <div key={idx} className="border border-slate-600 rounded-lg p-4 bg-slate-800 hover:border-purple-500 transition-all">
                     <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h5 className="font-semibold text-lg">{decisor.name}</h5>
-                        <p className="text-sm text-muted-foreground">{decisor.position}</p>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h5 className="font-semibold text-lg">{decisor.name}</h5>
+                          {decisor.buying_power === 'decision-maker' && (
+                            <Badge className="bg-red-600 text-xs">Decision Maker</Badge>
+                          )}
+                          {decisor.buying_power === 'influencer' && (
+                            <Badge variant="secondary" className="text-xs">Influencer</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{decisor.title || decisor.position}</p>
+                        {decisor.city && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                            <MapPin className="w-3 h-3" />
+                            {decisor.city}, {decisor.state} - {decisor.country}
+                          </p>
+                        )}
                       </div>
-                      {decisor.email && (
-                        <Badge variant="default" className="bg-green-600 text-xs">
-                          ✉️ Email verificado
-                        </Badge>
-                      )}
+                      <Badge variant="default" className="bg-blue-600 text-xs">Apollo</Badge>
                     </div>
 
                     {/* Contatos */}
                     <div className="space-y-2 mb-3">
-                      {decisor.email && (
+                      {decisor.email && decisor.email !== 'email_not_unlocked@domain.com' && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Mail className="w-4 h-4 text-purple-600" />
-                          <a href={`mailto:${decisor.email}`} className="text-primary hover:underline">
+                          <Mail className="w-4 h-4 text-green-600" />
+                          <a href={`mailto:${decisor.email}`} className="text-primary hover:underline font-medium" target="_blank" rel="noopener noreferrer">
                             {decisor.email}
                           </a>
-                          <Badge variant="outline" className="text-xs ml-auto">
-                            {decisor.confidence}% confiança
-                          </Badge>
+                          <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                        </div>
+                      )}
+                      {decisor.email === 'email_not_unlocked@domain.com' && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <AlertCircle className="w-4 h-4 text-yellow-600" />
+                          <span className="text-muted-foreground text-xs">Email bloqueado - upgrade Apollo necessário</span>
                         </div>
                       )}
                       
                       {decisor.phone && (
                         <div className="flex items-center gap-2 text-sm">
                           <Phone className="w-4 h-4 text-purple-600" />
-                          <span>{decisor.phone}</span>
+                          <a href={`tel:${decisor.phone}`} className="text-primary hover:underline font-medium">{decisor.phone}</a>
+                        </div>
+                      )}
+                      
+                      {decisor.linkedin_url && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Linkedin className="w-4 h-4 text-blue-600" />
+                          <a href={decisor.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
+                            Ver perfil LinkedIn
+                          </a>
+                          <ExternalLink className="w-3 h-3 text-muted-foreground" />
                         </div>
                       )}
                     </div>
 
                     {/* Approach Sugerido */}
-                    <div className="bg-purple-50 rounded p-3 text-xs">
-                      <p className="font-medium text-purple-900 mb-1">💡 Approach Sugerido:</p>
-                      <ul className="space-y-1 text-purple-700">
-                        {decisor.email && (
-                          <li>• Email direto: Mencionar [{decisor.position}] e dores do setor</li>
+                    <div className="bg-slate-700/50 rounded p-3 text-xs border border-slate-600">
+                      <p className="font-medium text-slate-200 mb-1">💡 Approach Sugerido:</p>
+                      <ul className="space-y-1 text-slate-300">
+                        {decisor.email && decisor.email !== 'email_not_unlocked@domain.com' && (
+                          <li>• Email direto: Mencionar {decisor.title || decisor.position || 'cargo'} e dores do setor</li>
                         )}
                         <li>• LinkedIn InMail: Personalizado com insights da empresa</li>
                         {decisor.phone && (
@@ -295,15 +349,15 @@ export function DecisorsContactsTab({
 
           {/* Insights Estratégicos */}
           {analysisData.insights.length > 0 && (
-            <Card className="p-6 bg-purple-50">
-              <h4 className="font-semibold mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-600" />
+            <Card className="p-6 bg-slate-800 border border-slate-600">
+              <h4 className="font-semibold mb-4 flex items-center gap-2 text-slate-200">
+                <Sparkles className="w-5 h-5 text-purple-400" />
                 Insights Estratégicos
               </h4>
-              <ul className="space-y-2 text-sm">
+              <ul className="space-y-2 text-sm text-slate-300">
                 {analysisData.insights.map((insight: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="text-purple-600 mt-1">•</span>
+                    <span className="text-purple-400 mt-1">•</span>
                     <span>{insight}</span>
                   </li>
                 ))}

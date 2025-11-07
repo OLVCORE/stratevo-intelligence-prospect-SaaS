@@ -251,70 +251,68 @@ export async function findDecisorsEmails(
 /**
  * 🔥 ANÁLISE COMPLETA LINKEDIN + DECISORES + EMAILS
  */
+// Apollo-based decisor extraction (hybrid Apollo + Phantom)
 export async function performFullLinkedInAnalysis(
   companyName: string,
   linkedinCompanyUrl?: string,
   companyDomain?: string
 ): Promise<{
   companyData: LinkedInCompanyEnhanced | null;
-  decisors: LinkedInProfileData[];
-  decisorsWithEmails: Array<{ name: string; position: string; email?: string; confidence: number }>;
+  decisors: any[];
+  decisorsWithEmails: any[];
   insights: string[];
 }> {
-  console.log('[PhantomBuster] 🔥 Análise LinkedIn completa:', companyName);
+  console.log('[Apollo+Phantom] 🔥 Extração híbrida:', companyName);
 
   const insights: string[] = [];
-
-  // 1. Dados da empresa
-  let companyData: LinkedInCompanyEnhanced | null = null;
-  if (linkedinCompanyUrl) {
-    companyData = await extractLinkedInCompanyData(linkedinCompanyUrl);
-    
-    if (companyData) {
-      insights.push(`✅ Empresa no LinkedIn: ${companyData.followers || 0} seguidores`);
-      insights.push(`👥 Funcionários no LinkedIn: ${companyData.employees || 0}`);
-      
-      if (companyData.recentPosts && companyData.recentPosts.length > 0) {
-        const avgEngagement = companyData.recentPosts.reduce((sum, p) => sum + p.engagement, 0) / companyData.recentPosts.length;
-        insights.push(`📊 Engajamento médio: ${avgEngagement.toFixed(1)}% (${companyData.recentPosts.length} posts)`);
-      }
-      
-      if (companyData.productMentions && companyData.productMentions.length > 0) {
-        insights.push(`🎯 Produtos mencionados: ${companyData.productMentions.join(', ')}`);
-      }
-    }
-  }
-
-  // 2. Decisores
-  const decisors = await extractLinkedInDecisors(companyName, linkedinCompanyUrl);
   
-  if (decisors.length > 0) {
-    insights.push(`👔 Decisores identificados: ${decisors.length} (${decisors.map(d => d.headline).filter(Boolean).join(', ')})`);
-  }
-
-  // 3. Emails dos decisores
-  let decisorsWithEmails: Array<{ name: string; position: string; email?: string; confidence: number }> = [];
+  // 1) Call Apollo backend
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
   
-  if (companyDomain && decisors.length > 0) {
-    const decisorsForEmail = decisors.map(d => ({
-      name: d.fullName,
-      position: d.headline || 'N/A'
-    }));
-    
-    decisorsWithEmails = await findDecisorsEmails(companyDomain, decisorsForEmail);
-    
-    const emailsFound = decisorsWithEmails.filter(d => d.email).length;
-    if (emailsFound > 0) {
-      insights.push(`📧 Emails encontrados: ${emailsFound}/${decisors.length} decisores`);
-    }
+  console.log('[Apollo+Phantom] 🚀 Chamando Apollo backend...');
+  
+  const apolloRes = await fetch(`${SUPABASE_URL}/functions/v1/enrich-apollo-decisores`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'apikey': SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify({
+      companyName,
+      domain: companyDomain,
+      positions: ['CEO','CFO','CIO','CTO','COO','Diretor','Gerente','VP','Head','Presidente','Sócio','Coordenador']
+    })
+  });
+  
+  console.log('[Apollo+Phantom] 📡 Response status:', apolloRes.status, apolloRes.statusText);
+  
+  if (!apolloRes.ok) {
+    const errorText = await apolloRes.text();
+    console.error('[Apollo+Phantom] ❌ Erro response:', errorText);
+    throw new Error(`Apollo API error: ${apolloRes.status}`);
   }
-
-  console.log('[PhantomBuster] ✅ Análise completa finalizada');
+  
+  const apolloData = await apolloRes.json();
+  console.log('[Apollo+Phantom] 📦 Response body:', apolloData);
+  
+  const decisores = apolloData?.decisores || [];
+  console.log('[Apollo+Phantom] 🔍 Decisores extraídos do response:', decisores.length);
+  
+  console.log('[Apollo+Phantom] 📊 Apollo retornou:', decisores.length, 'decisores');
+  console.log('[Apollo+Phantom] 📧 Dados completos:', apolloData);
+  
+  insights.push(`✅ ${decisores.length} decisores encontrados via Apollo.io`);
+  insights.push(`📧 ${decisores.filter((d:any) => d.email && d.email !== 'email_not_unlocked@domain.com').length} emails validados`);
+  insights.push(`🎯 ${decisores.filter((d:any) => d.buying_power === 'decision-maker').length} decision-makers`);
+  
+  console.log('[Apollo+Phantom] ✅ Extração completa, retornando', decisores.length, 'decisores');
   
   return {
-    companyData,
-    decisors,
-    decisorsWithEmails,
+    companyData: null,
+    decisors: decisores,
+    decisorsWithEmails: decisores,
     insights
   };
 }

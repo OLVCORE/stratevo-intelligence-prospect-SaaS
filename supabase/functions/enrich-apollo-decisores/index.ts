@@ -10,6 +10,7 @@ interface EnrichApolloRequest {
   companyId?: string; // optional: only update DB when provided
   companyName: string;
   domain?: string;
+  positions?: string[]; // optional: custom positions list
 }
 
 // Classificar poder de decisão baseado no título
@@ -64,7 +65,7 @@ serve(async (req) => {
     );
 
     const body: EnrichApolloRequest = await req.json();
-    const { companyId, companyName, domain } = body;
+    const { companyId, companyName, domain, positions } = body;
 
     console.log('[ENRICH-APOLLO] Buscando decisores para:', companyName);
 
@@ -74,32 +75,74 @@ serve(async (req) => {
       throw new Error('APOLLO_API_KEY não configurada');
     }
 
-    // Buscar pessoas (decisores) na empresa
+    // PASSO 1: Buscar a empresa pelo nome para obter o organization_id
+    let organizationId: string | null = null;
+    
+    if (!domain) {
+      // Apollo funciona melhor com "Primeira + Segunda palavra" (ex: "Ceramfix Indústria")
+      const words = companyName.split(/\s+/);
+      const firstTwo = words.slice(0, 2).join(' ');
+      const firstOne = words[0];
+      
+      const namesToTry = [firstTwo, firstOne, companyName];
+      
+      console.log('[ENRICH-APOLLO] Tentando nomes:', namesToTry);
+      
+      for (const name of namesToTry) {
+        const orgSearchPayload = {
+          q_organization_name: name,
+          page: 1,
+          per_page: 5
+        };
+        
+        const orgResponse = await fetch(
+          'https://api.apollo.io/v1/organizations/search',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Api-Key': apolloKey
+            },
+            body: JSON.stringify(orgSearchPayload)
+          }
+        );
+        
+        if (orgResponse.ok) {
+          const orgData = await orgResponse.json();
+          if (orgData.organizations && orgData.organizations.length > 0) {
+            organizationId = orgData.organizations[0].id;
+            console.log('[ENRICH-APOLLO] ✅ Organização encontrada:', organizationId, 'com nome:', name);
+            break;
+          }
+        }
+      }
+      
+      if (!organizationId) {
+        console.warn('[ENRICH-APOLLO] ⚠️ Organização não encontrada, usando busca genérica');
+      }
+    }
+    
+    // PASSO 2: Buscar pessoas (decisores) na empresa
+    const defaultPositions = [
+      'CEO','CFO','CIO','CTO','COO','Diretor','Gerente','VP','Head','Presidente','Sócio','Owner','Coordenador'
+    ];
+    
     const searchPayload: any = {
       page: 1,
-      per_page: 25,
-      person_titles: [
-        'CEO',
-        'CFO',
-        'CIO',
-        'CTO',
-        'COO',
-        'Diretor',
-        'Gerente',
-        'Presidente',
-        'Sócio',
-        'Owner'
-      ]
+      per_page: 100,
+      person_titles: positions && positions.length > 0 ? positions : defaultPositions
     };
 
-    // Usar domínio se disponível, senão usar nome da empresa
-    if (domain) {
+    // Priorizar: organization_id > domain > q_keywords (fallback)
+    if (organizationId) {
+      searchPayload.organization_ids = [organizationId];
+    } else if (domain) {
       searchPayload.q_organization_domains = domain;
     } else {
-      searchPayload.organization_names = [companyName];
+      searchPayload.q_keywords = companyName;
     }
 
-    console.log('[ENRICH-APOLLO] Payload:', JSON.stringify(searchPayload));
+    console.log('[ENRICH-APOLLO] Payload pessoas:', JSON.stringify(searchPayload));
 
     const apolloResponse = await fetch(
       'https://api.apollo.io/v1/mixed_people/search',
@@ -148,6 +191,13 @@ serve(async (req) => {
     console.log('[ENRICH-APOLLO] Influencers:', influencers.length);
     console.log('[ENRICH-APOLLO] Users:', users.length);
 
+    // Identificar decision maker principal (CEO/CFO/CIO)
+    const mainDecisionMaker = decisionMakers.find(d => 
+      d.title?.toLowerCase().includes('ceo') ||
+      d.title?.toLowerCase().includes('cfo') ||
+      d.title?.toLowerCase().includes('cio')
+    );
+
     // Atualizar empresa no banco (apenas se companyId for fornecido)
     if (companyId) {
       const updateData = {
@@ -168,23 +218,17 @@ serve(async (req) => {
       }
 
       // Se encontrou CEO/CFO/CIO, salvar email principal
-      const mainDecisionMaker = decisionMakers.find(d => 
-        d.title?.toLowerCase().includes('ceo') ||
-        d.title?.toLowerCase().includes('cfo') ||
-        d.title?.toLowerCase().includes('cio')
-      );
-
       if (mainDecisionMaker?.email) {
         await supabaseClient
           .from('suggested_companies')
           .update({ email: mainDecisionMaker.email })
           .eq('id', companyId);
       }
+      
+      console.log('[ENRICH-APOLLO] Empresa atualizada com sucesso');
     } else {
       console.log('[ENRICH-APOLLO] companyId não informado — retornando apenas os decisores (sem atualizar DB)');
     }
-
-    console.log('[ENRICH-APOLLO] Empresa atualizada com sucesso');
 
     return new Response(
       JSON.stringify({
