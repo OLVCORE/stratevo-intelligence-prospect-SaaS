@@ -946,7 +946,32 @@ export default function ICPQuarantine() {
         }
         
         // 4. Salvar relatório completo
-        await supabase
+        const fullReport = {
+          detection_report: totvsResult,
+          decisors_report: decisors,
+          keywords_seo_report: digital,
+          __status: {
+            detection: { status: 'completed' },
+            decisors: { status: decisors ? 'completed' : 'skipped' },
+            keywords: { status: digital ? 'completed' : 'skipped' },
+          },
+          __meta: {
+            saved_at: new Date().toISOString(),
+            batch_processing: true,
+            version: '2.0',
+            company: company.razao_social,
+          },
+        };
+        
+        console.log(`[BATCH] 💾 Salvando full_report:`, {
+          hasDetection: !!totvsResult,
+          hasDecisors: !!decisors,
+          hasDigital: !!digital,
+          evidencesCount: totvsResult?.evidences?.length || 0,
+          decisorsCount: decisors?.decisores?.length || 0,
+        });
+        
+        const { data: savedReport, error: saveError } = await supabase
           .from('stc_verification_history')
           .insert({
             company_id: company.company_id || company.id,
@@ -961,22 +986,21 @@ export default function ICPQuarantine() {
             evidences: totvsResult.evidences || [],
             sources_consulted: totvsResult.methodology?.searched_sources || 0,
             queries_executed: totvsResult.methodology?.total_queries || 0,
-            full_report: {
-              detection_report: totvsResult,
-              decisors_report: decisors,
-              keywords_seo_report: digital,
-              __status: {
-                detection: { status: 'completed' },
-                decisors: { status: decisors ? 'completed' : 'skipped' },
-                keywords: { status: digital ? 'completed' : 'skipped' },
-              },
-              __meta: {
-                saved_at: new Date().toISOString(),
-                batch_processing: true,
-                version: '2.0',
-              },
-            },
-          });
+            full_report: fullReport,
+          })
+          .select()
+          .single();
+        
+        if (saveError) {
+          console.error(`[BATCH] ❌ Erro ao salvar relatório:`, saveError);
+          throw saveError;
+        }
+        
+        console.log(`[BATCH] ✅ Relatório salvo:`, {
+          id: savedReport.id,
+          hasFullReport: !!savedReport.full_report,
+          fullReportKeys: savedReport.full_report ? Object.keys(savedReport.full_report) : [],
+        });
         
         // 5. Auto-descartar se NO-GO
         if (isNoGo) {
