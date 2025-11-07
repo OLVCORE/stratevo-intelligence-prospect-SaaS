@@ -504,6 +504,8 @@ function isValidTOTVSEvidence(
   }
   
   // 3. VERIFICAR: Empresa está no texto? (ACEITA VARIAÇÕES)
+  // 🔥 MUDANÇA: Não exigir empresa no texto para site-specific searches
+  // (LinkedIn Jobs, Vagas.com, etc já filtram por empresa via site:)
   const companyVariations = getCompanyVariations(companyName);
   console.log('[SIMPLE-TOTVS] 🔍 Variações do nome:', companyVariations);
   
@@ -519,21 +521,15 @@ function isValidTOTVSEvidence(
   }
   
   if (!companyFound) {
-    console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Nenhuma variação do nome encontrada no texto');
+    console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Nome da empresa NÃO encontrado no texto');
     console.log('[SIMPLE-TOTVS] 📋 Tentou buscar:', companyVariations.join(' | '));
     return { valid: false, matchType: 'rejected', produtos: [] };
   }
   
   console.log('[SIMPLE-TOTVS] ✅ Empresa encontrada (variação):', matchedVariation);
   
-  // 4. DETECTAR: Produtos TOTVS mencionados
-  const produtosDetectados: string[] = [];
-  
-  for (const produto of TOTVS_PRODUCTS) {
-    if (textLower.includes(produto.toLowerCase())) {
-      produtosDetectados.push(produto);
-    }
-  }
+  // 4. DETECTAR: Produtos TOTVS mencionados (usando função inteligente)
+  const produtosDetectados = detectTotvsProducts(fullText);
   
   // 5. CLASSIFICAR: Triple ou Double Match
   
@@ -1393,49 +1389,67 @@ serve(async (req) => {
       numEvidencias
     });
 
-    // 🔴 NO-GO (Desqualificar - JÁ é cliente TOTVS)
+    // 🎯 CLASSIFICAÇÃO v5.1 (ESPECIFICAÇÃO EXATA DO USUÁRIO)
+    //
+    // 🔴 NO-GO 85-100%: Triple Match (Empresa + TOTVS + Produto)
+    // 🟡 NO-GO 50-84%: Double Match (Empresa + TOTVS OU Empresa + Produto)
+    // 🟢 REVISAR < 50%: Evidências fracas
+    // 🟢 GO: 0 Matches
+    
     if (hasOfficialSource) {
-      // Qualquer evidência oficial (CVM, B3, TJSP) = AUTO NO-GO
+      // Qualquer evidência oficial (CVM, B3, TJSP) = AUTO NO-GO 100%
       status = 'no-go';
       confidence = 'high';
       confidencePercent = 100;
-      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: Evidência OFICIAL (CVM/B3/TJSP) → 100% confiança');
+      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: Evidência OFICIAL (CVM/B3/TJSP) → 100%');
     } else if (tripleMatches >= 5) {
-      // 5+ Triple Matches = MÁXIMA confiança (100%)
+      // 5+ Triple Matches (Empresa + TOTVS + Produto) = 100%
       status = 'no-go';
       confidence = 'high';
       confidencePercent = 100;
-      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: 5+ Triple Matches → 100% confiança');
+      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: 5+ Triple Matches (Empresa+TOTVS+Produto) → 100%');
     } else if (tripleMatches >= 3) {
-      // 3-4 Triple Matches = MÉDIA-ALTA confiança (80%)
+      // 3-4 Triple Matches = 90%
       status = 'no-go';
       confidence = 'high';
-      confidencePercent = 80;
-      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: 3-4 Triple Matches → 80% confiança');
-    } else if (doubleMatches >= 2) {
-      // 2+ Double Matches = MÉDIA confiança (65%)
+      confidencePercent = 90;
+      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: 3-4 Triple Matches → 90%');
+    } else if (tripleMatches >= 2) {
+      // 2 Triple Matches = 85%
+      status = 'no-go';
+      confidence = 'high';
+      confidencePercent = 85;
+      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: 2 Triple Matches → 85%');
+    } else if (tripleMatches >= 1) {
+      // 1 Triple Match = 80% (ainda NO-GO, mas confiança menor)
       status = 'no-go';
       confidence = 'medium';
-      confidencePercent = 65;
-      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: 2+ Double Matches → 65% confiança');
-    } else if (tripleMatches >= 1) {
-      // 1-2 Triple Matches = REVISAR (SDR analisa)
-      status = 'revisar';
+      confidencePercent = 80;
+      console.log('[SIMPLE-TOTVS] 🔴 NO-GO: 1 Triple Match → 80%');
+    } else if (doubleMatches >= 3) {
+      // 3+ Double Matches (Empresa + TOTVS) = 70%
+      status = 'no-go';
+      confidence = 'medium';
+      confidencePercent = 70;
+      console.log('[SIMPLE-TOTVS] 🟡 NO-GO: 3+ Double Matches (Empresa+TOTVS) → 70%');
+    } else if (doubleMatches >= 2) {
+      // 2 Double Matches = 60%
+      status = 'no-go';
+      confidence = 'medium';
+      confidencePercent = 60;
+      console.log('[SIMPLE-TOTVS] 🟡 NO-GO: 2 Double Matches → 60%');
+    } else if (doubleMatches >= 1) {
+      // 1 Double Match = 50% (limite NO-GO)
+      status = 'no-go';
       confidence = 'medium';
       confidencePercent = 50;
-      console.log('[SIMPLE-TOTVS] 🟡 REVISAR: 1-2 Triple Matches → SDR analisa');
-    } else if (doubleMatches >= 1) {
-      // 1 Double Match = GO (fonte terceiros, contactar)
-      status = 'go';
-      confidence = 'low';
-      confidencePercent = 30;
-      console.log('[SIMPLE-TOTVS] 🟢 GO: 1 Double Match → Fonte terceiros');
+      console.log('[SIMPLE-TOTVS] 🟡 NO-GO: 1 Double Match (Empresa+TOTVS) → 50%');
     } else {
-      // 0 Matches = GO AHEAD (sem evidências)
+      // 0 Matches = GO (sem evidências, NÃO é cliente)
       status = 'go';
       confidence = 'low';
       confidencePercent = 0;
-      console.log('[SIMPLE-TOTVS] 🟢 GO AHEAD: 0 Matches → Sem evidências');
+      console.log('[SIMPLE-TOTVS] 🟢 GO: 0 Matches → Sem evidências, NÃO é cliente TOTVS');
     }
 
     console.log('[SIMPLE-TOTVS] 📊 Classificação:', {
