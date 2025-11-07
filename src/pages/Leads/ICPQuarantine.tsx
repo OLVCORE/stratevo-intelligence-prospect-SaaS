@@ -979,13 +979,9 @@ export default function ICPQuarantine() {
             company_name: company.razao_social,
             cnpj: company.cnpj,
             status: totvsResult.status,
-            // ✅ REMOVIDO: confidence, double_matches, triple_matches, single_matches
-            // MOTIVO: PGRST204 - Colunas não existem no schema cache
-            // Todos os dados ficam salvos em full_report (incluindo matches)
-            total_score: totvsResult.total_weight || 0,
-            evidences: totvsResult.evidences || [],
-            sources_consulted: totvsResult.methodology?.searched_sources || 0,
-            queries_executed: totvsResult.methodology?.total_queries || 0,
+            // ✅ APENAS 2 COLUNAS + full_report
+            // MOTIVO: PGRST204 - Múltiplas colunas não existem no schema
+            // TODOS os dados ficam em full_report
             full_report: fullReport,
           })
           .select()
