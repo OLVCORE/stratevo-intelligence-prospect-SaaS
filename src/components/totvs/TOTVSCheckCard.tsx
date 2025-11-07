@@ -491,11 +491,15 @@ export default function TOTVSCheckCard({
             .from('simple_totvs_checks')
             .delete()
             .eq('company_id', companyId);
-          console.log('[TOTVS] 🗑️ Cache deletado, forçando nova verificação');
+          console.log('[TOTVS] 🗑️ Cache deletado do Supabase');
         } catch (error) {
           console.error('[TOTVS] ❌ Erro ao deletar cache:', error);
         }
       }
+      
+      // 🔥 INVALIDAR CACHE DO REACT QUERY
+      await queryClient.invalidateQueries({ queryKey: ['simple-totvs-check', companyName] });
+      console.log('[TOTVS] 🗑️ Cache do React Query invalidado');
     }
     
     setEnabled(true);
