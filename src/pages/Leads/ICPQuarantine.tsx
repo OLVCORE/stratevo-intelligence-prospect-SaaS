@@ -979,7 +979,7 @@ export default function ICPQuarantine() {
             company_name: company.razao_social,
             cnpj: company.cnpj,
             status: totvsResult.status,
-            confidence: totvsResult.confidence,
+            // ✅ REMOVIDO: confidence (coluna não existe no schema)
             triple_matches: totvsResult.triple_matches || 0,
             double_matches: totvsResult.double_matches || 0,
             single_matches: totvsResult.single_matches || 0,

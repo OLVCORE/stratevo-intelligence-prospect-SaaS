@@ -62,7 +62,7 @@ export default function STCHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('stc_verification_history')
-        .select('status, confidence, triple_matches, total_score');
+        .select('status, triple_matches, total_score');
 
       if (error) throw error;
 
@@ -373,18 +373,10 @@ export default function STCHistory() {
                   <CardContent className="p-4">
                     <p className="text-sm text-muted-foreground mb-1">Confiança</p>
                     <Badge
-                      variant={
-                        selectedVerification.confidence === 'high'
-                          ? 'default'
-                          : selectedVerification.confidence === 'medium'
-                          ? 'secondary'
-                          : 'outline'
-                      }
+                      variant="outline"
                       className="text-base px-3 py-1"
                     >
-                      {selectedVerification.confidence === 'high' && 'Alta'}
-                      {selectedVerification.confidence === 'medium' && 'Média'}
-                      {selectedVerification.confidence === 'low' && 'Baixa'}
+                      N/A
                     </Badge>
                   </CardContent>
                 </Card>
