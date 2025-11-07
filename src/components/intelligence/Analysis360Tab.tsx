@@ -8,6 +8,8 @@ import { FloatingNavigation } from '@/components/common/FloatingNavigation';
 import { Loader2, Target, TrendingUp, Lightbulb, Package, AlertTriangle, Clock } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
+import { useEffect } from 'react';
+import { registerTab, unregisterTab } from '@/components/icp/tabs/tabsRegistry';
 
 interface Analysis360TabProps {
   companyId: string;
@@ -18,6 +20,7 @@ interface Analysis360TabProps {
   };
   similarCompanies?: any;
   savedData?: any;
+  stcHistoryId?: string;
   onDataChange?: (data: any) => void;
 }
 
@@ -56,19 +59,9 @@ export function Analysis360Tab({
   stcResult,
   similarCompanies,
   savedData,
+  stcHistoryId,
   onDataChange
 }: Analysis360TabProps) {
-  
-  // 🔄 RESET
-  const handleReset = () => {
-    sonnerToast.info('Retornando ao início');
-  };
-
-  // 💾 SALVAR
-  const handleSave = () => {
-    onDataChange?.(data);
-    sonnerToast.success('✅ Análise 360° Salva!');
-  };
   
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['360-analysis', companyId],
@@ -280,6 +273,25 @@ export function Analysis360Tab({
     enabled: !!companyId,
     staleTime: 5 * 60 * 1000,
   });
+
+  // 🔗 REGISTRY: Registrar aba para SaveBar global
+  useEffect(() => {
+    console.info('[REGISTRY] ✅ Registering: 360');
+    
+    registerTab('360', {
+      flushSave: async () => {
+        console.log('[360] 📤 Registry: flushSave() chamado');
+        onDataChange?.(data);
+        sonnerToast.success('✅ Análise 360° Salva!');
+      },
+      getStatus: () => data ? 'completed' : 'draft',
+    });
+
+    return () => {
+      console.info('[REGISTRY] 🧹 Unregistered: 360');
+      unregisterTab('360');
+    };
+  }, [data, onDataChange]);
 
   const handleRefresh = () => {
     refetch();

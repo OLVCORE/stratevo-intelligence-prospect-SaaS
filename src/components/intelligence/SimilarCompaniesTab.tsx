@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +10,7 @@ import { Loader2, Building2, MapPin, Users, TrendingUp, AlertTriangle, Plus, Spa
 import { useToast } from '@/hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { registerTab, unregisterTab } from '@/components/icp/tabs/tabsRegistry';
 
 interface SimilarCompaniesTabProps {
   companyId: string;
@@ -19,6 +20,7 @@ interface SimilarCompaniesTabProps {
   state?: string;
   size?: string;
   savedData?: any[];
+  stcHistoryId?: string;
   onDataChange?: (data: any) => void;
 }
 
@@ -257,27 +259,35 @@ export function SimilarCompaniesTab({
   state, 
   size,
   savedData,
+  stcHistoryId,
   onDataChange
 }: SimilarCompaniesTabProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // 🔄 RESET
-  const handleReset = () => {
-    setActiveScoreFilter(null);
-    sonnerToast.info('Retornando ao início');
-  };
-
-  // 💾 SALVAR
-  const handleSave = () => {
-    onDataChange?.(data?.similar_companies);
-    sonnerToast.success('✅ Empresas Similares Salvas!');
-  };
-  
   // ===== TODOS OS HOOKS NO TOPO (NUNCA CONDICIONAIS) =====
   const [isAddingCompany, setIsAddingCompany] = useState<string | null>(null);
   const [activeScoreFilter, setActiveScoreFilter] = useState<string | null>(null);
   const [loadedFromHistory, setLoadedFromHistory] = useState(false);
+  
+  // 🔗 REGISTRY: Registrar aba para SaveBar global
+  useEffect(() => {
+    console.info('[REGISTRY] ✅ Registering: similar');
+    
+    registerTab('similar', {
+      flushSave: async () => {
+        console.log('[SIMILAR] 📤 Registry: flushSave() chamado');
+        onDataChange?.(data?.similar_companies);
+        sonnerToast.success('✅ Empresas Similares Salvas!');
+      },
+      getStatus: () => data?.similar_companies?.length > 0 ? 'completed' : 'draft',
+    });
+
+    return () => {
+      console.info('[REGISTRY] 🧹 Unregistered: similar');
+      unregisterTab('similar');
+    };
+  }, [data, onDataChange]);
   
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['similar-companies-web', companyId, companyName, sector, state],
@@ -2375,4 +2385,25 @@ export function SimilarCompaniesTab({
       )}
     </div>
   );
+}
+
+// 🔗 Hook separado para Registry (evitar conflitos com hooks condicionais)
+function useSimilarCompaniesRegistry(data: any, onDataChange?: (data: any) => void) {
+  useEffect(() => {
+    console.info('[REGISTRY] ✅ Registering: similar');
+    
+    registerTab('similar', {
+      flushSave: async () => {
+        console.log('[SIMILAR] 📤 Registry: flushSave() chamado');
+        onDataChange?.(data?.similar_companies);
+        sonnerToast.success('✅ Empresas Similares Salvas!');
+      },
+      getStatus: () => data?.similar_companies?.length > 0 ? 'completed' : 'draft',
+    });
+
+    return () => {
+      console.info('[REGISTRY] 🧹 Unregistered: similar');
+      unregisterTab('similar');
+    };
+  }, [data, onDataChange]);
 }
