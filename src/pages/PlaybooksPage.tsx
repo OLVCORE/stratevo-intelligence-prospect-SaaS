@@ -22,7 +22,7 @@ export default function PlaybooksPage() {
       // Busca relações em paralelo para todas as empresas
       const companyIds = baseCompanies.map(c => c.id);
       const [decisorsRes, maturityRes] = await Promise.all([
-        supabase.from('decision_makers').select('id, name, title, company_id').in('company_id', companyIds),
+        supabase.from('decision_makers').select('id, company_name, title, company_id').in('company_id', companyIds),
         supabase.from('digital_maturity').select('overall_score, company_id').in('company_id', companyIds),
       ]);
 

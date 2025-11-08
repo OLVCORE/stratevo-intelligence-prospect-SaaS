@@ -29,7 +29,7 @@ export const useMessageTemplates = ({ channel }: UseMessageTemplatesOptions) => 
       setError(null);
       const { data, error } = await supabase
         .from('message_templates')
-        .select('id, name, category, channel, subject, body, variables, is_active, created_by')
+        .select('id, company_name, category, channel, subject, body, variables, is_active, created_by')
         .eq('channel', channel)
         .eq('is_active', true)
         .order('updated_at', { ascending: false });

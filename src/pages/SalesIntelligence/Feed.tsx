@@ -115,7 +115,7 @@ export default function SalesIntelligenceFeed() {
       
       const { data } = await supabase
         .from('companies')
-        .select('id, name, domain, headquarters_state, industry, employees')
+        .select('id, company_name, domain, headquarters_state, industry, employees')
         .in('id', companyIds);
       
       return (data || []).reduce((acc, company) => {

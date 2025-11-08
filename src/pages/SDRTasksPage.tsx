@@ -197,7 +197,7 @@ export default function SDRTasksPage() {
   const loadContacts = async () => {
     const { data } = await supabase
       .from('contacts')
-      .select('id, name, company_id')
+      .select('id, company_name, company_id')
       .order('name');
     setContacts(data || []);
   };

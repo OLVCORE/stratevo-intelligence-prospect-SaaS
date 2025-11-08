@@ -17,21 +17,21 @@ export default function NotificationCenter() {
     queryFn: async () => {
       const { data: hotLeads } = await supabase
         .from('companies')
-        .select('id, name, icp_score, created_at')
+        .select('id, company_name, icp_score, created_at')
         .gte('icp_score', 80)
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false });
 
       const { data: stagnantDeals } = await supabase
         .from('companies')
-        .select('id, name, deal_stage, days_in_stage')
+        .select('id, company_name, deal_stage, days_in_stage')
         .gte('days_in_stage', 7)
         .not('deal_stage', 'in', '("closed_won","closed_lost")')
         .order('days_in_stage', { ascending: false });
 
       const { data: followUps } = await supabase
         .from('companies')
-        .select('id, name, next_follow_up_action')
+        .select('id, company_name, next_follow_up_action')
         .eq('next_follow_up_date', new Date().toISOString().split('T')[0])
         .order('next_follow_up_date', { ascending: true });
 
