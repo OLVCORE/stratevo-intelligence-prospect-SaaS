@@ -148,6 +148,15 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
     setIcpComboboxOpen(false);
   };
 
+  // 🔥 BUSCA AUTOMÁTICA QUANDO DIGITA CNPJ (14 dígitos completos)
+  useEffect(() => {
+    const clean = (formData.cnpj || '').replace(/\D/g, '');
+    if (clean.length === 14 && !selectedCompany) {
+      // CNPJ completo digitado, buscar automaticamente
+      handleEnrichCompany();
+    }
+  }, [formData.cnpj]);
+
   const handleEnrichCompany = async () => {
     // Aceita empresa selecionada OU CNPJ digitado
     if (!selectedCompany?.id && !formData.cnpj) {
@@ -182,26 +191,107 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
           companyId = existing.id;
           console.log('✅ Empresa já existe no banco:', existing.company_name);
         } else {
-          // Buscar dados da Receita Federal via Edge Function
+          // 🔥 FALLBACK CHAIN: API Brasil → ReceitaWS → EmpresasAqui
+          console.log('🔍 Iniciando busca de CNPJ com fallback em 3 APIs...');
+          
+          // TENTATIVA 1: API Brasil (mais confiável)
           try {
-            const { data: rfResponse, error: rfError } = await supabase.functions.invoke('enrich-receitaws', {
-              body: { cnpj: clean }
-            });
+            console.log('📡 Tentando API Brasil...');
+            const apiBrasilResponse = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
             
-            if (rfError) throw rfError;
-            receitaData = rfResponse?.data || rfResponse;
-            if (!receitaData || receitaData.status === 'ERROR') {
-              throw new Error(receitaData?.message || 'CNPJ não encontrado');
+            if (apiBrasilResponse.ok) {
+              const data = await apiBrasilResponse.json();
+              receitaData = {
+                nome: data.razao_social || data.nome_fantasia,
+                fantasia: data.nome_fantasia,
+                cnpj: data.cnpj,
+                atividade_principal: [{ text: data.cnae_fiscal_descricao }],
+                municipio: data.municipio,
+                uf: data.uf,
+                logradouro: data.logradouro,
+                numero: data.numero,
+                complemento: data.complemento,
+                bairro: data.bairro,
+                cep: data.cep
+              };
+              console.log('✅ API Brasil: Sucesso!', receitaData.nome);
+            } else {
+              throw new Error('API Brasil falhou');
             }
-          } catch (err: any) {
-            // FALLBACK: Aceitar entrada manual se Edge Function falhar
-            console.warn('Edge Function falhou, permitindo entrada manual');
-            receitaData = {
-              nome: formData.company_name || `Empresa ${clean}`,
-              fantasia: formData.company_name,
-              cnpj: clean,
-              atividade_principal: [{ text: formData.industry }]
-            };
+          } catch (apiBrasilError: any) {
+            console.warn('⚠️ API Brasil falhou, tentando ReceitaWS...', apiBrasilError.message);
+            
+            // TENTATIVA 2: ReceitaWS
+            try {
+              const receitawsResponse = await fetch(`https://www.receitaws.com.br/v1/cnpj/${clean}`);
+              
+              if (receitawsResponse.ok) {
+                const data = await receitawsResponse.json();
+                if (data.status !== 'ERROR') {
+                  receitaData = {
+                    nome: data.nome || data.fantasia,
+                    fantasia: data.fantasia,
+                    cnpj: data.cnpj,
+                    atividade_principal: data.atividade_principal,
+                    municipio: data.municipio,
+                    uf: data.uf,
+                    logradouro: data.logradouro,
+                    numero: data.numero,
+                    complemento: data.complemento,
+                    bairro: data.bairro,
+                    cep: data.cep
+                  };
+                  console.log('✅ ReceitaWS: Sucesso!', receitaData.nome);
+                } else {
+                  throw new Error('ReceitaWS retornou erro');
+                }
+              } else {
+                throw new Error('ReceitaWS falhou');
+              }
+            } catch (receitawsError: any) {
+              console.warn('⚠️ ReceitaWS falhou, tentando EmpresasAqui...', receitawsError.message);
+              
+              // TENTATIVA 3: EmpresasAqui (última opção)
+              try {
+                // Nota: EmpresasAqui requer API key, ajuste se necessário
+                const empresasAquiResponse = await fetch(`https://api.empresasaqui.com.br/v1/cnpj/${clean}`, {
+                  headers: {
+                    'Authorization': 'Bearer SEU_TOKEN_AQUI' // Adicionar token se disponível
+                  }
+                });
+                
+                if (empresasAquiResponse.ok) {
+                  const data = await empresasAquiResponse.json();
+                  receitaData = {
+                    nome: data.razao_social || data.nome_fantasia,
+                    fantasia: data.nome_fantasia,
+                    cnpj: data.cnpj,
+                    atividade_principal: [{ text: data.atividade_principal }],
+                    municipio: data.municipio,
+                    uf: data.uf,
+                    logradouro: data.logradouro,
+                    numero: data.numero,
+                    complemento: data.complemento,
+                    bairro: data.bairro,
+                    cep: data.cep
+                  };
+                  console.log('✅ EmpresasAqui: Sucesso!', receitaData.nome);
+                } else {
+                  throw new Error('EmpresasAqui falhou');
+                }
+              } catch (empresasAquiError: any) {
+                console.error('❌ TODAS as APIs falharam!', empresasAquiError.message);
+                
+                // FALLBACK FINAL: Aceitar entrada manual
+                console.warn('⚠️ Usando fallback manual');
+                receitaData = {
+                  nome: formData.company_name || `Empresa ${clean}`,
+                  fantasia: formData.company_name,
+                  cnpj: clean,
+                  atividade_principal: [{ text: formData.industry || 'Não especificado' }]
+                };
+              }
+            }
           }
           
           // 🔥 PASSO 3: CRIAR EMPRESA COM DADOS REAIS DA RECEITA FEDERAL
