@@ -873,7 +873,7 @@ export default function TOTVSCheckCard({
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-9 mb-6 h-auto bg-muted/30 p-1 rounded-lg">
           {/* 🔄 NOVA ORDEM: TOTVS → Decisores → Digital → ... → Executive */}
-          <TabsTrigger value="detection" className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-primary/10 font-semibold relative">
+          <TabsTrigger value="detection" className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-primary/10 font-semibold relative data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             <Search className="w-4 h-4" />
             <span>TOTVS</span>
             <TabIndicator status={latestReport?.full_report?.__status?.detection?.status || 'draft'} />
@@ -884,7 +884,7 @@ export default function TOTVSCheckCard({
           <TabsTrigger 
             value="decisors" 
             disabled={!totvsSaved} 
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative"
+            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-600 data-[state=active]:text-white"
           >
             {!totvsSaved && <span className="text-sm">🔒</span>}
             <UserCircle className="w-4 h-4" />
@@ -896,7 +896,7 @@ export default function TOTVSCheckCard({
           <TabsTrigger 
             value="keywords" 
             disabled={!totvsSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative"
+            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-600 data-[state=active]:text-white"
           >
             {!totvsSaved && <span className="text-sm">🔒</span>}
             <Globe className="w-4 h-4" />

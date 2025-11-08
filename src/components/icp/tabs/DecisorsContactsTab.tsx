@@ -374,12 +374,12 @@ export function DecisorsContactsTab({
           {/* Lista de Decisores - DESTAQUE COM BALÃO COLORIDO */}
           {analysisData.decisorsWithEmails.length > 0 && (
             <Card className="p-6 border-2 border-emerald-500/30 bg-emerald-500/5">
-              <div className="flex items-center justify-between mb-6">
-                <h4 className="font-bold text-xl flex items-center gap-3">
-                  <div className="p-3 rounded-full bg-emerald-500/20">
-                    <Users className="w-6 h-6 text-emerald-500" />
-                  </div>
-                  <span className="text-foreground">Decisores Identificados</span>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 rounded-full bg-emerald-500/20">
+                  <Users className="w-6 h-6 text-emerald-500" />
+                </div>
+                <h4 className="font-bold text-xl text-foreground">
+                  Decisores Identificados
                 </h4>
                 <Badge variant="default" className="bg-emerald-600 text-white text-lg px-4 py-2 shadow-lg">
                   {analysisData.decisorsWithEmails.length} pessoas
