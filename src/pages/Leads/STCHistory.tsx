@@ -27,8 +27,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw, XCircle } from 'lucide-react';
+import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw, XCircle, Maximize2, AlertTriangle, CheckCircle2, Flame, Snowflake, Zap } from 'lucide-react';
 import TOTVSCheckCard from '@/components/totvs/TOTVSCheckCard';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function STCHistory() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -347,7 +348,11 @@ export default function STCHistory() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setSelectedVerification(verification)}
+                        onClick={() => {
+                          setSelectedVerification(verification);
+                          setShowFullReport(true);
+                        }}
+                        title="Abrir Relatório Completo (9 abas)"
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
