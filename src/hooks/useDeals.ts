@@ -41,9 +41,12 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
       
       const { data, error } = await query;
       if (error) {
+        console.error('❌ ERRO DETALHADO useDeals:', JSON.stringify(error, null, 2));
         logger.error('Error fetching deals', error);
         return []; // Retornar array vazio em vez de quebrar
       }
+      
+      console.log('✅ Deals carregados:', data?.length || 0);
       
       // 🔥 MAPEAR ALIASES PARA COMPATIBILIDADE COM CÓDIGO LEGADO
       const dealsWithAliases = (data || []).map(deal => ({
