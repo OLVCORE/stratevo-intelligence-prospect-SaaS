@@ -591,7 +591,7 @@ export default function CommandCenter() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Quarentena → Aprovadas</span>
-                  <span className="font-semibold text-yellow-500">
+                  <span className="font-semibold text-yellow-600">
                     {metrics.conversionRate.quarantineToApproved}%
                   </span>
                 </div>
@@ -601,7 +601,7 @@ export default function CommandCenter() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Aprovadas → Pipeline</span>
-                  <span className="font-semibold text-green-500">
+                  <span className="font-semibold text-green-600">
                     {metrics.conversionRate.approvedToPipeline}%
                   </span>
                 </div>
@@ -610,7 +610,7 @@ export default function CommandCenter() {
               
               <div className="flex items-center justify-between pt-4 border-t">
                 <span className="text-sm font-semibold">Conversão Global</span>
-                <span className="font-bold text-2xl text-purple-500">
+                <span className="font-bold text-2xl text-blue-600">
                   {metrics.conversionRate.overall}%
                 </span>
               </div>
@@ -624,8 +624,8 @@ export default function CommandCenter() {
             </CardHeader>
             <CardContent className="space-y-3">
               {metrics.inQuarantine > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-yellow-500/10 rounded-lg">
-                  <Filter className="h-5 w-5 text-yellow-500 mt-0.5" />
+                <div className="flex items-start gap-3 p-3 border border-yellow-600/30 rounded-lg bg-yellow-600/5">
+                  <Filter className="h-5 w-5 text-yellow-600 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium">
                       {metrics.inQuarantine} empresas aguardando análise ICP
@@ -633,7 +633,7 @@ export default function CommandCenter() {
                     <Button 
                       variant="link" 
                       size="sm" 
-                      className="text-yellow-500 p-0 h-auto"
+                      className="text-yellow-600 hover:text-yellow-700 p-0 h-auto"
                       onClick={() => navigate('/leads/icp-quarantine')}
                     >
                       Analisar agora →
@@ -643,8 +643,8 @@ export default function CommandCenter() {
               )}
 
               {metrics.approved > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-green-500/10 rounded-lg">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                <div className="flex items-start gap-3 p-3 border border-green-600/30 rounded-lg bg-green-600/5">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium">
                       {metrics.approved} leads aprovados prontos para vendas
@@ -652,7 +652,7 @@ export default function CommandCenter() {
                     <Button 
                       variant="link" 
                       size="sm" 
-                      className="text-green-500 p-0 h-auto"
+                      className="text-green-600 hover:text-green-700 p-0 h-auto"
                       onClick={() => navigate('/leads/approved')}
                     >
                       Criar deals →
@@ -662,8 +662,8 @@ export default function CommandCenter() {
               )}
 
               {metrics.inPipeline > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-purple-500/10 rounded-lg">
-                  <Zap className="h-5 w-5 text-purple-500 mt-0.5" />
+                <div className="flex items-start gap-3 p-3 border border-blue-600/30 rounded-lg bg-blue-600/5">
+                  <Zap className="h-5 w-5 text-blue-600 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium">
                       {metrics.inPipeline} deals ativos no pipeline
@@ -671,7 +671,7 @@ export default function CommandCenter() {
                     <Button 
                       variant="link" 
                       size="sm" 
-                      className="text-purple-500 p-0 h-auto"
+                      className="text-blue-600 hover:text-blue-700 p-0 h-auto"
                       onClick={() => navigate('/sdr/workspace')}
                     >
                       Gerenciar →
@@ -681,8 +681,8 @@ export default function CommandCenter() {
               )}
 
               {metrics.totalImported === 0 && (
-                <div className="flex items-start gap-3 p-3 bg-blue-500/10 rounded-lg">
-                  <Building2 className="h-5 w-5 text-blue-500 mt-0.5" />
+                <div className="flex items-start gap-3 p-3 border border-blue-600/30 rounded-lg bg-blue-600/5">
+                  <Building2 className="h-5 w-5 text-blue-600 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium">
                       Comece importando empresas
@@ -690,7 +690,7 @@ export default function CommandCenter() {
                     <Button 
                       variant="link" 
                       size="sm" 
-                      className="text-blue-500 p-0 h-auto"
+                      className="text-blue-600 hover:text-blue-700 p-0 h-auto"
                       onClick={() => navigate('/search')}
                     >
                       Importar agora →
