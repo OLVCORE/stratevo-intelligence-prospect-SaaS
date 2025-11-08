@@ -33,6 +33,8 @@ export function BulkUploadDialog({ children }: { children?: ReactNode }) {
 const [result, setResult] = useState<{ success: number; errors: string[] } | null>(null);
 const navigate = useNavigate();
 const [importMode, setImportMode] = useState<'analyze' | 'direct'>('analyze');
+const [sourceName, setSourceName] = useState("");
+const [sourceCampaign, setSourceCampaign] = useState("");
 
   // Fecha automaticamente após sucesso
   useEffect(() => {
@@ -494,18 +496,44 @@ const [importMode, setImportMode] = useState<'analyze' | 'direct'>('analyze');
         return;
       }
 
+      // GERAR ID ÚNICO DO LOTE
+      const import_batch_id = crypto.randomUUID();
+      const import_date = new Date().toISOString();
+      
+      // ADICIONAR METADADOS DE RASTREABILIDADE A TODAS AS EMPRESAS
+      const companiesWithMetadata = companies.map(company => ({
+        ...company,
+        source_type: 'csv',
+        source_name: sourceName.trim(),
+        import_batch_id,
+        import_date,
+        source_metadata: {
+          file_name: file.name,
+          campaign: sourceCampaign.trim() || null,
+          total_rows: companies.length,
+          import_mode: importMode
+        }
+      }));
+
 // Se o modo for importação direta, enviar ao backend
 if (importMode === 'direct') {
   try {
-    toast.info(`Importando ${companies.length} empresas para a base...`);
+    toast.info(`Importando ${companiesWithMetadata.length} empresas para a base...`);
     const { data, error } = await supabase.functions.invoke('bulk-upload-companies', {
-      body: { companies }
+      body: { 
+        companies: companiesWithMetadata,
+        metadata: {
+          source_name: sourceName.trim(),
+          campaign: sourceCampaign.trim() || null,
+          import_batch_id
+        }
+      }
     });
     if (error) throw error;
 
     const imported = (data?.success as number) ?? (Array.isArray(data?.inserted) ? data.inserted.length : 0);
     toast.success('Importação concluída', {
-      description: `${imported} empresas importadas com sucesso`,
+      description: `${imported} empresas de "${sourceName}" importadas com sucesso`,
       action: {
         label: 'Ver empresas',
         onClick: () => navigate('/companies')
@@ -525,7 +553,7 @@ if (importMode === 'direct') {
 }
 
 // Fluxo atual: Redirecionar para análise ICP antes de cadastrar
-toast.success(`📊 ${companies.length} empresas prontas para análise ICP`, {
+toast.success(`📊 ${companiesWithMetadata.length} empresas de "${sourceName}" prontas para análise ICP`, {
   description: 'Redirecionando para análise automática...',
 });
 
@@ -538,8 +566,11 @@ setIsOpen(false);
 setTimeout(() => {
   navigate('/central-icp/batch', {
     state: {
-      empresas: companies,
-      origem: 'upload_massa'
+      empresas: companiesWithMetadata,
+      origem: 'upload_massa',
+      source_name: sourceName.trim(),
+      source_campaign: sourceCampaign.trim() || null,
+      import_batch_id
     }
   });
 }, 500);
@@ -678,6 +709,44 @@ try {
               </Select>
             </div>
 
+            {/* CAMPOS DE RASTREABILIDADE */}
+            <div className="space-y-4 rounded-lg border border-blue-600/30 bg-blue-600/5 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Folder className="h-4 w-4 text-blue-600" />
+                <p className="text-sm font-semibold text-blue-600">Rastreabilidade da Importação</p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="source-name">Nome da Fonte *</Label>
+                <Input
+                  id="source-name"
+                  placeholder="Ex: Prospecção Q1 2025, Leads Manuais, Teste Campanha"
+                  value={sourceName}
+                  onChange={(e) => setSourceName(e.target.value)}
+                  disabled={isUploading}
+                  className="border-blue-600/50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Identifique a origem desta planilha para rastrear conversão por fonte
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="source-campaign">Campanha (opcional)</Label>
+                <Input
+                  id="source-campaign"
+                  placeholder="Ex: Black Friday, Webinar Tech, Feira SP"
+                  value={sourceCampaign}
+                  onChange={(e) => setSourceCampaign(e.target.value)}
+                  disabled={isUploading}
+                  className="border-blue-600/50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tag adicional para organizar importações por campanha
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-4">
               <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary transition-colors">
                 <input
@@ -758,7 +827,7 @@ try {
               </Button>
               <Button
                 onClick={handleUpload}
-                disabled={!file || isUploading}
+                disabled={!file || isUploading || !sourceName.trim()}
                 className="gap-2"
               >
                 {isUploading ? (
