@@ -5,7 +5,8 @@ import { useDeals } from '@/hooks/useDeals';
 import { usePipelineStages } from '@/hooks/usePipelineStages';
 
 export function AdvancedFunnelChart() {
-  const { data: deals, isLoading } = useDeals({ status: 'open' });
+  const deals: any[] = []; // DESABILITAR TEMPORARIAMENTE
+  const isLoading = false;
   const { data: stages } = usePipelineStages();
 
   // Calcular métricas do funil

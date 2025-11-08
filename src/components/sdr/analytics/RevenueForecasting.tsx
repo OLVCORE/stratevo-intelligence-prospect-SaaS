@@ -18,7 +18,8 @@ import { addMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function RevenueForecasting() {
-  const { data: deals, isLoading } = useDeals({ status: 'open' });
+  const deals: any[] = []; // DESABILITAR TEMPORARIAMENTE
+  const isLoading = false;
 
   // Calcular forecast para próximos 6 meses
   const forecastData = Array.from({ length: 6 }, (_, i) => {

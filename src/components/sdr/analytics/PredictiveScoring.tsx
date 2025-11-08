@@ -18,7 +18,8 @@ interface PredictiveScore {
 }
 
 export function PredictiveScoring() {
-  const { data: deals, isLoading: dealsLoading } = useDeals({ status: 'open' });
+  const deals: any[] = []; // DESABILITAR TEMPORARIAMENTE
+  const dealsLoading = false;
   const [predictions, setPredictions] = useState<PredictiveScore[]>([]);
   const [loading, setLoading] = useState(false);
 

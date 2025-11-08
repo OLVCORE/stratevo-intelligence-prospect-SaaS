@@ -44,7 +44,7 @@ export default function SDRWorkspacePage() {
   const { data: deals } = useDeals({ status: 'open' });
   const { data: stages } = usePipelineStages();
   const { data: automations, isLoading: automationsLoading } = useSDRAutomations();
-  const { data: companiesAtRisk } = useCompaniesAtRisk();
+  const { data: companiesAtRisk } = { data: [] }; // DESABILITAR TEMPORARIAMENTE
 
   // Stats
   const stats = {
