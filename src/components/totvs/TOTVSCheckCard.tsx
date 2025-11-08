@@ -1356,9 +1356,9 @@ export default function TOTVSCheckCard({
             cnpj={cnpj}
             domain={discoveredWebsite || domain}
             sector={latestReport?.full_report?.icp_score?.sector}
-            stcStatus={stcResult?.status}
-            onDataChange={(data) => {
-              tabDataRef.current.keywords = data;
+            stcStatus={data?.status}
+            onDataChange={(dataChange) => {
+              tabDataRef.current.keywords = dataChange;
               setUnsavedChanges(prev => ({ ...prev, keywords: true }));
               setTabsStatus(prev => ({ ...prev, keywords: 'success' }));
             }}
