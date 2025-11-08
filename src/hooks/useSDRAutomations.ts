@@ -18,7 +18,7 @@ export function useSDRAutomations() {
       const { data: deals, error } = await supabase
         .from('sdr_deals')
         .select('*')
-        .eq('status', 'open')
+        .in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']) // FIX: usar deal_stage, não status
         .order('created_at', { ascending: false });
 
       if (error) throw error;

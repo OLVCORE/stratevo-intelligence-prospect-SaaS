@@ -29,7 +29,7 @@ export default function SystemHealth() {
       const { count: dealsCount } = await supabase
         .from('sdr_deals')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'open');
+        .in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']);
 
       // 2. Processing Health (últimas 24h)
       const { count: recentAnalysis } = await supabase
@@ -75,10 +75,10 @@ export default function SystemHealth() {
 
       const { data: conversionData } = await supabase
         .from('sdr_deals')
-        .select('status, created_at')
+        .select('deal_stage, created_at')
         .gte('created_at', oneDayAgo.toISOString());
 
-      const wonDeals = conversionData?.filter(d => d.status === 'won').length || 0;
+      const wonDeals = conversionData?.filter(d => d.deal_stage === 'won').length || 0;
       const totalDealsCreated = conversionData?.length || 0;
       const conversionRate = totalDealsCreated > 0 
         ? Math.round((wonDeals / totalDealsCreated) * 100) 

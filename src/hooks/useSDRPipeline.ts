@@ -40,14 +40,14 @@ export function useSDRPipeline() {
           id,
           company_id,
           contact_id,
-          title,
-          stage,
-          value,
+          deal_title,
+          deal_stage,
+          deal_value,
           probability,
           created_at,
           updated_at,
-          company:companies(id, name, website, industry),
-          contact:contacts(id, name, email, phone)
+          company:companies(id, company_name, website, industry),
+          contact:Contact(id, name, email, phone)
         `)
         .order('created_at', { ascending: false });
 
@@ -58,8 +58,8 @@ export function useSDRPipeline() {
         id: opp.id,
         company_id: opp.company_id || '',
         contact_id: opp.contact_id || '',
-        stage: opp.stage,
-        value: Number(opp.value) || 0,
+        stage: opp.deal_stage,
+        value: Number(opp.deal_value) || 0,
         probability: opp.probability || 0,
         next_action: 'Follow-up agendado',
         next_action_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -69,7 +69,7 @@ export function useSDRPipeline() {
         contact: opp.contact as any,
         conversation_id: undefined,
         canvas_id: undefined,
-        title: opp.title,
+        title: opp.deal_title,
       }));
 
       setLeads(leadsData);
@@ -87,7 +87,7 @@ export function useSDRPipeline() {
       const { error } = await supabase
         .from('sdr_deals')
         .update({ 
-          stage: newStage,
+          deal_stage: newStage,
           won_date: newStage === 'won' ? new Date().toISOString() : null,
         })
         .eq('id', leadId);

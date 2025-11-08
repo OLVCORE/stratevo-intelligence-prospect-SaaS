@@ -164,7 +164,7 @@ export function useSDRMetrics() {
       const { count: wonOpps } = await supabase
         .from('sdr_deals')
         .select('*', { count: 'exact', head: true })
-        .eq('stage', 'won');
+        .eq('deal_stage', 'won');
 
       const conversionRate = totalOpps && totalOpps > 0 
         ? Math.round((wonOpps || 0) / totalOpps * 100)
@@ -175,7 +175,7 @@ export function useSDRMetrics() {
         .from('sdr_deals')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', `${today}T00:00:00`)
-        .in('stage', ['qualified', 'proposal', 'negotiation', 'won']);
+        .in('deal_stage', ['qualification', 'proposal', 'negotiation', 'won']);
 
       setMetrics({
         totalContacts: contactsCount || 0,

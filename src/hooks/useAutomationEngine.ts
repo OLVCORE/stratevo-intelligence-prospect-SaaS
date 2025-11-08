@@ -139,7 +139,7 @@ export function useAutomationEngine() {
       const { data: deals } = await supabase
         .from('sdr_deals')
         .select('*')
-        .eq('status', 'open')
+        .in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation'])
         .order('updated_at', { ascending: true });
 
       return executeAutomations(deals || []);

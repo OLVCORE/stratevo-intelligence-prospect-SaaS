@@ -177,11 +177,10 @@ export function useApproveQuarantineBatch() {
       if (hotLeads.length > 0) {
         const dealsToCreate = hotLeads.map(lead => ({
           company_id: lead.company_id || null,
-          title: `Oportunidade - ${lead.razao_social}`,
-          stage: 'discovery',
+          deal_title: `Oportunidade - ${lead.razao_social}`,
+          deal_stage: 'discovery',
           priority: 'high',
-          status: 'open',
-          value: (lead.icp_score || 0) >= 85 ? 100000 : 50000,
+          deal_value: (lead.icp_score || 0) >= 85 ? 100000 : 50000,
           probability: Math.round((lead.icp_score || 0) * 0.8),
           source: 'icp_hot_lead_auto',
           lead_score: lead.icp_score || 0,
@@ -333,11 +332,10 @@ export function useAutoApprove() {
       if (rules.autoCreateDeals) {
         const dealsToCreate = data.map(lead => ({
           company_id: lead.company_id,
-          title: `Auto - ${lead.razao_social}`,
-          stage: 'discovery',
+          deal_title: `Auto - ${lead.razao_social}`,
+          deal_stage: 'discovery',
           priority: lead.icp_score >= 75 ? 'high' : 'medium',
-          status: 'open',
-          value: lead.icp_score >= 85 ? 100000 : 50000,
+          deal_value: lead.icp_score >= 85 ? 100000 : 50000,
           probability: Math.round(lead.icp_score * 0.8),
           source: 'icp_auto_approval',
           lead_score: lead.icp_score,
