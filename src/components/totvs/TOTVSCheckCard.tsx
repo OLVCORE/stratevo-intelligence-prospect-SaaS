@@ -843,6 +843,31 @@ export default function TOTVSCheckCard({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* 🏢 CABEÇALHO COM NOME DA EMPRESA + CNPJ (TODAS AS ABAS) */}
+      <div className="mb-4 pb-4 border-b border-border">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold tracking-tight">{companyName || 'Empresa Sem Nome'}</h2>
+            {cnpj && (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="font-mono text-sm">
+                  CNPJ: {cnpj}
+                </Badge>
+                {domain && (
+                  <Badge variant="secondary" className="text-sm">
+                    🌐 {domain}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="text-right text-sm text-muted-foreground">
+            <div>Relatório de 9 Abas</div>
+            <div className="text-xs">ID: {stcHistoryId?.substring(0, 8) || 'Gerando...'}</div>
+          </div>
+        </div>
+      </div>
+
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-9 mb-6 h-auto">
           {/* 🔄 NOVA ORDEM: TOTVS → Decisores → Digital → ... → Executive */}
