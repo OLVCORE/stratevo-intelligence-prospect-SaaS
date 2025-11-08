@@ -17,8 +17,7 @@ import { toast } from 'sonner';
 
 export function EnhancedKanbanBoard() {
   const { data: stages, isLoading: stagesLoading } = usePipelineStages();
-  const deals: any[] = []; // DESABILITAR TEMPORARIAMENTE
-  const dealsLoading = false;
+  const { data: deals, isLoading: dealsLoading } = useDeals(); // ✅ HABILITADO!
   const moveDeal = useMoveDeal();
   const bulkUpdate = useBulkUpdateDeals();
   const deleteDeal = useDeleteDeal();

@@ -77,7 +77,7 @@ export function useCompaniesAtRisk() {
       }
       return data;
     },
-    enabled: false, // 🔥 DESABILITAR ATÉ TERMOS DADOS
+    // ✅ HABILITADO: Agora temos deals e health scores!
   });
 }
 

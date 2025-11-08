@@ -41,7 +41,9 @@ export default function SDRWorkspacePage() {
     queryClient.invalidateQueries({ queryKey: ['sdr_deals'] });
   }, []);
   
-  const { data: deals } = useDeals({ status: 'open' }); // 🔥 DESABILITADO VIA enabled: false
+  // ✅ REMOVER FILTRO status: 'open' (coluna não existe na tabela)
+  // Filtrar apenas pelos stages abertos (discovery, qualification, proposal, negotiation)
+  const { data: deals } = useDeals(); 
   const { data: stages } = usePipelineStages();
   const { data: automations, isLoading: automationsLoading } = useSDRAutomations();
   const { data: companiesAtRisk } = { data: [] }; // DESABILITAR TEMPORARIAMENTE

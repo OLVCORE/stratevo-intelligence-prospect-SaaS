@@ -36,16 +36,8 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
       // Filtro por stage
       if (filters?.stage) query = query.eq('deal_stage', filters.stage);
       
-      // Filtro por status: usar is_closed da tabela sdr_pipeline_stages
-      if (filters?.status) {
-        if (filters.status === 'open') {
-          // Deals abertos: stage.is_closed = false
-          query = query.in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']);
-        } else if (filters.status === 'closed') {
-          // Deals fechados: stage.is_closed = true
-          query = query.in('deal_stage', ['won', 'lost']);
-        }
-      }
+      // 🔥 REMOVIDO: Coluna 'status' não existe na tabela sdr_deals
+      // Se precisar filtrar por status, usar deal_stage (discovery/won/lost/etc)
       
       const { data, error } = await query;
       if (error) {
@@ -63,7 +55,7 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
       
       return dealsWithAliases as Deal[];
     },
-    enabled: false, // 🔥 DESABILITAR ATÉ TERMOS DADOS NO BANCO
+    // ✅ HABILITADO: Agora temos deals criados com sucesso!
   });
 }
 
