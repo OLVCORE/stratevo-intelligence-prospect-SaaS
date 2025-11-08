@@ -27,7 +27,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw, XCircle } from 'lucide-react';
+import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw, XCircle, Maximize2 } from 'lucide-react';
 import TOTVSCheckCard from '@/components/totvs/TOTVSCheckCard';
 
 export default function STCHistory() {
@@ -68,6 +68,25 @@ export default function STCHistory() {
     });
     
     return highlighted;
+  };
+  
+  // 🎯 FUNÇÃO: Texto contextual baseado em status + confidence + score
+  const getStatusMessage = (status: string, confidence: string, score: number) => {
+    if (status === 'no-go') {
+      if (confidence === 'high' || score >= 300) {
+        return '⚠️ Lead Descartado - Já opera com TOTVS (não prosseguir)';
+      }
+      return '❌ Cliente TOTVS Detectado - Não Qualificado';
+    }
+    
+    if (status === 'go') {
+      if (confidence === 'low' && score < 100) {
+        return '✅ Prospect Qualificado - Sem vínculo TOTVS detectado';
+      }
+      return '🎯 Oportunidade Confirmada - Pronto para Abordagem';
+    }
+    
+    return '⚡ Requer Revisão Manual - Evidências Inconclusivas';
   };
 
   const { data: verifications, isLoading, refetch, isRefetching } = useQuery({
@@ -344,13 +363,27 @@ export default function STCHistory() {
                       })}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedVerification(verification)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedVerification(verification);
+                            setShowFullReport(true);
+                          }}
+                          title="Abrir Relatório Completo (9 abas)"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedVerification(verification)}
+                          title="Ver Detalhes Resumidos"
+                        >
+                          <Maximize2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -367,113 +400,151 @@ export default function STCHistory() {
       </Card>
 
       {/* Modal de Detalhes */}
-      <Dialog open={!!selectedVerification} onOpenChange={() => setSelectedVerification(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+      <Dialog open={!!selectedVerification} onOpenChange={() => {
+        setSelectedVerification(null);
+        setEvidenceFilter('all');
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          {/* Botão Expandir ao lado do X */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowFullReport(true)}
+            title="Expandir Relatório Completo (9 abas)"
+            className="absolute right-12 top-4 h-8 w-8 rounded-full hover:bg-accent z-50"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </Button>
+          
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Target className="w-5 h-5 text-primary" />
               Detalhes da Verificação STC
             </DialogTitle>
-            <DialogDescription>
-              {selectedVerification?.company_name}
-              {selectedVerification?.cnpj && ` - ${selectedVerification.cnpj}`}
+            <DialogDescription className="space-y-1">
+              <div>{selectedVerification?.company_name}</div>
+              {selectedVerification?.cnpj && (
+                <div className="text-xs text-muted-foreground">CNPJ: {selectedVerification.cnpj}</div>
+              )}
+              {selectedVerification && (
+                <div className="text-sm font-semibold text-primary mt-2">
+                  {getStatusMessage(
+                    selectedVerification.status,
+                    calculateConfidence(selectedVerification.evidences),
+                    calculateTotalScore(selectedVerification.evidences)
+                  )}
+                </div>
+              )}
             </DialogDescription>
           </DialogHeader>
 
-          {selectedVerification && (
-            <div className="space-y-6">
-              {/* Resumo */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground mb-1">Status</p>
-                    <Badge
-                      variant={
-                        selectedVerification.status === 'go'
-                          ? 'secondary'
-                          : selectedVerification.status === 'revisar'
-                          ? 'default'
-                          : 'destructive'
-                      }
-                      className="text-base px-3 py-1"
-                    >
-                      {selectedVerification.status === 'go' && '✅ GO'}
-                      {selectedVerification.status === 'revisar' && '⚠️ Revisar'}
-                      {selectedVerification.status === 'no-go' && '❌ NO-GO'}
-                    </Badge>
+          <div className="flex-1 overflow-y-auto">
+            {selectedVerification && (() => {
+              const confidence = calculateConfidence(selectedVerification.evidences);
+              const totalScore = calculateTotalScore(selectedVerification.evidences);
+              const tripleCount = selectedVerification.triple_matches || 0;
+              const doubleCount = selectedVerification.double_matches || 0;
+              
+              return (
+                <div className="space-y-6 p-1">
+                {/* HERO CARD - STATUS EXECUTIVO */}
+                <Card className={`border-2 ${
+                  selectedVerification.status === 'no-go' 
+                    ? 'bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-red-500'
+                    : 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-500'
+                }`}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl ${
+                          selectedVerification.status === 'no-go' 
+                            ? 'bg-red-500 text-white'
+                            : 'bg-green-500 text-white'
+                        }`}>
+                          {selectedVerification.status === 'no-go' ? '❌' : '✅'}
+                        </div>
+                        <div>
+                          <h3 className={`text-2xl font-bold ${
+                            selectedVerification.status === 'no-go' ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'
+                          }`}>
+                            {selectedVerification.status === 'no-go' ? 'NO-GO' : 'GO'}
+                          </h3>
+                          <p className={`text-sm font-semibold ${
+                            selectedVerification.status === 'no-go' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                          }`}>
+                            {getStatusMessage(selectedVerification.status, confidence, totalScore)}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* MÉTRICAS COMPACTAS */}
+                      <div className="flex items-center gap-6">
+                        <div 
+                          className="cursor-pointer hover:bg-white/50 dark:hover:bg-black/20 p-3 rounded-lg transition-all"
+                          onClick={() => setEvidenceFilter(evidenceFilter === 'triple' ? 'all' : 'triple')}
+                          title="Click para filtrar Triple Matches"
+                        >
+                          <div className={`text-xs font-semibold mb-1 ${evidenceFilter === 'triple' ? 'text-primary' : 'text-muted-foreground'}`}>
+                            TRIPLE
+                          </div>
+                          <div className={`text-3xl font-bold ${evidenceFilter === 'triple' ? 'text-primary' : ''}`}>
+                            {tripleCount}
+                          </div>
+                        </div>
+                        
+                        <div className="h-12 w-px bg-gray-300 dark:bg-gray-600" />
+                        
+                        <div 
+                          className="cursor-pointer hover:bg-white/50 dark:hover:bg-black/20 p-3 rounded-lg transition-all"
+                          onClick={() => setEvidenceFilter(evidenceFilter === 'double' ? 'all' : 'double')}
+                          title="Click para filtrar Double Matches"
+                        >
+                          <div className={`text-xs font-semibold mb-1 ${evidenceFilter === 'double' ? 'text-primary' : 'text-muted-foreground'}`}>
+                            DOUBLE
+                          </div>
+                          <div className={`text-3xl font-bold ${evidenceFilter === 'double' ? 'text-primary' : ''}`}>
+                            {doubleCount}
+                          </div>
+                        </div>
+                        
+                        <div className="h-12 w-px bg-gray-300 dark:bg-gray-600" />
+                        
+                        <div className="p-3">
+                          <div className="text-xs font-semibold text-muted-foreground mb-1">
+                            SCORE
+                          </div>
+                          <div className="text-3xl font-bold text-primary">
+                            {totalScore}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            pts
+                          </div>
+                        </div>
+                        
+                        <div className="h-12 w-px bg-gray-300 dark:bg-gray-600" />
+                        
+                        <div className="p-3">
+                          <div className="text-xs font-semibold text-muted-foreground mb-1">
+                            CONFIANÇA
+                          </div>
+                          <div className={`text-2xl font-bold ${
+                            confidence === 'high' ? 'text-red-500' : confidence === 'medium' ? 'text-amber-500' : 'text-blue-500'
+                          }`}>
+                            {confidence === 'high' && '🔥'}
+                            {confidence === 'medium' && '⚡'}
+                            {confidence === 'low' && '❄️'}
+                          </div>
+                          <div className="text-xs font-semibold">
+                            {confidence === 'high' && 'ALTA'}
+                            {confidence === 'medium' && 'MÉDIA'}
+                            {confidence === 'low' && 'BAIXA'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
-
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground mb-1">Confiança</p>
-                    <Badge
-                      variant={
-                        calculateConfidence(selectedVerification.evidences) === 'high'
-                          ? 'default'
-                          : calculateConfidence(selectedVerification.evidences) === 'medium'
-                          ? 'secondary'
-                          : 'outline'
-                      }
-                      className="text-base px-3 py-1"
-                    >
-                      {calculateConfidence(selectedVerification.evidences) === 'high' && '🔥 Alta'}
-                      {calculateConfidence(selectedVerification.evidences) === 'medium' && '⚡ Média'}
-                      {calculateConfidence(selectedVerification.evidences) === 'low' && '❄️ Baixa'}
-                    </Badge>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Métricas - CLICÁVEIS PARA FILTRAR */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center justify-between">
-                    Métricas da Verificação
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowFullReport(true)}
-                      className="gap-2"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Expandir Relatório Completo
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div 
-                      className="cursor-pointer hover:bg-accent/50 p-3 rounded-lg transition-all hover:scale-105"
-                      onClick={() => setEvidenceFilter(evidenceFilter === 'triple' ? 'all' : 'triple')}
-                      title="Click para filtrar apenas Triple Matches"
-                    >
-                      <p className="text-sm text-muted-foreground">Triple Matches</p>
-                      <p className={`text-2xl font-bold ${evidenceFilter === 'triple' ? 'text-primary' : ''}`}>
-                        {selectedVerification.triple_matches || 0}
-                      </p>
-                    </div>
-                    <div 
-                      className="cursor-pointer hover:bg-accent/50 p-3 rounded-lg transition-all hover:scale-105"
-                      onClick={() => setEvidenceFilter(evidenceFilter === 'double' ? 'all' : 'double')}
-                      title="Click para filtrar apenas Double Matches"
-                    >
-                      <p className="text-sm text-muted-foreground">Double Matches</p>
-                      <p className={`text-2xl font-bold ${evidenceFilter === 'double' ? 'text-primary' : ''}`}>
-                        {selectedVerification.double_matches || 0}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Score Total</p>
-                      <p className="text-2xl font-bold text-primary">
-                        {calculateTotalScore(selectedVerification.evidences)} pts
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Evidências - FILTRADAS E COM HIGHLIGHT */}
+                {/* Evidências - FILTRADAS E COM HIGHLIGHT */}
               {selectedVerification.evidences && selectedVerification.evidences.length > 0 && (() => {
                 const filteredEvidences = selectedVerification.evidences.filter((e: any) => {
                   if (evidenceFilter === 'all') return true;
@@ -542,8 +613,8 @@ export default function STCHistory() {
                 </Card>
                 );
               })()}
-
-              {/* Informações Técnicas */}
+                
+                {/* Informações Técnicas */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Informações Técnicas</CardTitle>
@@ -575,8 +646,10 @@ export default function STCHistory() {
                   </div>
                 </CardContent>
               </Card>
-            </div>
-          )}
+                </div>
+              );
+            })()}
+          </div>
         </DialogContent>
       </Dialog>
       
