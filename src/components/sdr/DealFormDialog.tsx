@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Check, ChevronsUpDown, Building2, Sparkles, X, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizeCompanyData } from '@/lib/utils/companyDataNormalizer';
 
 interface DealFormDialogProps {
   open: boolean;
@@ -200,21 +201,22 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
             const apiBrasilResponse = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
             
             if (apiBrasilResponse.ok) {
-              const data = await apiBrasilResponse.json();
+              const rawData = await apiBrasilResponse.json();
+              const normalized = normalizeCompanyData(rawData, 'api_brasil');
               receitaData = {
-                nome: data.razao_social || data.nome_fantasia,
-                fantasia: data.nome_fantasia,
-                cnpj: data.cnpj,
-                atividade_principal: [{ text: data.cnae_fiscal_descricao }],
-                municipio: data.municipio,
-                uf: data.uf,
-                logradouro: data.logradouro,
-                numero: data.numero,
-                complemento: data.complemento,
-                bairro: data.bairro,
-                cep: data.cep
+                nome: normalized.company_name,
+                fantasia: normalized.company_name,
+                cnpj: normalized.cnpj,
+                atividade_principal: [{ text: normalized.industry }],
+                municipio: normalized.location?.city,
+                uf: normalized.location?.state,
+                logradouro: normalized.location?.address,
+                numero: '',
+                complemento: '',
+                bairro: '',
+                cep: normalized.location?.cep
               };
-              console.log('✅ API Brasil: Sucesso!', receitaData.nome);
+              console.log('✅ API Brasil: Sucesso!', normalized.company_name);
             } else {
               throw new Error('API Brasil falhou');
             }
@@ -226,22 +228,23 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
               const receitawsResponse = await fetch(`https://www.receitaws.com.br/v1/cnpj/${clean}`);
               
               if (receitawsResponse.ok) {
-                const data = await receitawsResponse.json();
-                if (data.status !== 'ERROR') {
+                const rawData = await receitawsResponse.json();
+                if (rawData.status !== 'ERROR') {
+                  const normalized = normalizeCompanyData(rawData, 'receitaws');
                   receitaData = {
-                    nome: data.nome || data.fantasia,
-                    fantasia: data.fantasia,
-                    cnpj: data.cnpj,
-                    atividade_principal: data.atividade_principal,
-                    municipio: data.municipio,
-                    uf: data.uf,
-                    logradouro: data.logradouro,
-                    numero: data.numero,
-                    complemento: data.complemento,
-                    bairro: data.bairro,
-                    cep: data.cep
+                    nome: normalized.company_name,
+                    fantasia: normalized.company_name,
+                    cnpj: normalized.cnpj,
+                    atividade_principal: [{ text: normalized.industry }],
+                    municipio: normalized.location?.city,
+                    uf: normalized.location?.state,
+                    logradouro: normalized.location?.address,
+                    numero: '',
+                    complemento: '',
+                    bairro: '',
+                    cep: normalized.location?.cep
                   };
-                  console.log('✅ ReceitaWS: Sucesso!', receitaData.nome);
+                  console.log('✅ ReceitaWS: Sucesso!', normalized.company_name);
                 } else {
                   throw new Error('ReceitaWS retornou erro');
                 }
@@ -261,21 +264,22 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
                 });
                 
                 if (empresasAquiResponse.ok) {
-                  const data = await empresasAquiResponse.json();
+                  const rawData = await empresasAquiResponse.json();
+                  const normalized = normalizeCompanyData(rawData, 'empresas_aqui');
                   receitaData = {
-                    nome: data.razao_social || data.nome_fantasia,
-                    fantasia: data.nome_fantasia,
-                    cnpj: data.cnpj,
-                    atividade_principal: [{ text: data.atividade_principal }],
-                    municipio: data.municipio,
-                    uf: data.uf,
-                    logradouro: data.logradouro,
-                    numero: data.numero,
-                    complemento: data.complemento,
-                    bairro: data.bairro,
-                    cep: data.cep
+                    nome: normalized.company_name,
+                    fantasia: normalized.company_name,
+                    cnpj: normalized.cnpj,
+                    atividade_principal: [{ text: normalized.industry }],
+                    municipio: normalized.location?.city,
+                    uf: normalized.location?.state,
+                    logradouro: normalized.location?.address,
+                    numero: '',
+                    complemento: '',
+                    bairro: '',
+                    cep: normalized.location?.cep
                   };
-                  console.log('✅ EmpresasAqui: Sucesso!', receitaData.nome);
+                  console.log('✅ EmpresasAqui: Sucesso!', normalized.company_name);
                 } else {
                   throw new Error('EmpresasAqui falhou');
                 }
