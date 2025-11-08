@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { BackButton } from '@/components/common/BackButton';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -56,13 +56,23 @@ export default function CompaniesManagementPage() {
   const location = useLocation();
   const [page, setPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'cnpj' | 'industry' | 'created_at' | 'cnpj_status'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // 🔥 DEBOUNCE: Só busca após 500ms de inatividade
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   
   const { data: companiesResult, isLoading: loading, refetch } = useCompanies({
     page,
     pageSize: 50,
-    search: searchTerm,
+    search: debouncedSearchTerm, // FIX: Usar debouncedSearchTerm
     sortBy,
     sortOrder,
   });
