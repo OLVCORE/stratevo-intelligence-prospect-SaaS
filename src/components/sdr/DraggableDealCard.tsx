@@ -89,6 +89,16 @@ export function DraggableDealCard({ deal, isDragging, isSelected, onSelect, onCl
               </div>
             )}
 
+            {/* Lead Source */}
+            {deal.lead_source && (
+              <Badge 
+                variant="secondary" 
+                className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-[10px] px-1.5 py-0.5 h-5"
+              >
+                {deal.lead_source}
+              </Badge>
+            )}
+
             {/* Value & Probability */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 text-sm font-semibold text-primary">

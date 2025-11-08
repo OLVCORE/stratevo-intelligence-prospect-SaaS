@@ -522,8 +522,21 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
         return;
       }
 
-      // 🔥 SIMPLIFICADO: Criar deal direto sem contatos por enquanto
-      // Contatos serão adicionados em fase futura
+      // 🔥 BUSCAR ORIGEM DA EMPRESA PARA PROPAGAR AO DEAL
+      let leadSource = null;
+      if (companyId) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('source_name, source_metadata')
+          .eq('id', companyId)
+          .single();
+        
+        if (companyData?.source_name) {
+          leadSource = companyData.source_name;
+        }
+      }
+
+      // 🔥 CRIAR DEAL COM LEAD SOURCE
       const { error: dealError } = await supabase
         .from('sdr_deals')
         .insert({
@@ -534,6 +547,8 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
           deal_value: formData.value ? parseFloat(formData.value) : 0,
           probability: 30,
           description: formData.description || null,
+          lead_source: leadSource,
+          source_campaign: null,
         });
 
       if (dealError) throw dealError;
