@@ -33,7 +33,16 @@ serve(async (req) => {
   }
 
   try {
-    const { companyName, cnpj, domain, sector } = await req.json();
+    // Verificar se tem body antes de parsear
+    const body = await req.text();
+    if (!body) {
+      return new Response(
+        JSON.stringify({ error: 'Body is required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    const { companyName, cnpj, domain, sector } = JSON.parse(body);
 
     console.log(`[DIGITAL-INTEL] 🚀 Iniciando análise para: ${companyName}`);
 
