@@ -221,7 +221,7 @@ export default function CompaniesManagementPage() {
   const handleEnrichReceita = async (companyId: string) => {
     try {
       setEnrichingReceitaId(companyId);
-      toast.info('Enriquecendo dados da Receita Federal...');
+      toast.info('Buscando dados da Receita Federal...');
 
       // Buscar CNPJ da empresa selecionada
       const company = companies.find((c: any) => c.id === companyId);
@@ -230,14 +230,43 @@ export default function CompaniesManagementPage() {
         return;
       }
 
-      // Chama a função que retorna os dados da Receita (não grava no banco)
-      const { data, error } = await supabase.functions.invoke('enrich-receitaws', {
-        body: { cnpj: company.cnpj, company_id: companyId }
-      });
+      const clean = company.cnpj.replace(/\D/g, '');
+      let receita: any = null;
 
-      if (error) throw error as any;
-
-      const receita = (data as any)?.data;
+      // 🔥 TRIPLE FALLBACK: API Brasil → ReceitaWS → Manual
+      try {
+        console.log('📡 Tentando API Brasil...');
+        const apiBrasilResponse = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
+        if (apiBrasilResponse.ok) {
+          receita = await apiBrasilResponse.json();
+          console.log('✅ API Brasil: Sucesso!');
+        } else {
+          throw new Error('API Brasil falhou');
+        }
+      } catch (apiBrasilError) {
+        console.warn('⚠️ API Brasil falhou, tentando ReceitaWS...');
+        try {
+          const receitawsResponse = await fetch(`https://www.receitaws.com.br/v1/cnpj/${clean}`);
+          if (receitawsResponse.ok) {
+            const data = await receitawsResponse.json();
+            if (data.status !== 'ERROR') {
+              receita = data;
+              console.log('✅ ReceitaWS: Sucesso!');
+            } else {
+              throw new Error('ReceitaWS retornou erro');
+            }
+          } else {
+            throw new Error('ReceitaWS falhou');
+          }
+        } catch (receitawsError) {
+          console.error('❌ Todas as APIs falharam');
+          toast.error('Erro ao buscar dados da Receita Federal', {
+            description: 'Tente novamente mais tarde'
+          });
+          setEnrichingReceitaId(null);
+          return;
+        }
+      }
       if (receita) {
         // Merge seguro preservando dados já existentes em raw_data
         const existingRaw = (company.raw_data && typeof company.raw_data === 'object') ? (company.raw_data as any) : {};

@@ -149,15 +149,6 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
     setIcpComboboxOpen(false);
   };
 
-  // 🔥 BUSCA AUTOMÁTICA QUANDO DIGITA CNPJ (14 dígitos completos)
-  useEffect(() => {
-    const clean = (formData.cnpj || '').replace(/\D/g, '');
-    if (clean.length === 14 && !selectedCompany) {
-      // CNPJ completo digitado, buscar automaticamente
-      handleEnrichCompany();
-    }
-  }, [formData.cnpj]);
-
   const handleEnrichCompany = async () => {
     // Aceita empresa selecionada OU CNPJ digitado
     if (!selectedCompany?.id && !formData.cnpj) {
