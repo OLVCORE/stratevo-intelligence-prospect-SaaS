@@ -50,16 +50,31 @@ serve(async (req) => {
     const allUrls = await searchAllUrls(companyName, cnpj, domain);
     console.log(`[DIGITAL-INTEL] ✅ ${allUrls.length} URLs coletadas`);
 
-    // ETAPA 2: ANALISAR CADA URL COM IA
+    // ETAPA 2: ANALISAR CADA URL COM IA (GPT-4o-mini)
+    console.log(`[DIGITAL-INTEL] 🧠 Iniciando análise de ${allUrls.length} URLs com GPT-4o-mini...`);
     const analyzedUrls: AnalyzedURL[] = [];
-    for (const urlData of allUrls) {
+    let aiSuccessCount = 0;
+    let aiErrorCount = 0;
+    
+    for (let i = 0; i < allUrls.length; i++) {
+      const urlData = allUrls[i];
+      console.log(`[DIGITAL-INTEL] 🔍 Analisando URL ${i + 1}/${allUrls.length}: ${urlData.url}`);
+      
       const analysis = await analyzeUrlWithAI(urlData, companyName);
+      
+      if (analysis.buying_signal || analysis.temperature === 'hot') {
+        aiSuccessCount++;
+        console.log(`[DIGITAL-INTEL] 🔥 Sinal detectado! Temperature: ${analysis.temperature}, Relevance: ${analysis.sales_relevance}/10`);
+      } else {
+        aiErrorCount++;
+      }
+      
       analyzedUrls.push({
         ...urlData,
         ai_analysis: analysis,
       });
     }
-    console.log(`[DIGITAL-INTEL] ✅ ${analyzedUrls.length} URLs analisadas pela IA`);
+    console.log(`[DIGITAL-INTEL] ✅ Análise IA completa: ${aiSuccessCount} sinais positivos, ${aiErrorCount} neutros`);
 
     // ETAPA 3: CROSS-MATCHING E DIAGNÓSTICO FINAL
     const diagnosis = await generateDiagnosis(analyzedUrls, companyName, sector);
