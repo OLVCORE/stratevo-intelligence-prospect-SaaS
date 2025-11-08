@@ -30,7 +30,7 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
       // Construir query base
       let query = supabase
         .from('sdr_deals')
-        .select('*, companies:companies(company_name)')
+        .select('*, companies:companies!sdr_deals_company_id_fkey(company_name)')
         .order('created_at', { ascending: false });
       
       // Filtro por stage
