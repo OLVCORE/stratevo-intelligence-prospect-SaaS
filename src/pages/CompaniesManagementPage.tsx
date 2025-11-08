@@ -1043,6 +1043,17 @@ export default function CompaniesManagementPage() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleSort('source_name')}
+                        className="h-8 flex items-center gap-1"
+                      >
+                        Origem
+                        <ArrowUpDown className="h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleSort('cnpj_status')}
                         className="h-8 flex items-center gap-1"
                       >
@@ -1099,6 +1110,20 @@ export default function CompaniesManagementPage() {
                           <Badge variant="outline">{company.cnpj}</Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">N/A</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {(company as any).source_name ? (
+                          <Badge 
+                            variant="secondary" 
+                            className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
+                          >
+                            {(company as any).source_name}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            Legacy
+                          </Badge>
                         )}
                       </TableCell>
                        <TableCell>
