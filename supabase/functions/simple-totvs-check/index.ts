@@ -223,6 +223,15 @@ const NEWS_SOURCES_PREMIUM = [
   'revistapegn.globo.com',      // Pequenas Empresas & Grandes Negócios
   'meioemensagem.com.br',       // Meio & Mensagem (marketing/tech)
   
+  // 📰 PORTAIS DE TECNOLOGIA & CASES (Peso 85 pts)
+  'baguete.com.br',             // ✨ Baguete (cases tech BR)
+  'cioadv.com.br',              // ✨ CIO Review (cases CIOs)
+  'mercadoeconsumo.com.br',     // ✨ Mercado e Consumo
+  'connectabil.com.br',         // ✨ Connectabil (integradores)
+  'tiinside.com.br',            // TI Inside
+  'crn.com.br',                 // CRN Brasil (canal de TI)
+  'computerworld.com.br',       // Computerworld Brasil
+  
   // 🎥 VÍDEO & CONTEÚDO (Peso 75 pts)
   'youtube.com',                // ✨ YouTube (cases, depoimentos, eventos)
   'vimeo.com',                  // Vimeo (vídeos corporativos)
@@ -929,6 +938,30 @@ serve(async (req) => {
       totalQueries += NEWS_SOURCES_PREMIUM.length;
       
       console.log(`[SIMPLE-TOTVS] ✅ FASE 4 concluída: ${evidenciasNewsPremium.length} evidências premium`);
+      
+      // 📰 FASE 4.5: BUSCA EM PORTAIS DE TECNOLOGIA (Baguete, CIO, etc)
+      console.log('[SIMPLE-TOTVS] 📰 FASE 4.5: Buscando em portais de tecnologia (Baguete, CIO Review, etc)...');
+      const evidenciasTechPortals = await searchMultiplePortals({
+        portals: [
+          'baguete.com.br',
+          'cioadv.com.br',
+          'mercadoeconsumo.com.br',
+          'connectabil.com.br',
+          'tiinside.com.br',
+          'crn.com.br',
+          'computerworld.com.br'
+        ],
+        companyName: shortSearchTerm,
+        serperKey,
+        sourceType: 'tech_portals',
+        sourceWeight: 85, // Peso alto (portais tech têm cases validados)
+        dateRestrict: 'y5',
+      });
+      evidencias.push(...evidenciasTechPortals);
+      sourcesConsulted += 7;
+      totalQueries += 7;
+      
+      console.log(`[SIMPLE-TOTVS] ✅ FASE 4.5 concluída: ${evidenciasTechPortals.length} evidências de portais tech`);
       
       // 🎥 FASE 5: BUSCA EM VÍDEOS (YouTube, Vimeo)
       console.log('[SIMPLE-TOTVS] 🎥 FASE 5: Buscando em canais de vídeo (YouTube, Vimeo)...');
