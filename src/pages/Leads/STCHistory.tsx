@@ -27,13 +27,48 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw } from 'lucide-react';
+import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw, XCircle } from 'lucide-react';
+import TOTVSCheckCard from '@/components/totvs/TOTVSCheckCard';
 
 export default function STCHistory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [confidenceFilter, setConfidenceFilter] = useState('all');
   const [selectedVerification, setSelectedVerification] = useState<any | null>(null);
+  const [evidenceFilter, setEvidenceFilter] = useState<'all' | 'triple' | 'double'>('all');
+  const [showFullReport, setShowFullReport] = useState(false);
+  
+  // 🎯 FUNÇÃO: Calcular confidence baseado em evidências
+  const calculateConfidence = (evidences: any[]) => {
+    if (!evidences || evidences.length === 0) return 'low';
+    
+    const tripleCount = evidences.filter(e => e.match_type === 'triple').length;
+    const totalWeight = evidences.reduce((sum, e) => sum + (e.weight || 0), 0);
+    
+    if (tripleCount >= 3 || totalWeight >= 300) return 'high';
+    if (tripleCount >= 1 || totalWeight >= 150) return 'medium';
+    return 'low';
+  };
+  
+  // 🎯 FUNÇÃO: Calcular score total
+  const calculateTotalScore = (evidences: any[]) => {
+    if (!evidences || evidences.length === 0) return 0;
+    return evidences.reduce((sum, e) => sum + (e.weight || 0), 0);
+  };
+  
+  // 🎯 FUNÇÃO: Highlight termos nas evidências
+  const highlightTerms = (text: string, companyName: string, products: string[] = []) => {
+    let highlighted = text;
+    const terms = [companyName, 'TOTVS', ...(products || [])];
+    
+    terms.forEach(term => {
+      if (!term) return;
+      const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      highlighted = highlighted.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded font-semibold">$1</mark>');
+    });
+    
+    return highlighted;
+  };
 
   const { data: verifications, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['stc-history', statusFilter, confidenceFilter],
@@ -373,59 +408,121 @@ export default function STCHistory() {
                   <CardContent className="p-4">
                     <p className="text-sm text-muted-foreground mb-1">Confiança</p>
                     <Badge
-                      variant="outline"
+                      variant={
+                        calculateConfidence(selectedVerification.evidences) === 'high'
+                          ? 'default'
+                          : calculateConfidence(selectedVerification.evidences) === 'medium'
+                          ? 'secondary'
+                          : 'outline'
+                      }
                       className="text-base px-3 py-1"
                     >
-                      N/A
+                      {calculateConfidence(selectedVerification.evidences) === 'high' && '🔥 Alta'}
+                      {calculateConfidence(selectedVerification.evidences) === 'medium' && '⚡ Média'}
+                      {calculateConfidence(selectedVerification.evidences) === 'low' && '❄️ Baixa'}
                     </Badge>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Métricas */}
+              {/* Métricas - CLICÁVEIS PARA FILTRAR */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Métricas da Verificação</CardTitle>
+                  <CardTitle className="text-base flex items-center justify-between">
+                    Métricas da Verificação
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowFullReport(true)}
+                      className="gap-2"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Expandir Relatório Completo
+                    </Button>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-3 gap-4">
-                    <div>
+                    <div 
+                      className="cursor-pointer hover:bg-accent/50 p-3 rounded-lg transition-all hover:scale-105"
+                      onClick={() => setEvidenceFilter(evidenceFilter === 'triple' ? 'all' : 'triple')}
+                      title="Click para filtrar apenas Triple Matches"
+                    >
                       <p className="text-sm text-muted-foreground">Triple Matches</p>
-                      <p className="text-2xl font-bold">{selectedVerification.triple_matches || 0}</p>
+                      <p className={`text-2xl font-bold ${evidenceFilter === 'triple' ? 'text-primary' : ''}`}>
+                        {selectedVerification.triple_matches || 0}
+                      </p>
                     </div>
-                    <div>
+                    <div 
+                      className="cursor-pointer hover:bg-accent/50 p-3 rounded-lg transition-all hover:scale-105"
+                      onClick={() => setEvidenceFilter(evidenceFilter === 'double' ? 'all' : 'double')}
+                      title="Click para filtrar apenas Double Matches"
+                    >
                       <p className="text-sm text-muted-foreground">Double Matches</p>
-                      <p className="text-2xl font-bold">{selectedVerification.double_matches || 0}</p>
+                      <p className={`text-2xl font-bold ${evidenceFilter === 'double' ? 'text-primary' : ''}`}>
+                        {selectedVerification.double_matches || 0}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Score Total</p>
-                      <p className="text-2xl font-bold">{selectedVerification.total_score || 0}</p>
+                      <p className="text-2xl font-bold text-primary">
+                        {calculateTotalScore(selectedVerification.evidences)} pts
+                      </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Evidências */}
-              {selectedVerification.evidences && selectedVerification.evidences.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      Evidências ({selectedVerification.evidences.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 max-h-96 overflow-y-auto">
-                    {selectedVerification.evidences.map((evidence: any, idx: number) => (
-                      <div key={idx} className="border rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-start">
-                          <Badge variant={evidence.match_type === 'triple' ? 'default' : 'secondary'}>
-                            {evidence.match_type === 'triple' ? '🎯 TRIPLE' : '🔍 DOUBLE'}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {evidence.weight} pts
-                          </Badge>
-                        </div>
-                        <h4 className="font-semibold text-sm">{evidence.title}</h4>
-                        <p className="text-sm text-muted-foreground">{evidence.content}</p>
+              {/* Evidências - FILTRADAS E COM HIGHLIGHT */}
+              {selectedVerification.evidences && selectedVerification.evidences.length > 0 && (() => {
+                const filteredEvidences = selectedVerification.evidences.filter((e: any) => {
+                  if (evidenceFilter === 'all') return true;
+                  return e.match_type === evidenceFilter;
+                });
+                
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center justify-between">
+                        <span>
+                          Evidências ({filteredEvidences.length}
+                          {evidenceFilter !== 'all' && ` de ${selectedVerification.evidences.length}`})
+                        </span>
+                        {evidenceFilter !== 'all' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEvidenceFilter('all')}
+                            className="gap-1"
+                          >
+                            <XCircle className="w-3 h-3" />
+                            Limpar Filtro
+                          </Button>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 max-h-96 overflow-y-auto">
+                      {filteredEvidences.map((evidence: any, idx: number) => (
+                        <div key={idx} className="border rounded-lg p-4 space-y-2">
+                          <div className="flex justify-between items-start">
+                            <Badge variant={evidence.match_type === 'triple' ? 'default' : 'secondary'}>
+                              {evidence.match_type === 'triple' ? '🎯 TRIPLE' : '🔍 DOUBLE'}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {evidence.weight} pts
+                            </Badge>
+                          </div>
+                          <h4 className="font-semibold text-sm">{evidence.title}</h4>
+                          <p 
+                            className="text-sm text-muted-foreground" 
+                            dangerouslySetInnerHTML={{ 
+                              __html: highlightTerms(
+                                evidence.content, 
+                                selectedVerification.company_name,
+                                evidence.detected_products || []
+                              ) 
+                            }}
+                          />
                         {evidence.url && (
                           <Button
                             variant="outline"
@@ -443,7 +540,8 @@ export default function STCHistory() {
                     ))}
                   </CardContent>
                 </Card>
-              )}
+                );
+              })()}
 
               {/* Informações Técnicas */}
               <Card>
@@ -481,6 +579,21 @@ export default function STCHistory() {
           )}
         </DialogContent>
       </Dialog>
+      
+      {/* Modal de Relatório Completo (9 abas) */}
+      {showFullReport && selectedVerification && (
+        <Dialog open={showFullReport} onOpenChange={setShowFullReport}>
+          <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] p-0">
+            <TOTVSCheckCard
+              companyId={selectedVerification.company_id}
+              companyName={selectedVerification.company_name}
+              cnpj={selectedVerification.cnpj}
+              autoVerify={false}
+              latestReport={selectedVerification}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
