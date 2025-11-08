@@ -23,7 +23,7 @@ export function useCompanies(options?: {
 
       // Filtro de busca
       if (search) {
-        query = query.or(`name.ilike.%${search}%,cnpj.ilike.%${search}%`);
+        query = query.or(`company_name.ilike.%${search}%,cnpj.ilike.%${search}%`); // FIX: company_name não name
       }
 
       // Ordenação
