@@ -260,76 +260,76 @@ export default function DigitalIntelligenceTab({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {data.digital_presence.website && (
               <Button
                 variant="outline"
-                className="h-auto flex-col gap-2 py-4"
+                className="h-24 flex-col gap-3 py-6 hover:scale-105 transition-transform"
                 asChild
               >
                 <a href={data.digital_presence.website} target="_blank" rel="noopener noreferrer">
-                  <Globe className="w-6 h-6 text-blue-500" />
-                  <span className="text-xs">Website</span>
+                  <Globe className="w-10 h-10 text-blue-500" />
+                  <span className="text-sm font-semibold">Website</span>
                 </a>
               </Button>
             )}
             {data.digital_presence.linkedin && (
               <Button
                 variant="outline"
-                className="h-auto flex-col gap-2 py-4"
+                className="h-24 flex-col gap-3 py-6 hover:scale-105 transition-transform"
                 asChild
               >
                 <a href={data.digital_presence.linkedin} target="_blank" rel="noopener noreferrer">
-                  <Linkedin className="w-6 h-6 text-blue-600" />
-                  <span className="text-xs">LinkedIn</span>
+                  <Linkedin className="w-10 h-10 text-blue-600" />
+                  <span className="text-sm font-semibold">LinkedIn</span>
                 </a>
               </Button>
             )}
             {data.digital_presence.instagram && (
               <Button
                 variant="outline"
-                className="h-auto flex-col gap-2 py-4"
+                className="h-24 flex-col gap-3 py-6 hover:scale-105 transition-transform"
                 asChild
               >
                 <a href={data.digital_presence.instagram} target="_blank" rel="noopener noreferrer">
-                  <Instagram className="w-6 h-6 text-pink-500" />
-                  <span className="text-xs">Instagram</span>
+                  <Instagram className="w-10 h-10 text-pink-500" />
+                  <span className="text-sm font-semibold">Instagram</span>
                 </a>
               </Button>
             )}
             {data.digital_presence.facebook && (
               <Button
                 variant="outline"
-                className="h-auto flex-col gap-2 py-4"
+                className="h-24 flex-col gap-3 py-6 hover:scale-105 transition-transform"
                 asChild
               >
                 <a href={data.digital_presence.facebook} target="_blank" rel="noopener noreferrer">
-                  <Facebook className="w-6 h-6 text-blue-700" />
-                  <span className="text-xs">Facebook</span>
+                  <Facebook className="w-10 h-10 text-blue-700" />
+                  <span className="text-sm font-semibold">Facebook</span>
                 </a>
               </Button>
             )}
             {data.digital_presence.youtube && (
               <Button
                 variant="outline"
-                className="h-auto flex-col gap-2 py-4"
+                className="h-24 flex-col gap-3 py-6 hover:scale-105 transition-transform"
                 asChild
               >
                 <a href={data.digital_presence.youtube} target="_blank" rel="noopener noreferrer">
-                  <Youtube className="w-6 h-6 text-red-600" />
-                  <span className="text-xs">YouTube</span>
+                  <Youtube className="w-10 h-10 text-red-600" />
+                  <span className="text-sm font-semibold">YouTube</span>
                 </a>
               </Button>
             )}
             {data.digital_presence.twitter && (
               <Button
                 variant="outline"
-                className="h-auto flex-col gap-2 py-4"
+                className="h-24 flex-col gap-3 py-6 hover:scale-105 transition-transform"
                 asChild
               >
                 <a href={data.digital_presence.twitter} target="_blank" rel="noopener noreferrer">
-                  <Twitter className="w-6 h-6 text-sky-500" />
-                  <span className="text-xs">Twitter/X</span>
+                  <Twitter className="w-10 h-10 text-sky-500" />
+                  <span className="text-sm font-semibold">Twitter/X</span>
                 </a>
               </Button>
             )}
