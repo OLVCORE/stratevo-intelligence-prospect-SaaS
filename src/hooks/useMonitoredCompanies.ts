@@ -24,7 +24,7 @@ export function useMonitoredCompanies(userId?: string) {
       // Buscar empresas que atendem aos critérios
       let query = supabase
         .from('companies')
-        .select('id, name, domain, headquarters_state, industry, employees')
+        .select('id, company_name, domain, headquarters_state, industry, employees')
         .eq('is_disqualified', false);
 
       // Aplicar filtros da config

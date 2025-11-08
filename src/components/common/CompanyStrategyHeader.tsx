@@ -15,7 +15,7 @@ export function CompanyStrategyHeader({ companyId }: CompanyStrategyHeaderProps)
     queryFn: async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, industry, employees, cnpj')
+        .select('id, company_name, industry, employees, cnpj')
         .eq('id', companyId)
         .single();
       

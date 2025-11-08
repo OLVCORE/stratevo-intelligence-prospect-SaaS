@@ -52,7 +52,7 @@ export default function CompaniesMap({
         setLoading(true);
         const { data, error } = await supabase
           .from('companies')
-          .select('id, name, location, industry, employees')
+          .select('id, company_name, location, industry, employees')
           .not('location', 'is', null);
 
         if (error) throw error;
