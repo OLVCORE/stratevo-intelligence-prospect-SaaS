@@ -25,7 +25,8 @@ import {
   TrendingDown,
   Activity,
   BarChart3,
-  Calendar
+  Calendar,
+  LayoutDashboard
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
