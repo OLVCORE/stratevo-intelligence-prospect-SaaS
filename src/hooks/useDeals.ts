@@ -6,10 +6,13 @@ import { toastMessages } from '@/lib/utils/toastMessages';
 export interface Deal {
   id: string;
   deal_title: string; // FIX: Usar deal_title (nome real da coluna no banco)
+  title?: string; // Alias para compatibilidade (computado automaticamente)
   description?: string | null;
   company_id?: string | null;
   deal_stage: string; // FIX: Usar deal_stage (nome real da coluna no banco)
-  value: number;
+  stage?: string; // Alias para compatibilidade (computado automaticamente)
+  deal_value: number; // FIX: Usar deal_value (nome real da coluna no banco)
+  value?: number; // Alias para compatibilidade (computado automaticamente)
   probability: number;
   status: 'open' | 'won' | 'lost' | 'abandoned';
   priority: 'low' | 'medium' | 'high' | 'urgent';
@@ -49,7 +52,16 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
         logger.error('Error fetching deals', error);
         return []; // Retornar array vazio em vez de quebrar
       }
-      return data as Deal[];
+      
+      // 🔥 MAPEAR ALIASES PARA COMPATIBILIDADE COM CÓDIGO LEGADO
+      const dealsWithAliases = (data || []).map(deal => ({
+        ...deal,
+        title: deal.deal_title,      // Alias: title → deal_title
+        stage: deal.deal_stage,      // Alias: stage → deal_stage
+        value: deal.deal_value,      // Alias: value → deal_value
+      }));
+      
+      return dealsWithAliases as Deal[];
     },
     enabled: false, // 🔥 DESABILITAR ATÉ TERMOS DADOS NO BANCO
   });

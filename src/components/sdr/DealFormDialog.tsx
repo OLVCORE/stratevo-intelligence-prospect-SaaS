@@ -531,7 +531,7 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
           company_id: companyId,
           deal_stage: formData.stage || 'discovery',
           priority: formData.priority || 'medium',
-          value: formData.value ? parseFloat(formData.value) : 0,
+          deal_value: formData.value ? parseFloat(formData.value) : 0,
           probability: 30,
           description: formData.description || null,
         });
