@@ -1348,7 +1348,7 @@ export default function TOTVSCheckCard({
           />
         </TabsContent>
 
-        {/* ABA 3: DIGITAL INTELLIGENCE (AI-POWERED) */}
+        {/* ABA 3: DIGITAL INTELLIGENCE (AI-POWERED) - NOVA IMPLEMENTAÇÃO */}
         <TabsContent value="keywords" className="mt-0 overflow-y-auto">
           <DigitalIntelligenceTab
             companyId={companyId}
