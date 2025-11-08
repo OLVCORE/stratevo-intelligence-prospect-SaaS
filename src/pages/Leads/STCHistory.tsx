@@ -27,7 +27,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw, XCircle, Maximize2, AlertTriangle, CheckCircle2, Flame, Snowflake, Zap } from 'lucide-react';
+import { Target, Search, Filter, BarChart3, Clock, ExternalLink, Eye, RefreshCw, XCircle, Maximize2, AlertTriangle, CheckCircle2, Flame, Snowflake, Zap, Crosshair, ScanSearch } from 'lucide-react';
 import TOTVSCheckCard from '@/components/totvs/TOTVSCheckCard';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -69,6 +69,26 @@ export default function STCHistory() {
     });
     
     return highlighted;
+  };
+  
+  // 🎯 FUNÇÃO: Mensagem contextual de status
+  const getStatusMessage = (status: string, confidence: string, score: number) => {
+    if (status === 'no-go') {
+      if (confidence === 'high' && score >= 300) {
+        return '⚠️ Lead Descartado - Já opera com TOTVS (alta confiança)';
+      }
+      return '❌ Lead Descartado - Evidências de uso da TOTVS detectadas';
+    }
+    
+    if (status === 'revisar') {
+      return '⚡ Lead Requer Revisão - Evidências inconclusivas';
+    }
+    
+    if (status === 'go') {
+      return '✅ Lead Qualificado - Nenhuma evidência de uso da TOTVS';
+    }
+    
+    return 'Status desconhecido';
   };
 
   const { data: verifications, isLoading, refetch, isRefetching } = useQuery({
@@ -371,8 +391,8 @@ export default function STCHistory() {
         </CardContent>
       </Card>
 
-      {/* Modal de Detalhes */}
-      <Dialog open={!!selectedVerification} onOpenChange={() => {
+      {/* Modal de Detalhes (Resumo) - Só abre se showFullReport for FALSE */}
+      <Dialog open={!!selectedVerification && !showFullReport} onOpenChange={() => {
         setSelectedVerification(null);
         setEvidenceFilter('all');
       }}>
@@ -381,7 +401,10 @@ export default function STCHistory() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setShowFullReport(true)}
+            onClick={() => {
+              setShowFullReport(true);
+              // O modal de resumo será fechado automaticamente pelo useEffect do showFullReport
+            }}
             title="Expandir Relatório Completo (9 abas)"
             className="absolute right-12 top-4 h-8 w-8 rounded-full hover:bg-accent z-50"
           >
@@ -488,9 +511,9 @@ export default function STCHistory() {
                             {selectedVerification.triple_matches || 0}
                           </p>
                         </div>
-                        <div className="text-2xl opacity-60 group-hover:opacity-100 transition-opacity">
-                          🎯
-                        </div>
+                        <Crosshair className={`w-8 h-8 transition-all ${
+                          evidenceFilter === 'triple' ? 'text-orange-500 opacity-100' : 'text-muted-foreground opacity-60 group-hover:text-orange-500 group-hover:opacity-100'
+                        }`} />
                       </div>
                     </div>
                     
@@ -508,9 +531,9 @@ export default function STCHistory() {
                             {selectedVerification.double_matches || 0}
                           </p>
                         </div>
-                        <div className="text-2xl opacity-60 group-hover:opacity-100 transition-opacity">
-                          🔍
-                        </div>
+                        <ScanSearch className={`w-8 h-8 transition-all ${
+                          evidenceFilter === 'double' ? 'text-blue-500 opacity-100' : 'text-muted-foreground opacity-60 group-hover:text-blue-500 group-hover:opacity-100'
+                        }`} />
                       </div>
                     </div>
                   </div>
@@ -558,9 +581,19 @@ export default function STCHistory() {
                             <div className="flex items-center gap-2">
                               <Badge 
                                 variant={evidence.match_type === 'triple' ? 'default' : 'secondary'}
-                                className={evidence.match_type === 'triple' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-500 hover:bg-blue-600'}
+                                className={`flex items-center gap-1.5 ${evidence.match_type === 'triple' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-500 hover:bg-blue-600'}`}
                               >
-                                {evidence.match_type === 'triple' ? '🎯 TRIPLE' : '🔍 DOUBLE'}
+                                {evidence.match_type === 'triple' ? (
+                                  <>
+                                    <Crosshair className="w-3.5 h-3.5" />
+                                    TRIPLE
+                                  </>
+                                ) : (
+                                  <>
+                                    <ScanSearch className="w-3.5 h-3.5" />
+                                    DOUBLE
+                                  </>
+                                )}
                               </Badge>
                               <span className="text-xs text-muted-foreground">
                                 {new URL(evidence.url || 'https://example.com').hostname.replace('www.', '')}
