@@ -51,6 +51,7 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
       }
       return data as Deal[];
     },
+    enabled: false, // 🔥 DESABILITAR ATÉ TERMOS DADOS NO BANCO
   });
 }
 

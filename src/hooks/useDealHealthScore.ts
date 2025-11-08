@@ -64,7 +64,7 @@ export function useCompaniesAtRisk() {
             company_id,
             companies (
               id,
-              name
+              company_name
             )
           )
         `)
@@ -77,6 +77,7 @@ export function useCompaniesAtRisk() {
       }
       return data;
     },
+    enabled: false, // 🔥 DESABILITAR ATÉ TERMOS DADOS
   });
 }
 
