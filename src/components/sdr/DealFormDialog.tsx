@@ -531,35 +531,17 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
         return;
       }
 
-      const contactsToInsert = validContacts.map(c => ({
-        name: c.name,
-        email: c.email || null,
-        phone: c.phone || null,
-        company_id: companyId,
-        meta: c.role ? { role: c.role } : {},
-      }));
-
-      const { data: createdContacts, error: contactError } = await supabase
-        .from('Contact')
-        .insert(contactsToInsert)
-        .select('id');
-
-      if (contactError) throw contactError;
-      
-      const primaryContactId = createdContacts[0].id;
-
-      // 3. Criar deal
+      // 🔥 SIMPLIFICADO: Criar deal direto sem contatos por enquanto
+      // Contatos serão adicionados em fase futura
       const { error: dealError } = await supabase
         .from('sdr_deals')
         .insert({
           title: formData.title,
           company_id: companyId,
-          contact_id: primaryContactId,
-          stage: formData.stage,
-          priority: formData.priority,
+          deal_stage: formData.stage || 'discovery',
+          priority: formData.priority || 'medium',
           value: formData.value ? parseFloat(formData.value) : 0,
           probability: 30,
-          status: 'open',
           description: formData.description || null,
         });
 
