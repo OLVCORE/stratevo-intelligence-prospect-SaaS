@@ -66,14 +66,14 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
     setSearchingCompanies(true);
     try {
       let queryBuilder = supabase
-        .from('leads_qualified')
+        .from('icp_analysis_results')
         .select('*')
-        .eq('status', 'qualificada')
-        .order('icp_score', { ascending: false });
+        .eq('status', 'aprovado') // FIX: usar tabela e status corretos
+        .order('icp_score', { ascending: false, nullsLast: true });
 
       if (query) {
         const cleanQuery = query.replace(/[^\w\s]/g, '');
-        queryBuilder = queryBuilder.or(`razao_social.ilike.%${query}%,cnpj.ilike.%${cleanQuery}%`);
+        queryBuilder = queryBuilder.or(`name.ilike.%${query}%,cnpj.ilike.%${cleanQuery}%`);
       }
 
       const { data, error } = await queryBuilder.limit(50);
@@ -98,7 +98,7 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
       let queryBuilder = supabase
         .from('companies')
         .select('id, name, employees, revenue, industry, cnpj, lead_score')
-        .order('lead_score', { ascending: false, nullsFirst: false });
+        .order('lead_score', { ascending: false, nullsLast: true }); // FIX: nullsLast instead of nullsFirst
 
       if (query) {
         // Remove apenas pontuação para busca de CNPJ
