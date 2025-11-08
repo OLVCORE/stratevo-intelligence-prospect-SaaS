@@ -73,44 +73,125 @@ export function DecisorsContactsTab({
     sonnerToast.success('✅ Decisores & Contatos Salvos!');
   };
 
-  // 🚀 Enriquecimento Apollo (Emails + Telefones)
+  // 🚀 Enriquecimento TRIPLO (Apollo → Hunter.io → PhantomBuster)
   const apolloMutation = useMutation({
     mutationFn: async () => {
       if (!companyName) throw new Error('Nome da empresa não disponível');
       if (!analysisData?.decisors) throw new Error('Extraia decisores primeiro');
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-apollo-decisores`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          companyName,
-          domain,
-        }),
-      });
+      let enrichmentData: any = null;
+      let source = '';
 
-      if (!response.ok) {
-        throw new Error('Erro ao enriquecer com Apollo');
+      // 🥇 TENTATIVA 1: APOLLO
+      try {
+        sonnerToast.loading('🔍 Buscando em Apollo.io...');
+        const apolloResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-apollo-decisores`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ companyName, domain }),
+        });
+
+        if (apolloResponse.ok) {
+          enrichmentData = await apolloResponse.json();
+          source = 'Apollo.io';
+          sonnerToast.success(`✅ Dados encontrados em ${source}`);
+          return { data: enrichmentData, source };
+        }
+      } catch (apolloError) {
+        console.warn('⚠️ Apollo falhou:', apolloError);
       }
 
-      return await response.json();
-    },
-    onSuccess: (apolloData) => {
-      // Merge Apollo data com dados existentes
-      const enrichedDecisors = analysisData.decisors.map((decisor: any) => {
-        const apolloMatch = apolloData.find((a: any) => 
-          a.name.toLowerCase().includes(decisor.name.toLowerCase()) ||
-          decisor.name.toLowerCase().includes(a.name.toLowerCase())
-        );
+      // 🥈 TENTATIVA 2: HUNTER.IO (se Apollo falhar)
+      if (!enrichmentData && domain) {
+        try {
+          sonnerToast.loading('🔍 Buscando em Hunter.io...');
+          const hunterResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hunter-domain-search`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ domain }),
+          });
 
-        if (apolloMatch) {
+          if (hunterResponse.ok) {
+            enrichmentData = await hunterResponse.json();
+            source = 'Hunter.io';
+            sonnerToast.success(`✅ Dados encontrados em ${source}`);
+            return { data: enrichmentData, source };
+          }
+        } catch (hunterError) {
+          console.warn('⚠️ Hunter.io falhou:', hunterError);
+        }
+      }
+
+      // 🥉 TENTATIVA 3: PHANTOMBUSTER (última tentativa)
+      if (!enrichmentData && linkedinUrl) {
+        try {
+          sonnerToast.loading('🔍 Buscando em PhantomBuster (LinkedIn)...');
+          const phantomData = await performFullLinkedInAnalysis(companyName, linkedinUrl, domain);
+          enrichmentData = phantomData;
+          source = 'PhantomBuster';
+          sonnerToast.success(`✅ Dados encontrados em ${source}`);
+          return { data: enrichmentData, source };
+        } catch (phantomError) {
+          console.warn('⚠️ PhantomBuster falhou:', phantomError);
+        }
+      }
+
+      // ❌ SE NENHUM FUNCIONOU
+      if (!enrichmentData) {
+        throw new Error('Nenhuma fonte de enriquecimento disponível (Apollo, Hunter.io, PhantomBuster)');
+      }
+
+      return { data: enrichmentData, source };
+    },
+    onSuccess: (result) => {
+      const { data: enrichmentResult, source } = result;
+      
+      // Merge enrichment data com dados existentes
+      const enrichedDecisors = analysisData.decisors.map((decisor: any) => {
+        // Apollo retorna decisores diretamente
+        if (source === 'Apollo.io' && enrichmentResult.decisores) {
+          const apolloMatch = enrichmentResult.decisores.find((a: any) => 
+            a.name?.toLowerCase().includes(decisor.name.toLowerCase()) ||
+            decisor.name.toLowerCase().includes(a.name?.toLowerCase() || '')
+          );
+
+          if (apolloMatch) {
+            return {
+              ...decisor,
+              email: apolloMatch.email || decisor.email,
+              phone: apolloMatch.phone || decisor.phone,
+              enriched_with: source,
+            };
+          }
+        }
+        
+        // Hunter.io retorna emails por domínio
+        if (source === 'Hunter.io' && enrichmentResult.emails) {
+          const hunterMatch = enrichmentResult.emails.find((e: any) => 
+            e.first_name?.toLowerCase() === decisor.name.split(' ')[0]?.toLowerCase()
+          );
+          
+          if (hunterMatch) {
+            return {
+              ...decisor,
+              email: hunterMatch.value || decisor.email,
+              enriched_with: source,
+            };
+          }
+        }
+        
+        // PhantomBuster retorna dados do LinkedIn
+        if (source === 'PhantomBuster') {
           return {
             ...decisor,
-            email: apolloMatch.email || decisor.email,
-            phone: apolloMatch.phone_numbers?.[0] || decisor.phone,
-            enriched_with_apollo: true,
+            ...enrichmentResult.decisors?.find((d: any) => d.name === decisor.name),
+            enriched_with: source,
           };
         }
 
@@ -120,7 +201,8 @@ export function DecisorsContactsTab({
       const updatedData = {
         ...analysisData,
         decisors: enrichedDecisors,
-        apollo_enriched: true,
+        enriched_with: source,
+        enriched_at: new Date().toISOString(),
       };
 
       setAnalysisData(updatedData);
@@ -130,7 +212,7 @@ export function DecisorsContactsTab({
       const phonesFound = enrichedDecisors.filter((d: any) => d.phone).length;
 
       toast({
-        title: '✅ Enriquecimento Apollo concluído!',
+        title: `✅ Enriquecimento via ${source} concluído!`,
         description: `${emailsFound} emails | ${phonesFound} telefones encontrados`,
       });
     },
@@ -243,9 +325,9 @@ export function DecisorsContactsTab({
                 {apolloMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Mail className="h-4 w-4" />
+                  <Sparkles className="h-4 w-4" />
                 )}
-                Enriquecer com Apollo (Emails + Telefones)
+                Enriquecer Contatos (Apollo + Hunter + Phantom)
               </Button>
             )}
           </div>
@@ -434,10 +516,15 @@ export function DecisorsContactsTab({
                         </div>
                       ) : (
                         <div className="flex items-center gap-3 p-3 bg-amber-500/10 rounded border border-amber-500/30">
-                          <AlertCircle className="w-5 h-5 text-amber-500" />
-                          <span className="text-amber-200 text-sm font-medium">
-                            Email bloqueado - Clique em "Enriquecer com Apollo"
-                          </span>
+                          <AlertCircle className="w-5 h-5 text-amber-500 animate-pulse" />
+                          <div className="flex-1">
+                            <p className="text-amber-200 text-sm font-semibold">
+                              💸 Email bloqueado - Revelar consome créditos
+                            </p>
+                            <p className="text-amber-300 text-xs mt-1">
+                              Clique em "Enriquecer Contatos" para revelar via Apollo/Hunter/Phantom
+                            </p>
+                          </div>
                         </div>
                       )}
                       
@@ -459,10 +546,15 @@ export function DecisorsContactsTab({
                         </div>
                       ) : (
                         <div className="flex items-center gap-3 p-3 bg-slate-700/50 rounded border border-slate-600">
-                          <Phone className="w-5 h-5 text-muted-foreground" />
-                          <span className="text-muted-foreground text-sm">
-                            Telefone não disponível - Enriquecer com Apollo
-                          </span>
+                          <Phone className="w-5 w-5 text-muted-foreground" />
+                          <div className="flex-1">
+                            <p className="text-muted-foreground text-sm">
+                              💸 Telefone bloqueado - Revelar consome créditos
+                            </p>
+                            <p className="text-muted-foreground text-xs mt-1">
+                              Enriquecimento via Apollo/Hunter/Phantom
+                            </p>
+                          </div>
                         </div>
                       )}
                       
