@@ -96,14 +96,14 @@ export default function SaveBar({
             if (progressPercent >= 67) barColor = 'bg-emerald-500'; // 67-100% = Quente (Verde)
             
             return (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-400">Progresso do Relatório</span>
-                  <span className="font-bold text-slate-300">{completedTabs}/{totalTabs} abas ({progressPercent}%)</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-bold text-foreground">Progresso do Relatório</span>
+                  <span className="font-bold text-foreground font-mono text-base">{completedTabs}/{totalTabs} abas ({progressPercent}%)</span>
                 </div>
-                <div className="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600">
+                <div className="w-full h-4 bg-slate-700/50 rounded-full overflow-hidden border-2 border-slate-600 shadow-lg">
                   <div 
-                    className={`h-full ${barColor} transition-all duration-500 ${progressPercent === 100 ? 'animate-pulse' : ''}`}
+                    className={`h-full ${barColor} transition-all duration-500 ${progressPercent === 100 ? 'animate-pulse' : ''} shadow-xl`}
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>

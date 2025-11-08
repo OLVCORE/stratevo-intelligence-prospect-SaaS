@@ -401,17 +401,17 @@ export default function DigitalIntelligenceTab({
                     <h4 className="font-semibold text-sm flex items-center gap-2">
                       {sourceLabels[sourceType]} ({urls.length})
                     </h4>
-                    <div className="space-y-1 pl-4">
+                    <div className="space-y-2 pl-4">
                       {urls.map((urlData, idx) => (
                         <a
                           key={idx}
                           href={urlData.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-sm text-primary hover:underline"
+                          className="flex items-center gap-2 text-base text-blue-400 hover:text-blue-200 hover:bg-blue-500/10 px-2 py-1.5 rounded transition-all"
                         >
-                          <ExternalLink className="w-3 h-3" />
-                          {urlData.title || urlData.url}
+                          <ExternalLink className="w-4 h-4" />
+                          <span className="font-medium">{urlData.title || urlData.url}</span>
                         </a>
                       ))}
                     </div>

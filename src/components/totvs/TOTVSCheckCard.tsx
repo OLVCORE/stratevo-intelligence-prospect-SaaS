@@ -871,7 +871,7 @@ export default function TOTVSCheckCard({
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-9 mb-6 h-auto">
+        <TabsList className="grid w-full grid-cols-9 mb-6 h-auto bg-muted/30 p-1 rounded-lg">
           {/* 🔄 NOVA ORDEM: TOTVS → Decisores → Digital → ... → Executive */}
           <TabsTrigger value="detection" className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-primary/10 font-semibold">
             <Search className="w-4 h-4" />
