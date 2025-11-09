@@ -950,82 +950,63 @@ export default function CompanyDetailPage() {
                 Atividade Econômica
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-x-8 gap-y-4">
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">Setor Amigável</span>
-                  <span className="text-sm font-semibold text-right">{rawData.setor_amigavel || company.industry || 'N/A'}</span>
+            <CardContent className="space-y-3">
+              {/* Info Rápida - 4 Colunas Compactas */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Setor Amigável</p>
+                  <p className="text-xs font-semibold">{rawData.setor_amigavel || company.industry || 'N/A'}</p>
                 </div>
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">CNAE Principal</span>
-                  <span className="text-sm font-mono font-semibold text-right">
-                    {receitaData?.cnae_fiscal || rawData.cod_atividade_economica || 'N/A'}
-                  </span>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">CNAE Principal</p>
+                  <p className="text-xs font-mono font-semibold">{receitaData?.cnae_fiscal || 'N/A'}</p>
                 </div>
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">Regime Tributário</span>
-                  <span className="text-sm font-semibold text-right">{rawData.regime_tributario || 'N/A'}</span>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Regime Tributário</p>
+                  <p className="text-xs font-semibold">{rawData.regime_tributario || 'N/A'}</p>
                 </div>
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">Importa/Exporta</span>
-                  <div className="flex gap-2">
-                    <Badge variant={rawData.importacao ? 'default' : 'secondary'} className="text-xs">
-                      Import: {rawData.importacao ? 'Sim' : 'Não'}
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Importa/Exporta</p>
+                  <div className="flex gap-1">
+                    <Badge variant={rawData.importacao ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
+                      I: {rawData.importacao ? 'Sim' : 'Não'}
                     </Badge>
-                    <Badge variant={rawData.exportacao ? 'default' : 'secondary'} className="text-xs">
-                      Export: {rawData.exportacao ? 'Sim' : 'Não'}
+                    <Badge variant={rawData.exportacao ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
+                      E: {rawData.exportacao ? 'Sim' : 'Não'}
                     </Badge>
                   </div>
                 </div>
               </div>
 
+              {/* Descrição CNAE Principal */}
               {receitaData?.cnae_fiscal_descricao && (
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-1">Atividade Principal - Descrição</p>
-                  <p className="text-sm">{receitaData.cnae_fiscal_descricao}</p>
+                <div className="p-2 bg-muted/20 rounded border">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Atividade Principal</p>
+                  <p className="text-xs">{receitaData.cnae_fiscal_descricao}</p>
                 </div>
               )}
 
-              <Separator />
+              {/* Atividades Secundárias - Compacto */}
+              {receitaData?.cnaes_secundarios && receitaData.cnaes_secundarios.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-2 text-primary">Atividades Secundárias</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                    {receitaData.cnaes_secundarios.map((ativ: any, i: number) => (
+                      <div key={i} className="p-2 bg-muted/20 rounded border text-xs">
+                        <span className="font-mono font-semibold text-primary">{ativ.codigo}</span> - <span className="text-muted-foreground">{ativ.descricao}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              {/* Atividades Secundárias */}
-              <div>
-                <p className="text-sm font-semibold mb-3 text-primary">Atividades Secundárias</p>
-                <ScrollArea className="h-40 border rounded-lg p-3 bg-muted/20">
-                  {receitaData?.cnaes_secundarios && receitaData.cnaes_secundarios.length > 0 ? (
-                    <div className="space-y-2">
-                      {receitaData.cnaes_secundarios.map((ativ: any, i: number) => (
-                        <div key={i} className="pb-2 border-b border-border/30 last:border-0">
-                          <p className="text-xs font-mono font-semibold text-primary">{ativ.codigo}</p>
-                          <p className="text-xs text-muted-foreground">{ativ.descricao}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Nenhuma atividade secundária</p>
-                  )}
-                </ScrollArea>
-              </div>
-
-              <Separator />
-
-              {/* Códigos NCM */}
-              <div>
-                <p className="text-sm font-semibold mb-3 text-primary">Códigos NCM (Nomenclatura Comum do Mercosul)</p>
-                <ScrollArea className="h-48 border rounded-lg p-3 bg-muted/20">
-                  <p className="text-xs font-mono whitespace-pre-wrap">{rawData.cod_ncms_primarios || 'Nenhum código NCM cadastrado'}</p>
-                </ScrollArea>
-              </div>
-
-              <Separator />
-
-              {/* Descrição NCMs */}
-              <div>
-                <p className="text-sm font-semibold mb-3 text-primary">Descrição dos Produtos NCM</p>
-                <ScrollArea className="h-64 border rounded-lg p-3 bg-muted/20">
-                  <p className="text-xs whitespace-pre-wrap">{rawData.ncms_primarios || 'Nenhuma descrição de produto disponível'}</p>
-                </ScrollArea>
-              </div>
+              {/* NCM - Só mostra se tiver */}
+              {rawData.cod_ncms_primarios && rawData.cod_ncms_primarios !== 'N/A' && (
+                <div className="p-2 bg-muted/20 rounded border">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Códigos NCM</p>
+                  <p className="text-xs font-mono">{rawData.cod_ncms_primarios}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1038,27 +1019,23 @@ export default function CompanyDetailPage() {
                   Quadro de Pessoal
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Funcionários (Matriz + CNPJ)</span>
-                  <span className="text-2xl font-bold text-primary">{rawData.funcionarios_presumido_matriz_cnpj || company.employees || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Este CNPJ</p>
-                    <p className="text-lg font-semibold">{rawData.funcionarios_presumido_este_cnpj || 'N/A'}</p>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-muted-foreground mb-1">Funcionários Total</p>
+                    <p className="text-sm font-bold text-primary">{rawData.funcionarios_presumido_matriz_cnpj || company.employees || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">PAT Funcionários</p>
-                    <p className="text-lg font-semibold">{rawData.pat_funcionarios || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-muted-foreground mb-1">Este CNPJ</p>
+                    <p className="text-sm font-semibold">{rawData.funcionarios_presumido_este_cnpj || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Qtd. Filiais</p>
-                    <p className="text-lg font-semibold">{rawData.qtd_filiais || '0'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-muted-foreground mb-1">PAT Funcionários</p>
+                    <p className="text-sm font-semibold">{rawData.pat_funcionarios || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Crescimento</p>
-                    <Badge className="text-xs">{rawData.crescimento_empresa || 'Estável'}</Badge>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-muted-foreground mb-1">Qtd. Filiais</p>
+                    <p className="text-sm font-semibold">{rawData.qtd_filiais || '0'}</p>
                   </div>
                 </div>
               </CardContent>
@@ -1072,25 +1049,20 @@ export default function CompanyDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-48">
+                <div className="max-h-48 overflow-y-auto">
                   {receitaData?.qsa && receitaData.qsa.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {receitaData.qsa.map((socio: any, i: number) => (
-                        <div key={i} className="p-3 bg-muted/30 rounded-lg border border-border/50">
-                          <p className="text-sm font-semibold text-primary">{socio.nome_socio || socio.nome}</p>
-                          <p className="text-xs text-muted-foreground">{socio.qualificacao_socio || socio.qual}</p>
-                          {socio.faixa_etaria && (
-                            <p className="text-xs text-muted-foreground mt-1">📊 {socio.faixa_etaria}</p>
-                          )}
+                        <div key={i} className="p-2 bg-muted/20 rounded border text-xs">
+                          <p className="font-semibold text-primary">{socio.nome_socio || socio.nome}</p>
+                          <p className="text-muted-foreground">{socio.qualificacao_socio || socio.qual} {socio.faixa_etaria && `• ${socio.faixa_etaria}`}</p>
                         </div>
                       ))}
                     </div>
-                  ) : rawData.socios_administradores ? (
-                    <p className="text-sm whitespace-pre-wrap">{rawData.socios_administradores}</p>
                   ) : (
-                    <p className="text-sm text-muted-foreground text-center py-8">Nenhum sócio cadastrado</p>
+                    <p className="text-xs text-muted-foreground text-center py-4">Nenhum sócio cadastrado</p>
                   )}
-                </ScrollArea>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1103,97 +1075,69 @@ export default function CompanyDetailPage() {
                 Informações Financeiras
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="p-3 bg-blue-50 dark:bg-lime-500/10 rounded-lg border border-blue-200 dark:border-lime-500/30">
-                  <p className="text-xs text-blue-700 dark:text-lime-300 font-semibold mb-1">Capital Social</p>
-                  <p className="text-2xl font-bold text-blue-700 dark:text-lime-400">
+            <CardContent className="space-y-3">
+              {/* Info Financeira Principal */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="p-2 bg-blue-50 dark:bg-lime-500/10 rounded border border-blue-200 dark:border-lime-500/30">
+                  <p className="text-[10px] text-blue-700 dark:text-lime-300 font-semibold mb-0.5">Capital Social</p>
+                  <p className="text-sm font-bold text-blue-700 dark:text-lime-400">
                     {receitaData?.capital_social || rawData.capital_social
                       ? `R$ ${parseFloat(receitaData?.capital_social || rawData.capital_social).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                       : 'N/A'}
                   </p>
                 </div>
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-1">Porte</p>
-                  <p className="text-lg font-semibold">{rawData.enquadramento_porte || receitaData?.porte || rawData.porte_estimado || 'N/A'}</p>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Porte</p>
+                  <p className="text-sm font-semibold">{rawData.enquadramento_porte || receitaData?.porte || 'N/A'}</p>
                 </div>
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-1">Recebimentos Governo</p>
-                  <p className="text-lg font-semibold">
-                    {rawData.recebimentos_governo_federal
-                      ? `R$ ${parseFloat(rawData.recebimentos_governo_federal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                      : 'N/A'}
-                  </p>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Faturamento Matriz+CNPJ</p>
+                  <p className="text-xs font-semibold">{rawData.faturamento_presumido_matriz_cnpj || 'N/A'}</p>
                 </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <p className="text-sm font-semibold mb-3 text-primary">Faturamento Estimado</p>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                    <span className="text-sm text-muted-foreground">Faturamento (Matriz + CNPJ)</span>
-                    <span className="text-sm font-semibold text-right">{rawData.faturamento_presumido_matriz_cnpj || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                    <span className="text-sm text-muted-foreground">Faturamento (Este CNPJ)</span>
-                    <span className="text-sm font-semibold text-right">{rawData.faturamento_presumido_este_cnpj || 'N/A'}</span>
-                  </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Faturamento Este CNPJ</p>
+                  <p className="text-xs font-semibold">{rawData.faturamento_presumido_este_cnpj || 'N/A'}</p>
                 </div>
               </div>
 
-              <Separator />
-
+              {/* Dívidas - Layout Compacto 4 Colunas */}
               <div>
-                <p className="text-sm font-semibold mb-3 text-primary flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-destructive" />
+                <p className="text-xs font-semibold mb-2 text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
                   Dívidas e Débitos
                 </p>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <div className="p-2 bg-destructive/10 rounded-lg">
-                      <p className="text-xs text-muted-foreground">% Dívidas CNPJ / Faturamento</p>
-                      <p className="text-sm font-semibold">{rawData.perc_dividas_cnpj_sobre_faturamento || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-destructive/10 rounded-lg">
-                      <p className="text-xs text-muted-foreground">% Dívidas CNPJ + Sócios / Faturamento</p>
-                      <p className="text-sm font-semibold">{rawData.perc_dividas_cnpj_socios_sobre_faturamento || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-destructive/10 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Total Dívidas CNPJ com União</p>
-                      <p className="text-sm font-semibold text-destructive">{rawData.total_dividas_cnpj_uniao || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-destructive/10 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Total Dívidas CNPJ + Sócios com União</p>
-                      <p className="text-sm font-semibold text-destructive">{rawData.total_dividas_cnpj_socios_uniao || 'N/A'}</p>
-                    </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="p-2 bg-destructive/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">% Dív. CNPJ/Fat.</p>
+                    <p className="text-xs font-semibold">{rawData.perc_dividas_cnpj_sobre_faturamento || 'N/A'}</p>
                   </div>
-                  <div className="space-y-3">
-                    <div className="p-2 bg-muted/20 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Dívidas Gerais CNPJ</p>
-                      <p className="text-sm">{rawData.dividas_gerais_cnpj_uniao || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-muted/20 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Dívidas Gerais CNPJ + Sócios</p>
-                      <p className="text-sm">{rawData.dividas_gerais_cnpj_socios_uniao || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-muted/20 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Dívidas FGTS (CNPJ)</p>
-                      <p className="text-sm">{rawData.dividas_cnpj_fgts || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-muted/20 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Dívidas FGTS (CNPJ + Sócios)</p>
-                      <p className="text-sm">{rawData.dividas_cnpj_socios_fgts || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-muted/20 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Dívidas Previdência (CNPJ)</p>
-                      <p className="text-sm">{rawData.dividas_cnpj_previdencia || 'N/A'}</p>
-                    </div>
-                    <div className="p-2 bg-muted/20 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Dívidas Previdência (CNPJ + Sócios)</p>
-                      <p className="text-sm">{rawData.dividas_cnpj_socios_previdencia || 'N/A'}</p>
-                    </div>
+                  <div className="p-2 bg-destructive/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">% Dív. CNPJ+Sócios/Fat.</p>
+                    <p className="text-xs font-semibold">{rawData.perc_dividas_cnpj_socios_sobre_faturamento || 'N/A'}</p>
+                  </div>
+                  <div className="p-2 bg-destructive/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">Total Dív. CNPJ c/ União</p>
+                    <p className="text-xs font-semibold text-destructive">{rawData.total_dividas_cnpj_uniao || 'N/A'}</p>
+                  </div>
+                  <div className="p-2 bg-destructive/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">Total Dív. CNPJ+Sócios</p>
+                    <p className="text-xs font-semibold text-destructive">{rawData.total_dividas_cnpj_socios_uniao || 'N/A'}</p>
+                  </div>
+                  <div className="p-2 bg-muted/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">Dív. Gerais CNPJ</p>
+                    <p className="text-xs">{rawData.dividas_gerais_cnpj_uniao || 'N/A'}</p>
+                  </div>
+                  <div className="p-2 bg-muted/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">Dív. Gerais CNPJ+Sócios</p>
+                    <p className="text-xs">{rawData.dividas_gerais_cnpj_socios_uniao || 'N/A'}</p>
+                  </div>
+                  <div className="p-2 bg-muted/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">FGTS CNPJ</p>
+                    <p className="text-xs">{rawData.dividas_cnpj_fgts || 'N/A'}</p>
+                  </div>
+                  <div className="p-2 bg-muted/10 rounded border">
+                    <p className="text-[10px] text-muted-foreground">FGTS CNPJ+Sócios</p>
+                    <p className="text-xs">{rawData.dividas_cnpj_socios_fgts || 'N/A'}</p>
                   </div>
                 </div>
               </div>
