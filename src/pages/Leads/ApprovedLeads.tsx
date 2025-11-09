@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { 
   CheckCircle2, 
   Rocket, 
@@ -42,6 +44,13 @@ export default function ApprovedLeads() {
   const [selectedLead, setSelectedLead] = useState<ApprovedLead | null>(null);
   const [dealFormOpen, setDealFormOpen] = useState(false);
   const [uniqueSources, setUniqueSources] = useState<string[]>([]);
+  const [pageSize, setPageSize] = useState(50); // 🔢 Paginação configurável
+  
+  // 🔍 FILTROS INTELIGENTES POR COLUNA
+  const [filterCNPJStatus, setFilterCNPJStatus] = useState<string[]>([]);
+  const [filterSector, setFilterSector] = useState<string[]>([]);
+  const [filterUF, setFilterUF] = useState<string[]>([]);
+  const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
 
   useEffect(() => {
     loadApprovedLeads();
@@ -79,6 +88,7 @@ export default function ApprovedLeads() {
   const filterLeads = () => {
     let filtered = [...leads];
 
+    // Filtro de busca
     if (searchTerm) {
       filtered = filtered.filter(lead =>
         lead.razao_social?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -86,12 +96,73 @@ export default function ApprovedLeads() {
       );
     }
 
+    // Filtro de temperatura (mantido)
     if (temperatureFilter !== 'all') {
       filtered = filtered.filter(lead => lead.temperatura === temperatureFilter);
     }
 
+    // Filtro de origem (mantido)
     if (sourceFilter !== 'all') {
       filtered = filtered.filter(lead => lead.source_name === sourceFilter);
+    }
+
+    // 🔍 FILTROS INTELIGENTES ADICIONAIS
+    
+    // Filtro por Status CNPJ
+    if (filterCNPJStatus.length > 0) {
+      filtered = filtered.filter(lead => {
+        const rawData = (lead as any).raw_data?.receita_federal || (lead as any).raw_data || {};
+        let status = 'PENDENTE';
+        
+        if (rawData.situacao || rawData.status) {
+          status = rawData.situacao || rawData.status;
+          
+          if (status.toUpperCase().includes('ATIVA') || status === '02') status = 'ATIVA';
+          else if (status.toUpperCase().includes('SUSPENSA') || status === '03') status = 'SUSPENSA';
+          else if (status.toUpperCase().includes('INAPTA') || status === '04') status = 'INAPTA';
+          else if (status.toUpperCase().includes('BAIXADA') || status === '08') status = 'BAIXADA';
+          else if (status.toUpperCase().includes('NULA') || status === '01') status = 'NULA';
+        }
+        
+        return filterCNPJStatus.includes(status);
+      });
+    }
+    
+    // Filtro por Setor
+    if (filterSector.length > 0) {
+      filtered = filtered.filter(lead => {
+        const sector = lead.segmento || (lead as any).raw_data?.setor_amigavel || (lead as any).raw_data?.atividade_economica || 'N/A';
+        return filterSector.includes(sector);
+      });
+    }
+    
+    // Filtro por UF
+    if (filterUF.length > 0) {
+      filtered = filtered.filter(lead => {
+        const uf = (lead as any).uf || (lead as any).raw_data?.uf || '';
+        return filterUF.includes(uf);
+      });
+    }
+    
+    // Filtro por Status Análise
+    if (filterAnalysisStatus.length > 0) {
+      filtered = filtered.filter(lead => {
+        const rawData = (lead as any).raw_data || {};
+        const hasReceitaWS = !!(rawData.receita_federal || rawData.cnpj);
+        const hasDecisionMakers = ((lead as any).decision_makers_count || 0) > 0;
+        const hasDigitalPresence = !!(rawData.digital_intelligence);
+        const hasLegalData = !!(rawData.totvs_report);
+        
+        const checks = [hasReceitaWS, hasDecisionMakers, hasDigitalPresence, hasLegalData];
+        const percentage = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+        
+        let statusLabel = '0-25%';
+        if (percentage > 75) statusLabel = '76-100%';
+        else if (percentage > 50) statusLabel = '51-75%';
+        else if (percentage > 25) statusLabel = '26-50%';
+        
+        return filterAnalysisStatus.includes(statusLabel);
+      });
     }
 
     setFilteredLeads(filtered);
@@ -211,7 +282,28 @@ export default function ApprovedLeads() {
         {/* Filtros */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Filtros</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Filtros</CardTitle>
+              
+              {/* 🔢 DROPDOWN DE PAGINAÇÃO */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Mostrar por página:</span>
+                <Select
+                  value={pageSize.toString()}
+                  onValueChange={(value) => setPageSize(Number(value))}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="150">150</SelectItem>
+                    <SelectItem value="9999">Todos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4">
@@ -312,7 +404,7 @@ export default function ApprovedLeads() {
               </CardContent>
             </Card>
           ) : (
-            filteredLeads.map((lead) => (
+            (pageSize === 9999 ? filteredLeads : filteredLeads.slice(0, pageSize)).map((lead) => (
               <Card 
                 key={lead.id}
                 className="hover:border-primary/50 transition-all cursor-pointer"
