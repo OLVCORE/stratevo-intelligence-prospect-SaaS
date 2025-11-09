@@ -134,7 +134,36 @@ serve(async (req) => {
       console.log('[ENRICH-APOLLO-DECISORES] ✅ Usando Apollo Org ID fornecido:', apollo_org_id);
     }
     
-    // PASSO 2: Buscar TODAS as pessoas da empresa (não filtrar por cargo)
+    // PASSO 2: Buscar dados da ORGANIZAÇÃO primeiro (NOVO!)
+    let organizationData: any = null;
+    
+    if (organizationId) {
+      console.log('[ENRICH-APOLLO] 🏢 Buscando dados da organização...');
+      
+      const orgResponse = await fetch(
+        `https://api.apollo.io/v1/organizations/${organizationId}`,
+        {
+          method: 'GET',
+          headers: {
+            'X-Api-Key': apolloKey
+          }
+        }
+      );
+
+      if (orgResponse.ok) {
+        const orgData = await orgResponse.json();
+        organizationData = orgData.organization;
+        
+        console.log('[ENRICH-APOLLO] ✅ Organização encontrada:', {
+          name: organizationData?.name,
+          industry: organizationData?.industry,
+          keywords: organizationData?.keywords?.slice(0, 5),
+          employees: organizationData?.estimated_num_employees
+        });
+      }
+    }
+    
+    // PASSO 3: Buscar TODAS as pessoas da empresa (não filtrar por cargo)
     const searchPayload: any = {
       page: 1,
       per_page: 100
@@ -292,15 +321,41 @@ serve(async (req) => {
 
       const existingRawData = currentCompany?.raw_data || {};
 
+      // ✅ SALVAR DADOS DA ORGANIZAÇÃO + DECISORES
+      const updateData: any = {
+        raw_data: {
+          ...existingRawData,
+          enriched_apollo: true,
+          apollo_decisores_count: decisores.length,
+          // ✅ NOVO: Dados completos da organização
+          apollo_organization: organizationData ? {
+            id: organizationData.id,
+            name: organizationData.name,
+            industry: organizationData.industry,
+            keywords: organizationData.keywords || [],
+            estimated_num_employees: organizationData.estimated_num_employees,
+            website_url: organizationData.website_url,
+            linkedin_url: organizationData.linkedin_url,
+            twitter_url: organizationData.twitter_url,
+            facebook_url: organizationData.facebook_url,
+            technologies: organizationData.technologies || [],
+            phone: organizationData.phone,
+            sic_codes: organizationData.sic_codes || [],
+            naics_codes: organizationData.naics_codes || [],
+            retail_location_count: organizationData.retail_location_count,
+            raw_location_count: organizationData.raw_location_count,
+          } : null
+        }
+      };
+      
+      // ✅ ATUALIZAR CAMPO 'industry' SE APOLLO TROUXE
+      if (organizationData?.industry) {
+        updateData.industry = organizationData.industry;
+      }
+
       await supabaseClient
         .from('companies')
-        .update({
-          raw_data: {
-            ...existingRawData,
-            enriched_apollo: true,
-            apollo_decisores_count: decisores.length
-          }
-        })
+        .update(updateData)
         .eq('id', companyId);
       
       console.log('[ENRICH-APOLLO] ✅', decisores.length, 'decisores salvos em decision_makers');

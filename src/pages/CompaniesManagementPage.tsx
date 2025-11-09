@@ -1788,8 +1788,9 @@ export default function CompaniesManagementPage() {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          // ✅ USAR MESMA LÓGICA DA QUARENTENA
-                          const setor = company.industry || 
+                          // ✅ PRIORIZAR APOLLO INDUSTRY > RECEITA FEDERAL
+                          const setor = (company as any).raw_data?.apollo_organization?.industry ||
+                                       company.industry || 
                                        (company as any).raw_data?.receita_federal?.atividade_principal?.[0]?.text ||
                                        (company as any).raw_data?.receita?.atividade_principal?.[0]?.text ||
                                        (company as any).raw_data?.atividade_economica ||
