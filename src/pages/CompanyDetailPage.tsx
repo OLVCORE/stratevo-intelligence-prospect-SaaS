@@ -980,7 +980,11 @@ export default function CompanyDetailPage() {
                 </div>
                 <div className="flex justify-between items-start border-b border-border/50 pb-2">
                   <span className="text-sm text-muted-foreground">CNAE Principal</span>
-                  <span className="text-sm font-mono font-semibold text-right">{receitaData?.atividade_principal?.code || rawData.cod_atividade_economica || 'N/A'}</span>
+                  <span className="text-sm font-mono font-semibold text-right">
+                    {receitaData?.atividade_principal?.[0]?.code || 
+                     receitaData?.atividade_principal?.code || 
+                     rawData.cod_atividade_economica || 'N/A'}
+                  </span>
                 </div>
                 <div className="flex justify-between items-start border-b border-border/50 pb-2">
                   <span className="text-sm text-muted-foreground">Regime Tributário</span>
@@ -999,10 +1003,10 @@ export default function CompanyDetailPage() {
                 </div>
               </div>
 
-              {receitaData?.atividade_principal?.text && (
+              {(receitaData?.atividade_principal?.[0]?.text || receitaData?.atividade_principal?.text) && (
                 <div className="p-3 bg-muted/30 rounded-lg">
                   <p className="text-xs text-muted-foreground mb-1">Atividade Principal - Descrição</p>
-                  <p className="text-sm">{receitaData.atividade_principal.text}</p>
+                  <p className="text-sm">{receitaData.atividade_principal?.[0]?.text || receitaData.atividade_principal.text}</p>
                 </div>
               )}
 
