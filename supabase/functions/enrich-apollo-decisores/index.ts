@@ -134,15 +134,11 @@ serve(async (req) => {
       console.log('[ENRICH-APOLLO-DECISORES] ✅ Usando Apollo Org ID fornecido:', apollo_org_id);
     }
     
-    // PASSO 2: Buscar pessoas (decisores) na empresa
-    const defaultPositions = [
-      'CEO','CFO','CIO','CTO','COO','Diretor','Gerente','VP','Head','Presidente','Sócio','Owner','Coordenador'
-    ];
-    
+    // PASSO 2: Buscar TODAS as pessoas da empresa (não filtrar por cargo)
     const searchPayload: any = {
       page: 1,
-      per_page: 100,
-      person_titles: positions && positions.length > 0 ? positions : defaultPositions
+      per_page: 100
+      // NÃO filtrar por person_titles - queremos TODOS os 24 decisores!
     };
 
     // Priorizar: organization_id > domain > q_keywords (fallback)
@@ -242,12 +238,11 @@ serve(async (req) => {
           full_name: d.name.trim(),
           position: d.title || null,
           email: d.email || null,
-          phone_number: d.phone || null,
+          phone: d.phone || null,
           linkedin_url: d.linkedin_url || null,
           seniority_level: d.seniority || null,
           data_source: 'apollo',
-          department: d.departments?.[0] || null,
-          // NOVOS CAMPOS - 100% dos dados Apollo
+          // 100% DOS CAMPOS APOLLO
           photo_url: d.photo_url || null,
           city: d.city || null,
           state: d.state || null,
@@ -255,11 +250,17 @@ serve(async (req) => {
           email_status: d.email_status || null,
           headline: d.headline || null,
           raw_data: {
-            apollo: d.raw_apollo_data,
-            phone_numbers: d.phone_numbers,
-            departments: d.departments,
+            apollo_id: d.raw_apollo_data?.id,
+            employment_history: d.raw_apollo_data?.employment_history || [],
+            phone_numbers: d.phone_numbers || [],
+            departments: d.departments || [],
+            subdepartments: d.raw_apollo_data?.subdepartments || [],
             email_status: d.email_status,
-            organization_name: d.organization_name
+            organization_name: d.organization_name,
+            organization_data: d.raw_apollo_data?.organization || {},
+            linkedin_uid: d.raw_apollo_data?.organization?.linkedin_uid,
+            sic_codes: d.raw_apollo_data?.organization?.sic_codes || [],
+            naics_codes: d.raw_apollo_data?.organization?.naics_codes || []
           }
         }));
 
