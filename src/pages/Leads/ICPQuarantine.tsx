@@ -1302,7 +1302,7 @@ export default function ICPQuarantine() {
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
                 <span className="text-sm font-medium text-muted-foreground">
-                  {filteredCompanies.length} {filteredCompanies.length === 1 ? 'empresa' : 'empresas'}
+                  {paginatedCompanies.length} de {filteredCompanies.length} {filteredCompanies.length === 1 ? 'empresa' : 'empresas'}
                 </span>
                 {selectedIds.length > 0 && (
                   <span className="text-xs text-blue-600 font-medium">
