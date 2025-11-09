@@ -534,6 +534,17 @@ if (sessionError || !sessionData.session) {
 
 console.log('✅ Sessão válida - prosseguindo com upload');
 console.log('🔑 Access Token:', sessionData.session.access_token.substring(0, 20) + '...');
+console.log('🔑 Token Type:', sessionData.session.token_type);
+console.log('👤 User ID:', sessionData.session.user.id);
+console.log('📧 User Email:', sessionData.session.user.email);
+
+// 🔍 DEBUG: Verificar se o Supabase vai enviar o Authorization automaticamente
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${sessionData.session.access_token}`
+};
+
+console.log('📤 Headers que serão enviados:', Object.keys(headers));
 
 const { data, error } = await supabase.functions.invoke('bulk-upload-companies', {
   body: { 
@@ -544,8 +555,8 @@ const { data, error } = await supabase.functions.invoke('bulk-upload-companies',
       import_batch_id,
       destination: 'quarantine' // Flag para indicar que vai para quarentena
     }
-  }
-  // ❌ NÃO enviar Authorization manualmente - Supabase já envia automaticamente
+  },
+  headers // 🔧 FORÇAR ENVIO DO AUTHORIZATION HEADER
 });
 
 setProgress(90); // Atualizar progresso após requisição
