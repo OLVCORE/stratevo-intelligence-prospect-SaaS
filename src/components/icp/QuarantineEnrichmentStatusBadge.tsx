@@ -19,9 +19,18 @@ export function QuarantineEnrichmentStatusBadge({
 }: QuarantineEnrichmentStatusBadgeProps) {
   // ✅ VERIFICAR 4 ENRIQUECIMENTOS (NÃO 3!)
   const hasReceitaFederal = !!rawAnalysis?.receita_federal || !!rawAnalysis?.receita;
-  const hasApollo = !!rawAnalysis?.apollo_organization || !!rawAnalysis?.apollo;
+  const hasApollo = !!rawAnalysis?.apollo_organization || !!rawAnalysis?.apollo || !!rawAnalysis?.enriched_apollo;
   const hasEnrichment360 = !!rawAnalysis?.digital_intelligence || !!rawAnalysis?.enrichment_360;
   const hasTOTVS = !!rawAnalysis?.totvs_report;
+  
+  // 🐛 DEBUG
+  if (rawAnalysis && Object.keys(rawAnalysis).length > 0) {
+    console.log('[BADGE] raw_data keys:', Object.keys(rawAnalysis));
+    console.log('[BADGE] hasReceita:', hasReceitaFederal);
+    console.log('[BADGE] hasApollo:', hasApollo);
+    console.log('[BADGE] has360:', hasEnrichment360);
+    console.log('[BADGE] hasTOTVS:', hasTOTVS);
+  }
   
   // Calcular porcentagem de completude (4 checks)
   const totalChecks = 4;
