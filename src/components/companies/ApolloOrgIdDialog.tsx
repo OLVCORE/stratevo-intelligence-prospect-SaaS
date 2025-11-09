@@ -21,7 +21,19 @@ export function ApolloOrgIdDialog({ onEnrich, disabled }: ApolloOrgIdDialogProps
     
     setIsLoading(true);
     try {
-      await onEnrich(apolloOrgId.trim());
+      // EXTRAIR ID DA URL AUTOMATICAMENTE
+      let cleanId = apolloOrgId.trim();
+      
+      // Se for URL completa, extrair apenas o ID
+      if (cleanId.includes('apollo.io')) {
+        const match = cleanId.match(/organizations\/([a-f0-9]{24})/i);
+        if (match) {
+          cleanId = match[1];
+          console.log('✅ ID extraído da URL:', cleanId);
+        }
+      }
+      
+      await onEnrich(cleanId);
       setOpen(false);
       setApolloOrgId("");
     } finally {
@@ -54,13 +66,16 @@ export function ApolloOrgIdDialog({ onEnrich, disabled }: ApolloOrgIdDialogProps
             <Label htmlFor="apollo-org-id">Apollo Organization ID</Label>
             <Input
               id="apollo-org-id"
-              placeholder="Ex: 5a9d68c2a6da98d9466cf9bc"
+              placeholder="Cole a URL completa ou só o ID: 5a9d68c2a6da98d9466cf9bc"
               value={apolloOrgId}
               onChange={(e) => setApolloOrgId(e.target.value)}
               disabled={isLoading}
             />
+            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">
+              ✅ Pode colar a URL COMPLETA! O ID será extraído automaticamente.
+            </p>
             <p className="text-xs text-muted-foreground">
-              Exemplo de URL: https://app.apollo.io/#/organizations/<strong>5a9d68c2a6da98d9466cf9bc</strong>
+              Exemplo: https://app.apollo.io/#/organizations/<strong className="text-primary">5a9d68c2a6da98d9466cf9bc</strong>
             </p>
           </div>
         </div>
