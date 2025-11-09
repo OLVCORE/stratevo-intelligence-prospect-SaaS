@@ -226,6 +226,24 @@ export default function CompaniesManagementPage() {
     }
 
     try {
+      // ✅ VERIFICAR SE CNPJ JÁ EXISTE EM OUTRA EMPRESA
+      const { data: existing, error: checkError } = await supabase
+        .from('companies')
+        .select('id, company_name')
+        .eq('cnpj', cleanCnpj)
+        .neq('id', companyId)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existing) {
+        toast.error('❌ CNPJ duplicado!', {
+          description: `Este CNPJ já pertence a: ${existing.company_name}`
+        });
+        return;
+      }
+
+      // ✅ SALVAR CNPJ
       const { error } = await supabase
         .from('companies')
         .update({ cnpj: cleanCnpj })
@@ -234,7 +252,7 @@ export default function CompaniesManagementPage() {
       if (error) throw error;
 
       toast.success('✅ CNPJ atualizado!', {
-        description: 'Você pode enriquecer novamente para atualizar os dados'
+        description: 'Agora você pode enriquecer a empresa com dados da Receita Federal'
       });
       
       setEditingCnpjId(null);
@@ -242,9 +260,16 @@ export default function CompaniesManagementPage() {
       refetch();
       queryClient.invalidateQueries({ queryKey: ['companies'] });
     } catch (error: any) {
-      toast.error('Erro ao salvar CNPJ', { 
-        description: error.message 
-      });
+      const message = error.message || '';
+      if (message.includes('duplicate') || message.includes('unique')) {
+        toast.error('❌ CNPJ duplicado!', {
+          description: 'Este CNPJ já existe em outra empresa'
+        });
+      } else {
+        toast.error('Erro ao salvar CNPJ', { 
+          description: message 
+        });
+      }
     }
   };
 
