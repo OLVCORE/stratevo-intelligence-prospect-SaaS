@@ -1309,19 +1309,19 @@ export default function CompaniesManagementPage() {
                               }
                               
                               toast.info('Buscando decisores com Apollo...');
-                              const { data, error } = await supabase.functions.invoke('enrich-apollo', {
+                              const { data, error } = await supabase.functions.invoke('enrich-apollo-decisores', {
                                 body: { 
-                                  organization_id: company.name,
                                   company_id: company.id,
-                                  modes: ['people', 'company']
+                                  company_name: company.name,
+                                  domain: company.website || company.domain
                                 }
                               });
                               if (error) throw error;
-                              toast.success('Dados Apollo atualizados!');
+                              toast.success('Decisores Apollo encontrados!');
                               refetch();
                             } catch (error) {
                               console.error('Error enriching Apollo:', error);
-                              toast.error('Erro ao buscar dados Apollo');
+                              toast.error('Erro ao buscar decisores Apollo');
                             }
                           }}
                           onEnrichEconodata={async () => {
