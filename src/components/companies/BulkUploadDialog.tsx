@@ -519,6 +519,21 @@ toast.info(`📤 Importando ${companiesWithMetadata.length} empresas de "${sourc
 // Simular progresso durante o upload
 setProgress(10);
 
+// 🛡️ FORÇAR REFRESH DE SESSÃO ANTES DE UPLOAD (prevenir 401)
+const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+if (sessionError || !sessionData.session) {
+  console.error('❌ Sessão inválida antes do upload:', sessionError);
+  toast.error('Sessão expirada', {
+    description: 'Recarregue a página e faça login novamente'
+  });
+  setProgress(0);
+  setIsUploading(false);
+  return;
+}
+
+console.log('✅ Sessão válida - prosseguindo com upload');
+
 const { data, error } = await supabase.functions.invoke('bulk-upload-companies', {
   body: { 
     companies: companiesWithMetadata,
