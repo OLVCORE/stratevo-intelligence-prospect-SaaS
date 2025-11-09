@@ -916,15 +916,29 @@ export default function CompaniesManagementPage() {
                           continue;
                         }
 
+                        // 🔧 BUSCAR DADOS COMPLETOS DA EMPRESA (com CNPJ)
+                        const { data: fullCompany } = await supabase
+                          .from('companies')
+                          .select('*')
+                          .eq('id', company.id)
+                          .single();
+
+                        if (!fullCompany?.cnpj) {
+                          console.warn(`⚠️ Empresa ${company.name} sem CNPJ - pulando integração`);
+                          skipped++;
+                          continue;
+                        }
+
                         // Integra ao ICP mantendo TODOS os dados
                         const { error: insertError } = await supabase
                           .from('icp_analysis_results')
                           .insert({
-                            company_id: company.id,
+                            company_id: fullCompany.id,
+                            cnpj: fullCompany.cnpj, // ✅ CAMPO OBRIGATÓRIO
                             status: 'pendente',
-                            source_type: company.source_type || 'manual',
-                            source_name: company.source_name || 'Estoque',
-                            import_batch_id: company.import_batch_id
+                            source_type: fullCompany.source_type || 'manual',
+                            source_name: fullCompany.source_name || 'Estoque',
+                            import_batch_id: fullCompany.import_batch_id
                           });
 
                         if (insertError) {
@@ -1074,20 +1088,39 @@ export default function CompaniesManagementPage() {
 
                     for (const company of selectedComps) {
                       try {
+                        // 🔧 BUSCAR DADOS COMPLETOS DA EMPRESA (necessário para ter CNPJ)
+                        const { data: fullCompany, error: fetchError } = await supabase
+                          .from('companies')
+                          .select('*')
+                          .eq('id', company.id)
+                          .single();
+
+                        if (fetchError || !fullCompany) {
+                          console.error(`❌ Erro ao buscar empresa completa:`, fetchError);
+                          errors++;
+                          continue;
+                        }
+
+                        if (!fullCompany.cnpj) {
+                          console.warn(`⚠️ Empresa ${fullCompany.company_name} sem CNPJ - pulando`);
+                          skipped++;
+                          continue;
+                        }
+
                         // Verifica se já existe no ICP
                         const { data: existing, error: checkError } = await supabase
                           .from('icp_analysis_results')
                           .select('id')
-                          .eq('company_id', company.id)
-                          .maybeSingle(); // 🔧 USAR maybeSingle() ao invés de single()
+                          .eq('company_id', fullCompany.id)
+                          .maybeSingle();
 
                         if (checkError) {
-                          console.error(`❌ Erro ao verificar empresa ${company.name}:`, checkError);
+                          console.error(`❌ Erro ao verificar empresa ${fullCompany.company_name}:`, checkError);
                           throw checkError;
                         }
 
                         if (existing) {
-                          console.log(`✓ Empresa ${company.name} já está no ICP`);
+                          console.log(`✓ Empresa ${fullCompany.company_name} já está no ICP`);
                           skipped++;
                           continue;
                         }
@@ -1096,23 +1129,23 @@ export default function CompaniesManagementPage() {
                         const { error: insertError } = await supabase
                           .from('icp_analysis_results')
                           .insert({
-                            company_id: company.id,
+                            company_id: fullCompany.id,
+                            cnpj: fullCompany.cnpj, // ✅ OBRIGATÓRIO
                             status: 'pendente',
-                            source_type: company.source_type || 'manual',
-                            source_name: company.source_name || 'Estoque',
-                            import_batch_id: company.import_batch_id
+                            source_type: fullCompany.source_type || 'manual',
+                            source_name: fullCompany.source_name || 'Estoque',
+                            import_batch_id: fullCompany.import_batch_id
                           });
 
                         if (insertError) {
-                          console.error(`❌ Erro ao inserir ${company.name} no ICP:`, insertError);
+                          console.error(`❌ Erro ao inserir ${fullCompany.company_name} no ICP:`, insertError);
                           throw insertError;
                         }
                         
-                        console.log(`✅ ${company.name} integrada ao ICP!`);
+                        console.log(`✅ ${fullCompany.company_name} integrada ao ICP!`);
                         sent++;
                       } catch (e: any) {
-                        console.error(`❌ Error integrating ${company.name} to ICP:`, e);
-                        console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
+                        console.error(`❌ Error integrating to ICP:`, e);
                         errors++;
                       }
                     }
