@@ -35,7 +35,12 @@ export function DecisorsContactsTab({
   onDataChange 
 }: DecisorsContactsTabProps) {
   const { toast } = useToast();
-  const [analysisData, setAnalysisData] = useState<any>(savedData || null);
+  const [analysisData, setAnalysisData] = useState<any>(savedData || {
+    decisors: [],
+    decisorsWithEmails: [],
+    insights: [],
+    companyData: null
+  });
   const [customLinkedInUrl, setCustomLinkedInUrl] = useState(linkedinUrl || '');
   const [customApolloUrl, setCustomApolloUrl] = useState('');
   
@@ -153,7 +158,7 @@ export function DecisorsContactsTab({
       const { data: enrichmentResult, source } = result;
       
       // Merge enrichment data com dados existentes
-      const enrichedDecisors = analysisData.decisors.map((decisor: any) => {
+      const enrichedDecisors = (analysisData?.decisors || []).map((decisor: any) => {
         // Apollo retorna decisores diretamente
         if (source === 'Apollo.io' && enrichmentResult.decisores) {
           const apolloMatch = enrichmentResult.decisores.find((a: any) => 
@@ -250,7 +255,7 @@ export function DecisorsContactsTab({
       
       toast({
         title: '✅ Análise LinkedIn concluída!',
-        description: `${data.decisors.length} decisores | ${emailsFound} emails | ${data.insights.length} insights`,
+        description: `${data.decisors?.length || 0} decisores | ${emailsFound} emails | ${data.insights?.length || 0} insights`,
       });
     },
     onError: (error) => {
@@ -410,7 +415,7 @@ export function DecisorsContactsTab({
                 <Target className="w-4 h-4 text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground uppercase">Insights</span>
               </div>
-              <div className="text-2xl font-bold">{analysisData.insights.length}</div>
+              <div className="text-2xl font-bold">{analysisData?.insights?.length || 0}</div>
               <Badge variant="outline" className="text-xs mt-1">gerados</Badge>
             </Card>
           </div>
@@ -426,20 +431,20 @@ export function DecisorsContactsTab({
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <span className="text-xs text-muted-foreground">Seguidores</span>
-                  <p className="text-xl font-bold">{analysisData.companyData.followers?.toLocaleString() || 0}</p>
+                  <p className="text-xl font-bold">{analysisData?.companyData?.followers?.toLocaleString() || 0}</p>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Funcionários</span>
-                  <p className="text-xl font-bold">{analysisData.companyData.employees?.toLocaleString() || 0}</p>
+                  <p className="text-xl font-bold">{analysisData?.companyData?.employees?.toLocaleString() || 0}</p>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Posts Recentes</span>
-                  <p className="text-xl font-bold">{analysisData.companyData.recentPosts?.length || 0}</p>
+                  <p className="text-xl font-bold">{analysisData?.companyData?.recentPosts?.length || 0}</p>
                 </div>
               </div>
 
               {/* Menções de concorrentes */}
-              {analysisData.companyData.competitorMentions && analysisData.companyData.competitorMentions.length > 0 && (
+              {analysisData?.companyData?.competitorMentions && analysisData.companyData.competitorMentions.length > 0 && (
                 <div className="mt-4 pt-4 border-t">
                   <span className="text-xs font-medium text-muted-foreground">Concorrentes Mencionados:</span>
                   <div className="flex flex-wrap gap-2 mt-2">
@@ -455,7 +460,7 @@ export function DecisorsContactsTab({
           )}
 
           {/* Lista de Decisores - DESTAQUE COM BALÃO COLORIDO */}
-          {analysisData.decisorsWithEmails.length > 0 && (
+          {analysisData?.decisorsWithEmails && analysisData.decisorsWithEmails.length > 0 && (
             <Card className="p-6 border-2 border-emerald-500/30 bg-emerald-500/5">
               <div className="flex items-center gap-4 mb-6">
                 <div className="p-3 rounded-full bg-emerald-500/20">
@@ -589,7 +594,7 @@ export function DecisorsContactsTab({
           )}
 
           {/* Insights Estratégicos */}
-          {analysisData.insights.length > 0 && (
+          {analysisData?.insights && analysisData.insights.length > 0 && (
             <Card className="p-6 bg-slate-800 border border-slate-600">
               <h4 className="font-semibold mb-4 flex items-center gap-2 text-slate-200">
                 <Sparkles className="w-5 h-5 text-muted-foreground" />
