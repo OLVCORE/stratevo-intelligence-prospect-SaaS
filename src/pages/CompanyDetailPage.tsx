@@ -655,11 +655,11 @@ export default function CompanyDetailPage() {
             <Card className="glass-card hover-scale">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="h-4 w-4 text-primary" />
+                  <CheckCircle className={`h-4 w-4 ${receitaData?.situacao === 'ATIVA' ? 'text-lime-500' : 'text-yellow-500'}`} />
                   <p className="text-xs text-muted-foreground">Situação</p>
                 </div>
-                <Badge variant={receitaData?.situacao === 'ATIVA' ? 'default' : 'destructive'} className="text-xs">
-                  {receitaData?.situacao || 'N/A'}
+                <Badge variant={receitaData?.situacao === 'ATIVA' ? 'default' : 'secondary'} className={receitaData?.situacao === 'ATIVA' ? 'bg-lime-600 hover:bg-lime-700 text-white dark:bg-lime-500 dark:hover:bg-lime-600' : 'bg-yellow-600 text-white dark:bg-yellow-500'}>
+                  {receitaData?.situacao || rawData?.situacao_cadastral || 'Pendente'}
                 </Badge>
               </CardContent>
             </Card>
@@ -681,9 +681,7 @@ export default function CompanyDetailPage() {
                   <p className="text-xs text-muted-foreground">Abertura</p>
                 </div>
                 <p className="font-semibold text-sm">
-                  {receitaData?.abertura || rawData.data_abertura 
-                    ? new Date(receitaData?.abertura || rawData.data_abertura).toLocaleDateString('pt-BR') 
-                    : 'N/A'}
+                  {receitaData?.abertura || rawData?.data_abertura || 'N/A'}
                 </p>
               </CardContent>
             </Card>
@@ -694,7 +692,7 @@ export default function CompanyDetailPage() {
                   <Users className="h-4 w-4 text-primary" />
                   <p className="text-xs text-muted-foreground">Funcionários</p>
                 </div>
-                <p className="font-semibold text-sm">{rawData.funcionarios_presumido_matriz_cnpj || company.employees || 'N/A'}</p>
+                <p className="font-semibold text-sm">{rawData?.funcionarios_presumido_matriz_cnpj || company.employees || receitaData?.qsa?.length || 'N/A'}</p>
               </CardContent>
             </Card>
 
