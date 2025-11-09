@@ -1734,11 +1734,8 @@ export default function CompaniesManagementPage() {
                        <TableCell>
                           {/* ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA */}
                           <QuarantineEnrichmentStatusBadge 
-                            company={{
-                              id: company.id,
-                              razao_social: company.company_name || '',
-                              raw_data: (company as any).raw_data
-                            } as any}
+                            rawAnalysis={(company as any).raw_data || {}}
+                            showProgress={true}
                           />
                         </TableCell>
                        <TableCell>
