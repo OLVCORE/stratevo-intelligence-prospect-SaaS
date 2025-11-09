@@ -1294,25 +1294,44 @@ export default function ICPQuarantine() {
         </Card>
       </div>
 
-      {/* Actions */}
-      <Card>
-        <CardHeader>
+      {/* ✅ BARRA DE AÇÕES WORLD-CLASS - ELEGANTE E PROFISSIONAL */}
+      <Card className="border-none shadow-sm">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div>
-                <CardTitle>Ações em Lote</CardTitle>
-                <CardDescription>
-                  {filteredCompanies.length} empresas na visualização · Selecione para ações em lote
-                </CardDescription>
+            {/* LEFT: Info + Contador */}
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {filteredCompanies.length} {filteredCompanies.length === 1 ? 'empresa' : 'empresas'}
+                </span>
+                {selectedIds.length > 0 && (
+                  <span className="text-xs text-blue-600 font-medium">
+                    {selectedIds.length} selecionada{selectedIds.length !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
-              {/* ✅ BADGE CONTADOR DESTACADO */}
-              {selectedIds.length > 0 && (
-                <Badge variant="default" className="text-sm px-3 py-1 bg-blue-600">
-                  {selectedIds.length} selecionada{selectedIds.length !== 1 ? 's' : ''}
-                </Badge>
-              )}
             </div>
-            <div className="flex gap-2">
+
+            {/* RIGHT: Ações Principais */}
+            <div className="flex items-center gap-2">
+              {/* Aprovar (apenas se tiver seleção) */}
+              {selectedIds.length > 0 && (
+                <Button
+                  onClick={handleBulkApprove}
+                  disabled={isApproving}
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {isApproving ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Aprovar ({selectedIds.length})
+                </Button>
+              )}
+              
+              {/* Menu de Ações (dropdown) */}
               <QuarantineActionsMenu
                 selectedCount={selectedIds.length}
                 onDeleteSelected={handleDeleteSelected}
@@ -1338,64 +1357,46 @@ export default function ICPQuarantine() {
                 totalCompanies={filteredCompanies}
               />
               
-              {/* ✅ BOTÃO APROVAR EM LOTE DESTACADO */}
-              {selectedIds.length > 0 && (
-                <Button
-                  onClick={handleBulkApprove}
-                  disabled={isApproving}
-                  className="gap-2 bg-green-600 hover:bg-green-700"
-                  title="Aprovar empresas selecionadas e mover para Pool de Vendas"
-                >
-                  {isApproving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4" />
-                  )}
-                  Aprovar Selecionadas ({selectedIds.length})
-                </Button>
-              )}
-              
+              {/* Descartadas */}
               <Button
                 onClick={() => setShowDiscardedModal(true)}
-                variant="outline"
-                className="gap-2"
-                title="Ver empresas descartadas e restaurar se necessário"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
               >
-                <XCircle className="w-4 h-4" />
+                <XCircle className="h-3.5 w-3.5 mr-1.5" />
                 Descartadas
               </Button>
               
+              {/* Relatórios */}
               <Button
                 onClick={() => navigate('/leads/stc-history')}
-                variant="outline"
-                className="gap-2"
-                title="Ver todos os relatórios TOTVS salvos"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="h-3.5 w-3.5 mr-1.5" />
                 Relatórios
               </Button>
               
-              {/* 🔢 DROPDOWN DE PAGINAÇÃO */}
-              <div className="flex items-center gap-2 ml-4">
-                <span className="text-sm text-muted-foreground">Mostrar:</span>
-                <Select
-                  value={pageSize.toString()}
-                  onValueChange={(value) => setPageSize(Number(value))}
-                >
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
-                    <SelectItem value="150">150</SelectItem>
-                    <SelectItem value="9999">Todos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Paginação */}
+              <Select
+                value={pageSize.toString()}
+                onValueChange={(value) => setPageSize(Number(value))}
+              >
+                <SelectTrigger className="w-[90px] h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="150">150</SelectItem>
+                  <SelectItem value="9999">Todos</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </CardHeader>
+        </CardContent>
       </Card>
 
       {/* Filters */}
@@ -1439,8 +1440,8 @@ export default function ICPQuarantine() {
 
       {/* Table */}
       <Card>
-        <CardContent className="p-0 overflow-x-auto">{/* ✅ SCROLL NO CARD CONTENT */}
-          <div className="min-w-[1400px]">{/* ✅ Largura mínima para forçar scroll */}
+        <CardContent className="p-6">
+          <div className="overflow-x-auto -mx-6">{/* ✅ SCROLL COMO EM GERENCIAR EMPRESAS */}
             <Table className="text-[10px]">{/* ✅ Fonte menor para fit 100% */}
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -1886,7 +1887,7 @@ export default function ICPQuarantine() {
               )}
             </TableBody>
           </Table>
-          </div>{/* ✅ FECHA min-w */}
+          </div>{/* ✅ FECHA overflow-x-auto */}
         </CardContent>
       </Card>
 
