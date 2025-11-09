@@ -56,8 +56,9 @@ export function useCompanies(options?: {
         totalPages: Math.ceil((count || 0) / pageSize)
       };
     },
-    staleTime: 30 * 1000, // 30 segundos
+    staleTime: 5 * 1000, // ✅ 5 segundos (atualiza mais rápido)
     gcTime: 5 * 60 * 1000, // 5 minutos
+    refetchOnWindowFocus: true, // ✅ Revalida ao focar janela
   });
 }
 

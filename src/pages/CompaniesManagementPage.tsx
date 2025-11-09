@@ -499,11 +499,13 @@ export default function CompaniesManagementPage() {
         { description: `${skipped} já tinham dados · ${errors} erros` }
       );
 
-      refetch();
-      
-      // ✅ INVALIDAR CACHE DO STATUS DE ENRIQUECIMENTO
+      // ✅ FORÇAR ATUALIZAÇÃO IMEDIATA (como Quarentena)
       queryClient.invalidateQueries({ queryKey: ['enrichment-status'] });
       queryClient.invalidateQueries({ queryKey: ['all-enrichment-status'] });
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      
+      // Refetch manual
+      await refetch();
     } catch (error) {
       console.error('Error batch enriching:', error);
       toast.error('Erro ao executar enriquecimento em lote');
