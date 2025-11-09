@@ -12,6 +12,7 @@ import TOTVSCheckReport from "@/pages/Leads/TOTVSCheckReport";
 import { Loader2 } from "lucide-react";
 import { TrevoAssistant } from "./components/trevo/TrevoAssistant";
 import SafeModeBanner from "@/components/dev/SafeModeBanner";
+import { AuthTokenGuard } from "./components/auth/AuthTokenGuard";
 
 // Eager load only critical pages
 import Index from "./pages/Index";
@@ -188,6 +189,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
           <AuthProvider>
+          <AuthTokenGuard />
           <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<Auth />} />
