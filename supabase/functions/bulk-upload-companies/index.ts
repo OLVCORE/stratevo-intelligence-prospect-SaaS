@@ -17,10 +17,30 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // 🔍 DEBUG: Verificar variáveis de ambiente
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    console.log('🔍 SUPABASE_URL:', supabaseUrl ? 'OK' : '❌ MISSING');
+    console.log('🔍 SERVICE_ROLE_KEY:', serviceRoleKey ? 'OK (length: ' + serviceRoleKey.length + ')' : '❌ MISSING');
+    
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Configuração do Supabase incompleta',
+          details: {
+            url: !!supabaseUrl,
+            key: !!serviceRoleKey
+          }
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { companies, metadata } = await req.json() as { 
       companies: CompanyRow[], 
