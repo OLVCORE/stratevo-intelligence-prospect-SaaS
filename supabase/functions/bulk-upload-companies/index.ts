@@ -70,10 +70,11 @@ serve(async (req) => {
         // Prepara dados completos da empresa (TODOS OS 87 CAMPOS + RASTREABILIDADE)
         const companyData: any = {
           name: name || 'Empresa Importada',
+          company_name: name || 'Empresa Importada', // NOVO: company_name é obrigatório!
           cnpj: cnpj,
           industry: row.setor_amigavel || row.Setor || null,
           employees: (row.funcionarios_presumido_matriz_cnpj || row['Funcion ários']) ? parseInt(String(row.funcionarios_presumido_matriz_cnpj || row['Funcionários'] || '0')) : null,
-          revenue: row.faturamento_presumido_matriz_cnpj || row['Faturamento Estimado'] || null,
+          revenue: null, // DESABILITADO: formato brasileiro causa erro
           digital_maturity_score: row['Score Maturidade Digital'] ? parseFloat(String(row['Score Maturidade Digital'])) : null,
           
           // 🏷️ CAMPOS DE RASTREABILIDADE
