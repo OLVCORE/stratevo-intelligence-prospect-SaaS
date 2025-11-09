@@ -47,21 +47,37 @@ export default function LocationMap({
 
     console.log('🗺️ Inicializando mapa Leaflet (OpenStreetMap - GRATUITO)...');
 
-    map.current = L.map(mapContainer.current).setView([-15.7942, -47.8825], 4);
+    // Aguardar DOM estar pronto
+    setTimeout(() => {
+      if (!mapContainer.current) return;
+      
+      try {
+        map.current = L.map(mapContainer.current).setView([-15.7942, -47.8825], 4);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    }).addTo(map.current);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19,
+        }).addTo(map.current);
+
+        console.log('✅ Mapa Leaflet inicializado!');
+      } catch (error) {
+        console.error('❌ Erro ao inicializar Leaflet:', error);
+      }
+    }, 100);
 
     return () => {
       map.current?.remove();
+      map.current = null;
     };
   }, []);
 
   // Geocodificar endereço usando Nominatim (GRATUITO)
   useEffect(() => {
-    if (!map.current) return;
+    // Aguardar mapa estar pronto
+    if (!map.current) {
+      console.log('⏳ Aguardando mapa inicializar...');
+      return;
+    }
 
     const geocodeAddress = async () => {
       const hasNumero = numero && numero.trim().length > 0;
@@ -111,7 +127,13 @@ export default function LocationMap({
 
           console.log('✅ Localização encontrada:', { lat: latNum, lng: lngNum });
 
-          map.current?.setView([latNum, lngNum], zoomLevel);
+          // Verificar se mapa ainda existe antes de usar
+          if (!map.current) {
+            console.error('❌ Mapa foi destruído antes do setView');
+            return;
+          }
+
+          map.current.setView([latNum, lngNum], zoomLevel);
 
           // Remover marcadores anteriores
           if (marker.current) {
