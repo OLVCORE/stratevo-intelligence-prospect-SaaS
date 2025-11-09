@@ -705,6 +705,18 @@ export default function CompanyDetailPage() {
             <Card className="glass-card hover-scale">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
+                  <UserPlus className="h-4 w-4 text-primary" />
+                  <p className="text-xs text-muted-foreground">Sócios</p>
+                </div>
+                <p className="font-semibold text-sm">
+                  {receitaData?.qsa?.length || rawData?.qtd_socios || 'N/A'}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-card hover-scale">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
                   <Globe className="h-4 w-4 text-primary" />
                   <p className="text-xs text-muted-foreground">Website</p>
                 </div>
