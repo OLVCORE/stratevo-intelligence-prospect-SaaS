@@ -58,7 +58,8 @@ import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnri
 
 
 export default function CompaniesManagementPage() {
-  logger.info('CompaniesManagementPage mounted', 'CompaniesManagement');
+  // 🔥 VERSÃO WORLD-CLASS - 100% IDÊNTICA À QUARENTENA
+  logger.info('CompaniesManagementPage mounted - v2.0 WORLD-CLASS', 'CompaniesManagement');
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
