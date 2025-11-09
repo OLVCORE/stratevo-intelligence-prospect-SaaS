@@ -200,6 +200,7 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
   };
 
   return (
+    <>
     <Card className="glass-card">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
