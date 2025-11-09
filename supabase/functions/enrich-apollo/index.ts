@@ -103,24 +103,7 @@ serve(async (req: Request) => {
 
     const sb = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-    // ESTIMATIVA DE CRÉDITOS (DESABILITADA PARA TESTES)
-    // const estimate = await estimateCredits(sb, input.organization_id, input.modes);
-    // const creditCheck = await checkCreditsAvailable(sb, estimate.total);
-    
     console.log('[enrich-apollo] ⚠️ Verificação de créditos DESABILITADA para testes');
-
-    // DRY RUN (apenas estimativa)
-    const isDryRun = body.dry_run === true;
-    if (isDryRun) {
-      return J({
-        ok: true,
-        dry_run: true,
-        estimate,
-        creditsAvailable: creditCheck.available,
-        creditWarning: creditCheck.message,
-        correlationId
-      }, 200, c);
-    }
 
     const requestId = crypto.randomUUID();
     const activityId = input.activity_id || crypto.randomUUID();
@@ -129,14 +112,8 @@ serve(async (req: Request) => {
       requestId, 
       activityId, 
       modes: input.modes,
-      correlationId,
-      estimate,
-      creditsAvailable: creditCheck.available
+      correlationId
     };
-
-    if (creditCheck.message) {
-      out.creditWarning = creditCheck.message;
-    }
 
     let actualCreditsConsumed = 0;
 
