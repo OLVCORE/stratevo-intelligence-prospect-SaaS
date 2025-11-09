@@ -45,7 +45,7 @@ export function useEnrichmentStatus(companyId?: string) {
       const status: EnrichmentStatus = {
         companyId: company.id,
         companyName: company.name,
-        hasReceitaWS: !!company.cnpj && !!company.raw_data,
+        hasReceitaWS: !!(company.raw_data as any)?.enriched_receita && !!(company.raw_data as any)?.receita,
         hasDecisionMakers: (decisorsCountRes.count || 0) > 0,
         hasDigitalPresence: (digitalPresenceRes.count || 0) > 0,
         hasMaturityScore: !!company.digital_maturity_score,
@@ -113,7 +113,7 @@ export function useAllEnrichmentStatus() {
         const status: EnrichmentStatus = {
           companyId: company.id,
           companyName: company.name,
-          hasReceitaWS: !!company.cnpj && !!company.raw_data,
+          hasReceitaWS: !!(company.raw_data as any)?.enriched_receita && !!(company.raw_data as any)?.receita,
           hasDecisionMakers: decisorsSet.has(company.id),
           hasDigitalPresence: digitalMaturitySet.has(company.id),
           hasMaturityScore: !!company.digital_maturity_score,
