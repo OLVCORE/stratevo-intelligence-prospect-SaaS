@@ -52,6 +52,7 @@ import { CNPJDiscoveryDialog } from '@/components/companies/CNPJDiscoveryDialog'
 import { formatWebsiteUrl, isValidUrl, extractDomain } from '@/lib/utils/urlHelpers';
 import { ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
+import { consultarReceitaFederal } from '@/services/receitaFederal';
 
 
 export default function CompaniesManagementPage() {
@@ -425,26 +426,80 @@ export default function CompaniesManagementPage() {
   const handleBatchEnrichReceitaWS = async () => {
     try {
       setIsBatchEnriching(true);
-      toast.info('Iniciando enriquecimento em lote com Receita Federal...', {
-        description: 'Apenas empresas sem dados serão processadas'
-      });
+      
+      // ✅ VERSÃO IDÊNTICA À QUARENTENA: Enriquecimento DIRETO no frontend
+      const companiesToEnrich = selectedCompanies.length > 0
+        ? companies.filter(c => selectedCompanies.includes(c.id) && c.cnpj)
+        : companies.filter(c => c.cnpj);
 
-      const { data, error } = await supabase.functions.invoke('batch-enrich-receitaws', {
-        body: { force_refresh: false }
-      });
-
-      if (error) throw error;
-
-      const summary = data?.summary;
-      if (summary) {
-        toast.success(
-          `Enriquecimento concluído! ${summary.enriched} empresas atualizadas, ${summary.skipped} já tinham dados, ${summary.errors} erros.`
-        );
-      } else {
-        toast.success('Enriquecimento em lote concluído!');
+      if (companiesToEnrich.length === 0) {
+        toast.error('Nenhuma empresa com CNPJ para enriquecer');
+        return;
       }
 
-      refetch(); // Recarrega para ver os dados atualizados
+      toast.info(`⚡ Enriquecendo ${companiesToEnrich.length} empresas...`, {
+        description: 'Consultando Receita Federal via BrasilAPI',
+        id: 'batch-receita'
+      });
+
+      let enriched = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      for (const company of companiesToEnrich) {
+        try {
+          // Verificar se já tem dados
+          const hasReceitaData = (company as any).raw_data?.receita_federal || (company as any).raw_data?.receita;
+          
+          if (hasReceitaData) {
+            skipped++;
+            continue;
+          }
+
+          // ✅ CHAMAR API DIRETAMENTE (como Quarentena)
+          const result = await consultarReceitaFederal(company.cnpj!);
+
+          if (!result.success) {
+            errors++;
+            continue;
+          }
+
+          // Atualizar dados
+          const rawData = ((company as any).raw_data && typeof (company as any).raw_data === 'object' && !Array.isArray((company as any).raw_data)) 
+            ? (company as any).raw_data as Record<string, any>
+            : {};
+
+          const { error: updateError } = await supabase
+            .from('companies')
+            .update({
+              industry: result.data?.atividade_principal?.[0]?.text || (company as any).industry,
+              raw_data: {
+                ...rawData,
+                receita_federal: result.data,
+                receita_source: result.source,
+              },
+            })
+            .eq('id', company.id);
+
+          if (updateError) throw updateError;
+
+          enriched++;
+          
+          // Delay para não sobrecarregar API
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error: any) {
+          console.error(`Erro ao enriquecer ${company.name}:`, error);
+          errors++;
+        }
+      }
+
+      toast.dismiss('batch-receita');
+      toast.success(
+        `✅ Enriquecimento concluído! ${enriched} empresas atualizadas`,
+        { description: `${skipped} já tinham dados · ${errors} erros` }
+      );
+
+      refetch();
       
       // ✅ INVALIDAR CACHE DO STATUS DE ENRIQUECIMENTO
       queryClient.invalidateQueries({ queryKey: ['enrichment-status'] });

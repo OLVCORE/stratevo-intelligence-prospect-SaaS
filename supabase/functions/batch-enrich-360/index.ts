@@ -14,10 +14,32 @@ serve(async (req) => {
   }
 
   try {
+    // ✅ VERIFICAR AUTENTICAÇÃO
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+    
+    // ✅ VERIFICAR USUÁRIO AUTENTICADO
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log(`✅ Authenticated user: ${user.email}`);
 
     const { force_refresh } = await req.json().catch(() => ({ force_refresh: false }));
     console.log('🔄 Starting batch enrichment 360 (public proxy)...', force_refresh ? '(FORCE REFRESH MODE)' : '');
