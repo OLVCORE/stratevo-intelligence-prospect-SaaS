@@ -181,7 +181,7 @@ serve(async (req) => {
 
     const decisores = (apolloData.people || []).map((person: any) => {
       const fullName = person.name || `${person.first_name || ''} ${person.last_name || ''}`.trim();
-      console.log('[ENRICH-APOLLO] Processando:', fullName, '- Cargo:', person.title);
+      console.log('[ENRICH-APOLLO-DECISORES] Processando:', fullName, '- Cargo:', person.title);
       
       return {
         name: fullName,
@@ -189,14 +189,20 @@ serve(async (req) => {
         last_name: person.last_name,
         title: person.title,
         email: person.email,
+        email_status: person.email_status, // verified, guessed, unavailable
         linkedin_url: person.linkedin_url,
         phone: person.phone_numbers?.[0]?.sanitized_number || null,
+        phone_numbers: person.phone_numbers || [], // TODOS os telefones
+        photo_url: person.photo_url,
+        headline: person.headline,
         buying_power: classifyBuyingPower(person.title || ''),
         seniority: person.seniority,
         departments: person.departments || [],
         city: person.city,
         state: person.state,
-        country: person.country
+        country: person.country,
+        organization_name: person.organization_name,
+        raw_apollo_data: person // SALVAR TUDO do Apollo
       };
     });
     
@@ -236,11 +242,25 @@ serve(async (req) => {
           full_name: d.name.trim(),
           position: d.title || null,
           email: d.email || null,
-          phone: d.phone || null,
+          phone_number: d.phone || null,
           linkedin_url: d.linkedin_url || null,
           seniority_level: d.seniority || null,
           data_source: 'apollo',
-          department: d.departments?.[0] || null
+          department: d.departments?.[0] || null,
+          // NOVOS CAMPOS - 100% dos dados Apollo
+          photo_url: d.photo_url || null,
+          city: d.city || null,
+          state: d.state || null,
+          country: d.country || null,
+          email_status: d.email_status || null,
+          headline: d.headline || null,
+          raw_data: {
+            apollo: d.raw_apollo_data,
+            phone_numbers: d.phone_numbers,
+            departments: d.departments,
+            email_status: d.email_status,
+            organization_name: d.organization_name
+          }
         }));
 
       console.log('[ENRICH-APOLLO] Preparando para salvar:', decisoresToInsert.length, 'decisores');
