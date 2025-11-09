@@ -157,9 +157,9 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
   };
 
   const handleRevealEmail = async () => {
-    // 🚨 FUNÇÃO DESABILITADA POR SEGURANÇA - CRÉDITOS APOLLO SENDO CONSUMIDOS
+    // 🚨 FUNÇÃO DESABILITADA POR SEGURANÇA
     toast.error('🔒 Função BLOQUEADA por Segurança', {
-      description: '⚠️ Revelar Email está desabilitado. Créditos Apollo estavam sendo consumidos indevidamente.'
+      description: '⚠️ Revelar Email está temporariamente desabilitado. Powered by OLV Internacional.'
     });
     
     setShowRevealDialog(false);
@@ -174,7 +174,7 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
 
     try {
       toast.info('🔓 Revelando email...', {
-        description: 'Triple Fallback: Apollo → Hunter.io → PhantomBuster'
+        description: 'Powered by OLV Internacional - Sistema Inteligente de Busca'
       });
 
       const { data, error } = await supabase.functions.invoke('reveal-apollo-email', {
@@ -187,15 +187,15 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
       if (error) throw error;
 
       if (data.success) {
-        toast.success(`✅ Email revelado via ${data.source}!`, {
-          description: data.email
+        toast.success(`✅ Email verificado com sucesso!`, {
+          description: `${data.email} · Powered by OLV Internacional`
         });
         
         // Recarregar página para atualizar dados
         window.location.reload();
       } else {
-        toast.warning('Email não disponível', {
-          description: data.message || 'Tentamos Apollo, Hunter.io e PhantomBuster'
+        toast.warning('Email não disponível no momento', {
+          description: 'Sistema OLV Internacional tentou múltiplas fontes de verificação'
         });
       }
     } catch (e: any) {

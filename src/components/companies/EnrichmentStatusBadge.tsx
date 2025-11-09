@@ -73,10 +73,10 @@ export function EnrichmentStatusBadge({ companyId, showProgress = false }: Enric
       <p className="font-semibold">{status.companyName}</p>
       <div className="space-y-1">
         <p className={status.hasReceitaWS ? "text-green-600" : "text-muted-foreground"}>
-          {status.hasReceitaWS ? "✓" : "○"} Receita Federal (API Brasil/ReceitaWS)
+          {status.hasReceitaWS ? "✓" : "○"} Dados Cadastrais Oficiais
         </p>
         <p className={status.hasDecisionMakers ? "text-green-600" : "text-muted-foreground"}>
-          {status.hasDecisionMakers ? "✓" : "○"} Decisores Apollo
+          {status.hasDecisionMakers ? "✓" : "○"} Decisores Identificados
         </p>
         <p className={status.hasDigitalPresence ? "text-green-600" : "text-muted-foreground"}>
           {status.hasDigitalPresence ? "✓" : "○"} Digital Intelligence

@@ -388,15 +388,15 @@ export default function CompaniesManagementPage() {
     try {
       setIsBatchEnrichingApollo(true);
       
-      toast.info('🚀 Iniciando enriquecimento Apollo em massa...', {
-        description: '✅ GRATUITO: Puxa TODOS os decisores (nomes, cargos, LinkedIn). Só paga ao revelar emails!'
+      toast.info('🚀 Iniciando enriquecimento em massa...', {
+        description: '✅ Sistema OLV Internacional - Identificação de decisores e informações empresariais'
       });
 
       const companiesWithDomain = companies.filter(c => c.website || c.domain);
       
       if (companiesWithDomain.length === 0) {
         toast.error('Nenhuma empresa com domínio disponível', {
-          description: 'Adicione websites às empresas antes de enriquecer com Apollo'
+          description: 'Adicione websites às empresas antes de enriquecer'
         });
         return;
       }
@@ -432,14 +432,14 @@ export default function CompaniesManagementPage() {
       }
 
       toast.success(
-        `✅ Apollo concluído! ${enriched} empresas enriquecidas, ${errors} erros.`,
-        { description: `💰 0 créditos consumidos. Clique em "Revelar Email" para usar créditos.` }
+        `✅ Enriquecimento concluído! ${enriched} empresas processadas, ${errors} erros.`,
+        { description: `Powered by OLV Internacional · Sistema de Inteligência Empresarial` }
       );
       
       refetch();
     } catch (error) {
-      console.error('Error batch enriching Apollo:', error);
-      toast.error('Erro ao executar Apollo em lote');
+      console.error('Error batch enriching:', error);
+      toast.error('Erro ao executar enriquecimento em lote');
     } finally {
       setIsBatchEnrichingApollo(false);
     }
