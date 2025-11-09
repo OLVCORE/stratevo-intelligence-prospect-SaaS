@@ -53,6 +53,8 @@ import { formatWebsiteUrl, isValidUrl, extractDomain } from '@/lib/utils/urlHelp
 import { ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
+import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
+import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
 
 
 export default function CompaniesManagementPage() {
@@ -1656,67 +1658,36 @@ export default function CompaniesManagementPage() {
                       </TableCell>
                        <TableCell>
                         {(() => {
-                          // VALIDAÇÃO RIGOROSA: Só verde se REALMENTE veio da ReceitaWS ou API Brasil
-                          const receitaData = (company as any).raw_data?.receita;
-                          const enrichedFlag = (company as any).raw_data?.enriched_receita;
-                          
-                          // Normalizar situação (ReceitaWS usa 'situacao', API Brasil usa 'situacao_cadastral' ou 'descricao_situacao_cadastral')
+                          // ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA
+                          const receitaData = (company as any).raw_data?.receita_federal || (company as any).raw_data?.receita;
                           const situacao = receitaData?.situacao || 
                                          receitaData?.descricao_situacao_cadastral || 
                                          receitaData?.situacao_cadastral;
                           
-                          // SÓ CONSIDERA ATIVO SE:
-                          // 1. Flag enriched_receita = true
-                          // 2. Objeto receita existe
-                          // 3. Situacao = ATIVA (case-insensitive)
-                          if (enrichedFlag === true && situacao?.toUpperCase().includes('ATIVA')) {
-                            return (
-                              <Badge className="gap-1 bg-lime-600 hover:bg-lime-700 text-white dark:bg-lime-500 dark:hover:bg-lime-600">
-                                <CheckCircle className="w-3 h-3" />
-                                Ativo
-                              </Badge>
-                            );
+                          // Normalizar status para o componente
+                          let cnpjStatus = 'pendente';
+                          if (situacao) {
+                            const sitUpper = situacao.toUpperCase();
+                            if (sitUpper.includes('ATIVA')) cnpjStatus = 'ativa';
+                            else if (sitUpper.includes('INAPTA') || sitUpper.includes('SUSPENSA') || sitUpper.includes('BAIXADA')) cnpjStatus = 'inativo';
+                            else if (sitUpper.includes('NULA')) cnpjStatus = 'inexistente';
                           }
                           
-                          // Se enriquecido mas situação não é ATIVA
-                          if (enrichedFlag === true && situacao) {
-                            return (
-                              <Badge variant="warning" className="gap-1 bg-red-600 text-white">
-                                <AlertTriangle className="w-3 h-3" />
-                                {situacao}
-                              </Badge>
-                            );
-                          }
-                          
-                          // Se não tem CNPJ
-                          if (!company.cnpj) {
-                            return (
-                              <Badge variant="secondary" className="gap-1 bg-gray-500/10 text-gray-600 border-gray-500/20">
-                                <Clock className="w-3 h-3" />
-                                Sem CNPJ
-                              </Badge>
-                            );
-                          }
-                          
-                          // PADRÃO: Pendente (aguardando enriquecimento)
-                          return (
-                            <Badge className="gap-1 bg-yellow-600 text-white dark:bg-yellow-500">
-                              <Clock className="w-3 h-3" />
-                              Pendente
-                            </Badge>
-                          );
+                          return <QuarantineCNPJStatusBadge cnpj={company.cnpj || undefined} cnpjStatus={cnpjStatus} />;
                         })()}
                       </TableCell>
                       <TableCell>
                         {(() => {
+                          // ✅ USAR MESMA LÓGICA DA QUARENTENA
                           const setor = company.industry || 
+                                       (company as any).raw_data?.receita_federal?.atividade_principal?.[0]?.text ||
                                        (company as any).raw_data?.receita?.atividade_principal?.[0]?.text ||
                                        (company as any).raw_data?.atividade_economica ||
                                        (company as any).raw_data?.setor_amigavel;
                           return setor ? (
                             <span className="text-xs">{setor}</span>
                           ) : (
-                            <span className="text-xs text-muted-foreground">N/A</span>
+                            <span className="text-xs text-muted-foreground">Não identificado</span>
                           );
                         })()}
                       </TableCell>
@@ -1761,7 +1732,14 @@ export default function CompaniesManagementPage() {
                           )}
                         </TableCell>
                        <TableCell>
-                          <EnrichmentStatusBadge companyId={company.id} showProgress />
+                          {/* ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA */}
+                          <QuarantineEnrichmentStatusBadge 
+                            company={{
+                              id: company.id,
+                              razao_social: company.company_name || '',
+                              raw_data: (company as any).raw_data
+                            } as any}
+                          />
                         </TableCell>
                        <TableCell>
                        <Badge variant="secondary">
