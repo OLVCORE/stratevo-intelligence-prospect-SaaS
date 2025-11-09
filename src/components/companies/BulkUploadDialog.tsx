@@ -544,10 +544,8 @@ const { data, error } = await supabase.functions.invoke('bulk-upload-companies',
       import_batch_id,
       destination: 'quarantine' // Flag para indicar que vai para quarentena
     }
-  },
-  headers: {
-    Authorization: `Bearer ${sessionData.session.access_token}` // 🔧 FORÇAR TOKEN NO HEADER
   }
+  // ❌ NÃO enviar Authorization manualmente - Supabase já envia automaticamente
 });
 
 setProgress(90); // Atualizar progresso após requisição
