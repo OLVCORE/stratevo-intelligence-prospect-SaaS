@@ -886,6 +886,60 @@ export default function CompaniesManagementPage() {
                   setIsBatchEnrichingEconodata(false);
                 }
               }}
+              onSendToQuarantine={async () => {
+                try {
+                  toast.info('🎯 Integrando TODAS as empresas ao ICP...', {
+                    description: 'Todos os dados enriquecidos serão mantidos · Powered by OLV Internacional'
+                  });
+
+                  let sent = 0;
+                  let skipped = 0;
+                  let errors = 0;
+
+                  for (const company of companies) {
+                    try {
+                      // Verifica se já existe no ICP
+                      const { data: existing } = await supabase
+                        .from('icp_analysis_results')
+                        .select('id')
+                        .eq('company_id', company.id)
+                        .single();
+
+                      if (existing) {
+                        skipped++;
+                        continue;
+                      }
+
+                      // Integra ao ICP mantendo TODOS os dados
+                      const { error } = await supabase
+                        .from('icp_analysis_results')
+                        .insert({
+                          company_id: company.id,
+                          status: 'pendente',
+                          source_type: company.source_type || 'manual',
+                          source_name: company.source_name || 'Estoque',
+                          import_batch_id: company.import_batch_id
+                        });
+
+                      if (error) throw error;
+                      sent++;
+                    } catch (e) {
+                      console.error(`Error integrating ${company.name}:`, e);
+                      errors++;
+                    }
+                  }
+
+                  toast.success(
+                    `✅ ${sent} empresas integradas ao ICP!`,
+                    { description: `${skipped} já estavam · ${errors} erros · Acesse "Leads > ICP Quarentena"` }
+                  );
+
+                  refetch();
+                } catch (error) {
+                  console.error('Error integrating to ICP:', error);
+                  toast.error('Erro ao integrar ao ICP');
+                }
+              }}
               onApolloImport={() => setIsApolloImportOpen(true)}
               onSearchCompanies={() => navigate('/search')}
               isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo || isBatchEnrichingEconodata}

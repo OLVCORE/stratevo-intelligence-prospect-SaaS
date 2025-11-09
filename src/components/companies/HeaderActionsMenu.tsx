@@ -16,7 +16,8 @@ import {
   Search,
   Database,
   Loader2,
-  MoreHorizontal
+  MoreHorizontal,
+  Target
 } from 'lucide-react';
 import { useState } from 'react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
@@ -27,6 +28,7 @@ interface HeaderActionsMenuProps {
   onBatchEnrich360: () => Promise<void>;
   onBatchEnrichApollo: () => Promise<void>;
   onBatchEnrichEconodata: () => Promise<void>;
+  onSendToQuarantine?: () => Promise<void>; // 🆕 NOVO
   onApolloImport: () => void;
   onSearchCompanies: () => void;
   isProcessing?: boolean;
@@ -38,6 +40,7 @@ export function HeaderActionsMenu({
   onBatchEnrich360,
   onBatchEnrichApollo,
   onBatchEnrichEconodata,
+  onSendToQuarantine, // 🆕 NOVO
   onApolloImport,
   onSearchCompanies,
   isProcessing = false
@@ -179,6 +182,29 @@ export function HeaderActionsMenu({
             360° Completo + IA
           </DropdownMenuItem>
         </DropdownMenuGroup>
+
+        {/* 🆕 AÇÕES DE FLUXO ICP */}
+        {onSendToQuarantine && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              Fluxo ICP
+            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={onSendToQuarantine}
+                disabled={isEnriching}
+                className="text-blue-600 font-bold hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-all duration-200 cursor-pointer hover:bg-blue-500/10 hover:shadow-md hover:border-l-4 hover:border-blue-600"
+              >
+                <Target className="h-4 w-4 mr-2" />
+                🎯 Integrar para ICP
+                <span className="ml-auto text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                  FLUXO
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
