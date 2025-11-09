@@ -120,6 +120,9 @@ verify_jwt = false
  [functions.bulk-upload-companies]
  verify_jwt = false
  
+ [functions.bulk-upload-temp]
+ verify_jwt = false
+ 
  [functions.auto-enrich-company]
  verify_jwt = false
  
