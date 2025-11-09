@@ -897,36 +897,48 @@ export default function CompaniesManagementPage() {
                   let errors = 0;
 
                   for (const company of companies) {
-                    try {
-                      // Verifica se já existe no ICP
-                      const { data: existing } = await supabase
-                        .from('icp_analysis_results')
-                        .select('id')
-                        .eq('company_id', company.id)
-                        .single();
+                      try {
+                        // Verifica se já existe no ICP
+                        const { data: existing, error: checkError } = await supabase
+                          .from('icp_analysis_results')
+                          .select('id')
+                          .eq('company_id', company.id)
+                          .maybeSingle(); // 🔧 USAR maybeSingle() ao invés de single()
 
-                      if (existing) {
-                        skipped++;
-                        continue;
+                        if (checkError) {
+                          console.error(`❌ Erro ao verificar empresa ${company.name}:`, checkError);
+                          throw checkError;
+                        }
+
+                        if (existing) {
+                          console.log(`✓ Empresa ${company.name} já está no ICP`);
+                          skipped++;
+                          continue;
+                        }
+
+                        // Integra ao ICP mantendo TODOS os dados
+                        const { error: insertError } = await supabase
+                          .from('icp_analysis_results')
+                          .insert({
+                            company_id: company.id,
+                            status: 'pendente',
+                            source_type: company.source_type || 'manual',
+                            source_name: company.source_name || 'Estoque',
+                            import_batch_id: company.import_batch_id
+                          });
+
+                        if (insertError) {
+                          console.error(`❌ Erro ao inserir ${company.name} no ICP:`, insertError);
+                          throw insertError;
+                        }
+                        
+                        console.log(`✅ ${company.name} integrada ao ICP!`);
+                        sent++;
+                      } catch (e: any) {
+                        console.error(`❌ Error integrating ${company.name} to ICP:`, e);
+                        console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
+                        errors++;
                       }
-
-                      // Integra ao ICP mantendo TODOS os dados
-                      const { error } = await supabase
-                        .from('icp_analysis_results')
-                        .insert({
-                          company_id: company.id,
-                          status: 'pendente',
-                          source_type: company.source_type || 'manual',
-                          source_name: company.source_name || 'Estoque',
-                          import_batch_id: company.import_batch_id
-                        });
-
-                      if (error) throw error;
-                      sent++;
-                    } catch (e) {
-                      console.error(`Error integrating ${company.name}:`, e);
-                      errors++;
-                    }
                   }
 
                   toast.success(
@@ -1063,11 +1075,16 @@ export default function CompaniesManagementPage() {
                     for (const company of selectedComps) {
                       try {
                         // Verifica se já existe no ICP
-                        const { data: existing } = await supabase
+                        const { data: existing, error: checkError } = await supabase
                           .from('icp_analysis_results')
                           .select('id')
                           .eq('company_id', company.id)
-                          .single();
+                          .maybeSingle(); // 🔧 USAR maybeSingle() ao invés de single()
+
+                        if (checkError) {
+                          console.error(`❌ Erro ao verificar empresa ${company.name}:`, checkError);
+                          throw checkError;
+                        }
 
                         if (existing) {
                           console.log(`✓ Empresa ${company.name} já está no ICP`);
@@ -1076,7 +1093,7 @@ export default function CompaniesManagementPage() {
                         }
 
                         // Integra ao ICP mantendo TODOS os dados enriquecidos
-                        const { error } = await supabase
+                        const { error: insertError } = await supabase
                           .from('icp_analysis_results')
                           .insert({
                             company_id: company.id,
@@ -1086,10 +1103,16 @@ export default function CompaniesManagementPage() {
                             import_batch_id: company.import_batch_id
                           });
 
-                        if (error) throw error;
+                        if (insertError) {
+                          console.error(`❌ Erro ao inserir ${company.name} no ICP:`, insertError);
+                          throw insertError;
+                        }
+                        
+                        console.log(`✅ ${company.name} integrada ao ICP!`);
                         sent++;
-                      } catch (e) {
-                        console.error(`Error integrating ${company.name} to ICP:`, e);
+                      } catch (e: any) {
+                        console.error(`❌ Error integrating ${company.name} to ICP:`, e);
+                        console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
                         errors++;
                       }
                     }
