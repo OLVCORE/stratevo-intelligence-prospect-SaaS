@@ -385,10 +385,64 @@ export default function CompaniesManagementPage() {
   const [isBatchEnrichingApollo, setIsBatchEnrichingApollo] = useState(false);
 
   const handleBatchEnrichApollo = async () => {
-    toast.error('Função batch Apollo temporariamente desabilitada', {
-      description: 'Use enriquecimento individual por empresa'
-    });
-    // TODO: Corrigir função batch enrich-apollo
+    try {
+      setIsBatchEnrichingApollo(true);
+      
+      toast.info('🚀 Iniciando enriquecimento Apollo em massa...', {
+        description: '✅ GRATUITO: Puxa TODOS os decisores (nomes, cargos, LinkedIn). Só paga ao revelar emails!'
+      });
+
+      const companiesWithDomain = companies.filter(c => c.website || c.domain);
+      
+      if (companiesWithDomain.length === 0) {
+        toast.error('Nenhuma empresa com domínio disponível', {
+          description: 'Adicione websites às empresas antes de enriquecer com Apollo'
+        });
+        return;
+      }
+
+      let enriched = 0;
+      let errors = 0;
+
+      for (const company of companiesWithDomain) {
+        try {
+          const domain = sanitizeDomain(company.website || company.domain || null);
+          if (!domain) continue;
+
+          const { error } = await supabase.functions.invoke('enrich-apollo-decisores', {
+            body: { 
+              company_id: company.id,
+              company_name: company.name,
+              domain: domain,
+              modes: ['people'] // APENAS pessoas, não consome créditos
+            }
+          });
+          
+          if (error) throw error;
+          enriched++;
+          
+          // Feedback visual a cada 5 empresas
+          if (enriched % 5 === 0) {
+            toast.info(`📊 Progresso: ${enriched}/${companiesWithDomain.length} empresas processadas`);
+          }
+        } catch (e) {
+          console.error(`Error enriching ${company.name}:`, e);
+          errors++;
+        }
+      }
+
+      toast.success(
+        `✅ Apollo concluído! ${enriched} empresas enriquecidas, ${errors} erros.`,
+        { description: `💰 0 créditos consumidos. Clique em "Revelar Email" para usar créditos.` }
+      );
+      
+      refetch();
+    } catch (error) {
+      console.error('Error batch enriching Apollo:', error);
+      toast.error('Erro ao executar Apollo em lote');
+    } finally {
+      setIsBatchEnrichingApollo(false);
+    }
   };
 
   const handleSort = (field: 'name' | 'cnpj' | 'industry' | 'created_at' | 'cnpj_status') => {
