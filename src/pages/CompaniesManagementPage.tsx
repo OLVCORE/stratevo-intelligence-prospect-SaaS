@@ -48,6 +48,7 @@ import html2canvas from 'html2canvas';
 import { CNPJDiscoveryDialog } from '@/components/companies/CNPJDiscoveryDialog';
 import { formatWebsiteUrl, isValidUrl, extractDomain } from '@/lib/utils/urlHelpers';
 import { ExternalLink as ExternalLinkIcon } from 'lucide-react';
+import { ColumnFilter } from '@/components/companies/ColumnFilter';
 
 
 export default function CompaniesManagementPage() {
@@ -59,6 +60,12 @@ export default function CompaniesManagementPage() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'cnpj' | 'industry' | 'created_at' | 'cnpj_status'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // 🔍 FILTROS POR COLUNA (tipo Excel)
+  const [filterOrigin, setFilterOrigin] = useState<string[]>([]);
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterSector, setFilterSector] = useState<string[]>([]);
+  const [filterRegion, setFilterRegion] = useState<string[]>([]);
   
   // 🔥 DEBOUNCE: Só busca após 500ms de inatividade
   useEffect(() => {
@@ -77,7 +84,41 @@ export default function CompaniesManagementPage() {
     sortOrder,
   });
   
-  const companies = companiesResult?.data || [];
+  const allCompanies = companiesResult?.data || [];
+  
+  // 🔍 APLICAR FILTROS LOCALMENTE
+  const companies = useMemo(() => {
+    let filtered = [...allCompanies];
+    
+    // Filtro por Origem
+    if (filterOrigin.length > 0) {
+      filtered = filtered.filter(c => filterOrigin.includes(c.source_name || ''));
+    }
+    
+    // Filtro por Status CNPJ
+    if (filterStatus.length > 0) {
+      filtered = filtered.filter(c => {
+        const status = (c as any).raw_data?.situacao || (c as any).cnpj_status || 'N/A';
+        return filterStatus.includes(status);
+      });
+    }
+    
+    // Filtro por Setor
+    if (filterSector.length > 0) {
+      filtered = filtered.filter(c => filterSector.includes(c.industry || 'N/A'));
+    }
+    
+    // Filtro por Região
+    if (filterRegion.length > 0) {
+      filtered = filtered.filter(c => {
+        const region = `${(c as any).raw_data?.uf || ''} ${(c as any).raw_data?.municipio || ''}`.trim();
+        return filterRegion.includes(region);
+      });
+    }
+    
+    return filtered;
+  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion]);
+  
   const totalCount = companiesResult?.count || 0;
   const totalPages = companiesResult?.totalPages || 0;
   
@@ -1291,39 +1332,44 @@ export default function CompaniesManagementPage() {
                       </Button>
                     </TableHead>
                     <TableHead>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSort('source_name')}
-                        className="h-8 flex items-center gap-1"
-                      >
-                        Origem
-                        <ArrowUpDown className="h-3 w-3" />
-                      </Button>
+                      <ColumnFilter
+                        column="source_name"
+                        title="Origem"
+                        values={allCompanies.map(c => c.source_name)}
+                        selectedValues={filterOrigin}
+                        onFilterChange={setFilterOrigin}
+                        onSort={() => handleSort('source_name')}
+                      />
                     </TableHead>
                     <TableHead>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSort('cnpj_status')}
-                        className="h-8 flex items-center gap-1"
-                      >
-                        Status CNPJ
-                        <ArrowUpDown className="h-3 w-3" />
-                      </Button>
+                      <ColumnFilter
+                        column="cnpj_status"
+                        title="Status CNPJ"
+                        values={allCompanies.map(c => (c as any).raw_data?.situacao || (c as any).cnpj_status || 'N/A')}
+                        selectedValues={filterStatus}
+                        onFilterChange={setFilterStatus}
+                        onSort={() => handleSort('cnpj_status')}
+                      />
                     </TableHead>
                     <TableHead>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSort('industry')}
-                        className="h-8 flex items-center gap-1"
-                      >
-                        Setor
-                        <ArrowUpDown className="h-3 w-3" />
-                      </Button>
+                      <ColumnFilter
+                        column="industry"
+                        title="Setor"
+                        values={allCompanies.map(c => c.industry || 'N/A')}
+                        selectedValues={filterSector}
+                        onFilterChange={setFilterSector}
+                        onSort={() => handleSort('industry')}
+                      />
                     </TableHead>
-                     <TableHead>UF/Região</TableHead>
+                     <TableHead>
+                      <ColumnFilter
+                        column="region"
+                        title="UF/Região"
+                        values={allCompanies.map(c => `${(c as any).raw_data?.uf || ''} ${(c as any).raw_data?.municipio || ''}`.trim())}
+                        selectedValues={filterRegion}
+                        onFilterChange={setFilterRegion}
+                      />
+                     </TableHead>
                      <TableHead>Score ICP</TableHead>
                      <TableHead>Status Análise</TableHead>
                      <TableHead>TOTVS Check</TableHead>
