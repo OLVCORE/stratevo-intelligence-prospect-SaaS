@@ -736,31 +736,31 @@ export default function CompanyDetailPage() {
             </Card>
           </div>
 
-          {/* Identificação Cadastral - Grid 2 Colunas */}
+          {/* Identificação Cadastral - 4 Colunas Compactas */}
           <Card className="glass-card">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Shield className="h-5 w-5 text-primary" />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Shield className="h-4 w-4 text-primary" />
                 Identificação Cadastral
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid md:grid-cols-2 gap-x-8 gap-y-4">
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">Razão Social</span>
-                  <span className="text-sm font-semibold text-right">{receitaData?.razao_social || company.name}</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Razão Social</p>
+                  <p className="text-xs font-semibold truncate">{receitaData?.razao_social || company.name}</p>
                 </div>
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">Nome Fantasia</span>
-                  <span className="text-sm font-semibold text-right">{receitaData?.fantasia || rawData.nome_fantasia || 'N/A'}</span>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Nome Fantasia</p>
+                  <p className="text-xs font-semibold">{receitaData?.fantasia || rawData.nome_fantasia || 'N/A'}</p>
                 </div>
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">Tipo Unidade</span>
-                  <span className="text-sm font-semibold text-right">{rawData.tipo_unidade || receitaData?.tipo || 'Matriz'}</span>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Tipo Unidade</p>
+                  <p className="text-xs font-semibold">{rawData.tipo_unidade || receitaData?.tipo || 'Matriz'}</p>
                 </div>
-                <div className="flex justify-between items-start border-b border-border/50 pb-2">
-                  <span className="text-sm text-muted-foreground">Natureza Jurídica</span>
-                  <span className="text-sm font-semibold text-right">{receitaData?.natureza_juridica || rawData.natureza_juridica || 'N/A'}</span>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Natureza Jurídica</p>
+                  <p className="text-xs font-semibold">{receitaData?.natureza_juridica || rawData.natureza_juridica || 'N/A'}</p>
                 </div>
               </div>
             </CardContent>
@@ -769,49 +769,49 @@ export default function CompanyDetailPage() {
           {/* Localização + Mapa - Grid 2 Colunas */}
           <div className="grid lg:grid-cols-2 gap-4">
             <Card className="glass-card">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <MapPin className="h-5 w-5 text-primary" />
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <MapPin className="h-4 w-4 text-primary" />
                   Localização Completa
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Logradouro</p>
-                    <p className="text-sm font-medium">{receitaData?.logradouro || rawData.logradouro || 'N/A'}</p>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Logradouro</p>
+                    <p className="text-xs font-medium">{receitaData?.logradouro || rawData.logradouro || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Número</p>
-                    <p className="text-sm font-medium">{receitaData?.numero || rawData.numero || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Número</p>
+                    <p className="text-xs font-medium">{receitaData?.numero || rawData.numero || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Complemento</p>
-                    <p className="text-sm font-medium">{receitaData?.complemento || rawData.complemento || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Complemento</p>
+                    <p className="text-xs font-medium">{receitaData?.complemento || rawData.complemento || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Bairro</p>
-                    <p className="text-sm font-medium">{receitaData?.bairro || rawData.bairro || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Bairro</p>
+                    <p className="text-xs font-medium">{receitaData?.bairro || rawData.bairro || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">CEP</p>
-                    <p className="text-sm font-mono font-medium">{receitaData?.cep || rawData.cep || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">CEP</p>
+                    <p className="text-xs font-mono font-medium">{receitaData?.cep || rawData.cep || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Cidade</p>
-                    <p className="text-sm font-medium">{receitaData?.municipio || rawData.cidade || (company.location as any)?.city || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Cidade</p>
+                    <p className="text-xs font-medium">{receitaData?.municipio || rawData.cidade || (company.location as any)?.city || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Estado</p>
-                    <p className="text-sm font-medium">{receitaData?.uf || rawData.uf || (company.location as any)?.state || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Estado</p>
+                    <p className="text-xs font-medium">{receitaData?.uf || rawData.uf || (company.location as any)?.state || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Microrregião</p>
-                    <p className="text-sm font-medium">{rawData.microrregiao || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Microrregião</p>
+                    <p className="text-xs font-medium">{rawData.microrregiao || 'N/A'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Mesorregião</p>
-                    <p className="text-sm font-medium">{rawData.mesorregiao || 'N/A'}</p>
+                  <div className="p-2 border rounded bg-muted/10">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Mesorregião</p>
+                    <p className="text-xs font-medium">{rawData.mesorregiao || 'N/A'}</p>
                   </div>
                 </div>
               </CardContent>
