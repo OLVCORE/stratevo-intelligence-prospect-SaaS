@@ -1128,10 +1128,15 @@ export default function CompaniesManagementPage() {
                       </TableCell>
                        <TableCell>
                         {(() => {
-                          const hasReceita = (company as any).raw_data?.enriched_receita || (company as any).raw_data?.receita;
-                          const situacao = (company as any).raw_data?.receita?.situacao || (company as any).raw_data?.situacao_cadastral;
+                          // VALIDAÇÃO RIGOROSA: Só verde se REALMENTE veio da ReceitaWS
+                          const receitaData = (company as any).raw_data?.receita;
+                          const enrichedFlag = (company as any).raw_data?.enriched_receita;
                           
-                          if (situacao === 'ATIVA') {
+                          // SÓ CONSIDERA ATIVO SE:
+                          // 1. Flag enriched_receita = true
+                          // 2. Objeto receita existe
+                          // 3. Situacao = ATIVA
+                          if (enrichedFlag === true && receitaData?.situacao === 'ATIVA') {
                             return (
                               <Badge className="gap-1 bg-lime-600 hover:bg-lime-700 text-white dark:bg-lime-500 dark:hover:bg-lime-600">
                                 <CheckCircle className="w-3 h-3" />
@@ -1140,15 +1145,17 @@ export default function CompaniesManagementPage() {
                             );
                           }
                           
-                          if (hasReceita && situacao) {
+                          // Se enriquecido mas situação não é ATIVA
+                          if (enrichedFlag === true && receitaData?.situacao) {
                             return (
                               <Badge variant="warning" className="gap-1 bg-red-600 text-white">
                                 <AlertTriangle className="w-3 h-3" />
-                                {situacao}
+                                {receitaData.situacao}
                               </Badge>
                             );
                           }
                           
+                          // Se não tem CNPJ
                           if (!company.cnpj) {
                             return (
                               <Badge variant="secondary" className="gap-1 bg-gray-500/10 text-gray-600 border-gray-500/20">
@@ -1158,6 +1165,7 @@ export default function CompaniesManagementPage() {
                             );
                           }
                           
+                          // PADRÃO: Pendente (aguardando enriquecimento)
                           return (
                             <Badge className="gap-1 bg-yellow-600 text-white dark:bg-yellow-500">
                               <Clock className="w-3 h-3" />
