@@ -50,9 +50,9 @@ serve(async (req) => {
       
       try {
         // Validação básica - pelo menos um identificador (AGORA USANDO CAMPOS NORMALIZADOS)
-        const cnpj = (row.cnpj || row.CNPJ)?.replace(/\D/g, '') || null;
-        const name = row.nome_empresa || row['nome_empresa'] || row['Nome da Empresa'] || row['Razão Social'] || row.nome_fantasia || row['nome_fantasia'];
-        const website = row.sites || row.melhor_site || row.Website;
+        const cnpj = (row.cnpj || row.CNPJ || row['CNPJ'])?.replace(/\D/g, '') || null;
+        const name = row.nome_empresa || row['nome_empresa'] || row['Nome da Empresa'] || row['Razão'] || row['Razão Social'] || row['Raz�o'] || row['Fantasia'] || row.nome_fantasia || row['nome_fantasia'];
+        const website = row.sites || row.melhor_site || row.Website || row['Site'];
         const linkedin = row.linkedin || row.LinkedIn;
         const instagram = row.instagram || row.Instagram;
         
