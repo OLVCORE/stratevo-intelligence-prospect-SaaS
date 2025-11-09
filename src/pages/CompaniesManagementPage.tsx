@@ -385,36 +385,10 @@ export default function CompaniesManagementPage() {
   const [isBatchEnrichingApollo, setIsBatchEnrichingApollo] = useState(false);
 
   const handleBatchEnrichApollo = async () => {
-    try {
-      setIsBatchEnrichingApollo(true);
-      toast.info('Iniciando atualização Apollo...', {
-        description: 'Buscando dados de decisores e contatos'
-      });
-
-      const { data, error } = await supabase.functions.invoke('enrich-apollo', {
-        body: { 
-          type: 'batch_enrich',
-          company_ids: selectedCompanies.length > 0 ? selectedCompanies : undefined
-        }
-      });
-
-      if (error) throw error;
-
-      if (data?.processed) {
-        toast.success(
-          `Atualização Apollo concluída! ${data.processed} empresas processadas, ${data.failed || 0} erros.`
-        );
-      } else {
-        toast.success('Atualização Apollo concluída!');
-      }
-
-      refetch();
-    } catch (error) {
-      console.error('Error batch enriching Apollo:', error);
-      toast.error('Erro ao executar atualização Apollo');
-    } finally {
-      setIsBatchEnrichingApollo(false);
-    }
+    toast.error('Função batch Apollo temporariamente desabilitada', {
+      description: 'Use enriquecimento individual por empresa'
+    });
+    // TODO: Corrigir função batch enrich-apollo
   };
 
   const handleSort = (field: 'name' | 'cnpj' | 'industry' | 'created_at' | 'cnpj_status') => {
