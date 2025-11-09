@@ -1225,7 +1225,7 @@ export default function ICPQuarantine() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="p-6 space-y-6">{/* ✅ SEM container - deixa scroll livre */}
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate('/central-icp')}>
