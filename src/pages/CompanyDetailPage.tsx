@@ -847,84 +847,55 @@ export default function CompanyDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Telefones Principais */}
-              <div>
-                <p className="text-sm font-semibold mb-3 text-primary">Telefones Principais</p>
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Melhor Telefone</p>
-                    <p className="text-sm font-mono font-medium">{rawData.melhor_telefone || receitaData?.telefone || 'N/A'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Segundo Melhor</p>
-                    <p className="text-sm font-mono font-medium">{rawData.segundo_melhor_telefone || 'N/A'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Assertividade</p>
-                    <p className="text-sm font-medium">{rawData.assertividade || 'N/A'}</p>
-                  </div>
+              {/* Telefones - Layout Compacto 4 Colunas */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Melhor Telefone</p>
+                  <p className="text-xs font-mono font-medium">{rawData.melhor_telefone || receitaData?.telefone || 'N/A'}</p>
                 </div>
-              </div>
-
-              <Separator />
-
-              {/* Telefones Detalhados */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Telefones Alta Assertividade</p>
-                  <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                    <p className="text-xs font-mono">{rawData.telefones_alta_assertividade || 'N/A'}</p>
-                  </ScrollArea>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Segundo Melhor</p>
+                  <p className="text-xs font-mono font-medium">{rawData.segundo_melhor_telefone || 'N/A'}</p>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Telefones Média Assertividade</p>
-                  <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                    <p className="text-xs font-mono">{rawData.telefones_media_assertividade || 'N/A'}</p>
-                  </ScrollArea>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Assertividade</p>
+                  <p className="text-xs font-medium">{rawData.assertividade || 'N/A'}</p>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Telefones Baixa Assertividade</p>
-                  <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                    <p className="text-xs font-mono">{rawData.telefones_baixa_assertividade || 'N/A'}</p>
-                  </ScrollArea>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Telefones Matriz</p>
+                  <p className="text-xs font-mono font-medium">{receitaData?.ddd_telefone_1 || receitaData?.ddd_telefone_2 || 'N/A'}</p>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Telefones Matriz</p>
-                  <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                    <p className="text-xs font-mono">{receitaData?.ddd_telefone_1 || receitaData?.ddd_telefone_2 || rawData.telefones_matriz || 'N/A'}</p>
-                  </ScrollArea>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Tel. Alta Assert.</p>
+                  <p className="text-xs font-mono">{rawData.telefones_alta_assertividade || 'N/A'}</p>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Telefones Filiais</p>
-                  <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                    <p className="text-xs font-mono">{rawData.telefones_filiais || 'N/A'}</p>
-                  </ScrollArea>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Tel. Média Assert.</p>
+                  <p className="text-xs font-mono">{rawData.telefones_media_assertividade || 'N/A'}</p>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">PAT Telefone</p>
-                  <div className="border rounded-lg p-2 bg-muted/20">
-                    <p className="text-xs font-mono">{rawData.pat_telefone || 'N/A'}</p>
-                  </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Tel. Baixa Assert.</p>
+                  <p className="text-xs font-mono">{rawData.telefones_baixa_assertividade || 'N/A'}</p>
                 </div>
-              </div>
-
-              <Separator />
-
-              {/* Celulares e Fixos */}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Melhor Celular</p>
-                  <p className="text-sm font-mono font-medium">{rawData.melhor_celular || 'N/A'}</p>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Telefones Filiais</p>
+                  <p className="text-xs font-mono">{rawData.telefones_filiais || 'N/A'}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">WhatsApp</p>
-                  <p className="text-sm font-mono font-medium">{rawData.whatsapp || digitalPresence?.whatsapp || 'N/A'}</p>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Melhor Celular</p>
+                  <p className="text-xs font-mono">{rawData.melhor_celular || 'N/A'}</p>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Celulares</p>
-                  <ScrollArea className="h-16 border rounded-lg p-2 bg-muted/20">
-                    <p className="text-xs font-mono">{rawData.celulares || 'N/A'}</p>
-                  </ScrollArea>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">WhatsApp</p>
+                  <p className="text-xs font-mono">{rawData.whatsapp || digitalPresence?.whatsapp || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">PAT Telefone</p>
+                  <p className="text-xs font-mono">{rawData.pat_telefone || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Celulares</p>
+                  <p className="text-xs font-mono">{rawData.celulares || 'N/A'}</p>
                 </div>
               </div>
 
@@ -937,46 +908,35 @@ export default function CompanyDetailPage() {
 
               <Separator />
 
-              {/* Emails */}
-              <div>
-                <p className="text-sm font-semibold mb-3 text-primary">E-mails</p>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">E-mails Departamentos</p>
-                    <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                      <p className="text-xs">{rawData.emails_validados_departamentos || 'N/A'}</p>
-                    </ScrollArea>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">E-mails Sócios</p>
-                    <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                      <p className="text-xs">{rawData.emails_validados_socios || 'N/A'}</p>
-                    </ScrollArea>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">E-mails Decisores</p>
-                    <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                      <p className="text-xs">{rawData.emails_validados_decisores || 'N/A'}</p>
-                    </ScrollArea>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">E-mails Colaboradores</p>
-                    <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                      <p className="text-xs">{rawData.emails_validados_colaboradores || 'N/A'}</p>
-                    </ScrollArea>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">E-mails Públicos</p>
-                    <ScrollArea className="h-20 border rounded-lg p-2 bg-muted/20">
-                      <p className="text-xs">{rawData.emails_publicos || 'N/A'}</p>
-                    </ScrollArea>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Email PAT</p>
-                    <p className="text-sm font-medium truncate">{rawData.email_pat || 'N/A'}</p>
-                    <p className="text-xs text-muted-foreground mt-2">Email Receita Federal</p>
-                    <p className="text-sm font-medium truncate">{rawData.email_receita_federal || receitaData?.email || 'N/A'}</p>
-                  </div>
+              {/* Emails - Layout Compacto 4 Colunas */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Departamentos</p>
+                  <p className="text-xs truncate">{rawData.emails_validados_departamentos || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Sócios</p>
+                  <p className="text-xs truncate">{rawData.emails_validados_socios || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Decisores</p>
+                  <p className="text-xs truncate">{rawData.emails_validados_decisores || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Colaboradores</p>
+                  <p className="text-xs truncate">{rawData.emails_validados_colaboradores || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Públicos</p>
+                  <p className="text-xs truncate">{rawData.emails_publicos || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Email PAT</p>
+                  <p className="text-xs truncate">{rawData.email_pat || 'N/A'}</p>
+                </div>
+                <div className="p-2 border rounded bg-muted/10">
+                  <p className="text-[10px] text-muted-foreground mb-1">Email Receita Federal</p>
+                  <p className="text-xs truncate">{rawData.email_receita_federal || receitaData?.email || 'N/A'}</p>
                 </div>
               </div>
             </CardContent>
