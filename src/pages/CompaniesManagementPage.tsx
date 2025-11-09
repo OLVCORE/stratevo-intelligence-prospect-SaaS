@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EnrichmentStatusBadge } from '@/components/companies/EnrichmentStatusBadge';
 import { SimpleTOTVSCheckDialog } from '@/components/intelligence/SimpleTOTVSCheckDialog';
 import { STCAgent } from '@/components/intelligence/STCAgent';
@@ -56,6 +57,7 @@ export default function CompaniesManagementPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50); // 🔢 Tamanho da página configurável
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'cnpj' | 'industry' | 'created_at' | 'cnpj_status'>('created_at');
@@ -66,6 +68,7 @@ export default function CompaniesManagementPage() {
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterSector, setFilterSector] = useState<string[]>([]);
   const [filterRegion, setFilterRegion] = useState<string[]>([]);
+  const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
   
   // 🔥 DEBOUNCE: Só busca após 500ms de inatividade
   useEffect(() => {
@@ -78,7 +81,7 @@ export default function CompaniesManagementPage() {
   
   const { data: companiesResult, isLoading: loading, refetch } = useCompanies({
     page,
-    pageSize: 50,
+    pageSize: pageSize === 9999 ? 9999 : pageSize, // 9999 = "Mostrar Todos"
     search: debouncedSearchTerm, // FIX: Usar debouncedSearchTerm
     sortBy,
     sortOrder,
@@ -98,26 +101,72 @@ export default function CompaniesManagementPage() {
     // Filtro por Status CNPJ
     if (filterStatus.length > 0) {
       filtered = filtered.filter(c => {
-        const status = (c as any).raw_data?.situacao || (c as any).cnpj_status || 'N/A';
+        // Buscar status da Receita Federal no raw_data
+        const receitaData = (c as any).raw_data?.receita_federal || (c as any).raw_data;
+        let status = 'PENDENTE'; // Default
+        
+        if (receitaData) {
+          // Normalizar status (API Brasil vs ReceitaWS)
+          status = receitaData.situacao || receitaData.status || 'PENDENTE';
+          
+          // Normalizar valores variados para padrão
+          if (status.toUpperCase().includes('ATIVA') || status === '02' || status === 'ATIVA') {
+            status = 'ATIVA';
+          } else if (status.toUpperCase().includes('SUSPENSA') || status === '03') {
+            status = 'SUSPENSA';
+          } else if (status.toUpperCase().includes('INAPTA') || status === '04') {
+            status = 'INAPTA';
+          } else if (status.toUpperCase().includes('BAIXADA') || status === '08') {
+            status = 'BAIXADA';
+          } else if (status.toUpperCase().includes('NULA') || status === '01') {
+            status = 'NULA';
+          }
+        }
+        
         return filterStatus.includes(status);
       });
     }
     
     // Filtro por Setor
     if (filterSector.length > 0) {
-      filtered = filtered.filter(c => filterSector.includes(c.industry || 'N/A'));
+      filtered = filtered.filter(c => {
+        const sector = c.industry || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A';
+        return filterSector.includes(sector);
+      });
     }
     
-    // Filtro por Região
+    // Filtro por UF (apenas estado, sem cidade)
     if (filterRegion.length > 0) {
       filtered = filtered.filter(c => {
-        const region = `${(c as any).raw_data?.uf || ''} ${(c as any).raw_data?.municipio || ''}`.trim();
-        return filterRegion.includes(region);
+        const uf = (c as any).raw_data?.uf || '';
+        return filterRegion.includes(uf);
+      });
+    }
+    
+    // Filtro por Status Análise (percentual de completude)
+    if (filterAnalysisStatus.length > 0) {
+      filtered = filtered.filter(c => {
+        // Calcular percentual baseado em 4 itens críticos
+        const rawData = (c as any).raw_data || {};
+        const hasReceitaWS = !!(rawData.receita_federal || rawData.cnpj);
+        const hasDecisionMakers = ((c as any).decision_makers_count || 0) > 0;
+        const hasDigitalPresence = !!(rawData.digital_intelligence);
+        const hasLegalData = !!(rawData.totvs_report);
+        
+        const checks = [hasReceitaWS, hasDecisionMakers, hasDigitalPresence, hasLegalData];
+        const percentage = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+        
+        let statusLabel = '0-25%';
+        if (percentage > 75) statusLabel = '76-100%';
+        else if (percentage > 50) statusLabel = '51-75%';
+        else if (percentage > 25) statusLabel = '26-50%';
+        
+        return filterAnalysisStatus.includes(statusLabel);
       });
     }
     
     return filtered;
-  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion]);
+  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion, filterAnalysisStatus]);
   
   const totalCount = companiesResult?.count || 0;
   const totalPages = companiesResult?.totalPages || 0;
@@ -223,7 +272,8 @@ export default function CompaniesManagementPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedCompanies.length === companies.length) {
+    // Selecionar/desmarcar apenas empresas FILTRADAS (não todas)
+    if (selectedCompanies.length === companies.length && companies.length > 0) {
       setSelectedCompanies([]);
     } else {
       setSelectedCompanies(companies.map(c => c.id));
@@ -1117,12 +1167,13 @@ export default function CompaniesManagementPage() {
         {/* Table */}
         <Card>
           <CardContent className="p-0">
-            {/* Bulk Actions Toolbar */}
+            {/* Bulk Actions Toolbar + Pagination Control */}
             {companies.length > 0 && (
-              <BulkActionsToolbar
-                selectedCount={selectedCompanies.length}
-                totalCount={companies.length}
-                onSelectAll={toggleSelectAll}
+              <div className="flex items-center justify-between p-4 border-b">
+                <BulkActionsToolbar
+                  selectedCount={selectedCompanies.length}
+                  totalCount={companies.length}
+                  onSelectAll={toggleSelectAll}
                 onClearSelection={() => setSelectedCompanies([])}
                 onBulkDelete={handleBulkDelete}
                 onBulkEnrichReceita={handleBatchEnrichReceitaWS}
@@ -1282,6 +1333,29 @@ export default function CompaniesManagementPage() {
                 onExportSelected={handleExportCSV}
                 isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo || isBatchEnrichingEconodata}
               />
+                
+                {/* 🔢 DROPDOWN DE PAGINAÇÃO */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Mostrar por página:</span>
+                  <Select
+                    value={pageSize.toString()}
+                    onValueChange={(value) => {
+                      setPageSize(Number(value));
+                      setPage(0); // Reset para primeira página
+                    }}
+                  >
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="150">150</SelectItem>
+                      <SelectItem value="9999">Mostrar Todos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             )}
 
             {companies.length === 0 ? (
@@ -1345,7 +1419,28 @@ export default function CompaniesManagementPage() {
                       <ColumnFilter
                         column="cnpj_status"
                         title="Status CNPJ"
-                        values={allCompanies.map(c => (c as any).raw_data?.situacao || (c as any).cnpj_status || 'N/A')}
+                        values={allCompanies.map(c => {
+                          const receitaData = (c as any).raw_data?.receita_federal || (c as any).raw_data;
+                          let status = 'PENDENTE';
+                          
+                          if (receitaData) {
+                            status = receitaData.situacao || receitaData.status || 'PENDENTE';
+                            
+                            if (status.toUpperCase().includes('ATIVA') || status === '02') {
+                              status = 'ATIVA';
+                            } else if (status.toUpperCase().includes('SUSPENSA') || status === '03') {
+                              status = 'SUSPENSA';
+                            } else if (status.toUpperCase().includes('INAPTA') || status === '04') {
+                              status = 'INAPTA';
+                            } else if (status.toUpperCase().includes('BAIXADA') || status === '08') {
+                              status = 'BAIXADA';
+                            } else if (status.toUpperCase().includes('NULA') || status === '01') {
+                              status = 'NULA';
+                            }
+                          }
+                          
+                          return status;
+                        })}
                         selectedValues={filterStatus}
                         onFilterChange={setFilterStatus}
                         onSort={() => handleSort('cnpj_status')}
@@ -1355,7 +1450,7 @@ export default function CompaniesManagementPage() {
                       <ColumnFilter
                         column="industry"
                         title="Setor"
-                        values={allCompanies.map(c => c.industry || 'N/A')}
+                        values={allCompanies.map(c => c.industry || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A')}
                         selectedValues={filterSector}
                         onFilterChange={setFilterSector}
                         onSort={() => handleSort('industry')}
@@ -1364,14 +1459,36 @@ export default function CompaniesManagementPage() {
                      <TableHead>
                       <ColumnFilter
                         column="region"
-                        title="UF/Região"
-                        values={allCompanies.map(c => `${(c as any).raw_data?.uf || ''} ${(c as any).raw_data?.municipio || ''}`.trim())}
+                        title="UF"
+                        values={allCompanies.map(c => (c as any).raw_data?.uf || '')}
                         selectedValues={filterRegion}
                         onFilterChange={setFilterRegion}
                       />
                      </TableHead>
                      <TableHead>Score ICP</TableHead>
-                     <TableHead>Status Análise</TableHead>
+                     <TableHead>
+                      <ColumnFilter
+                        column="analysis_status"
+                        title="Status Análise"
+                        values={allCompanies.map(c => {
+                          const rawData = (c as any).raw_data || {};
+                          const hasReceitaWS = !!(rawData.receita_federal || rawData.cnpj);
+                          const hasDecisionMakers = ((c as any).decision_makers_count || 0) > 0;
+                          const hasDigitalPresence = !!(rawData.digital_intelligence);
+                          const hasLegalData = !!(rawData.totvs_report);
+                          
+                          const checks = [hasReceitaWS, hasDecisionMakers, hasDigitalPresence, hasLegalData];
+                          const percentage = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+                          
+                          if (percentage > 75) return '76-100%';
+                          if (percentage > 50) return '51-75%';
+                          if (percentage > 25) return '26-50%';
+                          return '0-25%';
+                        })}
+                        selectedValues={filterAnalysisStatus}
+                        onFilterChange={setFilterAnalysisStatus}
+                      />
+                     </TableHead>
                      <TableHead>TOTVS Check</TableHead>
                      <TableHead>Website</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
