@@ -230,9 +230,13 @@ export function BulkActionsToolbar({
               <DropdownMenuContent align="end">
                 {onBulkSendToQuarantine && (
                   <>
-                    <DropdownMenuItem onClick={onBulkSendToQuarantine} disabled={isProcessing}>
-                      <Target className="h-4 w-4 mr-2 text-yellow-600" />
-                      Enviar para Quarentena ICP
+                    <DropdownMenuItem 
+                      onClick={onBulkSendToQuarantine} 
+                      disabled={isProcessing}
+                      className="text-blue-600 font-semibold hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      <Target className="h-4 w-4 mr-2" />
+                      🎯 Integrar para ICP
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
