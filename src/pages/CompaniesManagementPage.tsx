@@ -451,19 +451,20 @@ export default function CompaniesManagementPage() {
 
       for (const company of companiesToEnrich) {
         try {
-          // Verificar se já tem dados
-          const hasReceitaData = (company as any).raw_data?.receita_federal || (company as any).raw_data?.receita;
+          // Verificar se já tem dados (COMENTADO TEMPORARIAMENTE PARA TESTAR)
+          // const hasReceitaData = (company as any).raw_data?.receita_federal || (company as any).raw_data?.receita;
           
           console.log(`[BATCH] ${company.company_name}:`, {
-            hasReceitaData: !!hasReceitaData,
+            cnpj: company.cnpj,
             raw_data: (company as any).raw_data ? Object.keys((company as any).raw_data) : 'undefined'
           });
           
-          if (hasReceitaData) {
-            console.log(`[BATCH] ⏭️ Pulando ${company.company_name} (já tem dados)`);
-            skipped++;
-            continue;
-          }
+          // ✅ FORÇAR RE-ENRIQUECIMENTO (para testar)
+          // if (hasReceitaData) {
+          //   console.log(`[BATCH] ⏭️ Pulando ${company.company_name} (já tem dados)`);
+          //   skipped++;
+          //   continue;
+          // }
 
           // ✅ CHAMAR API DIRETAMENTE (como Quarentena)
           console.log(`[BATCH] 🔍 Enriquecendo ${company.company_name}...`);
