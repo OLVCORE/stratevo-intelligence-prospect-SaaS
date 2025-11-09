@@ -546,7 +546,8 @@ const headers = {
 
 console.log('📤 Headers que serão enviados:', Object.keys(headers));
 
-const { data, error } = await supabase.functions.invoke('bulk-upload-companies', {
+// 🧪 TESTE TEMPORÁRIO: Usar bulk-upload-temp (sem JWT) para diagnosticar
+const { data, error } = await supabase.functions.invoke('bulk-upload-temp', {
   body: { 
     companies: companiesWithMetadata,
     metadata: {
