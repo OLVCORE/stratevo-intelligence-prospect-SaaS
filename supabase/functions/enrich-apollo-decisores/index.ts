@@ -198,36 +198,66 @@ serve(async (req) => {
       d.title?.toLowerCase().includes('cio')
     );
 
-    // Atualizar empresa no banco (apenas se companyId for fornecido)
-    if (companyId) {
-      const updateData = {
-        decisores: decisores,
-        decision_makers_count: decisionMakers.length,
-        influencers_count: influencers.length,
-        apollo_enriched_at: new Date().toISOString()
-      };
+    // Salvar decisores na tabela decision_makers
+    if (companyId && decisores.length > 0) {
+      // Deletar decisores antigos do Apollo
+      await supabaseClient
+        .from('decision_makers')
+        .delete()
+        .eq('company_id', companyId)
+        .eq('source', 'apollo');
 
-      const { error: updateError } = await supabaseClient
-        .from('suggested_companies')
-        .update(updateData)
+      // Inserir novos decisores
+      const decisoresToInsert = decisores.map((d: any) => ({
+        company_id: companyId,
+        name: d.name,
+        title: d.title,
+        email: d.email,
+        phone: d.phone,
+        linkedin_url: d.linkedin_url,
+        seniority: d.seniority,
+        source: 'apollo',
+        metadata: {
+          buying_power: d.buying_power,
+          departments: d.departments,
+          city: d.city,
+          state: d.state,
+          country: d.country
+        }
+      }));
+
+      const { error: insertError } = await supabaseClient
+        .from('decision_makers')
+        .insert(decisoresToInsert);
+
+      if (insertError) {
+        console.error('[ENRICH-APOLLO] Erro ao salvar decisores:', insertError);
+        throw insertError;
+      }
+
+      // Atualizar flag na empresa
+      const { data: currentCompany } = await supabaseClient
+        .from('companies')
+        .select('raw_data')
+        .eq('id', companyId)
+        .single();
+
+      const existingRawData = currentCompany?.raw_data || {};
+
+      await supabaseClient
+        .from('companies')
+        .update({
+          raw_data: {
+            ...existingRawData,
+            enriched_apollo: true,
+            apollo_decisores_count: decisores.length
+          }
+        })
         .eq('id', companyId);
-
-      if (updateError) {
-        console.error('[ENRICH-APOLLO] Erro ao atualizar banco:', updateError);
-        throw updateError;
-      }
-
-      // Se encontrou CEO/CFO/CIO, salvar email principal
-      if (mainDecisionMaker?.email) {
-        await supabaseClient
-          .from('suggested_companies')
-          .update({ email: mainDecisionMaker.email })
-          .eq('id', companyId);
-      }
       
-      console.log('[ENRICH-APOLLO] Empresa atualizada com sucesso');
+      console.log('[ENRICH-APOLLO] ✅', decisores.length, 'decisores salvos em decision_makers');
     } else {
-      console.log('[ENRICH-APOLLO] companyId não informado — retornando apenas os decisores (sem atualizar DB)');
+      console.log('[ENRICH-APOLLO] Nenhum decisor para salvar ou companyId não informado');
     }
 
     return new Response(
