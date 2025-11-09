@@ -204,10 +204,49 @@ export default function CompaniesManagementPage() {
   // Inline website editing state
   const [editingWebsiteId, setEditingWebsiteId] = useState<string | null>(null);
   const [websiteInput, setWebsiteInput] = useState<string>('');
+  
+  // ✅ NOVO: Inline CNPJ editing state
+  const [editingCnpjId, setEditingCnpjId] = useState<string | null>(null);
+  const [cnpjInput, setCnpjInput] = useState<string>('');
 
   // CNPJ Discovery dialog state
   const [cnpjDialogOpen, setCnpjDialogOpen] = useState(false);
   const [cnpjCompany, setCnpjCompany] = useState<any | null>(null);
+
+  // ✅ FUNÇÃO PARA SALVAR CNPJ EDITADO
+  const saveCnpj = async (companyId: string, newCnpj: string) => {
+    // Validar formato CNPJ (apenas números, 14 dígitos)
+    const cleanCnpj = newCnpj.replace(/\D/g, '');
+    
+    if (cleanCnpj.length !== 14) {
+      toast.error('CNPJ inválido', { 
+        description: 'O CNPJ deve ter 14 dígitos' 
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ cnpj: cleanCnpj })
+        .eq('id', companyId);
+
+      if (error) throw error;
+
+      toast.success('✅ CNPJ atualizado!', {
+        description: 'Você pode enriquecer novamente para atualizar os dados'
+      });
+      
+      setEditingCnpjId(null);
+      setCnpjInput('');
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+    } catch (error: any) {
+      toast.error('Erro ao salvar CNPJ', { 
+        description: error.message 
+      });
+    }
+  };
 
   // Helper functions for inline website editing
   const sanitizeDomain = (value?: string | null): string | null => {
@@ -1638,10 +1677,54 @@ export default function CompaniesManagementPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {company.cnpj ? (
-                          <Badge variant="outline">{company.cnpj}</Badge>
+                        {editingCnpjId === company.id ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              value={cnpjInput}
+                              onChange={(e) => setCnpjInput(e.target.value)}
+                              placeholder="00000000000000"
+                              className="h-7 w-[140px] text-xs"
+                              maxLength={14}
+                            />
+                            <Button 
+                              size="sm" 
+                              variant="secondary" 
+                              className="h-7 px-2"
+                              onClick={() => saveCnpj(company.id, cnpjInput)}
+                            >
+                              Salvar
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-7 px-2"
+                              onClick={() => { 
+                                setEditingCnpjId(null); 
+                                setCnpjInput(''); 
+                              }}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">N/A</span>
+                          <div className="flex items-center gap-2">
+                            {company.cnpj ? (
+                              <Badge variant="outline">{company.cnpj}</Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">N/A</span>
+                            )}
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-7 px-2"
+                              onClick={() => { 
+                                setEditingCnpjId(company.id); 
+                                setCnpjInput(company.cnpj || ''); 
+                              }}
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>
