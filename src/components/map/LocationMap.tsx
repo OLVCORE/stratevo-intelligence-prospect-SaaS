@@ -81,9 +81,73 @@ export default function LocationMap({
       }
 
       const geocodeAddress = async () => {
-      const hasNumero = numero && numero.trim().length > 0;
       const hasCep = cep && cep.replace(/\D/g, '').length === 8;
+      const hasNumero = numero && numero.trim().length > 0;
       
+      setLoading(true);
+
+      // PRIORIDADE 1: CEP brasileiro (ViaCEP + Nominatim)
+      if (hasCep) {
+        const cleanCep = cep.replace(/\D/g, '');
+        console.log('📍 Buscando coordenadas por CEP:', cleanCep);
+
+        try {
+          // Tentar ViaCEP primeiro (mais preciso no Brasil)
+          const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+          const viaCepData = await viaCepResponse.json();
+
+          if (!viaCepData.erro) {
+            // ViaCEP retornou, agora buscar lat/lng no Nominatim
+            const fullAddress = `${viaCepData.logradouro || address || ''}, ${numero || ''}, ${viaCepData.bairro || ''}, ${viaCepData.localidade || municipio}, ${viaCepData.uf || estado}, Brasil`.replace(/\s+/g, ' ').trim();
+            console.log('📍 Geocodificando endereço completo:', fullAddress);
+
+            const nomResponse = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddress)}&format=json&limit=1&countrycodes=br`
+            );
+            const nomData = await nomResponse.json();
+
+            if (nomData && nomData.length > 0) {
+              const { lat, lon } = nomData[0];
+              const latNum = parseFloat(lat);
+              const lngNum = parseFloat(lon);
+
+              console.log('✅ Localização PRECISA encontrada (ViaCEP + Nominatim):', { lat: latNum, lng: lngNum });
+
+              if (!map.current) return;
+
+              map.current.setView([latNum, lngNum], hasNumero ? 18 : 16);
+
+              // Remover marcadores anteriores
+              if (marker.current) marker.current.remove();
+              if (circle.current) circle.current.remove();
+
+              if (hasNumero) {
+                // Pin preciso no número exato
+                marker.current = L.marker([latNum, lngNum]).addTo(map.current);
+              } else {
+                // Círculo na área do CEP
+                circle.current = L.circle([latNum, lngNum], {
+                  color: '#3b82f6',
+                  fillColor: '#3b82f6',
+                  fillOpacity: 0.2,
+                  radius: 100,
+                }).addTo(map.current);
+              }
+
+              if (onLocationSelect) {
+                onLocationSelect({ lat: latNum, lng: lngNum });
+              }
+
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ ViaCEP falhou, usando Nominatim direto:', error);
+        }
+      }
+
+      // FALLBACK: Nominatim direto
       let searchText = '';
       let zoomLevel = 6;
       let showAreaCircle = false;
@@ -92,14 +156,6 @@ export default function LocationMap({
         searchText = `${address}, ${numero}, ${municipio}, ${estado}, Brasil`;
         zoomLevel = 18;
         showAreaCircle = false;
-      } else if (hasCep) {
-        searchText = `${cep}, Brasil`;
-        zoomLevel = 16;
-        showAreaCircle = true;
-      } else if (address && municipio) {
-        searchText = `${address}, ${municipio}, ${estado}, Brasil`;
-        zoomLevel = 16;
-        showAreaCircle = true;
       } else if (municipio && estado) {
         searchText = `${municipio}, ${estado}, Brasil`;
         zoomLevel = 12;
@@ -109,15 +165,15 @@ export default function LocationMap({
         zoomLevel = 8;
         showAreaCircle = true;
       } else {
+        setLoading(false);
         return;
       }
 
-      setLoading(true);
-      console.log('📍 Geocodificando (Nominatim):', searchText);
+      console.log('📍 Geocodificando (Nominatim fallback):', searchText);
 
       try {
         const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchText)}&format=json&limit=1`
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchText)}&format=json&limit=1&countrycodes=br`
         );
         const data = await response.json();
 
