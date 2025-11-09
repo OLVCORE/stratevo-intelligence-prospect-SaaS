@@ -1283,12 +1283,17 @@ export default function CompaniesManagementPage() {
                           onEnrich360={() => handleEnrich(company.id)}
                           onEnrichApollo={async () => {
                             try {
+                              if (!company.name && !company.domain && !company.website) {
+                                toast.error('Apollo requer nome ou domínio da empresa');
+                                return;
+                              }
+                              
                               toast.info('Buscando decisores com Apollo...');
                               const { data, error } = await supabase.functions.invoke('enrich-apollo', {
                                 body: { 
-                                  type: 'enrich_company',
-                                  companyId: company.id,
-                                  domain: company.website || company.domain
+                                  organization_id: company.name,
+                                  company_id: company.id,
+                                  modes: ['people', 'company']
                                 }
                               });
                               if (error) throw error;
