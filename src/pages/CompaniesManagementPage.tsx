@@ -1108,15 +1108,20 @@ export default function CompaniesManagementPage() {
                       </TableCell>
                        <TableCell>
                         {(() => {
-                          // VALIDAÇÃO RIGOROSA: Só verde se REALMENTE veio da ReceitaWS
+                          // VALIDAÇÃO RIGOROSA: Só verde se REALMENTE veio da ReceitaWS ou API Brasil
                           const receitaData = (company as any).raw_data?.receita;
                           const enrichedFlag = (company as any).raw_data?.enriched_receita;
+                          
+                          // Normalizar situação (ReceitaWS usa 'situacao', API Brasil usa 'situacao_cadastral' ou 'descricao_situacao_cadastral')
+                          const situacao = receitaData?.situacao || 
+                                         receitaData?.descricao_situacao_cadastral || 
+                                         receitaData?.situacao_cadastral;
                           
                           // SÓ CONSIDERA ATIVO SE:
                           // 1. Flag enriched_receita = true
                           // 2. Objeto receita existe
-                          // 3. Situacao = ATIVA
-                          if (enrichedFlag === true && receitaData?.situacao === 'ATIVA') {
+                          // 3. Situacao = ATIVA (case-insensitive)
+                          if (enrichedFlag === true && situacao?.toUpperCase().includes('ATIVA')) {
                             return (
                               <Badge className="gap-1 bg-lime-600 hover:bg-lime-700 text-white dark:bg-lime-500 dark:hover:bg-lime-600">
                                 <CheckCircle className="w-3 h-3" />
@@ -1126,11 +1131,11 @@ export default function CompaniesManagementPage() {
                           }
                           
                           // Se enriquecido mas situação não é ATIVA
-                          if (enrichedFlag === true && receitaData?.situacao) {
+                          if (enrichedFlag === true && situacao) {
                             return (
                               <Badge variant="warning" className="gap-1 bg-red-600 text-white">
                                 <AlertTriangle className="w-3 h-3" />
-                                {receitaData.situacao}
+                                {situacao}
                               </Badge>
                             );
                           }

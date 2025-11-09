@@ -37,35 +37,95 @@ serve(async (req) => {
     // Remove formatação do CNPJ
     const cleanCNPJ = cnpj.replace(/\D/g, '')
 
-    console.log('[ReceitaWS] Buscando dados para CNPJ:', cleanCNPJ)
+    console.log('[ReceitaWS] 🔄 TRIPLE FALLBACK: API Brasil → ReceitaWS → EmpresasAqui')
 
-    // Chamar API ReceitaWS
-    const response = await fetch(`https://www.receitaws.com.br/v1/cnpj/${cleanCNPJ}`, {
-      headers: {
-        'Accept': 'application/json',
-      },
-    })
+    let data: any = null;
+    let source = '';
 
-    if (!response.ok) {
-      console.error('[ReceitaWS] Erro na API:', response.status, response.statusText)
-      throw new Error(`API ReceitaWS retornou erro: ${response.status}`)
+    // TENTATIVA 1: API BRASIL (GRATUITA, OFICIAL)
+    console.log('[ReceitaWS] 🚀 Tentativa 1: API Brasil (brasilapi.com.br)');
+    try {
+      const apiBrasilResponse = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCNPJ}`);
+      
+      if (apiBrasilResponse.ok) {
+        const apiBrasilData = await apiBrasilResponse.json();
+        
+        // Normalizar para formato ReceitaWS
+        data = {
+          cnpj: apiBrasilData.cnpj,
+          razao_social: apiBrasilData.razao_social,
+          nome_fantasia: apiBrasilData.nome_fantasia,
+          cnae_fiscal: apiBrasilData.cnae_fiscal,
+          cnae_fiscal_descricao: apiBrasilData.cnae_fiscal_descricao,
+          cnaes_secundarios: apiBrasilData.cnaes_secundarios?.map((c: any) => ({
+            codigo: c.codigo,
+            descricao: c.descricao
+          })) || [],
+          descricao_situacao_cadastral: apiBrasilData.descricao_situacao_cadastral,
+          situacao_cadastral: apiBrasilData.codigo_situacao_cadastral,
+          data_inicio_atividade: apiBrasilData.data_inicio_atividade,
+          natureza_juridica: apiBrasilData.natureza_juridica,
+          porte: apiBrasilData.porte,
+          capital_social: apiBrasilData.capital_social,
+          logradouro: apiBrasilData.logradouro,
+          numero: apiBrasilData.numero,
+          complemento: apiBrasilData.complemento,
+          bairro: apiBrasilData.bairro,
+          cep: apiBrasilData.cep,
+          municipio: apiBrasilData.municipio,
+          uf: apiBrasilData.uf,
+          ddd_telefone_1: apiBrasilData.ddd_telefone_1,
+          ddd_telefone_2: apiBrasilData.ddd_telefone_2,
+          email: apiBrasilData.email,
+          qsa: apiBrasilData.qsa
+        };
+        
+        source = 'api_brasil';
+        console.log('[ReceitaWS] ✅ API Brasil retornou dados para:', data.razao_social);
+      }
+    } catch (e) {
+      console.warn('[ReceitaWS] ⚠️ API Brasil falhou, tentando ReceitaWS...', e);
     }
 
-    const data = await response.json()
+    // TENTATIVA 2: RECEITAWS (Se API Brasil falhou)
+    if (!data) {
+      console.log('[ReceitaWS] 🚀 Tentativa 2: ReceitaWS');
+      
+      const response = await fetch(`https://www.receitaws.com.br/v1/cnpj/${cleanCNPJ}`, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
 
-    // Verificar se retornou erro
-    if (data.status === 'ERROR') {
-      console.error('[ReceitaWS] CNPJ não encontrado:', data.message)
-      return new Response(
-        JSON.stringify({ error: data.message || 'CNPJ não encontrado' }),
-        { 
-          status: 404, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+      if (!response.ok) {
+        console.error('[ReceitaWS] Erro na API:', response.status, response.statusText)
+        throw new Error(`API ReceitaWS retornou erro: ${response.status}`)
+      }
+
+      data = await response.json()
+
+      // Verificar se retornou erro
+      if (data.status === 'ERROR') {
+        console.error('[ReceitaWS] CNPJ não encontrado:', data.message)
+        return new Response(
+          JSON.stringify({ error: data.message || 'CNPJ não encontrado' }),
+          { 
+            status: 404, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
+
+      source = 'receitaws';
+      console.log('[ReceitaWS] ✅ ReceitaWS retornou dados para:', data.nome || data.razao_social)
     }
 
-    console.log('[ReceitaWS] ✅ Dados encontrados para:', data.nome)
+    // TODO: TENTATIVA 3: EMPRESASAQUI (Se ReceitaWS falhou)
+    // if (!data) { ... }
+
+    if (!data) {
+      throw new Error('Nenhuma API retornou dados para este CNPJ');
+    }
 
     // ATUALIZAR A EMPRESA NO BANCO COM NORMALIZADOR UNIVERSAL
     if (company_id) {
@@ -82,6 +142,7 @@ serve(async (req) => {
         raw_data: {
           ...existingRawData,
           enriched_receita: true,
+          receita_source: source, // api_brasil, receitaws, ou empresasaqui
           receita: data
         }
       }
