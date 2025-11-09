@@ -238,7 +238,7 @@ serve(async (req) => {
           full_name: d.name.trim(),
           position: d.title || null,
           email: d.email || null,
-          phone: d.phone || null,
+          phone: d.phone || null, // ✅ CORRETO: "phone" (não "phone_number")
           linkedin_url: d.linkedin_url || null,
           seniority_level: d.seniority || null,
           data_source: 'apollo',
