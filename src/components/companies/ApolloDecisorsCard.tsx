@@ -524,33 +524,38 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
                 ⚠️ Consumo de Créditos
               </p>
               <p className="text-xs">
-                Esta ação consumirá <strong>1 crédito Apollo</strong> se o email for revelado com sucesso.
+                Esta ação consumirá <strong>1 crédito</strong> se o email for revelado com sucesso.
               </p>
             </div>
 
             <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg space-y-2">
               <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                🔄 Triple Fallback Automático
+                🔄 Sistema de Busca em 3 Camadas
               </p>
               <ul className="text-xs space-y-1">
                 <li className="flex items-center gap-2">
                   <span className="text-blue-600">1.</span>
-                  <span><strong>Apollo Reveal API</strong> - Tenta revelar (1 crédito se sucesso)</span>
+                  <span><strong>Fonte Principal</strong> - Motor de busca empresarial (1 crédito se sucesso)</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-blue-600">2.</span>
-                  <span><strong>Hunter.io</strong> - Busca gratuita por nome + domínio</span>
+                  <span><strong>Fonte Secundária</strong> - Verificador de emails por domínio</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-blue-600">3.</span>
-                  <span><strong>PhantomBuster</strong> - Scraping LinkedIn (se necessário)</span>
+                  <span><strong>Fonte Terciária</strong> - Extração de dados profissionais</span>
                 </li>
               </ul>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              💡 Você só paga se encontrarmos o email!
-            </p>
+            <div className="p-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-xs font-semibold text-center text-blue-600 dark:text-blue-400">
+                Powered by OLV Internacional
+              </p>
+              <p className="text-xs text-center text-muted-foreground mt-1">
+                💡 Você só paga se encontrarmos o email!
+              </p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
