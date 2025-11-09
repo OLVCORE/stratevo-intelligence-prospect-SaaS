@@ -1440,9 +1440,8 @@ export default function ICPQuarantine() {
 
       {/* Table */}
       <Card>
-        <CardContent className="p-6">
-          <div className="overflow-x-auto -mx-6">{/* ✅ SCROLL COMO EM GERENCIAR EMPRESAS */}
-            <Table className="text-[10px]">{/* ✅ Fonte menor para fit 100% */}
+        <CardContent className="p-0">{/* ✅ EXATAMENTE COMO GERENCIAR EMPRESAS */}
+            <Table className="text-[10px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-[44px]">
@@ -1887,7 +1886,6 @@ export default function ICPQuarantine() {
               )}
             </TableBody>
           </Table>
-          </div>{/* ✅ FECHA overflow-x-auto */}
         </CardContent>
       </Card>
 
