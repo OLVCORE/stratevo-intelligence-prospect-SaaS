@@ -413,7 +413,14 @@ export default function ApprovedLeads() {
               <Card 
                 key={lead.id}
                 className="hover:border-primary/50 transition-all cursor-pointer"
-                onClick={() => handleCreateDeal(lead)}
+                onClick={() => {
+                  // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
+                  if (lead.company_id) {
+                    navigate(`/company/${lead.company_id}`);
+                  } else {
+                    toast.error('Empresa sem ID vinculado');
+                  }
+                }}
               >
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -452,6 +459,7 @@ export default function ApprovedLeads() {
                       <Button
                         onClick={(e) => {
                           e.stopPropagation();
+                          // 🎯 ABRIR MODAL DE DEAL (mantido)
                           handleCreateDeal(lead);
                         }}
                         className="bg-green-600 hover:bg-green-700"

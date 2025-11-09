@@ -1275,10 +1275,10 @@ export function KeywordsSEOTabEnhanced({
             </p>
             <div className="grid grid-cols-2 gap-3">
               {digitalPresence.website && (
-                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-green-300 dark:border-green-700">
-                  <Globe className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 bg-white/60 dark:bg-black/30 rounded-lg border border-green-300 dark:border-green-700">
+                  <Globe className="w-8 h-8 text-green-600 dark:text-green-400" />{/* ✅ 2x maior */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Website Oficial</p>
+                    <p className="font-bold text-green-900 dark:text-green-100 text-base mb-1">Website Oficial</p>
                     <a href={digitalPresence.website} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
                       {digitalPresence.website}
                     </a>
@@ -1286,10 +1286,10 @@ export function KeywordsSEOTabEnhanced({
                 </div>
               )}
               {digitalPresence.linkedin && (
-                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-blue-300 dark:border-blue-700">
-                  <ExternalLink className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 bg-white/60 dark:bg-black/30 rounded-lg border border-blue-300 dark:border-blue-700">
+                  <Linkedin className="w-8 h-8 text-blue-600 dark:text-blue-400" />{/* ✅ LinkedIn icon + 2x maior */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">LinkedIn</p>
+                    <p className="font-bold text-green-900 dark:text-green-100 text-base mb-1">LinkedIn</p>
                     <a href={digitalPresence.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
                       Perfil corporativo →
                     </a>

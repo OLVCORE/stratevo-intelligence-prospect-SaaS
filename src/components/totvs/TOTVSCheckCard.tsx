@@ -823,7 +823,7 @@ export default function TOTVSCheckCard({
 
       {/* 🚨 ALERT DIALOG - MUDANÇAS NÃO SALVAS */}
       <AlertDialog open={showUnsavedAlert} onOpenChange={setShowUnsavedAlert}>
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent className="max-w-2xl p-8 border-4 border-red-500/50">{/* ✅ Maior, bordas melhores */}
           <AlertDialogHeader>
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30">
@@ -837,7 +837,7 @@ export default function TOTVSCheckCard({
               <div className="text-base">
                 Você tem <strong>alterações não salvas</strong> nesta aba.
               </div>
-              <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border-2 border-red-500 dark:border-red-600">
+              <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg border-2 border-red-500 dark:border-red-600 my-4">{/* ✅ Padding e margem maiores */}
                 <div className="flex items-center gap-2 text-base font-bold text-red-800 dark:text-red-200 mb-3">
                   <AlertTriangle className="w-5 h-5 animate-pulse" />
                   🚨 ATENÇÃO: PERDA DE DADOS E CRÉDITOS!
@@ -859,7 +859,7 @@ export default function TOTVSCheckCard({
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+          <AlertDialogFooter className="flex-col sm:flex-row gap-3 pt-4">{/* ✅ Gap e padding maiores */}
             <AlertDialogCancel onClick={() => setShowUnsavedAlert(false)} className="order-3 sm:order-1">
               Cancelar
             </AlertDialogCancel>

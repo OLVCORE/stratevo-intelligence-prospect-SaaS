@@ -1422,7 +1422,7 @@ export default function ICPQuarantine() {
       <Card>
         <CardContent className="pt-6">
           <div className="overflow-x-auto w-full">
-            <Table className="text-xs">
+            <Table className="text-[10px]">{/* ✅ Fonte menor para fit 100% */}
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-[44px]">
@@ -1431,7 +1431,7 @@ export default function ICPQuarantine() {
                       onCheckedChange={handleSelectAll}
                     />
                   </TableHead>
-                  <TableHead className="min-w-[220px] max-w-[260px]">
+                  <TableHead className="min-w-[180px] max-w-[200px]">{/* ✅ Reduzido */}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1442,7 +1442,7 @@ export default function ICPQuarantine() {
                       <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'empresa' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
                     </Button>
                   </TableHead>
-                  <TableHead className="min-w-[130px]">
+                  <TableHead className="min-w-[110px]">{/* ✅ CNPJ reduzido */}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1453,7 +1453,7 @@ export default function ICPQuarantine() {
                       <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'cnpj' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
                     </Button>
                   </TableHead>
-                  <TableHead className="min-w-[150px]">
+                  <TableHead className="min-w-[120px]">{/* ✅ Origem reduzido */}
                     <ColumnFilter
                       column="source_name"
                       title="Origem"
@@ -1463,7 +1463,7 @@ export default function ICPQuarantine() {
                       onSort={() => handleSort('source_name')}
                     />
                   </TableHead>
-                  <TableHead className="min-w-[100px]">
+                  <TableHead className="min-w-[90px]">
                     <ColumnFilter
                       column="cnpj_status"
                       title="Status CNPJ"
@@ -1488,7 +1488,7 @@ export default function ICPQuarantine() {
                       onSort={() => handleSort('cnpj_status')}
                     />
                   </TableHead>
-                  <TableHead className="min-w-[100px]">
+                  <TableHead className="min-w-[80px]">
                     <ColumnFilter
                       column="setor"
                       title="Setor"
@@ -1498,28 +1498,28 @@ export default function ICPQuarantine() {
                       onSort={() => handleSort('setor')}
                     />
                   </TableHead>
-                  <TableHead className="min-w-[90px]">
-                    <ColumnFilter
-                      column="uf"
+                     <TableHead className="min-w-[60px]">
+                      <ColumnFilter
+                        column="uf"
                       title="UF"
                       values={companies.map(c => c.uf || (c as any).raw_data?.uf || '')}
                       selectedValues={filterUF}
                       onFilterChange={setFilterUF}
                       onSort={() => handleSort('uf')}
                     />
-                  </TableHead>
-                  <TableHead className="min-w-[80px]">
+                     </TableHead>
+                     <TableHead className="min-w-[70px]">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleSort('score')}
-                      className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
+                      className="h-8 flex items-center gap-1 px-1 hover:bg-primary/10 transition-colors group"
                     >
-                      <span className="font-semibold">Score ICP</span>
+                      <span className="font-semibold text-[10px]">Score</span>
                       <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'score' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
                     </Button>
                   </TableHead>
-                  <TableHead className="min-w-[90px]">
+                  <TableHead className="min-w-[80px]">
                     <ColumnFilter
                       column="analysis_status"
                       title="Status Análise"
@@ -1542,9 +1542,9 @@ export default function ICPQuarantine() {
                       onFilterChange={setFilterAnalysisStatus}
                     />
                   </TableHead>
-                  <TableHead className="min-w-[110px]"><span className="font-semibold">Website</span></TableHead>
-                  <TableHead className="min-w-[60px]"><span className="font-semibold">Agent</span></TableHead>
-                  <TableHead className="w-[50px]"><span className="font-semibold">Ações</span></TableHead>
+                  <TableHead className="min-w-[90px]"><span className="font-semibold text-[10px]">Website</span></TableHead>
+                  <TableHead className="min-w-[50px]"><span className="font-semibold text-[10px]">STC</span></TableHead>
+                  <TableHead className="w-[40px]"><span className="font-semibold text-[10px]">⚙️</span></TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
@@ -1582,12 +1582,12 @@ export default function ICPQuarantine() {
                       <div 
                         className="flex flex-col cursor-pointer hover:text-primary transition-colors max-w-[250px]"
                         onClick={() => {
+                          // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
                           if (company.company_id) {
-                            setExecutiveReportCompanyId(company.company_id);
-                            setExecutiveReportOpen(true);
+                            navigate(`/company/${company.company_id}`);
                           } else {
-                            toast.info('Empresa ainda não possui relatório completo', {
-                              description: 'Aprove a empresa primeiro para gerar o relatório executivo'
+                            toast.error('Empresa sem ID vinculado', {
+                              description: 'Não foi possível localizar o ID da empresa'
                             });
                           }
                         }}
