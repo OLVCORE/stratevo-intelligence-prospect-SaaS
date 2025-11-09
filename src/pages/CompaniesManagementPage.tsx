@@ -303,15 +303,8 @@ export default function CompaniesManagementPage() {
 
         toast.success('Dados da Receita Federal atualizados!');
         
-        // CRÍTICO: Após enriquecer Receita, recalcular Maturity e Relatório
-        toast.info('Recalculando scores...', { description: 'Aguarde' });
-        try {
-          await supabase.functions.invoke('calculate-maturity-score', { body: { companyId } });
-          await supabase.functions.invoke('generate-company-report', { body: { companyId } });
-          toast.success('Análise completa atualizada!');
-        } catch (e) {
-          console.warn('Failed to update scores', e);
-        }
+        // DESABILITADO: Edge Functions com CORS bloqueado
+        // TODO: Corrigir CORS em calculate-maturity-score e generate-company-report
         
         await refetch();
       } else {
