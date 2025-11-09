@@ -213,8 +213,8 @@ serve(async (req) => {
         first_name: person.first_name,
         last_name: person.last_name,
         title: person.title,
-        email: person.email,
-        email_status: person.email_status, // verified, guessed, unavailable
+        email: null, // ✅ NUNCA SALVAR EMAIL (economizar créditos!)
+        email_status: null, // ✅ Email só via Reveal manual
         linkedin_url: person.linkedin_url,
         phone: person.phone_numbers?.[0]?.sanitized_number || null,
         phone_numbers: person.phone_numbers || [], // TODOS os telefones

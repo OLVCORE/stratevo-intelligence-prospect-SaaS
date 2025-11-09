@@ -1353,8 +1353,8 @@ export default function CompaniesManagementPage() {
             {/* ✅ BARRA DE AÇÕES WORLD-CLASS - PADRÃO QUARENTENA */}
             {companies.length > 0 && (
               <div className="flex items-center justify-between p-4 border-b">
-                {/* LEFT: Contador */}
-                <div className="flex flex-col">
+                {/* LEFT: Contador + Estatísticas de Enriquecimento */}
+                <div className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-muted-foreground">
                     {paginatedCompanies.length} de {filteredCompanies.length} {filteredCompanies.length === 1 ? 'empresa' : 'empresas'}
                   </span>
@@ -1363,6 +1363,64 @@ export default function CompaniesManagementPage() {
                       {selectedCompanies.length} selecionada{selectedCompanies.length !== 1 ? 's' : ''}
                     </span>
                   )}
+                  
+                  {/* ✅ NOVO: Estatísticas de Enriquecimento */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(() => {
+                      const stats = filteredCompanies.reduce((acc, c) => {
+                        const rawData = (c as any).raw_data || {};
+                        if (rawData.receita_federal || rawData.receita) acc.receita++;
+                        if (rawData.apollo_organization || rawData.apollo) acc.apollo++;
+                        if (rawData.digital_intelligence || rawData.enrichment_360) acc.digital360++;
+                        if (rawData.totvs_report) acc.totvs++;
+                        return acc;
+                      }, { receita: 0, apollo: 0, digital360: 0, totvs: 0 });
+                      
+                      return (
+                        <>
+                          {stats.receita > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 border border-green-500/20">
+                              🟢 {stats.receita} Receita
+                            </span>
+                          )}
+                          {stats.apollo > 0 && (
+                            <button
+                              onClick={() => {
+                                // Filtrar para mostrar apenas empresas com Apollo
+                                const apolloFilter = filterEnrichment.includes('Apollo') ? [] : ['Apollo'];
+                                setFilterEnrichment(apolloFilter);
+                              }}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 border border-yellow-500/20 hover:bg-yellow-500/20 cursor-pointer transition-colors"
+                            >
+                              🟡 {stats.apollo} Apollo {filterEnrichment.includes('Apollo') && '✓'}
+                            </button>
+                          )}
+                          {stats.digital360 > 0 && (
+                            <button
+                              onClick={() => {
+                                const filter360 = filterEnrichment.includes('360° Digital') ? [] : ['360° Digital'];
+                                setFilterEnrichment(filter360);
+                              }}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20 hover:bg-blue-500/20 cursor-pointer transition-colors"
+                            >
+                              🔵 {stats.digital360} 360° {filterEnrichment.includes('360° Digital') && '✓'}
+                            </button>
+                          )}
+                          {stats.totvs > 0 && (
+                            <button
+                              onClick={() => {
+                                const totvsFilter = filterEnrichment.includes('TOTVS Check') ? [] : ['TOTVS Check'];
+                                setFilterEnrichment(totvsFilter);
+                              }}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 border border-purple-500/20 hover:bg-purple-500/20 cursor-pointer transition-colors"
+                            >
+                              🟣 {stats.totvs} TOTVS {filterEnrichment.includes('TOTVS Check') && '✓'}
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
 
                 {/* RIGHT: Ações */}
