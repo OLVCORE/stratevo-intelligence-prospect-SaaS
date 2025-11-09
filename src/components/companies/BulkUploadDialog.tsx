@@ -546,17 +546,24 @@ const headers = {
 
 console.log('📤 Headers que serão enviados:', Object.keys(headers));
 
+// 🔍 DEBUG: Ver o que está sendo enviado
+const bodyPayload = { 
+  companies: companiesWithMetadata,
+  metadata: {
+    source_name: sourceName.trim(),
+    campaign: sourceCampaign.trim() || null,
+    import_batch_id,
+    destination: 'quarantine'
+  }
+};
+
+console.log('📦 Body payload (primeiros 500 chars):', JSON.stringify(bodyPayload).substring(0, 500));
+console.log('📊 Número de empresas:', companiesWithMetadata.length);
+console.log('📊 Primeira empresa:', JSON.stringify(companiesWithMetadata[0]).substring(0, 200));
+
 // 🧪 TESTE TEMPORÁRIO: Usar bulk-upload-temp (sem JWT) para diagnosticar
 const { data, error } = await supabase.functions.invoke('bulk-upload-temp', {
-  body: { 
-    companies: companiesWithMetadata,
-    metadata: {
-      source_name: sourceName.trim(),
-      campaign: sourceCampaign.trim() || null,
-      import_batch_id,
-      destination: 'quarantine' // Flag para indicar que vai para quarentena
-    }
-  },
+  body: bodyPayload,
   headers // 🔧 FORÇAR ENVIO DO AUTHORIZATION HEADER
 });
 
