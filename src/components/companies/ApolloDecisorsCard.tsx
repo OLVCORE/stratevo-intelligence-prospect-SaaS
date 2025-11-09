@@ -157,16 +157,6 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
   };
 
   const handleRevealEmail = async () => {
-    // 🚨 FUNÇÃO DESABILITADA POR SEGURANÇA
-    toast.error('🔒 Função BLOQUEADA por Segurança', {
-      description: '⚠️ Revelar Email está temporariamente desabilitado. Powered by OLV Internacional.'
-    });
-    
-    setShowRevealDialog(false);
-    setSelectedDecisor(null);
-    return;
-    
-    /* CÓDIGO ORIGINAL BLOQUEADO:
     if (!selectedDecisor) return;
 
     setRevealingEmailId(selectedDecisor.id);
@@ -207,7 +197,6 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
       setRevealingEmailId(null);
       setSelectedDecisor(null);
     }
-    */
   };
 
   return (
