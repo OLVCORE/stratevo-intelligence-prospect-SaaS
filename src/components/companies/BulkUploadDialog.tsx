@@ -557,11 +557,10 @@ console.log('📦 Body payload (primeiros 500 chars):', JSON.stringify(bodyPaylo
 console.log('📊 Número de empresas:', companiesWithMetadata.length);
 console.log('📊 Primeira empresa:', JSON.stringify(companiesWithMetadata[0]).substring(0, 200));
 
-// 🧪 TESTE TEMPORÁRIO: Usar bulk-upload-temp (sem JWT) para diagnosticar
-// ✅ NÃO enviar headers customizados - deixar o Supabase Client gerenciar
-const { data, error } = await supabase.functions.invoke('bulk-upload-temp', {
+// ✅ SOLUÇÃO DEFINITIVA: Usar bulk-upload-companies (sem headers customizados)
+// Supabase Client gerencia automaticamente serialização e autorização
+const { data, error } = await supabase.functions.invoke('bulk-upload-companies', {
   body: bodyPayload
-  // ❌ headers removidos - causavam problema de serialização
 });
 
 setProgress(90); // Atualizar progresso após requisição
