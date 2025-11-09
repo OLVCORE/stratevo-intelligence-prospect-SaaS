@@ -205,25 +205,19 @@ serve(async (req) => {
         .from('decision_makers')
         .delete()
         .eq('company_id', companyId)
-        .eq('source', 'apollo');
+        .eq('data_source', 'apollo');
 
-      // Inserir novos decisores
+      // Inserir novos decisores (CAMPOS CORRETOS DO SCHEMA)
       const decisoresToInsert = decisores.map((d: any) => ({
         company_id: companyId,
-        name: d.name,
-        title: d.title,
+        full_name: d.name,
+        position: d.title,
         email: d.email,
         phone: d.phone,
         linkedin_url: d.linkedin_url,
-        seniority: d.seniority,
-        source: 'apollo',
-        metadata: {
-          buying_power: d.buying_power,
-          departments: d.departments,
-          city: d.city,
-          state: d.state,
-          country: d.country
-        }
+        seniority_level: d.seniority,
+        data_source: 'apollo',
+        department: d.departments?.[0] || null
       }));
 
       const { error: insertError } = await supabaseClient
