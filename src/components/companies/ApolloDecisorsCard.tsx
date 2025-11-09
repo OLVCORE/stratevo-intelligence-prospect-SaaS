@@ -18,7 +18,9 @@ import {
   Github,
   MapPin,
   GraduationCap,
-  Filter
+  Filter,
+  Unlock,
+  Loader2
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -28,6 +30,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 
 interface DecisorWithApollo {
@@ -77,6 +91,9 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
   const [filterSeniority, setFilterSeniority] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterLocation, setFilterLocation] = useState<string>('all');
+  const [revealingEmailId, setRevealingEmailId] = useState<string | null>(null);
+  const [showRevealDialog, setShowRevealDialog] = useState(false);
+  const [selectedDecisor, setSelectedDecisor] = useState<DecisorWithApollo | null>(null);
 
   if (!decisors || decisors.length === 0) {
     return null;
@@ -131,6 +148,54 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
       case 'verified': return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'guessed': return <AlertCircle className="h-4 w-4 text-yellow-500" />;
       default: return <Mail className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const handleRevealEmailClick = (decisor: DecisorWithApollo) => {
+    setSelectedDecisor(decisor);
+    setShowRevealDialog(true);
+  };
+
+  const handleRevealEmail = async () => {
+    if (!selectedDecisor) return;
+
+    setRevealingEmailId(selectedDecisor.id);
+    setShowRevealDialog(false);
+
+    try {
+      toast.info('🔓 Revelando email...', {
+        description: 'Triple Fallback: Apollo → Hunter.io → PhantomBuster'
+      });
+
+      const { data, error } = await supabase.functions.invoke('reveal-apollo-email', {
+        body: {
+          decisor_id: selectedDecisor.id,
+          company_domain: window.location.hostname.includes('mpacb') ? 'mpacb.com.br' : undefined
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success(`✅ Email revelado via ${data.source}!`, {
+          description: data.email
+        });
+        
+        // Recarregar página para atualizar dados
+        window.location.reload();
+      } else {
+        toast.warning('Email não disponível', {
+          description: data.message || 'Tentamos Apollo, Hunter.io e PhantomBuster'
+        });
+      }
+    } catch (e: any) {
+      console.error('[REVEAL-EMAIL] Erro:', e);
+      toast.error('Erro ao revelar email', {
+        description: e.message
+      });
+    } finally {
+      setRevealingEmailId(null);
+      setSelectedDecisor(null);
     }
   };
 
@@ -279,9 +344,25 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
                         )}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        {getEmailStatusIcon(decisor.email_status)}
-                        <span>E-mail protegido (Apollo)</span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-1">
+                          {getEmailStatusIcon(decisor.email_status)}
+                          <span className="text-xs">E-mail protegido (Apollo)</span>
+                        </div>
+                        <Button
+                          onClick={() => handleRevealEmailClick(decisor)}
+                          disabled={revealingEmailId === decisor.id}
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs gap-1.5 border-yellow-600 text-yellow-600 hover:bg-yellow-600/10"
+                        >
+                          {revealingEmailId === decisor.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Unlock className="h-3 w-3" />
+                          )}
+                          Revelar (1 crédito)
+                        </Button>
                       </div>
                     )}
 
@@ -412,5 +493,66 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
         </div>
       </CardContent>
     </Card>
+
+    {/* AlertDialog - Confirmar Revelação de Email */}
+    <AlertDialog open={showRevealDialog} onOpenChange={setShowRevealDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <Unlock className="h-5 w-5 text-yellow-600" />
+            Revelar Email do Decisor
+          </AlertDialogTitle>
+          <AlertDialogDescription className="space-y-3 pt-2">
+            <p className="text-sm">
+              Você está prestes a revelar o email de <strong>{selectedDecisor?.name}</strong>.
+            </p>
+            
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg space-y-2">
+              <p className="text-sm font-semibold text-yellow-600 dark:text-yellow-500">
+                ⚠️ Consumo de Créditos
+              </p>
+              <p className="text-xs">
+                Esta ação consumirá <strong>1 crédito Apollo</strong> se o email for revelado com sucesso.
+              </p>
+            </div>
+
+            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg space-y-2">
+              <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                🔄 Triple Fallback Automático
+              </p>
+              <ul className="text-xs space-y-1">
+                <li className="flex items-center gap-2">
+                  <span className="text-blue-600">1.</span>
+                  <span><strong>Apollo Reveal API</strong> - Tenta revelar (1 crédito se sucesso)</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-blue-600">2.</span>
+                  <span><strong>Hunter.io</strong> - Busca gratuita por nome + domínio</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-blue-600">3.</span>
+                  <span><strong>PhantomBuster</strong> - Scraping LinkedIn (se necessário)</span>
+                </li>
+              </ul>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              💡 Você só paga se encontrarmos o email!
+            </p>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleRevealEmail}
+            className="bg-yellow-600 hover:bg-yellow-700 text-white"
+          >
+            <Unlock className="h-4 w-4 mr-2" />
+            Revelar Email
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>
   );
 }
