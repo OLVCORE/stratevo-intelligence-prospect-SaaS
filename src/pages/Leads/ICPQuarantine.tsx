@@ -1285,13 +1285,19 @@ export default function ICPQuarantine() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Ações em Lote</CardTitle>
-              <CardDescription>
-                {selectedIds.length > 0 
-                  ? `${selectedIds.length} de ${filteredCompanies.length} empresas selecionadas` 
-                  : `${filteredCompanies.length} empresas na visualização · Selecione para ações em lote`}
-              </CardDescription>
+            <div className="flex items-center gap-3">
+              <div>
+                <CardTitle>Ações em Lote</CardTitle>
+                <CardDescription>
+                  {filteredCompanies.length} empresas na visualização · Selecione para ações em lote
+                </CardDescription>
+              </div>
+              {/* ✅ BADGE CONTADOR DESTACADO */}
+              {selectedIds.length > 0 && (
+                <Badge variant="default" className="text-lg px-4 py-2 bg-blue-600">
+                  {selectedIds.length} selecionada{selectedIds.length !== 1 ? 's' : ''}
+                </Badge>
+              )}
             </div>
             <div className="flex gap-2">
               <QuarantineActionsMenu
@@ -1419,9 +1425,9 @@ export default function ICPQuarantine() {
       </Card>
 
       {/* Table */}
+      <div className="overflow-x-auto w-full">{/* ✅ SCROLL NA PÁGINA, NÃO NA TABELA */}
       <Card>
         <CardContent className="pt-6">
-          <div className="overflow-x-auto w-full">
             <Table className="text-[10px]">{/* ✅ Fonte menor para fit 100% */}
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -1858,9 +1864,9 @@ export default function ICPQuarantine() {
               )}
             </TableBody>
           </Table>
-          </div>
         </CardContent>
       </Card>
+      </div>{/* ✅ FECHA overflow-x-auto */}
 
       {/* Preview Dialog */}
       <DraggableDialog
