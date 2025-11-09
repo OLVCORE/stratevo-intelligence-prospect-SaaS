@@ -52,6 +52,16 @@ export default function ICPQuarantine() {
   const [filterSector, setFilterSector] = useState<string[]>([]);
   const [filterUF, setFilterUF] = useState<string[]>([]);
   const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
+  
+  // 🔄 SINCRONIZAR: Desmarcar empresas que não estão mais visíveis após filtro
+  useEffect(() => {
+    const visibleIds = filteredCompanies.map(c => c.id);
+    const currentSelected = selectedIds.filter(id => visibleIds.includes(id));
+    
+    if (currentSelected.length !== selectedIds.length) {
+      setSelectedIds(currentSelected);
+    }
+  }, [filteredCompanies]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCompany, setPreviewCompany] = useState<any>(null);
   const [sortColumn, setSortColumn] = useState<string>('');
@@ -527,9 +537,11 @@ export default function ICPQuarantine() {
         if (!filterSector.includes(sector)) return false;
       }
       
-      // Filtro por UF
+      // Filtro por UF (apenas empresas COM UF válido)
       if (filterUF.length > 0) {
         const uf = c.uf || (c as any).raw_data?.uf || '';
+        // ❌ Se UF está vazio/N/A, não incluir quando há filtro ativo
+        if (!uf || uf === 'N/A' || uf === '') return false;
         if (!filterUF.includes(uf)) return false;
       }
       
@@ -1294,7 +1306,7 @@ export default function ICPQuarantine() {
               </div>
               {/* ✅ BADGE CONTADOR DESTACADO */}
               {selectedIds.length > 0 && (
-                <Badge variant="default" className="text-lg px-4 py-2 bg-blue-600">
+                <Badge variant="default" className="text-sm px-3 py-1 bg-blue-600">
                   {selectedIds.length} selecionada{selectedIds.length !== 1 ? 's' : ''}
                 </Badge>
               )}
@@ -1425,9 +1437,9 @@ export default function ICPQuarantine() {
       </Card>
 
       {/* Table */}
-      <div className="overflow-x-auto w-full">{/* ✅ SCROLL NA PÁGINA, NÃO NA TABELA */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="p-0 overflow-x-auto">{/* ✅ SCROLL NO CARD CONTENT */}
+          <div className="min-w-[1400px]">{/* ✅ Largura mínima para forçar scroll */}
             <Table className="text-[10px]">{/* ✅ Fonte menor para fit 100% */}
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -1475,17 +1487,26 @@ export default function ICPQuarantine() {
                       title="Status CNPJ"
                       values={companies.map(c => {
                         const rawData = (c as any).raw_data?.receita_federal || (c as any).raw_data || {};
-                        let status = 'PENDENTE';
                         
-                        if (rawData.situacao || rawData.status) {
-                          status = rawData.situacao || rawData.status;
-                          
-                          if (status.toUpperCase().includes('ATIVA') || status === '02') status = 'ATIVA';
-                          else if (status.toUpperCase().includes('SUSPENSA') || status === '03') status = 'SUSPENSA';
-                          else if (status.toUpperCase().includes('INAPTA') || status === '04') status = 'INAPTA';
-                          else if (status.toUpperCase().includes('BAIXADA') || status === '08') status = 'BAIXADA';
-                          else if (status.toUpperCase().includes('NULA') || status === '01') status = 'NULA';
+                        // ✅ Buscar status em MÚLTIPLOS CAMPOS
+                        let status = rawData.situacao || rawData.status || (c as any).cnpj_status || '';
+                        
+                        // ✅ Se tem CNPJ mas sem status = assumir ATIVA
+                        if (c.cnpj && !status) {
+                          status = 'ATIVA';
                         }
+                        
+                        if (!status) {
+                          return 'PENDENTE';
+                        }
+                        
+                        // Normalizar
+                        const statusUpper = String(status).toUpperCase();
+                        if (statusUpper.includes('ATIVA') || status === '02') return 'ATIVA';
+                        if (statusUpper.includes('SUSPENSA') || status === '03') return 'SUSPENSA';
+                        if (statusUpper.includes('INAPTA') || status === '04') return 'INAPTA';
+                        if (statusUpper.includes('BAIXADA') || status === '08') return 'BAIXADA';
+                        if (statusUpper.includes('NULA') || status === '01') return 'NULA';
                         
                         return status;
                       })}
@@ -1864,9 +1885,9 @@ export default function ICPQuarantine() {
               )}
             </TableBody>
           </Table>
+          </div>{/* ✅ FECHA min-w */}
         </CardContent>
       </Card>
-      </div>{/* ✅ FECHA overflow-x-auto */}
 
       {/* Preview Dialog */}
       <DraggableDialog

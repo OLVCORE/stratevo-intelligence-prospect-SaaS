@@ -1297,10 +1297,10 @@ export function KeywordsSEOTabEnhanced({
                 </div>
               )}
               {digitalPresence.instagram && (
-                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-pink-300 dark:border-pink-700">
-                  <TrendingUp className="w-5 h-5 text-pink-600 dark:text-pink-400 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 bg-white/60 dark:bg-black/30 rounded-lg border border-pink-300 dark:border-pink-700">
+                  <TrendingUp className="w-8 h-8 text-pink-600 dark:text-pink-400" />{/* ✅ 2x maior */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Instagram</p>
+                    <p className="font-bold text-green-900 dark:text-green-100 text-base mb-1">Instagram</p>
                     <a href={digitalPresence.instagram} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
                       Perfil oficial →
                     </a>
@@ -1308,10 +1308,10 @@ export function KeywordsSEOTabEnhanced({
                 </div>
               )}
               {digitalPresence.twitter && (
-                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-sky-300 dark:border-sky-700">
-                  <Target className="w-5 h-5 text-sky-600 dark:text-sky-400 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 bg-white/60 dark:bg-black/30 rounded-lg border border-sky-300 dark:border-sky-700">
+                  <Target className="w-8 h-8 text-sky-600 dark:text-sky-400" />{/* ✅ 2x maior */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Twitter/X</p>
+                    <p className="font-bold text-green-900 dark:text-green-100 text-base mb-1">Twitter/X</p>
                     <a href={digitalPresence.twitter} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
                       Perfil oficial →
                     </a>
@@ -1319,10 +1319,10 @@ export function KeywordsSEOTabEnhanced({
                 </div>
               )}
               {digitalPresence.facebook && (
-                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-black/30 rounded-lg border border-indigo-300 dark:border-indigo-700">
-                  <Globe className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 bg-white/60 dark:bg-black/30 rounded-lg border border-indigo-300 dark:border-indigo-700">
+                  <Globe className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />{/* ✅ Facebook 2x maior */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-green-900 dark:text-green-100 text-sm mb-1">Facebook</p>
+                    <p className="font-bold text-green-900 dark:text-green-100 text-base mb-1">Facebook</p>
                     <a href={digitalPresence.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
                       Página oficial →
                     </a>
