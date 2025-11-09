@@ -850,51 +850,51 @@ export default function CompanyDetailPage() {
               {/* Telefones - Layout Compacto 4 Colunas */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Melhor Telefone</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Melhor Telefone</p>
                   <p className="text-xs font-mono font-medium">{rawData.melhor_telefone || receitaData?.telefone || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Segundo Melhor</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Segundo Melhor</p>
                   <p className="text-xs font-mono font-medium">{rawData.segundo_melhor_telefone || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Assertividade</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Assertividade</p>
                   <p className="text-xs font-medium">{rawData.assertividade || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Telefones Matriz</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Telefones Matriz</p>
                   <p className="text-xs font-mono font-medium">{receitaData?.ddd_telefone_1 || receitaData?.ddd_telefone_2 || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Tel. Alta Assert.</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Tel. Alta Assert.</p>
                   <p className="text-xs font-mono">{rawData.telefones_alta_assertividade || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Tel. Média Assert.</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Tel. Média Assert.</p>
                   <p className="text-xs font-mono">{rawData.telefones_media_assertividade || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Tel. Baixa Assert.</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Tel. Baixa Assert.</p>
                   <p className="text-xs font-mono">{rawData.telefones_baixa_assertividade || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Telefones Filiais</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Telefones Filiais</p>
                   <p className="text-xs font-mono">{rawData.telefones_filiais || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Melhor Celular</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Melhor Celular</p>
                   <p className="text-xs font-mono">{rawData.melhor_celular || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">WhatsApp</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">WhatsApp</p>
                   <p className="text-xs font-mono">{rawData.whatsapp || digitalPresence?.whatsapp || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">PAT Telefone</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">PAT Telefone</p>
                   <p className="text-xs font-mono">{rawData.pat_telefone || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Celulares</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Celulares</p>
                   <p className="text-xs font-mono">{rawData.celulares || 'N/A'}</p>
                 </div>
               </div>
@@ -911,31 +911,31 @@ export default function CompanyDetailPage() {
               {/* Emails - Layout Compacto 4 Colunas */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Departamentos</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">E-mails Departamentos</p>
                   <p className="text-xs truncate">{rawData.emails_validados_departamentos || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Sócios</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">E-mails Sócios</p>
                   <p className="text-xs truncate">{rawData.emails_validados_socios || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Decisores</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">E-mails Decisores</p>
                   <p className="text-xs truncate">{rawData.emails_validados_decisores || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Colaboradores</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">E-mails Colaboradores</p>
                   <p className="text-xs truncate">{rawData.emails_validados_colaboradores || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">E-mails Públicos</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">E-mails Públicos</p>
                   <p className="text-xs truncate">{rawData.emails_publicos || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Email PAT</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Email PAT</p>
                   <p className="text-xs truncate">{rawData.email_pat || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Email Receita Federal</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Email Receita Federal</p>
                   <p className="text-xs truncate">{rawData.email_receita_federal || receitaData?.email || 'N/A'}</p>
                 </div>
               </div>
@@ -954,19 +954,19 @@ export default function CompanyDetailPage() {
               {/* Info Rápida - 4 Colunas Compactas */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Setor Amigável</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Setor Amigável</p>
                   <p className="text-xs font-semibold">{rawData.setor_amigavel || company.industry || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">CNAE Principal</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">CNAE Principal</p>
                   <p className="text-xs font-mono font-semibold">{receitaData?.cnae_fiscal || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Regime Tributário</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Regime Tributário</p>
                   <p className="text-xs font-semibold">{rawData.regime_tributario || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-1">Importa/Exporta</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Importa/Exporta</p>
                   <div className="flex gap-1">
                     <Badge variant={rawData.importacao ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
                       I: {rawData.importacao ? 'Sim' : 'Não'}
@@ -981,7 +981,7 @@ export default function CompanyDetailPage() {
               {/* Descrição CNAE Principal */}
               {receitaData?.cnae_fiscal_descricao && (
                 <div className="p-2 bg-muted/20 rounded border">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Atividade Principal</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Atividade Principal</p>
                   <p className="text-xs">{receitaData.cnae_fiscal_descricao}</p>
                 </div>
               )}
@@ -1003,7 +1003,7 @@ export default function CompanyDetailPage() {
               {/* NCM - Só mostra se tiver */}
               {rawData.cod_ncms_primarios && rawData.cod_ncms_primarios !== 'N/A' && (
                 <div className="p-2 bg-muted/20 rounded border">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Códigos NCM</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Códigos NCM</p>
                   <p className="text-xs font-mono">{rawData.cod_ncms_primarios}</p>
                 </div>
               )}
@@ -1022,19 +1022,19 @@ export default function CompanyDetailPage() {
               <CardContent className="space-y-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   <div className="p-2 border rounded bg-muted/10">
-                    <p className="text-[10px] text-muted-foreground mb-1">Funcionários Total</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Funcionários Total</p>
                     <p className="text-sm font-bold text-primary">{rawData.funcionarios_presumido_matriz_cnpj || company.employees || 'N/A'}</p>
                   </div>
                   <div className="p-2 border rounded bg-muted/10">
-                    <p className="text-[10px] text-muted-foreground mb-1">Este CNPJ</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Este CNPJ</p>
                     <p className="text-sm font-semibold">{rawData.funcionarios_presumido_este_cnpj || 'N/A'}</p>
                   </div>
                   <div className="p-2 border rounded bg-muted/10">
-                    <p className="text-[10px] text-muted-foreground mb-1">PAT Funcionários</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">PAT Funcionários</p>
                     <p className="text-sm font-semibold">{rawData.pat_funcionarios || 'N/A'}</p>
                   </div>
                   <div className="p-2 border rounded bg-muted/10">
-                    <p className="text-[10px] text-muted-foreground mb-1">Qtd. Filiais</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Qtd. Filiais</p>
                     <p className="text-sm font-semibold">{rawData.qtd_filiais || '0'}</p>
                   </div>
                 </div>
@@ -1087,15 +1087,15 @@ export default function CompanyDetailPage() {
                   </p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Porte</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Porte</p>
                   <p className="text-sm font-semibold">{rawData.enquadramento_porte || receitaData?.porte || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Faturamento Matriz+CNPJ</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Faturamento Matriz+CNPJ</p>
                   <p className="text-xs font-semibold">{rawData.faturamento_presumido_matriz_cnpj || 'N/A'}</p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Faturamento Este CNPJ</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Faturamento Este CNPJ</p>
                   <p className="text-xs font-semibold">{rawData.faturamento_presumido_este_cnpj || 'N/A'}</p>
                 </div>
               </div>
@@ -1108,35 +1108,35 @@ export default function CompanyDetailPage() {
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   <div className="p-2 bg-destructive/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">% Dív. CNPJ/Fat.</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">% Dív. CNPJ/Fat.</p>
                     <p className="text-xs font-semibold">{rawData.perc_dividas_cnpj_sobre_faturamento || 'N/A'}</p>
                   </div>
                   <div className="p-2 bg-destructive/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">% Dív. CNPJ+Sócios/Fat.</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">% Dív. CNPJ+Sócios/Fat.</p>
                     <p className="text-xs font-semibold">{rawData.perc_dividas_cnpj_socios_sobre_faturamento || 'N/A'}</p>
                   </div>
                   <div className="p-2 bg-destructive/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">Total Dív. CNPJ c/ União</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">Total Dív. CNPJ c/ União</p>
                     <p className="text-xs font-semibold text-destructive">{rawData.total_dividas_cnpj_uniao || 'N/A'}</p>
                   </div>
                   <div className="p-2 bg-destructive/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">Total Dív. CNPJ+Sócios</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">Total Dív. CNPJ+Sócios</p>
                     <p className="text-xs font-semibold text-destructive">{rawData.total_dividas_cnpj_socios_uniao || 'N/A'}</p>
                   </div>
                   <div className="p-2 bg-muted/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">Dív. Gerais CNPJ</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">Dív. Gerais CNPJ</p>
                     <p className="text-xs">{rawData.dividas_gerais_cnpj_uniao || 'N/A'}</p>
                   </div>
                   <div className="p-2 bg-muted/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">Dív. Gerais CNPJ+Sócios</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">Dív. Gerais CNPJ+Sócios</p>
                     <p className="text-xs">{rawData.dividas_gerais_cnpj_socios_uniao || 'N/A'}</p>
                   </div>
                   <div className="p-2 bg-muted/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">FGTS CNPJ</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">FGTS CNPJ</p>
                     <p className="text-xs">{rawData.dividas_cnpj_fgts || 'N/A'}</p>
                   </div>
                   <div className="p-2 bg-muted/10 rounded border">
-                    <p className="text-[10px] text-muted-foreground">FGTS CNPJ+Sócios</p>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">FGTS CNPJ+Sócios</p>
                     <p className="text-xs">{rawData.dividas_cnpj_socios_fgts || 'N/A'}</p>
                   </div>
                 </div>
