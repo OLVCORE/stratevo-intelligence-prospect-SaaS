@@ -1389,21 +1389,21 @@ export function DecisorsContactsTab({
                           </Button>
                         )}
                         
-                        {/* 💎 BOTÃO LUSHA (Para TODOS, não só C-Level) */}
+                        {/* 📱 BOTÃO LUSHA - CONTATOS PESSOAIS (Para TODOS) */}
                         {!decisor.email && (
                           <div className="mt-1">
                             <Button 
                               size="sm" 
                               variant="ghost" 
-                              className="h-6 text-[9px] text-amber-600 hover:text-amber-500 disabled:opacity-50"
+                              className="h-6 text-[9px] text-purple-500 hover:text-purple-400 disabled:opacity-50"
                               onClick={() => handleRevealPersonalContact(decisor)}
                               disabled={revealingContacts.has(decisor.id)}
-                              title="Revelar mobile pessoal via Lusha (se disponível)"
+                              title="📱 Revelar contatos PESSOAIS via Lusha: Mobile + Email pessoal"
                             >
                               {revealingContacts.has(decisor.id) ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                               ) : (
-                                '💎 Mobile (~3💰)'
+                                '📱 Pessoal (~3💰)'
                               )}
                             </Button>
                           </div>
