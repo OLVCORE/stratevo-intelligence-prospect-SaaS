@@ -66,34 +66,64 @@ export function DecisorsContactsTab({
       if (existingDecisors && existingDecisors.length > 0) {
         console.log('[DECISORES-TAB] ✅ Encontrados', existingDecisors.length, 'decisores já salvos');
         
-        // Classificar corretamente buying_power baseado no cargo
+        // 🎯 CLASSIFICAÇÃO CORRETA: Prioriza SENIORITY do Apollo
         const classifyBuyingPower = (title: string, seniority: string) => {
           const titleLower = (title || '').toLowerCase();
           const seniorityLower = (seniority || '').toLowerCase();
           
-          // Decision Makers: C-level, Diretores, VP, Sócios
+          // 🔴 DECISION MAKERS (C-level, Diretores, VP, Sócios)
           if (
-            titleLower.includes('ceo') || titleLower.includes('presidente') ||
-            titleLower.includes('diretor') || titleLower.includes('director') ||
-            titleLower.includes('cfo') || titleLower.includes('cto') || titleLower.includes('cio') ||
-            titleLower.includes('vp') || titleLower.includes('vice') ||
-            titleLower.includes('sócio') || titleLower.includes('owner') ||
-            seniorityLower.includes('c_suite') || seniorityLower.includes('vp')
+            // Seniority Apollo (mais confiável)
+            seniorityLower.includes('c_suite') || 
+            seniorityLower.includes('c-suite') ||
+            seniorityLower.includes('vp') || 
+            seniorityLower.includes('founder') ||
+            seniorityLower.includes('owner') ||
+            seniorityLower.includes('partner') ||
+            seniorityLower.includes('director') ||
+            // Cargo exato
+            titleLower.includes('ceo') || 
+            titleLower.includes('cfo') || 
+            titleLower.includes('cto') || 
+            titleLower.includes('cio') || 
+            titleLower.includes('cmo') ||
+            titleLower.includes('presidente') ||
+            titleLower.includes('diretor geral') ||
+            titleLower.includes('diretor executivo') ||
+            titleLower.includes('diretor financeiro') ||
+            titleLower.includes('diretor comercial') ||
+            titleLower.includes('diretor de ti') ||
+            titleLower.includes('diretor de tecnologia') ||
+            titleLower.includes('vice-presidente') ||
+            titleLower.includes('vice presidente') ||
+            titleLower.includes('sócio') ||
+            titleLower.includes('partner') ||
+            titleLower.includes('fundador') ||
+            titleLower.includes('proprietário')
           ) {
             return 'decision-maker';
           }
           
-          // Influencers: Gerentes, Coordenadores, Supervisores
+          // 🟡 INFLUENCERS (Gerentes, Coordenadores, Supervisores, Heads)
           if (
-            titleLower.includes('gerente') || titleLower.includes('manager') ||
-            titleLower.includes('coordenador') || titleLower.includes('coordinator') ||
-            titleLower.includes('supervisor') || titleLower.includes('head') ||
-            seniorityLower.includes('manager')
+            // Seniority Apollo
+            seniorityLower.includes('manager') ||
+            seniorityLower.includes('senior') ||
+            // Cargo
+            titleLower.includes('gerente') || 
+            titleLower.includes('manager') ||
+            titleLower.includes('coordenador') || 
+            titleLower.includes('coordinator') ||
+            titleLower.includes('supervisor') || 
+            titleLower.includes('head of') ||
+            titleLower.includes('líder') ||
+            titleLower.includes('leader')
           ) {
             return 'influencer';
           }
           
-          // Usuários: Analistas, Assistentes, Técnicos
+          // 🔵 USUÁRIOS (Analistas, Assistentes, Técnicos, Inspetores, Auxiliares)
+          // Tudo que não é Decision Maker nem Influencer
           return 'user';
         };
         
