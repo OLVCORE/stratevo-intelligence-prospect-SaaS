@@ -41,7 +41,8 @@ export function DecisorsContactsTab({
     decisors: [],
     decisorsWithEmails: [],
     insights: [],
-    companyData: null
+    companyData: null,
+    companyApolloOrg: null // 🏢 Apollo Organization data
   });
   const [customLinkedInUrl, setCustomLinkedInUrl] = useState(linkedinUrl || '');
   const [customApolloUrl, setCustomApolloUrl] = useState('');
@@ -334,7 +335,7 @@ export function DecisorsContactsTab({
           };
         });
         
-        setAnalysisData({
+        const newAnalysisData = {
           decisors: formattedDecisors,
           decisorsWithEmails: formattedDecisors, // 🔥 SEMPRE mostrar todos (mesmo sem email)
           insights: [`${existingDecisors.length} decisores já identificados por enrichment anterior`],
@@ -355,7 +356,10 @@ export function DecisorsContactsTab({
             employees: 0,
             recentPosts: []
           }
-        });
+        };
+        
+        console.log('[DECISORES-TAB] 🔥 SETANDO analysisData com companyApolloOrg:', newAnalysisData.companyApolloOrg);
+        setAnalysisData(newAnalysisData);
         
         sonnerToast.success(`✅ ${existingDecisors.length} decisores carregados!`);
       }
