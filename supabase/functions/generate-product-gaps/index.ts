@@ -35,6 +35,36 @@ interface ProductGapRequest {
     hasSocialMedia: boolean;
     technologies: string[];
     websiteTraffic?: number;
+    allUrls?: string[]; // 🔥 TODAS AS URLs descobertas (50+)
+    socialNetworks?: {
+      linkedin?: string;
+      facebook?: string;
+      instagram?: string;
+      twitter?: string;
+      youtube?: string;
+    };
+    websiteContent?: string;
+    // 🔥 ANÁLISE PROFUNDA (de analyze-urls-deep)
+    deepAnalysis?: {
+      company_moment: string;
+      digital_maturity: string;
+      key_insights: string[];
+      recent_activities: string[];
+      buying_signals: string[];
+      red_flags: string[];
+      green_flags: string[];
+      recommended_approach: string;
+      best_timing: string;
+    };
+    signalsSummary?: {
+      productLaunches: number;
+      expansions: number;
+      hiring: number;
+      partnerships: number;
+      awards: number;
+      events: number;
+      international: number;
+    };
   };
   analysis360Data?: {
     revenue: number;
@@ -290,6 +320,26 @@ ANÁLISE CONTEXTUAL COMPLETA (TODAS AS ABAS):
    Website: ${digitalData?.hasWebsite ? 'SIM' : 'NÃO'}
    Tecnologias: ${digitalData?.technologies?.join(', ') || 'N/A'}
    Insight: ${isDigitalMature ? '✅ Madura digitalmente' : '⚠️ Baixa maturidade'}
+
+🔍 3.1. ANÁLISE PROFUNDA DE URLs (${digitalData?.signalsSummary ? digitalData.allUrls?.length || 0 : 0} URLs analisadas):
+   ${digitalData?.signalsSummary ? `
+   Lançamentos de Produtos: ${digitalData.signalsSummary.productLaunches}
+   Expansões: ${digitalData.signalsSummary.expansions}
+   Contratações: ${digitalData.signalsSummary.hiring}
+   Parcerias: ${digitalData.signalsSummary.partnerships}
+   Prêmios/Certificações: ${digitalData.signalsSummary.awards}
+   Eventos/Feiras: ${digitalData.signalsSummary.events}
+   Atividade Internacional: ${digitalData.signalsSummary.international}
+   
+   🧠 INSIGHTS PROFUNDOS:
+   ${digitalData.deepAnalysis?.key_insights?.join('\n   ') || 'N/A'}
+   
+   🎯 ATIVIDADES RECENTES:
+   ${digitalData.deepAnalysis?.recent_activities?.join('\n   ') || 'N/A'}
+   
+   🔥 SINAIS DE COMPRA:
+   ${digitalData.deepAnalysis?.buying_signals?.join('\n   ') || 'N/A'}
+   ` : 'Análise profunda não disponível (será executada em background)'}
 
 💰 4. SAÚDE FINANCEIRA:
    Receita: R$ ${(analysis360Data?.revenue || 0) / 1000}K/ano

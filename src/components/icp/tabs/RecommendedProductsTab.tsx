@@ -106,13 +106,67 @@ export function RecommendedProductsTab({
     healthScore: companyData.raw_data.enriched_360.healthScore || 'unknown'
   } : undefined;
 
-  // Extrair dados digitais
+  // 🌐 BUSCAR ANÁLISE PROFUNDA DE URLs (50+) E REDES SOCIAIS
+  const { data: urlsDeepAnalysis } = useQuery({
+    queryKey: ['urls-deep-analysis', companyId],
+    queryFn: async () => {
+      if (!companyId || !companyData) return null;
+      
+      // Extrair TODAS URLs da aba Digital (campo raw_data)
+      const allUrls = companyData.raw_data?.discovered_urls || [];
+      
+      // Extrair redes sociais
+      const socialNetworks = {
+        linkedin: companyData.raw_data?.linkedin_url || companyData.linkedin_url,
+        facebook: companyData.raw_data?.facebook,
+        instagram: companyData.raw_data?.instagram,
+        twitter: companyData.raw_data?.twitter,
+        youtube: companyData.raw_data?.youtube
+      };
+      
+      console.log('[PRODUCTS-TAB] 🔍 Solicitando análise profunda de', allUrls.length, 'URLs');
+      
+      // Chamar Edge Function de análise profunda
+      const { data, error } = await supabase.functions.invoke('analyze-urls-deep', {
+        body: {
+          companyName: companyName,
+          urls: allUrls,
+          socialNetworks
+        }
+      });
+      
+      if (error) {
+        console.error('[PRODUCTS-TAB] Erro na análise profunda:', error);
+        return null;
+      }
+      
+      console.log('[PRODUCTS-TAB] ✅ Análise profunda completa:', data);
+      return data;
+    },
+    enabled: !!companyId && !!companyData,
+    staleTime: 1000 * 60 * 30 // 30 min (análise cara, cachear bem)
+  });
+
+  // Extrair dados digitais (EXPANDIDO com análise profunda)
   const digitalContext = {
     maturityScore: companyData?.raw_data?.digital_maturity_score || 0,
     hasWebsite: !!companyData?.website,
     hasSocialMedia: !!(companyData?.raw_data?.social_media),
     technologies: companyData?.raw_data?.technologies || [],
-    websiteTraffic: companyData?.raw_data?.website_traffic
+    websiteTraffic: companyData?.raw_data?.website_traffic,
+    // 🔥 NOVO: Análise profunda de URLs
+    allUrls: companyData?.raw_data?.discovered_urls || [],
+    socialNetworks: {
+      linkedin: companyData?.raw_data?.linkedin_url || companyData?.linkedin_url,
+      facebook: companyData?.raw_data?.facebook,
+      instagram: companyData?.raw_data?.instagram,
+      twitter: companyData?.raw_data?.twitter,
+      youtube: companyData?.raw_data?.youtube
+    },
+    // 🔥 NOVO: Insights da análise profunda
+    deepAnalysis: urlsDeepAnalysis?.deep_analysis,
+    signalsSummary: urlsDeepAnalysis?.signals_summary,
+    relevantUrls: urlsDeepAnalysis?.relevant_urls
   };
 
   // 📊 EXTRAIR DADOS (priorizar companyData, fallback props)
