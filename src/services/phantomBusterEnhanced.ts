@@ -255,14 +255,15 @@ export async function findDecisorsEmails(
 export async function performFullLinkedInAnalysis(
   companyName: string,
   linkedinCompanyUrl?: string,
-  companyDomain?: string
+  companyDomain?: string,
+  companyId?: string // 🔥 NOVO: company_id para salvar no banco
 ): Promise<{
   companyData: LinkedInCompanyEnhanced | null;
   decisors: any[];
   decisorsWithEmails: any[];
   insights: string[];
 }> {
-  console.log('[Apollo+Phantom] 🔥 Extração híbrida:', companyName);
+  console.log('[Apollo+Phantom] 🔥 Extração híbrida:', companyName, '| companyId:', companyId);
 
   const insights: string[] = [];
   
@@ -270,9 +271,9 @@ export async function performFullLinkedInAnalysis(
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
   const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
   
-  console.log('[Apollo+Phantom] 🚀 Chamando Apollo backend...');
+  console.log('[Apollo+Phantom] 🚀 Chamando Apollo backend (enrich-apollo-public)...');
   
-  const apolloRes = await fetch(`${SUPABASE_URL}/functions/v1/enrich-apollo-decisores`, {
+  const apolloRes = await fetch(`${SUPABASE_URL}/functions/v1/enrich-apollo-public`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -280,8 +281,10 @@ export async function performFullLinkedInAnalysis(
       'apikey': SUPABASE_ANON_KEY
     },
     body: JSON.stringify({
-      companyName,
+      company_id: companyId, // 🔥 CRITICAL: passar company_id para salvar no banco!
+      company_name: companyName,
       domain: companyDomain,
+      modes: ['people', 'company'], // 🏢 BUSCAR dados de PEOPLE + ORGANIZATION
       positions: ['CEO','CFO','CIO','CTO','COO','Diretor','Gerente','VP','Head','Presidente','Sócio','Coordenador']
     })
   });

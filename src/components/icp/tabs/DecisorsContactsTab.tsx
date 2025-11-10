@@ -576,7 +576,7 @@ export function DecisorsContactsTab({
       if (!enrichmentData && linkedinUrl) {
         try {
           sonnerToast.loading('🔍 Buscando em PhantomBuster (LinkedIn)...');
-          const phantomData = await performFullLinkedInAnalysis(companyName, linkedinUrl, domain);
+          const phantomData = await performFullLinkedInAnalysis(companyName, linkedinUrl, domain, companyId);
           enrichmentData = phantomData;
           source = 'PhantomBuster';
           sonnerToast.success(`✅ Dados encontrados em ${source}`);
@@ -678,7 +678,7 @@ export function DecisorsContactsTab({
       const linkedinToUse = customLinkedInUrl || linkedinUrl;
       const domainToUse = domain;
       
-      return await performFullLinkedInAnalysis(companyName, linkedinToUse, domainToUse);
+      return await performFullLinkedInAnalysis(companyName, linkedinToUse, domainToUse, companyId);
     },
     onMutate: () => {
       toast({
