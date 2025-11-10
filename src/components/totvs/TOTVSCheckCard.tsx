@@ -34,7 +34,7 @@ import { registerTab as registerTabInGlobal, unregisterTab as unregisterTabInGlo
 import { saveAllTabs, hasNonCompleted, getStatuses, getStatusCounts } from '@/components/icp/tabs/tabsRegistry';
 import { createSnapshotFromFullReport, loadSnapshot, isReportClosed, generatePdfFromSnapshot, type Snapshot } from '@/components/icp/tabs/snapshotReport';
 import { ReportHistoryModal } from '@/components/icp/ReportHistoryModal';
-// SaveBar removido - botões movidos para header
+import { SaveBar } from './SaveBar';
 import { toast } from 'sonner';
 import { isDiagEnabled, dlog, dgroup, dgroupEnd, dtable } from '@/lib/diag';
 import {
@@ -1513,6 +1513,16 @@ export default function TOTVSCheckCard({
           </UniversalTabWrapper>
         </TabsContent>
       </Tabs>
+
+      {/* 💾 SAVEBAR - HEADER COMPACTO NO TOPO */}
+      <SaveBar
+        companyId={companyId}
+        companyName={companyName || 'Empresa'}
+        stcHistoryId={stcHistoryId}
+        onSave={handleGlobalSave}
+        onShowHistory={() => setShowHistoryModal(true)}
+        tabsStatus={getStatuses()}
+      />
 
       {/* 🔗 REGISTRY: Diálogo de confirmação ao detectar rascunhos */}
       <AlertDialog open={showCloseConfirmDialog} onOpenChange={setShowCloseConfirmDialog}>
