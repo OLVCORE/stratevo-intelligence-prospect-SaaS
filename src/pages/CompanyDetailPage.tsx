@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { consultarReceitaFederal } from "@/services/receitaFederal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -98,13 +99,31 @@ export default function CompanyDetailPage() {
       if (!base) return null;
 
       // AUTO-ENRIQUECIMENTO: Se não tem dados da Receita Federal, buscar agora
-      if (base.cnpj && !base.raw_data?.receita && !base.raw_data?.enriched_receita) {
+      if (base.cnpj && !base.raw_data?.receita_federal && !base.raw_data?.receita) {
         console.log('🚀 [Auto-Enrich] Buscando dados da Receita Federal para:', base.cnpj);
         
         try {
-          await supabase.functions.invoke('enrich-receitaws', {
-            body: { cnpj: base.cnpj, company_id: id }
-          });
+          // ✅ USAR MESMA FUNÇÃO DO ENRICHMENT EM MASSA (consultarReceitaFederal DIRETO)
+          const result = await consultarReceitaFederal(base.cnpj);
+          
+          if (result.success && result.data) {
+            // Atualizar dados no banco
+            const rawData = (base.raw_data && typeof base.raw_data === 'object' && !Array.isArray(base.raw_data)) 
+              ? base.raw_data as Record<string, any>
+              : {};
+            
+            await supabase
+              .from('companies')
+              .update({
+                industry: result.data.atividade_principal?.[0]?.text || base.industry,
+                raw_data: {
+                  ...rawData,
+                  receita_federal: result.data,
+                  receita_source: result.source,
+                },
+              })
+              .eq('id', id!);
+          }
           
           // Recarregar dados após enriquecimento
           const { data: updated } = await supabase
@@ -162,9 +181,27 @@ export default function CompanyDetailPage() {
     try {
       toast.info('Executando atualização inteligente...');
       
-      await supabase.functions.invoke('enrich-receitaws', {
-        body: { cnpj: company.cnpj, company_id: id }
-      });
+      // ✅ UNIFICADO: Usar consultarReceitaFederal direto (mesmo do EM MASSA)
+      if (company.cnpj) {
+        const receitaResult = await consultarReceitaFederal(company.cnpj);
+        if (receitaResult.success && receitaResult.data) {
+          const rawData = (company.raw_data && typeof company.raw_data === 'object') 
+            ? company.raw_data as Record<string, any> 
+            : {};
+          
+          await supabase
+            .from('companies')
+            .update({
+              industry: receitaResult.data.atividade_principal?.[0]?.text || company.industry,
+              raw_data: {
+                ...rawData,
+                receita_federal: receitaResult.data,
+                receita_source: receitaResult.source,
+              },
+            })
+            .eq('id', id!);
+        }
+      }
 
       await supabase.functions.invoke('enrich-company-360', {
         body: { company_id: id }
@@ -351,7 +388,8 @@ export default function CompanyDetailPage() {
     }
   };
 
-  const receitaData = (company as any)?.raw_data?.receita;
+  // ✅ UNIFICADO: Buscar receita_federal (padrão atual) OU receita (legado)
+  const receitaData = (company as any)?.raw_data?.receita_federal || (company as any)?.raw_data?.receita;
   const decisors = (company as any)?.decision_makers || [];
   
   console.log('[CompanyDetail] 📊 Decisores carregados:', decisors.length);
