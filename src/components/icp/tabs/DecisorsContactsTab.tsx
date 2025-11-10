@@ -59,11 +59,35 @@ export function DecisorsContactsTab({
       if (existingDecisors && existingDecisors.length > 0) {
         console.log('[DECISORES-TAB] ✅ Encontrados', existingDecisors.length, 'decisores já salvos');
         
+        // Formatar decisores para match com estrutura esperada
+        const formattedDecisors = existingDecisors.map(d => ({
+          name: d.name,
+          title: d.position || d.title,
+          position: d.position,
+          email: d.email,
+          email_status: d.email_status,
+          phone: d.phone,
+          linkedin_url: d.linkedin_url,
+          department: d.department,
+          seniority_level: d.seniority_level,
+          buying_power: d.buying_power || 'decision-maker',
+          city: d.city,
+          state: d.state,
+          country: d.country || 'Brazil',
+          photo_url: d.photo_url,
+          enriched_with: 'database'
+        }));
+        
         setAnalysisData({
-          decisors: existingDecisors,
-          decisorsWithEmails: existingDecisors.filter(d => d.email),
+          decisors: formattedDecisors,
+          decisorsWithEmails: formattedDecisors, // 🔥 SEMPRE mostrar todos (mesmo sem email)
           insights: [`${existingDecisors.length} decisores já identificados por enrichment anterior`],
-          companyData: { source: 'database' }
+          companyData: { 
+            source: 'database',
+            followers: 0,
+            employees: 0,
+            recentPosts: []
+          }
         });
         
         sonnerToast.success(`✅ ${existingDecisors.length} decisores carregados!`);
