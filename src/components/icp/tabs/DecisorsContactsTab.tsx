@@ -782,7 +782,7 @@ export function DecisorsContactsTab({
             </Card>
           )}
 
-          {/* Lista de Decisores - TEMA ESCURO PREMIUM */}
+          {/* 📊 TABELA DE DECISORES - LAYOUT ELEGANTE APOLLO-STYLE */}
           {filteredDecisors && filteredDecisors.length > 0 && (
             <Card className="p-6 border-2 border-emerald-500/40 bg-gradient-to-br from-slate-800 to-slate-900">
               <div className="flex items-center gap-4 mb-6">
@@ -797,7 +797,20 @@ export function DecisorsContactsTab({
                 </Badge>
               </div>
 
-              <div className="space-y-4">
+              {/* Tabela Responsiva Premium */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-slate-700">
+                      <th className="text-left p-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Decisor</th>
+                      <th className="text-left p-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Cargo & Empresa</th>
+                      <th className="text-left p-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Contato</th>
+                      <th className="text-left p-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Localização</th>
+                      <th className="text-left p-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Score</th>
+                      <th className="text-right p-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                 {filteredDecisors.map((decisor: any, idx: number) => {
                   // Gerar iniciais para avatar (com validação)
                   const initials = decisor.name
@@ -810,210 +823,171 @@ export function DecisorsContactsTab({
                     : '??';
                   
                   return (
-                  <div key={idx} className="border border-slate-600 rounded-lg p-5 bg-gradient-to-br from-slate-800 to-slate-900 hover:border-primary/50 transition-all hover:shadow-lg">
-                    <div className="flex items-start gap-4 mb-4">
-                      {/* 📸 FOTO/AVATAR DO DECISOR */}
-                      <div className="flex-shrink-0">
-                        {decisor.photo_url ? (
-                          <img 
-                            src={decisor.photo_url} 
-                            alt={decisor.name}
-                            className="w-16 h-16 rounded-full border-2 border-primary/30 object-cover"
-                            onError={(e) => {
-                              // Fallback para avatar com iniciais se imagem falhar
-                              e.currentTarget.style.display = 'none';
-                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                            }}
-                          />
-                        ) : null}
-                        <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white font-bold text-xl border-2 border-primary/50 shadow-md ${decisor.photo_url ? 'hidden' : ''}`}>
-                          {initials}
-                        </div>
-                      </div>
-                      
-                      {/* INFO DO DECISOR */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h5 className="font-bold text-lg text-foreground">{decisor.name}</h5>
+                    <tr key={idx} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors">
+                      {/* COLUNA 1: DECISOR (Foto + Nome + Badges) */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          {/* Foto/Avatar */}
+                          <div className="flex-shrink-0">
+                            {decisor.photo_url ? (
+                              <img 
+                                src={decisor.photo_url} 
+                                alt={decisor.name}
+                                className="w-12 h-12 rounded-full border-2 border-emerald-500/30 object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                }}
+                              />
+                            ) : null}
+                            <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-emerald-600 to-blue-600 flex items-center justify-center text-white font-bold text-sm border-2 border-emerald-500/50 ${decisor.photo_url ? 'hidden' : ''}`}>
+                              {initials}
+                            </div>
+                          </div>
+                          {/* Nome + Badges */}
+                          <div className="min-w-0">
+                            <p className="font-bold text-white text-sm mb-1">{decisor.name}</p>
+                            <div className="flex flex-wrap gap-1">
                               {decisor.buying_power === 'decision-maker' && (
-                                <Badge variant="default" className="text-xs bg-emerald-600">Decision Maker</Badge>
+                                <Badge className="text-[10px] bg-emerald-600 text-white border-0">Decision Maker</Badge>
                               )}
                               {decisor.buying_power === 'influencer' && (
-                                <Badge variant="default" className="text-xs bg-blue-600">Influencer</Badge>
+                                <Badge className="text-[10px] bg-blue-600 text-white border-0">Influencer</Badge>
                               )}
                               {decisor.buying_power === 'user' && (
-                                <Badge variant="secondary" className="text-xs">Usuário</Badge>
+                                <Badge variant="secondary" className="text-[10px]">Usuário</Badge>
                               )}
                               {decisor.seniority_level && (
-                                <Badge variant="outline" className="text-xs">{decisor.seniority_level}</Badge>
+                                <Badge variant="outline" className="text-[9px] border-slate-600 text-slate-300">{decisor.seniority_level}</Badge>
                               )}
                             </div>
-                            <p className="text-sm font-medium text-muted-foreground mb-1">{decisor.title || decisor.position}</p>
-                            {decisor.headline && (
-                              <p className="text-xs text-primary/80 italic mb-1">"{decisor.headline}"</p>
-                            )}
-                            {decisor.department && (
-                              <p className="text-xs text-muted-foreground">📁 {decisor.department}</p>
-                            )}
-                            {decisor.organization_name && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Building2 className="w-3 h-3" />
-                                {decisor.organization_name}
-                                {decisor.organization_employees && (
-                                  <span className="text-[10px]">• {decisor.organization_employees} funcionários</span>
-                                )}
-                              </p>
-                            )}
-                            {decisor.organization_industry && (
-                              <p className="text-xs text-muted-foreground">
-                                🏢 {decisor.organization_industry}
-                              </p>
-                            )}
-                            {decisor.city && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                <MapPin className="w-3 h-3" />
-                                {decisor.city}, {decisor.state} - {decisor.country}
-                              </p>
-                            )}
-                            {decisor.apollo_score && (
-                              <div className="flex items-center gap-1 mt-1">
-                                <Badge variant="outline" className="text-[10px] bg-purple-500/10">
-                                  ⭐ Apollo Score: {decisor.apollo_score}
-                                </Badge>
-                              </div>
-                            )}
-                            {decisor.organization_keywords && decisor.organization_keywords.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {decisor.organization_keywords.slice(0, 3).map((kw: string, i: number) => (
-                                  <Badge key={i} variant="secondary" className="text-[9px]">{kw}</Badge>
-                                ))}
-                              </div>
-                            )}
                           </div>
-                          <Badge variant="outline" className="text-xs shrink-0">
-                            {decisor.enriched_with || 'Apollo'}
-                          </Badge>
                         </div>
-                      </div>
-                    </div>
+                      </td>
 
-                    {/* Contatos - DESTAQUE MAIOR */}
-                    <div className="space-y-3 mb-4 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
-                      {decisor.email && decisor.email !== 'email_not_unlocked@domain.com' ? (
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-full bg-emerald-500/20">
-                            <Mail className="w-5 h-5 text-emerald-500" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-xs text-muted-foreground mb-1">Email Corporativo</p>
-                            <a 
-                              href={`mailto:${decisor.email}`} 
-                              className="text-blue-400 hover:text-blue-300 font-semibold text-base hover:underline" 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                            >
-                              {decisor.email}
-                            </a>
-                          </div>
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-3 p-3 bg-amber-500/10 rounded border border-amber-500/30">
-                          <AlertCircle className="w-5 h-5 text-amber-500 animate-pulse" />
-                          <div className="flex-1">
-                            <p className="text-amber-200 text-sm font-semibold">
-                              💸 Email bloqueado - Revelar consome créditos
+                      {/* COLUNA 2: CARGO & EMPRESA */}
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-white">{decisor.title || decisor.position}</p>
+                          {decisor.headline && (
+                            <p className="text-xs text-blue-400 italic line-clamp-1">"{decisor.headline}"</p>
+                          )}
+                          {decisor.department && (
+                            <p className="text-xs text-slate-400">📁 {decisor.department}</p>
+                          )}
+                          {decisor.organization_name && (
+                            <p className="text-xs text-slate-400 flex items-center gap-1">
+                              <Building2 className="w-3 h-3" />
+                              {decisor.organization_name}
                             </p>
-                            <p className="text-amber-300 text-xs mt-1">
-                              Clique em "Enriquecer Contatos" para revelar via Apollo/Hunter/Phantom
-                            </p>
-                          </div>
+                          )}
+                          {decisor.organization_industry && (
+                            <p className="text-xs text-slate-500">{decisor.organization_industry}</p>
+                          )}
                         </div>
-                      )}
-                      
-                      {decisor.phone ? (
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-full bg-blue-500/20">
-                            <Phone className="w-5 h-5 text-blue-500" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-xs text-muted-foreground mb-1">Telefone Verificado</p>
-                            <a 
-                              href={`tel:${decisor.phone}`} 
-                              className="text-blue-400 hover:text-blue-300 font-semibold text-base hover:underline"
-                            >
-                              {decisor.phone}
-                            </a>
-                          </div>
-                          <CheckCircle2 className="w-5 h-5 text-blue-500" />
+                      </td>
+
+                      {/* COLUNA 3: CONTATO */}
+                      <td className="p-4">
+                        <div className="space-y-2">
+                          {/* Email */}
+                          {decisor.email && decisor.email !== 'email_not_unlocked@domain.com' ? (
+                            <div className="flex items-center gap-2">
+                              <Mail className="w-4 h-4 text-emerald-400" />
+                              <a 
+                                href={`mailto:${decisor.email}`} 
+                                className="text-emerald-400 hover:text-emerald-300 text-xs hover:underline font-medium" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                              >
+                                {decisor.email}
+                              </a>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-amber-400">
+                              <AlertCircle className="w-4 h-4" />
+                              <span className="text-xs">Email bloqueado</span>
+                            </div>
+                          )}
+                          
+                          {/* Phone */}
+                          {decisor.phone ? (
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-blue-400" />
+                              <a 
+                                href={`tel:${decisor.phone}`} 
+                                className="text-blue-400 hover:text-blue-300 text-xs hover:underline font-medium"
+                              >
+                                {decisor.phone}
+                              </a>
+                            </div>
+                          ) : decisor.phone_numbers && decisor.phone_numbers.length > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-blue-400" />
+                              <span className="text-blue-400 text-xs">{decisor.phone_numbers.length} telefone(s)</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <Phone className="w-4 h-4" />
+                              <span className="text-xs">Bloqueado</span>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-3 p-3 bg-slate-700/50 rounded border border-slate-600">
-                          <Phone className="w-5 w-5 text-muted-foreground" />
-                          <div className="flex-1">
-                            <p className="text-muted-foreground text-sm">
-                              💸 Telefone bloqueado - Revelar consome créditos
-                            </p>
-                            <p className="text-muted-foreground text-xs mt-1">
-                              Enriquecimento via Apollo/Hunter/Phantom
-                            </p>
+                      </td>
+
+                      {/* COLUNA 4: LOCALIZAÇÃO */}
+                      <td className="p-4">
+                        {decisor.city && (
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <MapPin className="w-4 h-4" />
+                            <span>{decisor.city}, {decisor.state}</span>
                           </div>
-                        </div>
-                      )}
-                      
-                      {/* 📞 Phone Numbers Apollo (múltiplos) */}
-                      {decisor.phone_numbers && decisor.phone_numbers.length > 0 && (
-                        <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                          <Phone className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-                          <div className="flex-1">
-                            <p className="text-xs text-slate-300 mb-2 font-medium">Telefones Apollo:</p>
-                            <div className="space-y-1">
-                              {decisor.phone_numbers.map((phoneObj: any, pIdx: number) => (
-                                <a
-                                  key={pIdx}
-                                  href={`tel:${phoneObj.sanitized_number || phoneObj.raw_number}`}
-                                  className="block text-blue-400 hover:text-blue-300 font-medium text-sm hover:underline"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  {phoneObj.sanitized_number || phoneObj.raw_number}
-                                  {phoneObj.type && <span className="text-xs text-slate-400 ml-2">({phoneObj.type})</span>}
-                                </a>
+                        )}
+                      </td>
+
+                      {/* COLUNA 5: SCORE */}
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          {decisor.apollo_score && (
+                            <Badge variant="outline" className="text-[10px] bg-purple-500/10 border-purple-500/30">
+                              ⭐ {decisor.apollo_score}
+                            </Badge>
+                          )}
+                          {decisor.organization_keywords && decisor.organization_keywords.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {decisor.organization_keywords.slice(0, 2).map((kw: string, i: number) => (
+                                <Badge key={i} variant="secondary" className="text-[9px] bg-slate-700">{kw}</Badge>
                               ))}
                             </div>
-                          </div>
+                          )}
                         </div>
-                      )}
+                      </td>
 
-                      {decisor.linkedin_url && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Linkedin className="w-4 h-4 text-blue-400" />
-                          <a href={decisor.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 hover:underline font-medium">
-                            Ver perfil LinkedIn
-                          </a>
-                          <ExternalLink className="w-3 h-3 text-slate-400" />
+                      {/* COLUNA 6: AÇÕES */}
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {decisor.linkedin_url && (
+                            <a 
+                              href={decisor.linkedin_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 transition-colors"
+                              title="Ver LinkedIn"
+                            >
+                              <Linkedin className="w-4 h-4 text-blue-400" />
+                            </a>
+                          )}
+                          <Button size="sm" variant="ghost" className="h-8 text-xs text-slate-400 hover:text-white">
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            Detalhes
+                          </Button>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Approach Sugerido */}
-                    <div className="bg-slate-700/50 rounded p-3 text-xs border border-slate-600">
-                      <p className="font-medium text-slate-200 mb-1">💡 Approach Sugerido:</p>
-                      <ul className="space-y-1 text-slate-300">
-                        {decisor.email && decisor.email !== 'email_not_unlocked@domain.com' && (
-                          <li>• Email direto: Mencionar {decisor.title || decisor.position || 'cargo'} e dores do setor</li>
-                        )}
-                        <li>• LinkedIn InMail: Personalizado com insights da empresa</li>
-                        {decisor.phone && (
-                          <li>• WhatsApp Business: Follow-up pós-email</li>
-                        )}
-                      </ul>
-                    </div>
-                  </div>
+                      </td>
+                    </tr>
                   );
                 })}
+                  </tbody>
+                </table>
               </div>
             </Card>
           )}
