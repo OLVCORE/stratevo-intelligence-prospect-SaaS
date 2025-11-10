@@ -549,14 +549,14 @@ export function DecisorsContactsTab({
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1">Tipo de Decisor</Label>
                   <Select
-                    value={filterBuyingPower.length === 1 ? filterBuyingPower[0] : ''}
-                    onValueChange={(val) => setFilterBuyingPower(val ? [val] : [])}
+                    value={filterBuyingPower.length === 1 ? filterBuyingPower[0] : 'ALL'}
+                    onValueChange={(val) => setFilterBuyingPower(val === 'ALL' ? [] : [val])}
                   >
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos ({analysisData?.decisorsWithEmails?.length || 0})</SelectItem>
+                      <SelectItem value="ALL">Todos ({analysisData?.decisorsWithEmails?.length || 0})</SelectItem>
                       {uniqueBuyingPowers.map(bp => (
                         <SelectItem key={bp} value={bp}>
                           {bp === 'decision-maker' ? 'Decision Maker' : bp === 'influencer' ? 'Influencer' : 'Usuário'}
@@ -570,14 +570,14 @@ export function DecisorsContactsTab({
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1">Departamento</Label>
                   <Select
-                    value={filterDepartment.length === 1 ? filterDepartment[0] : ''}
-                    onValueChange={(val) => setFilterDepartment(val ? [val] : [])}
+                    value={filterDepartment.length === 1 ? filterDepartment[0] : 'ALL'}
+                    onValueChange={(val) => setFilterDepartment(val === 'ALL' ? [] : [val])}
                   >
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="ALL">Todos</SelectItem>
                       {uniqueDepartments.map(dept => (
                         <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                       ))}
@@ -589,14 +589,14 @@ export function DecisorsContactsTab({
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1">Localização</Label>
                   <Select
-                    value={filterLocation.length === 1 ? filterLocation[0] : ''}
-                    onValueChange={(val) => setFilterLocation(val ? [val] : [])}
+                    value={filterLocation.length === 1 ? filterLocation[0] : 'ALL'}
+                    onValueChange={(val) => setFilterLocation(val === 'ALL' ? [] : [val])}
                   >
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="ALL">Todos</SelectItem>
                       {uniqueLocations.map(loc => (
                         <SelectItem key={loc} value={loc}>{loc}</SelectItem>
                       ))}
@@ -608,14 +608,14 @@ export function DecisorsContactsTab({
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1">Senioridade</Label>
                   <Select
-                    value={filterSeniority.length === 1 ? filterSeniority[0] : ''}
-                    onValueChange={(val) => setFilterSeniority(val ? [val] : [])}
+                    value={filterSeniority.length === 1 ? filterSeniority[0] : 'ALL'}
+                    onValueChange={(val) => setFilterSeniority(val === 'ALL' ? [] : [val])}
                   >
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="ALL">Todos</SelectItem>
                       {uniqueSeniorities.map(sen => (
                         <SelectItem key={sen} value={sen}>{sen}</SelectItem>
                       ))}
