@@ -47,6 +47,8 @@ export function RecommendedProductsTab({
 }: RecommendedProductsTabProps) {
   
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(false); // 🔥 NOVO: Controle manual
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // 🔍 BUSCAR DADOS DA EMPRESA (se companyId fornecido)
   const { data: companyData } = useQuery({
@@ -107,10 +109,13 @@ export function RecommendedProductsTab({
   } : undefined;
 
   // 🌐 BUSCAR ANÁLISE PROFUNDA DE URLs (50+) E REDES SOCIAIS
-  const { data: urlsDeepAnalysis } = useQuery({
+  // 🔒 SÓ EXECUTA SE enabled = true (usuário clicou "Analisar")
+  const { data: urlsDeepAnalysis, refetch: refetchUrlsAnalysis } = useQuery({
     queryKey: ['urls-deep-analysis', companyId],
     queryFn: async () => {
       if (!companyId || !companyData) return null;
+      
+      setIsAnalyzing(true);
       
       // Extrair TODAS URLs da aba Digital (campo raw_data)
       const allUrls = companyData.raw_data?.discovered_urls || [];
@@ -125,6 +130,7 @@ export function RecommendedProductsTab({
       };
       
       console.log('[PRODUCTS-TAB] 🔍 Solicitando análise profunda de', allUrls.length, 'URLs');
+      toast.info(`Analisando ${allUrls.length} URLs... (pode levar 1-2 minutos)`);
       
       // Chamar Edge Function de análise profunda
       const { data, error } = await supabase.functions.invoke('analyze-urls-deep', {
@@ -137,13 +143,17 @@ export function RecommendedProductsTab({
       
       if (error) {
         console.error('[PRODUCTS-TAB] Erro na análise profunda:', error);
+        toast.error('Erro na análise profunda de URLs');
+        setIsAnalyzing(false);
         return null;
       }
       
       console.log('[PRODUCTS-TAB] ✅ Análise profunda completa:', data);
+      toast.success(`✅ ${data.urls_analyzed} URLs analisadas!`);
+      setIsAnalyzing(false);
       return data;
     },
-    enabled: !!companyId && !!companyData,
+    enabled: false, // 🔒 NÃO DISPARA AUTOMATICAMENTE
     staleTime: 1000 * 60 * 30 // 30 min (análise cara, cachear bem)
   });
 
@@ -202,7 +212,8 @@ export function RecommendedProductsTab({
   });
 
   // Buscar produtos recomendados REAIS via Edge Function EVOLUÍDA
-  const { data: productGapsData, isLoading, error } = useProductGaps({
+  // 🔒 SÓ EXECUTA SE enabled = true (usuário clicou "Analisar")
+  const { data: productGapsData, isLoading, error, refetch: refetchProducts } = useProductGaps({
     companyId,
     companyName: companyName || '',
     cnpj,
@@ -217,7 +228,8 @@ export function RecommendedProductsTab({
     // 🧠 DADOS CONTEXTUAIS DE TODAS AS ABAS
     decisorsData: decisorsContextData,
     digitalData: digitalContext,
-    analysis360Data: analysis360Context
+    analysis360Data: analysis360Context,
+    enabled: enabled // 🔒 CONTROLE MANUAL
   });
 
   // 🔗 REGISTRY: Registrar aba para SaveBar global
@@ -260,12 +272,116 @@ export function RecommendedProductsTab({
     }
   };
 
+  // Função para iniciar análise
+  const handleStartAnalysis = async () => {
+    setEnabled(true);
+    
+    // Primeiro: Análise profunda de URLs (se houver)
+    const allUrls = companyData?.raw_data?.discovered_urls || [];
+    if (allUrls.length > 0) {
+      await refetchUrlsAnalysis();
+    }
+    
+    // Depois: Gerar recomendações de produtos
+    await refetchProducts();
+  };
+
   if (!companyName) {
     return (
       <Card className="p-6">
         <p className="text-center text-muted-foreground">
           Informações da empresa necessárias para análise de produtos
         </p>
+      </Card>
+    );
+  }
+
+  // 🔒 TELA INICIAL: Botão "Analisar Agora" (igual outras abas)
+  if (!enabled && !productGapsData) {
+    const allUrls = companyData?.raw_data?.discovered_urls || [];
+    const estimatedCost = Math.ceil((allUrls.length * 0.001) + 0.03); // ~R$ 0.001 por URL + R$ 0.03 IA
+    
+    return (
+      <Card className="p-12 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
+          <Sparkles className="w-10 h-10 text-primary" />
+        </div>
+        <h3 className="text-xl font-semibold mb-2">
+          Análise de Produtos & Oportunidades
+        </h3>
+        <p className="text-sm text-muted-foreground mb-6 max-w-2xl mx-auto">
+          Analisaremos <strong>TODAS as 9 abas do relatório</strong> + <strong>{allUrls.length} URLs</strong> descobertas 
+          para gerar recomendações de produtos TOTVS contextualizadas e precisas.
+        </p>
+        
+        <div className="bg-muted/50 p-4 rounded-lg mb-6 max-w-xl mx-auto">
+          <h4 className="font-semibold mb-3 flex items-center gap-2 justify-center">
+            <Target className="w-4 h-4" />
+            O que será analisado:
+          </h4>
+          <div className="grid grid-cols-2 gap-3 text-sm text-left">
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+              <span>TOTVS Check (produtos detectados)</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+              <span>Decisores ({decisorsContextData?.total || 0} encontrados)</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+              <span>Maturidade Digital (score {digitalContext.maturityScore}/100)</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+              <span>Análise 360° (saúde financeira)</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Flame className="w-4 h-4 text-orange-600 mt-0.5" />
+              <span className="font-semibold">{allUrls.length} URLs profundas</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Flame className="w-4 h-4 text-orange-600 mt-0.5" />
+              <span className="font-semibold">Redes sociais</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <Badge variant="outline" className="text-xs">
+            <Clock className="w-3 h-3 mr-1" />
+            Tempo estimado: 1-2 minutos
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            <DollarSign className="w-3 h-3 mr-1" />
+            Custo estimado: ~R$ {estimatedCost.toFixed(2)}
+          </Badge>
+        </div>
+        
+        <Button 
+          onClick={handleStartAnalysis} 
+          size="lg" 
+          disabled={isAnalyzing}
+          className="gap-2"
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Analisando...
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4" />
+              Analisar Agora
+            </>
+          )}
+        </Button>
+        
+        {isAnalyzing && (
+          <p className="text-xs text-muted-foreground mt-4">
+            Analisando {allUrls.length} URLs + dados de todas as abas... Aguarde.
+          </p>
+        )}
       </Card>
     );
   }
