@@ -57,7 +57,17 @@ export function DecisorsContactsTab({
     const loadExistingDecisors = async () => {
       if (!companyId) return;
       
-      // Buscar decisores salvos na tabela decision_makers
+      // 1️⃣ Buscar dados da empresa (Apollo Organization)
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('raw_data, industry')
+        .eq('id', companyId)
+        .single();
+      
+      console.log('[DECISORES-TAB] 🏢 Company raw_data:', companyData?.raw_data);
+      console.log('[DECISORES-TAB] 🏢 Apollo Organization:', companyData?.raw_data?.apollo_organization);
+      
+      // 2️⃣ Buscar decisores salvos na tabela decision_makers
       const { data: existingDecisors } = await supabase
         .from('decision_makers')
         .select('*')
@@ -123,33 +133,43 @@ export function DecisorsContactsTab({
         };
         
         // Formatar decisores para match com estrutura esperada (TODOS CAMPOS APOLLO)
-        const formattedDecisors = existingDecisors.map(d => ({
-          name: d.full_name || d.name,
-          title: d.position || d.title,
-          position: d.position,
-          email: d.email,
-          email_status: d.email_status,
-          phone: d.phone,
-          linkedin_url: d.linkedin_url,
-          department: d.department,
-          seniority_level: d.seniority_level,
-          buying_power: classifyBuyingPower(d.position || '', d.seniority_level || ''),
-          city: d.city,
-          state: d.state,
-          country: d.country || 'Brazil',
-          photo_url: d.photo_url,
-          headline: d.headline,
-          // 🔥 CAMPOS APOLLO EXPANDIDOS (de raw_data)
-          apollo_score: d.raw_data?.apollo_score,
-          organization_name: d.raw_data?.organization_name,
-          organization_employees: d.raw_data?.organization_data?.estimated_num_employees,
-          organization_industry: d.raw_data?.organization_data?.industry,
-          organization_keywords: d.raw_data?.organization_data?.keywords || [],
-          phone_numbers: d.raw_data?.phone_numbers || [],
-          departments: d.raw_data?.departments || [],
-          employment_history: d.raw_data?.employment_history || [],
-          enriched_with: 'database'
-        }));
+        const formattedDecisors = existingDecisors.map(d => {
+          console.log('[DECISORES-TAB] 🔍 raw_data para', d.full_name || d.name, ':', d.raw_data);
+          
+          return {
+            name: d.full_name || d.name,
+            title: d.position || d.title,
+            position: d.position,
+            email: d.email,
+            email_status: d.email_status,
+            phone: d.phone,
+            linkedin_url: d.linkedin_url,
+            department: d.department,
+            seniority_level: d.seniority_level,
+            buying_power: classifyBuyingPower(d.position || '', d.seniority_level || ''),
+            city: d.city,
+            state: d.state,
+            country: d.country || 'Brazil',
+            photo_url: d.photo_url,
+            headline: d.headline,
+            // 🔥 CAMPOS APOLLO EXPANDIDOS (múltiplas fontes possíveis)
+            apollo_score: d.raw_data?.apollo_score || d.apollo_score,
+            organization_name: d.raw_data?.organization_name || d.organization_name,
+            organization_employees: d.raw_data?.organization_employees || 
+                                   d.raw_data?.organization_data?.estimated_num_employees ||
+                                   d.organization_employees,
+            organization_industry: d.raw_data?.organization_industry || 
+                                  d.raw_data?.organization_data?.industry ||
+                                  d.organization_industry,
+            organization_keywords: d.raw_data?.organization_keywords || 
+                                  d.raw_data?.organization_data?.keywords || 
+                                  d.organization_keywords || [],
+            phone_numbers: d.raw_data?.phone_numbers || d.phone_numbers || [],
+            departments: d.raw_data?.departments || d.departments || [],
+            employment_history: d.raw_data?.employment_history || [],
+            enriched_with: 'database'
+          };
+        });
         
         setAnalysisData({
           decisors: formattedDecisors,
