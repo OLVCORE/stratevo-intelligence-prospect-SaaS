@@ -153,6 +153,16 @@ export function DecisorsContactsTab({
       };
       
       console.log('[DECISORES-TAB] 🏢 companyApolloOrg preparado:', baseAnalysisData.companyApolloOrg);
+      console.log('[DECISORES-TAB] 🔍 Dados RAW do Apollo:', {
+        name: apolloOrg.name,
+        description: apolloOrg.short_description || apolloOrg.description,
+        employees: apolloOrg.estimated_num_employees,
+        industry: apolloOrg.industry,
+        keywords: apolloOrg.keywords,
+        founded_year: apolloOrg.founded_year,
+        website_url: apolloOrg.website_url,
+        linkedin_url: apolloOrg.linkedin_url
+      });
       
       if (existingDecisors && existingDecisors.length > 0) {
         console.log('[DECISORES-TAB] ✅ Encontrados', existingDecisors.length, 'decisores já salvos');
