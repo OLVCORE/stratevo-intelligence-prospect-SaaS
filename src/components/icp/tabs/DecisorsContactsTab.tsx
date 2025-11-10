@@ -1436,7 +1436,19 @@ export function DecisorsContactsTab({
                             )}
                           </Button>
                         ) : (
-                          <span className="text-xs text-slate-600">-</span>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-7 text-[10px] text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                            onClick={() => handleRevealCorporateContact(decisor)}
+                            disabled={revealingContacts.has(decisor.id)}
+                          >
+                            {revealingContacts.has(decisor.id) ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              '📞 Revelar (~1💰)'
+                            )}
+                          </Button>
                         )}
                       </td>
 
