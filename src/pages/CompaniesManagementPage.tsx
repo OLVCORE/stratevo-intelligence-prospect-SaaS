@@ -622,12 +622,30 @@ export default function CompaniesManagementPage() {
   const handleBatchEnrich360 = async () => {
     try {
       setIsBatchEnriching360(true);
-      toast.info('Iniciando enriquecimento 360° completo...', {
-        description: 'Apenas empresas sem análise completa serão processadas'
+      
+      // ✅ OTIMIZAÇÃO: Apenas empresas SELECIONADAS ou com ICP Score alto
+      const companiesToEnrich = selectedCompanies.length > 0
+        ? companies.filter(c => selectedCompanies.includes(c.id))
+        : companies; // Se nenhuma selecionada, faz todas (comportamento antigo)
+
+      if (companiesToEnrich.length === 0) {
+        toast.error('Nenhuma empresa para enriquecer');
+        return;
+      }
+
+      // ⚠️ AVISO DE CUSTO
+      const estimatedCost = companiesToEnrich.length * 1.5; // ~1-2 créditos/empresa
+      
+      toast.info(`⚡ Enriquecendo ${companiesToEnrich.length} empresas...`, {
+        description: `Custo estimado: ${Math.round(estimatedCost)} créditos Serper`,
+        duration: 5000
       });
 
       const { data, error } = await supabase.functions.invoke('batch-enrich-360', {
-        body: { force_refresh: false }
+        body: { 
+          force_refresh: false,
+          company_ids: companiesToEnrich.map(c => c.id) // ✅ Enviar IDs específicos
+        }
       });
 
       if (error) throw error;
@@ -635,15 +653,14 @@ export default function CompaniesManagementPage() {
       const summary = data;
       if (summary) {
         toast.success(
-          `Enriquecimento 360° concluído! ${summary.processed} empresas processadas, ${summary.skipped} já tinham análise, ${summary.failed} erros.`
+          `✅ Enriquecimento 360° concluído! ${summary.processed} empresas processadas`,
+          { description: `${summary.skipped} puladas · ${summary.failed} erros · ~${Math.round(summary.processed * 1.5)} créditos usados` }
         );
       } else {
         toast.success('Enriquecimento 360° concluído!');
       }
 
       refetch();
-      
-      // ✅ INVALIDAR CACHE DO STATUS DE ENRIQUECIMENTO
       queryClient.invalidateQueries({ queryKey: ['enrichment-status'] });
       queryClient.invalidateQueries({ queryKey: ['all-enrichment-status'] });
     } catch (error) {
