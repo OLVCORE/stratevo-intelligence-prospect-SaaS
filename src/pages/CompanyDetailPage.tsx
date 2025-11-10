@@ -285,12 +285,13 @@ export default function CompanyDetailPage() {
       };
       const cleanedDomain = cleanDomain(company.domain || company.website);
       
-      const { data: apolloData, error } = await supabase.functions.invoke('enrich-apollo', {
+      const { data: apolloData, error } = await supabase.functions.invoke('enrich-apollo-decisores', {
         body: {
-          type: 'people',
-          organizationName: searchName,
-          ...(cleanedDomain ? { domain: cleanedDomain } : {}),
-          titles: ['CEO','CTO','CFO','Diretor','Gerente','VP']
+          company_id: id,
+          company_name: searchName,
+          domain: cleanedDomain,
+          modes: ['people', 'company'],
+          positions: ['CEO','CTO','CFO','Diretor','Gerente','VP']
         }
       });
       
