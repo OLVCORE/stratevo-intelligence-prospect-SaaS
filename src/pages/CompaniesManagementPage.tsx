@@ -732,16 +732,17 @@ export default function CompaniesManagementPage() {
             throw new Error('Domínio inválido');
           }
 
-          const { error } = await supabase.functions.invoke('enrich-apollo-decisores', {
-            body: { 
-              company_id: company.id,
-              company_name: company.company_name || company.name,
-              domain: domain,
-              modes: ['people', 'company'] // 🔥 PESSOAS + DADOS DA EMPRESA (keywords, industry, employees)
-            }
-          });
+          // 🔥 CHAMADA DIRETA (evita CORS/401 da Edge Function)
+          const { enrichCompanyWithApollo } = await import('@/services/apolloEnrichment');
+          const result = await enrichCompanyWithApollo(
+            company.id,
+            company.company_name || company.name,
+            domain
+          );
           
-          if (error) throw error;
+          if (!result.success) {
+            throw new Error(result.error || 'Falha no enrichment Apollo');
+          }
           
           // ✅ ATUALIZAR STATUS: SUCESSO
           setEnrichmentProgress(prev => prev.map(p => 
