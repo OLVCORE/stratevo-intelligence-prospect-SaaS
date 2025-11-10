@@ -378,8 +378,18 @@ export function DecisorsContactsTab({
       }
     };
     
+    // ⚠️ IMPORTANTE: Limpar dados antigos antes de carregar novos
+    console.log('[DECISORES-TAB] 🧹 Limpando dados antigos antes de carregar nova empresa');
+    setAnalysisData({
+      decisors: [],
+      decisorsWithEmails: [],
+      insights: [],
+      companyData: null,
+      companyApolloOrg: null
+    });
+    
     loadExistingDecisors();
-  }, [companyId]);
+  }, [companyId]); // ✅ Re-executar quando companyId mudar
   
   // 🔄 Função para forçar reload manual (SEM sair do relatório!)
   const [isRefreshing, setIsRefreshing] = useState(false);
