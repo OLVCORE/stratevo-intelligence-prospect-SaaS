@@ -56,6 +56,7 @@ import { consultarReceitaFederal } from '@/services/receitaFederal';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
 import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/companies/EnrichmentProgressModal';
+import { PartnerSearchModal } from '@/components/companies/PartnerSearchModal';
 
 
 export default function CompaniesManagementPage() {
@@ -659,6 +660,9 @@ export default function CompaniesManagementPage() {
   const [enrichmentModalOpen, setEnrichmentModalOpen] = useState(false);
   const [enrichmentProgress, setEnrichmentProgress] = useState<EnrichmentProgress[]>([]);
   const [cancelEnrichment, setCancelEnrichment] = useState(false);
+  
+  // ✅ MODAL DE BUSCA POR SÓCIOS
+  const [partnerSearchOpen, setPartnerSearchOpen] = useState(false);
 
   const handleBatchEnrichApollo = async () => {
     try {
@@ -1305,6 +1309,7 @@ export default function CompaniesManagementPage() {
               }}
               onApolloImport={() => setIsApolloImportOpen(true)}
               onSearchCompanies={() => navigate('/search')}
+              onPartnerSearch={() => setPartnerSearchOpen(true)}
               isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo || isBatchEnrichingEconodata}
             />
             
@@ -2197,6 +2202,16 @@ export default function CompaniesManagementPage() {
           companies={enrichmentProgress}
           onCancel={() => setCancelEnrichment(true)}
           isCancelling={cancelEnrichment}
+        />
+        
+        {/* ✅ MODAL DE BUSCA POR SÓCIOS */}
+        <PartnerSearchModal
+          open={partnerSearchOpen}
+          onOpenChange={setPartnerSearchOpen}
+          onImportCompanies={(companies) => {
+            toast.success(`${companies.length} empresas importadas!`);
+            refetch();
+          }}
         />
       </AppLayout>
     </ErrorBoundary>

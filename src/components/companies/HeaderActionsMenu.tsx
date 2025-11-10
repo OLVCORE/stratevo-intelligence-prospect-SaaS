@@ -17,7 +17,8 @@ import {
   Database,
   Loader2,
   MoreHorizontal,
-  Target
+  Target,
+  Users
 } from 'lucide-react';
 import { useState } from 'react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
@@ -31,6 +32,7 @@ interface HeaderActionsMenuProps {
   onSendToQuarantine?: () => Promise<void>; // 🆕 NOVO
   onApolloImport: () => void;
   onSearchCompanies: () => void;
+  onPartnerSearch?: () => void; // ✅ NOVO: Buscar por Sócios
   isProcessing?: boolean;
 }
 
@@ -43,6 +45,7 @@ export function HeaderActionsMenu({
   onSendToQuarantine, // 🆕 NOVO
   onApolloImport,
   onSearchCompanies,
+  onPartnerSearch, // ✅ NOVO
   isProcessing = false
 }: HeaderActionsMenuProps) {
   const [isEnriching, setIsEnriching] = useState(false);
@@ -116,6 +119,17 @@ export function HeaderActionsMenu({
             <Search className="h-4 w-4 mr-2" />
             Buscar Empresas
           </DropdownMenuItem>
+
+          {onPartnerSearch && (
+            <DropdownMenuItem 
+              onClick={onPartnerSearch}
+              disabled={isEnriching}
+              className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Buscar por Sócios
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
