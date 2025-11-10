@@ -271,9 +271,9 @@ export async function performFullLinkedInAnalysis(
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
   const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
   
-  console.log('[Apollo+Phantom] 🚀 Chamando Apollo backend (enrich-apollo-public)...');
+  console.log('[Apollo+Phantom] 🚀 Chamando Apollo backend...');
   
-  const apolloRes = await fetch(`${SUPABASE_URL}/functions/v1/enrich-apollo-public`, {
+  const apolloRes = await fetch(`${SUPABASE_URL}/functions/v1/enrich-apollo-decisores`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -281,10 +281,10 @@ export async function performFullLinkedInAnalysis(
       'apikey': SUPABASE_ANON_KEY
     },
     body: JSON.stringify({
-      company_id: companyId, // 🔥 CRITICAL: passar company_id para salvar no banco!
-      company_name: companyName,
+      company_id: companyId,
+      companyName,
       domain: companyDomain,
-      modes: ['people', 'company'], // 🏢 BUSCAR dados de PEOPLE + ORGANIZATION
+      modes: ['people', 'company'],
       positions: ['CEO','CFO','CIO','CTO','COO','Diretor','Gerente','VP','Head','Presidente','Sócio','Coordenador']
     })
   });
