@@ -275,7 +275,15 @@ export function DecisorsContactsTab({
         
         // Formatar decisores para match com estrutura esperada (TODOS CAMPOS APOLLO)
         const formattedDecisors = existingDecisors.map(d => {
-          console.log('[DECISORES-TAB] 🔍 raw_data para', d.full_name || d.name, ':', d.raw_data);
+          const name = d.full_name || d.name;
+          console.log('[DECISORES-TAB] 🔍 raw_data para', name, ':', d.raw_data);
+          
+          // 📸 LOG ESPECIAL para foto
+          if (name?.toLowerCase().includes('rogerio') || name?.toLowerCase().includes('souza')) {
+            console.log('[DECISORES-TAB] 📸 DIRETOR ROGERIO - photo_url:', d.photo_url);
+            console.log('[DECISORES-TAB] 📸 DIRETOR ROGERIO - raw_data.photo_url:', d.raw_data?.photo_url);
+            console.log('[DECISORES-TAB] 📸 DIRETOR ROGERIO - raw_data completo:', d.raw_data);
+          }
           
           // Normalizar dados Apollo do DECISOR
           const apolloNormalized = normalizeApolloData(d.raw_data);
@@ -935,44 +943,7 @@ export function DecisorsContactsTab({
             </Card>
           )}
 
-          {/* Dados da Empresa LinkedIn - TEMA ESCURO */}
-          {analysisData.companyData && (
-            <Card className="p-6 bg-gradient-to-r from-slate-800 to-slate-900 border-slate-700">
-              <h4 className="font-semibold mb-4 flex items-center gap-2 text-white">
-                <Linkedin className="w-5 h-5 text-blue-400" />
-                Presença no LinkedIn
-              </h4>
-              
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <span className="text-xs text-slate-400">Seguidores</span>
-                  <p className="text-xl font-bold text-white">{analysisData?.companyData?.followers?.toLocaleString() || 0}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400">Funcionários</span>
-                  <p className="text-xl font-bold text-white">{analysisData?.companyData?.employees?.toLocaleString() || 0}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-slate-400">Posts Recentes</span>
-                  <p className="text-xl font-bold text-white">{analysisData?.companyData?.recentPosts?.length || 0}</p>
-                </div>
-              </div>
-
-              {/* Menções de concorrentes */}
-              {analysisData?.companyData?.competitorMentions && analysisData.companyData.competitorMentions.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-slate-700">
-                  <span className="text-xs font-medium text-slate-400">Concorrentes Mencionados:</span>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {analysisData.companyData.competitorMentions.map((comp: string, idx: number) => (
-                      <Badge key={idx} variant="destructive" className="text-xs">
-                        {comp}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Card>
-          )}
+          {/* 🗑️ REMOVIDO: Card LinkedIn inútil (sempre 0, 0, 0) */}
 
           {/* 📊 TABELA DE DECISORES - LAYOUT ELEGANTE APOLLO-STYLE */}
           {filteredDecisors && filteredDecisors.length > 0 && (
