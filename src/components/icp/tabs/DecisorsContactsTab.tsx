@@ -1529,3 +1529,5 @@ export function DecisorsContactsTab({
   );
 }
 
+export default DecisorsContactsTab;
+
