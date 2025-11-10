@@ -30,6 +30,8 @@ import {
 import { toast } from "sonner";
 import { consultarReceitaFederal } from "@/services/receitaFederal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import DecisionMakerAddDialog from "@/components/companies/DecisionMakerAddDialog";
@@ -67,6 +69,11 @@ export default function CompanyDetailPage() {
   const [isEnriching, setIsEnriching] = useState(false);
   const [isTestingApollo, setIsTestingApollo] = useState(false);
   const [isRunningPhantom, setIsRunningPhantom] = useState(false);
+  
+  // 🔍 FILTROS DE DECISORES
+  const [filterSeniority, setFilterSeniority] = useState<string>('ALL');
+  const [filterDepartment, setFilterDepartment] = useState<string>('ALL');
+  const [filterLocation, setFilterLocation] = useState<string>('ALL');
 
   // ✅ MICROCICLO 2: Ativar Realtime para mudanças na empresa
   useRealtimeCompanyChanges(id);
@@ -1184,14 +1191,10 @@ export default function CompanyDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Decisores Cadastrados */}
-          <DecisorsCollaboratorsCard
-            decisors={parseCollaborators(rawData.decisores_cargos, rawData.decisores_linkedin)}
-            collaborators={parseCollaborators(rawData.colaboradores_cargos, rawData.colaboradores_linkedin)}
-          />
+          {/* ❌ REMOVIDO: Card "Decisores & Colaboradores" (redundante e inútil) */}
 
           {decisors.length > 0 && (
-            <Card className="glass-card">
+            <Card className="glass-card border-2 border-blue-500/30">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Target className="h-5 w-5 text-primary" />
@@ -1200,18 +1203,157 @@ export default function CompanyDetailPage() {
               </CardHeader>
               <CardContent>
                 {console.log('[CompanyDetail] 🎯 Renderizando', decisors.length, 'decisores')}
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {decisors.map((dec: any, idx: number) => {
+                
+                {/* 🔍 FILTROS AVANÇADOS */}
+                <div className="mb-6 p-4 bg-slate-900/40 rounded-lg border border-slate-700/50">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Filtro Senioridade */}
+                    <div>
+                      <Label className="text-xs text-slate-400 mb-1.5 block">Senioridade</Label>
+                      <Select value={filterSeniority} onValueChange={setFilterSeniority}>
+                        <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">Todos ({decisors.length})</SelectItem>
+                          <SelectItem value="senior">Senior</SelectItem>
+                          <SelectItem value="manager">Manager</SelectItem>
+                          <SelectItem value="entry">Entry</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {/* Filtro Departamento */}
+                    <div>
+                      <Label className="text-xs text-slate-400 mb-1.5 block">Departamento</Label>
+                      <Select value={filterDepartment} onValueChange={setFilterDepartment}>
+                        <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">Todos ({decisors.length})</SelectItem>
+                          <SelectItem value="sales">Vendas</SelectItem>
+                          <SelectItem value="marketing">Marketing</SelectItem>
+                          <SelectItem value="engineering">Engenharia</SelectItem>
+                          <SelectItem value="finance">Financeiro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {/* Filtro Localização */}
+                    <div>
+                      <Label className="text-xs text-slate-400 mb-1.5 block">Localização</Label>
+                      <Select value={filterLocation} onValueChange={setFilterLocation}>
+                        <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">Todos ({decisors.length})</SelectItem>
+                          {Array.from(new Set(decisors.map((d: any) => d.city).filter(Boolean))).map((city: any) => (
+                            <SelectItem key={city} value={city}>{city}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {decisors
+                    .filter((dec: any) => {
+                      if (filterSeniority !== 'ALL' && dec.seniority_level !== filterSeniority) return false;
+                      if (filterDepartment !== 'ALL' && !dec.departments?.includes(filterDepartment)) return false;
+                      if (filterLocation !== 'ALL' && dec.city !== filterLocation) return false;
+                      return true;
+                    })
+                    .map((dec: any, idx: number) => {
                     console.log('[CompanyDetail] 📋 Decisor', idx, ':', dec);
+                    
+                    // Gerar iniciais para avatar
+                    const initials = (dec.full_name || dec.name || 'NN')
+                      .split(' ')
+                      .map((n: string) => n[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase();
+                    
                     return (
-                      <div key={dec.id || idx} className="p-3 bg-muted/30 rounded-lg hover-scale border border-blue-500/30">
-                        <p className="font-semibold text-sm mb-1 text-white">{dec.full_name || dec.name || 'Sem nome'}</p>
-                        <p className="text-xs text-slate-300 mb-2">{dec.position || dec.title || 'Cargo não informado'}</p>
-                        {dec.email && <p className="text-xs flex items-center gap-1 text-emerald-400"><Mail className="h-3 w-3" />{dec.email}</p>}
-                        {dec.phone && <p className="text-xs flex items-center gap-1 text-blue-400"><Phone className="h-3 w-3" />{dec.phone}</p>}
+                      <div key={dec.id || idx} className="p-4 bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg border border-blue-500/40 hover:border-blue-400/60 transition-all hover:shadow-lg hover:shadow-blue-500/20">
+                        {/* Foto + Nome */}
+                        <div className="flex items-start gap-3 mb-3">
+                          {dec.photo_url ? (
+                            <img 
+                              src={dec.photo_url} 
+                              alt={dec.full_name || dec.name}
+                              className="w-12 h-12 rounded-full border-2 border-blue-500/30 object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                          ) : null}
+                          <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm border-2 border-blue-500/30 ${dec.photo_url ? 'hidden' : ''}`}>
+                            {initials}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-sm text-white leading-tight">{dec.full_name || dec.name || 'Sem nome'}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{dec.position || dec.title || 'Cargo não informado'}</p>
+                          </div>
+                        </div>
+                        
+                        {/* Email Bloqueado */}
+                        <div className="mb-2 p-2 bg-slate-900/60 rounded border border-slate-700/50">
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <Mail className="h-3 w-3 text-slate-500" />
+                            {dec.email ? (
+                              <span className="text-emerald-400">{dec.email}</span>
+                            ) : (
+                              <>
+                                <span>💸 Email bloqueado</span>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="h-5 px-2 text-[10px] ml-auto text-blue-400 hover:text-blue-300"
+                                  onClick={() => toast.info('💸 Revelar email consome créditos Apollo')}
+                                >
+                                  Revelar
+                                </Button>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                        
+                        {/* Telefone Bloqueado */}
+                        <div className="mb-2 p-2 bg-slate-900/60 rounded border border-slate-700/50">
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <Phone className="h-3 w-3 text-slate-500" />
+                            {dec.phone ? (
+                              <span className="text-blue-400">{dec.phone}</span>
+                            ) : (
+                              <>
+                                <span>💸 Tel bloqueado</span>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="h-5 px-2 text-[10px] ml-auto text-blue-400 hover:text-blue-300"
+                                  onClick={() => toast.info('💸 Revelar telefone consome créditos')}
+                                >
+                                  Revelar
+                                </Button>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                        
+                        {/* LinkedIn */}
                         {dec.linkedin_url && (
-                          <a href={dec.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline">
-                            LinkedIn →
+                          <a 
+                            href={dec.linkedin_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 hover:underline"
+                          >
+                            🔗 LinkedIn →
                           </a>
                         )}
                       </div>
