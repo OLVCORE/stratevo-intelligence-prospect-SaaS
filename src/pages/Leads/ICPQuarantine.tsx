@@ -295,13 +295,12 @@ export default function ICPQuarantine() {
         throw new Error('company_id não encontrado');
       }
 
-      // 🔥 EDGE FUNCTION com SERVICE_ROLE_KEY
-      const { error } = await supabase.functions.invoke('enrich-apollo-decisores', {
+      // 🔥 EDGE FUNCTION PÚBLICA (sem JWT, evita 401)
+      const { error } = await supabase.functions.invoke('enrich-apollo-public', {
         body: {
           company_id: targetCompanyId,
           company_name: analysis.company_name || analysis.name,
-          domain: analysis.website || analysis.domain,
-          modes: ['people', 'company']
+          domain: analysis.website || analysis.domain
         }
       });
       
