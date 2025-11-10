@@ -673,6 +673,58 @@ export function DecisorsContactsTab({
             </Card>
           )}
 
+          {/* 🏢 RESUMO DA EMPRESA (Apollo Organization Data) - TEMA ESCURO */}
+          {(analysisData?.decisorsWithEmails?.[0]?.organization_name || 
+            analysisData?.decisorsWithEmails?.[0]?.organization_industry || 
+            analysisData?.decisorsWithEmails?.[0]?.organization_employees) && (
+            <Card className="p-6 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700">
+              <div className="flex items-start gap-4 mb-4">
+                <div className="p-3 rounded-full bg-blue-500/20">
+                  <Building2 className="w-8 h-8 text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-2xl font-bold text-white mb-1">
+                    {analysisData?.decisorsWithEmails?.[0]?.organization_name || companyName}
+                  </h3>
+                  {analysisData?.decisorsWithEmails?.[0]?.organization_industry && (
+                    <p className="text-sm text-emerald-400 mb-2">
+                      {analysisData.decisorsWithEmails[0].organization_industry}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 text-sm text-slate-400">
+                    {analysisData?.decisorsWithEmails?.[0]?.city && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {analysisData.decisorsWithEmails[0].city}, {analysisData.decisorsWithEmails[0].country || 'Brazil'}
+                      </span>
+                    )}
+                    {analysisData?.decisorsWithEmails?.[0]?.organization_employees && (
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        {analysisData.decisorsWithEmails[0].organization_employees} funcionários
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Keywords / Industries */}
+              {analysisData?.decisorsWithEmails?.[0]?.organization_keywords && 
+               analysisData.decisorsWithEmails[0].organization_keywords.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-700">
+                  <span className="text-xs font-medium text-slate-400 mb-2 block">Keywords:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {analysisData.decisorsWithEmails[0].organization_keywords.map((kw: string, idx: number) => (
+                      <Badge key={idx} variant="secondary" className="text-xs bg-slate-700 text-slate-300">
+                        {kw}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* Dados da Empresa LinkedIn - TEMA ESCURO */}
           {analysisData.companyData && (
             <Card className="p-6 bg-gradient-to-r from-slate-800 to-slate-900 border-slate-700">
@@ -698,8 +750,8 @@ export function DecisorsContactsTab({
 
               {/* Menções de concorrentes */}
               {analysisData?.companyData?.competitorMentions && analysisData.companyData.competitorMentions.length > 0 && (
-                <div className="mt-4 pt-4 border-t">
-                  <span className="text-xs font-medium text-muted-foreground">Concorrentes Mencionados:</span>
+                <div className="mt-4 pt-4 border-t border-slate-700">
+                  <span className="text-xs font-medium text-slate-400">Concorrentes Mencionados:</span>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {analysisData.companyData.competitorMentions.map((comp: string, idx: number) => (
                       <Badge key={idx} variant="destructive" className="text-xs">
@@ -893,13 +945,37 @@ export function DecisorsContactsTab({
                         </div>
                       )}
                       
+                      {/* 📞 Phone Numbers Apollo (múltiplos) */}
+                      {decisor.phone_numbers && decisor.phone_numbers.length > 0 && (
+                        <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                          <Phone className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-slate-300 mb-2 font-medium">Telefones Apollo:</p>
+                            <div className="space-y-1">
+                              {decisor.phone_numbers.map((phoneObj: any, pIdx: number) => (
+                                <a
+                                  key={pIdx}
+                                  href={`tel:${phoneObj.sanitized_number || phoneObj.raw_number}`}
+                                  className="block text-blue-400 hover:text-blue-300 font-medium text-sm hover:underline"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {phoneObj.sanitized_number || phoneObj.raw_number}
+                                  {phoneObj.type && <span className="text-xs text-slate-400 ml-2">({phoneObj.type})</span>}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {decisor.linkedin_url && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Linkedin className="w-4 h-4 text-muted-foreground" />
-                          <a href={decisor.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
+                          <Linkedin className="w-4 h-4 text-blue-400" />
+                          <a href={decisor.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 hover:underline font-medium">
                             Ver perfil LinkedIn
                           </a>
-                          <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                          <ExternalLink className="w-3 h-3 text-slate-400" />
                         </div>
                       )}
                     </div>
