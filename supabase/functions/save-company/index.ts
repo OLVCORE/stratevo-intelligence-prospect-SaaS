@@ -89,6 +89,14 @@ serve(async (req) => {
       delete safePayload.id;
     }
 
+    console.log('[Save Company] 📦 Payload a ser salvo:', {
+      company_name: safePayload.company_name,
+      cnpj: safePayload.cnpj,
+      has_location: !!safePayload.location,
+      has_raw_data: !!safePayload.raw_data,
+      keys: Object.keys(safePayload)
+    });
+
     const { data: savedCompany, error: companyError } = await supabase
       .from('companies')
       .upsert(safePayload, willConflictOnCnpj ? { onConflict: 'cnpj' } : undefined as any)
@@ -209,8 +217,7 @@ serve(async (req) => {
       .select(`
         *,
         decision_makers (*),
-        digital_maturity (*),
-        governance_signals (*)
+        digital_maturity (*)
       `)
       .eq('id', savedCompany.id)
       .single();
