@@ -37,6 +37,14 @@ export function QuarantineEnrichmentStatusBadge({
   const completedChecks = [hasReceitaFederal, hasApollo, hasEnrichment360, hasTOTVS].filter(Boolean).length;
   const completionPercentage = Math.round((completedChecks / totalChecks) * 100);
   
+  // 🐛 DEBUG CÁLCULO
+  console.log('[BADGE] Cálculo:', {
+    checks: [hasReceitaFederal, hasApollo, hasEnrichment360, hasTOTVS],
+    completed: completedChecks,
+    total: totalChecks,
+    percentage: completionPercentage
+  });
+  
   const isFullyEnriched = completionPercentage === 100;
   const hasAnyEnrichment = completionPercentage > 0;
 
