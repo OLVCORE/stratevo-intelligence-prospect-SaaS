@@ -792,11 +792,36 @@ export default function CompanyDetailPage() {
             <Card className="glass-card hover-scale">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <CheckCircle className={`h-4 w-4 ${receitaData?.descricao_situacao_cadastral === 'ATIVA' ? 'text-lime-500' : 'text-yellow-500'}`} />
+                  <CheckCircle className={`h-4 w-4 ${
+                    (receitaData?.descricao_situacao_cadastral === 'ATIVA' || 
+                     receitaData?.situacao === 'ATIVA' || 
+                     receitaData?.status === 'ATIVA') 
+                    ? 'text-lime-500' 
+                    : 'text-yellow-500'
+                  }`} />
                   <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Situação</p>
                 </div>
-                <Badge variant={receitaData?.descricao_situacao_cadastral === 'ATIVA' ? 'default' : 'secondary'} className={`text-sm px-3 py-1 ${receitaData?.descricao_situacao_cadastral === 'ATIVA' ? 'bg-lime-600 hover:bg-lime-700 text-white dark:bg-lime-500 dark:hover:bg-lime-600' : 'bg-yellow-600 text-white dark:bg-yellow-500'}`}>
-                  {receitaData?.descricao_situacao_cadastral || rawData?.situacao_cadastral || 'Pendente'}
+                <Badge 
+                  variant={
+                    (receitaData?.descricao_situacao_cadastral === 'ATIVA' || 
+                     receitaData?.situacao === 'ATIVA' || 
+                     receitaData?.status === 'ATIVA') 
+                    ? 'default' 
+                    : 'secondary'
+                  } 
+                  className={`text-sm px-3 py-1 ${
+                    (receitaData?.descricao_situacao_cadastral === 'ATIVA' || 
+                     receitaData?.situacao === 'ATIVA' || 
+                     receitaData?.status === 'ATIVA')
+                    ? 'bg-lime-600 hover:bg-lime-700 text-white dark:bg-lime-500 dark:hover:bg-lime-600' 
+                    : 'bg-yellow-600 text-white dark:bg-yellow-500'
+                  }`}
+                >
+                  {receitaData?.descricao_situacao_cadastral || 
+                   receitaData?.situacao || 
+                   receitaData?.status || 
+                   rawData?.situacao_cadastral || 
+                   'Pendente'}
                 </Badge>
               </CardContent>
             </Card>
@@ -1456,13 +1481,13 @@ export default function CompanyDetailPage() {
                         </div>
                         
                         {/* 📱 BOTÃO CONTATOS PESSOAIS (sem revelar fonte) */}
-                        <div className="mb-2 p-2 bg-gradient-to-r from-purple-900/30 to-indigo-900/30 rounded border border-purple-600/50">
-                          <p className="text-xs text-purple-400 flex items-center gap-1.5">
+                        <div className="mb-2 p-2 bg-gradient-to-r from-cyan-900/30 to-blue-900/30 rounded border border-cyan-600/50">
+                          <p className="text-xs text-cyan-400 flex items-center gap-1.5">
                             <span className="flex-1">📱 Contatos Pessoais</span>
                             <Button 
                               size="sm" 
                               variant="ghost" 
-                              className="h-5 px-2 text-[10px] text-purple-400 hover:text-purple-300 disabled:opacity-50"
+                              className="h-5 px-2 text-[10px] text-cyan-400 hover:text-cyan-300 disabled:opacity-50"
                               onClick={() => handleRevealPersonalContact(dec)}
                               disabled={revealingContacts.has(dec.id)}
                               title="📱 Revelar mobile + email pessoal"
@@ -1474,7 +1499,7 @@ export default function CompanyDetailPage() {
                               )}
                             </Button>
                           </p>
-                          <p className="text-[9px] text-purple-500/70 mt-1">Mobile + Email pessoal</p>
+                          <p className="text-[9px] text-cyan-500/70 mt-1">Mobile + Email pessoal</p>
                         </div>
                         
                         {/* LinkedIn */}

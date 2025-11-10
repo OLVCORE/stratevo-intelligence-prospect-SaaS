@@ -1395,7 +1395,7 @@ export function DecisorsContactsTab({
                             <Button 
                               size="sm" 
                               variant="ghost" 
-                              className="h-6 text-[9px] text-purple-500 hover:text-purple-400 disabled:opacity-50"
+                              className="h-6 text-[9px] text-cyan-500 hover:text-cyan-400 disabled:opacity-50"
                               onClick={() => handleRevealPersonalContact(decisor)}
                               disabled={revealingContacts.has(decisor.id)}
                               title="📱 Revelar mobile + email pessoal"
