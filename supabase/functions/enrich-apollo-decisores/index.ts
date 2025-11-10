@@ -133,8 +133,26 @@ serve(async (req) => {
         if (orgResponse.ok) {
           const orgData = await orgResponse.json();
           if (orgData.organizations && orgData.organizations.length > 0) {
-            organizationId = orgData.organizations[0].id;
-            console.log('[ENRICH-APOLLO-DECISORES] ✅ Organização encontrada:', organizationId, 'com nome:', name);
+            console.log('[ENRICH-APOLLO-DECISORES] 🔍 Encontradas', orgData.organizations.length, 'empresas com nome', name);
+            
+            // 🎯 FILTRO INTELIGENTE: Priorizar empresa do BRASIL
+            const brazilOrg = orgData.organizations.find((org: any) => 
+              org.country === 'Brazil' || 
+              org.country === 'Brasil' ||
+              org.primary_domain?.includes('.br') ||
+              org.website_url?.includes('.br')
+            );
+            
+            const selectedOrg = brazilOrg || orgData.organizations[0];
+            organizationId = selectedOrg.id;
+            
+            console.log('[ENRICH-APOLLO-DECISORES] ✅ Organização selecionada:', {
+              id: organizationId,
+              nome: selectedOrg.name,
+              country: selectedOrg.country,
+              employees: selectedOrg.estimated_num_employees,
+              criterio: brazilOrg ? 'Brasil (filtrado)' : 'Primeira (fallback)'
+            });
             break;
           }
         }
