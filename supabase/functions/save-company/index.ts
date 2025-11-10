@@ -75,6 +75,8 @@ serve(async (req) => {
     const safePayload: any = {
       ...upsertPayload,
       ...(cnpjDigits ? { cnpj: cnpjDigits } : {}),
+      // 🔥 GARANTIR company_name SEMPRE tenha valor (NOT NULL constraint)
+      company_name: upsertPayload.company_name || upsertPayload.name || company.name || 'Empresa Sem Nome',
     };
 
     // Evita gravar websites placeholder
