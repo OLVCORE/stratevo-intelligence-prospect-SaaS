@@ -132,9 +132,92 @@ export function DecisorsContactsTab({
           return 'user';
         };
         
+        // 🔥 NORMALIZADOR UNIVERSAL APOLLO - Extrai de qualquer estrutura
+        const normalizeApolloData = (rawData: any) => {
+          if (!rawData) return {};
+          
+          // Tentar múltiplos caminhos possíveis para cada campo
+          const paths = {
+            organization_name: [
+              'organization.name',
+              'organization_name',
+              'organization_data.name',
+              'company.name',
+              'company_name'
+            ],
+            organization_employees: [
+              'organization.estimated_num_employees',
+              'organization_data.estimated_num_employees',
+              'organization_employees',
+              'company.estimated_num_employees',
+              'organization.num_employees',
+              'num_employees'
+            ],
+            organization_industry: [
+              'organization.industry',
+              'organization_data.industry',
+              'organization_industry',
+              'company.industry',
+              'industry'
+            ],
+            organization_keywords: [
+              'organization.keywords',
+              'organization_data.keywords',
+              'organization_keywords',
+              'company.keywords',
+              'keywords'
+            ],
+            apollo_score: [
+              'person_score',
+              'apollo_score',
+              'score'
+            ],
+            phone_numbers: [
+              'phone_numbers',
+              'phoneNumbers',
+              'phones'
+            ]
+          };
+          
+          const getValue = (obj: any, pathArray: string[]) => {
+            for (const path of pathArray) {
+              const keys = path.split('.');
+              let value = obj;
+              let found = true;
+              
+              for (const key of keys) {
+                if (value && typeof value === 'object' && key in value) {
+                  value = value[key];
+                } else {
+                  found = false;
+                  break;
+                }
+              }
+              
+              if (found && value !== null && value !== undefined) {
+                return value;
+              }
+            }
+            return null;
+          };
+          
+          return {
+            organization_name: getValue(rawData, paths.organization_name),
+            organization_employees: getValue(rawData, paths.organization_employees),
+            organization_industry: getValue(rawData, paths.organization_industry),
+            organization_keywords: getValue(rawData, paths.organization_keywords) || [],
+            apollo_score: getValue(rawData, paths.apollo_score),
+            phone_numbers: getValue(rawData, paths.phone_numbers) || []
+          };
+        };
+        
         // Formatar decisores para match com estrutura esperada (TODOS CAMPOS APOLLO)
         const formattedDecisors = existingDecisors.map(d => {
           console.log('[DECISORES-TAB] 🔍 raw_data para', d.full_name || d.name, ':', d.raw_data);
+          
+          // Normalizar dados Apollo
+          const apolloNormalized = normalizeApolloData(d.raw_data);
+          console.log('[DECISORES-TAB] 📦 Apollo normalizado:', apolloNormalized);
           
           return {
             name: d.full_name || d.name,
@@ -152,19 +235,17 @@ export function DecisorsContactsTab({
             country: d.country || 'Brazil',
             photo_url: d.photo_url,
             headline: d.headline,
-            // 🔥 CAMPOS APOLLO EXPANDIDOS (múltiplas fontes possíveis)
-            apollo_score: d.raw_data?.apollo_score || d.apollo_score,
-            organization_name: d.raw_data?.organization_name || d.organization_name,
-            organization_employees: d.raw_data?.organization_employees || 
-                                   d.raw_data?.organization_data?.estimated_num_employees ||
-                                   d.organization_employees,
-            organization_industry: d.raw_data?.organization_industry || 
-                                  d.raw_data?.organization_data?.industry ||
-                                  d.organization_industry,
-            organization_keywords: d.raw_data?.organization_keywords || 
-                                  d.raw_data?.organization_data?.keywords || 
-                                  d.organization_keywords || [],
-            phone_numbers: d.raw_data?.phone_numbers || d.phone_numbers || [],
+            // 🔥 CAMPOS APOLLO NORMALIZADOS (fallback hierarchy)
+            apollo_score: apolloNormalized.apollo_score || d.apollo_score,
+            organization_name: apolloNormalized.organization_name || d.organization_name,
+            organization_employees: apolloNormalized.organization_employees || d.organization_employees,
+            organization_industry: apolloNormalized.organization_industry || d.organization_industry,
+            organization_keywords: Array.isArray(apolloNormalized.organization_keywords) && apolloNormalized.organization_keywords.length > 0
+              ? apolloNormalized.organization_keywords 
+              : (d.organization_keywords || []),
+            phone_numbers: Array.isArray(apolloNormalized.phone_numbers) && apolloNormalized.phone_numbers.length > 0
+              ? apolloNormalized.phone_numbers 
+              : (d.phone_numbers || []),
             departments: d.raw_data?.departments || d.departments || [],
             employment_history: d.raw_data?.employment_history || [],
             enriched_with: 'database'
