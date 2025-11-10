@@ -943,7 +943,9 @@ export function DecisorsContactsTab({
           )}
 
           {/* 🏢 RESUMO DA EMPRESA (Apollo Organization) - 100% COMPLETO */}
-          {analysisData?.companyApolloOrg && (
+          {console.log('[DECISORES-TAB] 🏢 analysisData:', analysisData)}
+          {console.log('[DECISORES-TAB] 🏢 companyApolloOrg:', analysisData?.companyApolloOrg)}
+          {analysisData?.companyApolloOrg ? (
             <Card className="p-6 bg-gradient-to-br from-blue-900/40 to-slate-900 border-2 border-blue-500/30">
               <div className="flex items-start gap-4 mb-4">
                 <div className="p-3 rounded-full bg-blue-500/20 border border-blue-500/30">
@@ -1017,6 +1019,11 @@ export function DecisorsContactsTab({
                   </div>
                 )}
               </div>
+            </Card>
+          ) : (
+            <Card className="p-6 bg-red-900/40 border-2 border-red-500/30">
+              <p className="text-red-400">⚠️ Card Apollo Organization: analysisData.companyApolloOrg está undefined/null</p>
+              <pre className="text-xs text-slate-300 mt-2">{JSON.stringify(analysisData, null, 2).substring(0, 500)}</pre>
             </Card>
           )}
 
