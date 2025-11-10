@@ -59,6 +59,37 @@ export function DecisorsContactsTab({
       if (existingDecisors && existingDecisors.length > 0) {
         console.log('[DECISORES-TAB] ✅ Encontrados', existingDecisors.length, 'decisores já salvos');
         
+        // Classificar corretamente buying_power baseado no cargo
+        const classifyBuyingPower = (title: string, seniority: string) => {
+          const titleLower = (title || '').toLowerCase();
+          const seniorityLower = (seniority || '').toLowerCase();
+          
+          // Decision Makers: C-level, Diretores, VP, Sócios
+          if (
+            titleLower.includes('ceo') || titleLower.includes('presidente') ||
+            titleLower.includes('diretor') || titleLower.includes('director') ||
+            titleLower.includes('cfo') || titleLower.includes('cto') || titleLower.includes('cio') ||
+            titleLower.includes('vp') || titleLower.includes('vice') ||
+            titleLower.includes('sócio') || titleLower.includes('owner') ||
+            seniorityLower.includes('c_suite') || seniorityLower.includes('vp')
+          ) {
+            return 'decision-maker';
+          }
+          
+          // Influencers: Gerentes, Coordenadores, Supervisores
+          if (
+            titleLower.includes('gerente') || titleLower.includes('manager') ||
+            titleLower.includes('coordenador') || titleLower.includes('coordinator') ||
+            titleLower.includes('supervisor') || titleLower.includes('head') ||
+            seniorityLower.includes('manager')
+          ) {
+            return 'influencer';
+          }
+          
+          // Usuários: Analistas, Assistentes, Técnicos
+          return 'user';
+        };
+        
         // Formatar decisores para match com estrutura esperada (TODOS CAMPOS APOLLO)
         const formattedDecisors = existingDecisors.map(d => ({
           name: d.full_name || d.name,
@@ -70,7 +101,7 @@ export function DecisorsContactsTab({
           linkedin_url: d.linkedin_url,
           department: d.department,
           seniority_level: d.seniority_level,
-          buying_power: d.buying_power || 'decision-maker',
+          buying_power: classifyBuyingPower(d.position || '', d.seniority_level || ''),
           city: d.city,
           state: d.state,
           country: d.country || 'Brazil',
@@ -578,10 +609,13 @@ export function DecisorsContactsTab({
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <h5 className="font-bold text-lg text-foreground">{decisor.name}</h5>
                               {decisor.buying_power === 'decision-maker' && (
-                                <Badge variant="default" className="text-xs bg-emerald-600">🎯 Decision Maker</Badge>
+                                <Badge variant="default" className="text-xs bg-emerald-600">Decision Maker</Badge>
                               )}
                               {decisor.buying_power === 'influencer' && (
-                                <Badge variant="secondary" className="text-xs">💡 Influencer</Badge>
+                                <Badge variant="default" className="text-xs bg-blue-600">Influencer</Badge>
+                              )}
+                              {decisor.buying_power === 'user' && (
+                                <Badge variant="secondary" className="text-xs">Usuário</Badge>
                               )}
                               {decisor.seniority_level && (
                                 <Badge variant="outline" className="text-xs">{decisor.seniority_level}</Badge>
