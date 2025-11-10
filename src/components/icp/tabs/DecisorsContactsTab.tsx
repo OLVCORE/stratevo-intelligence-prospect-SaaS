@@ -57,6 +57,8 @@ export function DecisorsContactsTab({
     const loadExistingDecisors = async () => {
       if (!companyId) return;
       
+      console.log('[DECISORES-TAB] 🔄 Carregando dados para companyId:', companyId);
+      
       // 1️⃣ Buscar dados da empresa (Apollo Organization - FONTE DOS CAMPOS!)
       const { data: companyData } = await supabase
         .from('companies')
@@ -362,6 +364,13 @@ export function DecisorsContactsTab({
     loadExistingDecisors();
   }, [companyId]);
   
+  // 🔄 Função para forçar reload manual
+  const handleRefreshData = () => {
+    console.log('[DECISORES-TAB] 🔄 REFRESH MANUAL acionado');
+    setAnalysisData(null); // Limpar estado
+    // useEffect vai re-executar automaticamente
+  };
+  
   // 🔗 REGISTRY: Registrar aba para SaveBar global
   useEffect(() => {
     console.info('[REGISTRY] ✅ Registering: decisors');
@@ -640,6 +649,16 @@ export function DecisorsContactsTab({
           </div>
 
           <div className="flex gap-2">
+            <Button
+              onClick={handleRefreshData}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <Loader2 className="h-4 w-4" />
+              Recarregar Dados
+            </Button>
+            
             <Button
               onClick={() => linkedinMutation.mutate()}
               disabled={linkedinMutation.isPending}
