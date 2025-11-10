@@ -175,9 +175,16 @@ serve(async (req) => {
     );
 
   } catch (error: any) {
-    console.error('[APOLLO-PUBLIC] ❌ Erro:', error);
+    console.error('[APOLLO-PUBLIC] ❌ Erro completo:', error);
+    console.error('[APOLLO-PUBLIC] ❌ Stack:', error.stack);
+    console.error('[APOLLO-PUBLIC] ❌ Message:', error.message);
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: error.stack,
+        timestamp: new Date().toISOString()
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
