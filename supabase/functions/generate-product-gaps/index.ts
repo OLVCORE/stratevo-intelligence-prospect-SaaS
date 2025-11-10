@@ -15,26 +15,42 @@ interface ProductGapRequest {
   size?: string;
   employees?: number;
   detectedProducts?: string[];
+  detectedEvidences?: Array<{
+    product: string;
+    sources: Array<{ url: string; title: string; source_name: string }>;
+  }>;
   competitors?: any[];
   similarCompanies?: any[];
 }
 
-// Catálogo TOTVS (14 categorias)
+// Catálogo TOTVS (14 categorias) - EXPANDIDO
 const TOTVS_PRODUCTS = {
-  'IA': ['Carol AI', 'Auditoria Folha IA', 'Análise Preditiva'],
+  'IA': ['Carol AI', 'Auditoria Folha IA', 'Análise Preditiva', 'IA Generativa'],
   'ERP': ['Protheus', 'Datasul', 'RM', 'Logix', 'Winthor', 'Backoffice'],
-  'Analytics': ['TOTVS BI', 'Advanced Analytics', 'Data Platform'],
-  'Assinatura': ['TOTVS Assinatura Eletrônica'],
-  'Atendimento': ['TOTVS Chatbot', 'Service Desk'],
+  'Analytics': ['TOTVS BI', 'Advanced Analytics', 'Data Platform', 'Dashboards'],
+  'Assinatura': ['TOTVS Assinatura Eletrônica', 'DocuSign Integration'],
+  'Atendimento': ['TOTVS Chatbot', 'Service Desk', 'Omnichannel'],
   'Cloud': ['TOTVS Cloud', 'IaaS', 'Backup Cloud', 'Disaster Recovery'],
-  'Crédito': ['TOTVS Techfin', 'Antecipação de Recebíveis'],
-  'CRM': ['TOTVS CRM', 'Sales Force Automation'],
-  'Fluig': ['Fluig BPM', 'Fluig ECM', 'Fluig Workflow'],
-  'iPaaS': ['TOTVS iPaaS', 'API Management'],
-  'Marketing': ['RD Station'],
-  'Pagamentos': ['TOTVS Pay', 'PIX Integrado'],
-  'RH': ['TOTVS Folha', 'TOTVS Ponto', 'TOTVS Recrutamento'],
-  'SFA': ['TOTVS SFA', 'Força de Vendas']
+  'Crédito': ['TOTVS Techfin', 'Antecipação de Recebíveis', 'Capital de Giro'],
+  'CRM': ['TOTVS CRM', 'Sales Force Automation', 'Customer 360'],
+  'Fluig': ['Fluig BPM', 'Fluig ECM', 'Fluig Workflow', 'Processos Digitais'],
+  'iPaaS': ['TOTVS iPaaS', 'API Management', 'Integração de Sistemas'],
+  'Marketing': ['RD Station', 'Marketing Automation', 'Lead Generation'],
+  'Pagamentos': ['TOTVS Pay', 'PIX Integrado', 'Gateway de Pagamentos'],
+  'RH': ['TOTVS Folha', 'TOTVS Ponto', 'TOTVS Recrutamento', 'LMS', 'Performance'],
+  'SFA': ['TOTVS SFA', 'Força de Vendas', 'Mobile Sales']
+};
+
+// PRODUCT_SEGMENT_MATRIX - Mapeamento simplificado para Edge Function
+const SEGMENT_PRIORITIES = {
+  'Indústria': { primary: ['Protheus', 'Datasul', 'Fluig BPM', 'TOTVS BI'], relevant: ['Carol AI', 'TOTVS Cloud', 'TOTVS iPaaS'] },
+  'Educação': { primary: ['RM', 'Fluig ECM', 'TOTVS CRM'], relevant: ['RD Station', 'TOTVS Chatbot', 'TOTVS Pay'] },
+  'Varejo': { primary: ['Winthor', 'TOTVS Pay', 'TOTVS SFA'], relevant: ['TOTVS CRM', 'TOTVS BI', 'Carol AI'] },
+  'Serviços': { primary: ['Protheus', 'Fluig BPM', 'TOTVS CRM'], relevant: ['RD Station', 'TOTVS Assinatura Eletrônica', 'TOTVS Chatbot'] },
+  'Saúde': { primary: ['RM', 'Fluig ECM', 'TOTVS Cloud'], relevant: ['TOTVS BI', 'TOTVS Chatbot'] },
+  'Tecnologia': { primary: ['Protheus', 'TOTVS CRM', 'RD Station'], relevant: ['Fluig BPM', 'TOTVS iPaaS', 'Carol AI'] },
+  'Construção': { primary: ['Datasul', 'Fluig BPM'], relevant: ['TOTVS BI', 'TOTVS Assinatura Eletrônica'] },
+  'Agronegócio': { primary: ['Datasul', 'TOTVS BI'], relevant: ['Carol AI', 'TOTVS Cloud'] }
 };
 
 serve(async (req) => {
@@ -62,13 +78,17 @@ serve(async (req) => {
       size,
       employees,
       detectedProducts = [],
+      detectedEvidences = [],
       competitors = [],
       similarCompanies = []
     } = body;
 
-    console.log('[PRODUCT-GAPS] Analisando:', companyName);
+    console.log('[PRODUCT-GAPS] ✨ EVOLUÇÃO v2.0: Produtos & Oportunidades');
+    console.log('[PRODUCT-GAPS] 📊 Empresa:', companyName);
+    console.log('[PRODUCT-GAPS] 📦 Produtos detectados:', detectedProducts.length);
+    console.log('[PRODUCT-GAPS] 🔍 Evidências:', detectedEvidences.length);
 
-    // ✅ CONECTAR OPENAI GPT-4o-mini (REAL - NÃO MOCK!)
+    // ✅ CONECTAR OPENAI GPT-4o-mini
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
     
     if (!openaiKey) {
@@ -76,288 +96,264 @@ serve(async (req) => {
       throw new Error('OPENAI_API_KEY não configurada');
     }
 
-    let strategy: 'cross-sell' | 'new-sale' | 'upsell' = 'new-sale';
-    let recommendedProducts: any[] = [];
+    // ==================================================================
+    // ETAPA 1: PRODUTOS EM USO (Confirmados por evidências)
+    // ==================================================================
+    const productsInUse = detectedEvidences.map(evidence => ({
+      product: evidence.product,
+      category: Object.keys(TOTVS_PRODUCTS).find(cat =>
+        TOTVS_PRODUCTS[cat as keyof typeof TOTVS_PRODUCTS].includes(evidence.product)
+      ) || 'Outro',
+      evidenceCount: evidence.sources.length,
+      sources: evidence.sources.slice(0, 3) // Top 3 fontes mais relevantes
+    }));
 
-    // ESTRATÉGIA 1: Se empresa JÁ É CLIENTE TOTVS (detectedProducts > 0)
-    if (detectedProducts.length > 0) {
-      strategy = 'cross-sell';
-      console.log('[PRODUCT-GAPS] Cliente TOTVS existente - CROSS-SELL');
+    console.log('[PRODUCT-GAPS] ✅ Produtos em uso:', productsInUse.length);
 
-      // Produtos que a empresa JÁ TEM
-      const usedCategories = new Set<string>();
-      Object.entries(TOTVS_PRODUCTS).forEach(([category, products]) => {
-        if (products.some(p => detectedProducts.includes(p))) {
-          usedCategories.add(category);
-        }
-      });
+    // ==================================================================
+    // ETAPA 2: IDENTIFICAR SEGMENTO E BUSCAR MATRIZ
+    // ==================================================================
+    const normalizedSector = (sector || 'Serviços').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const segmentKey = Object.keys(SEGMENT_PRIORITIES).find(key =>
+      normalizedSector.toLowerCase().includes(key.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
+    ) || 'Serviços';
 
-      // ✅ USAR IA PARA RECOMENDAR (não mais mock!)
-      const aiPrompt = `Você é especialista em produtos TOTVS.
+    const segmentMatrix = SEGMENT_PRIORITIES[segmentKey as keyof typeof SEGMENT_PRIORITIES] || 
+                          SEGMENT_PRIORITIES['Serviços'];
 
-EMPRESA: ${companyName}
-SETOR: ${sector || 'não especificado'}
-PORTE: ${size || 'não especificado'} (${employees || '?'} funcionários)
-PRODUTOS JÁ USANDO: ${detectedProducts.join(', ')}
+    console.log('[PRODUCT-GAPS] 🎯 Segmento:', segmentKey);
 
-Recomende 3-5 produtos TOTVS complementares da MESMA categoria para CROSS-SELL.
-
-Responda APENAS JSON:
-[
-  {
-    "name": "Nome do Produto",
-    "category": "Categoria",
-    "fit_score": 85-95,
-    "value": "R$ XXK-XXXK ARR",
-    "reason": "Razão específica para essa empresa",
-    "timing": "immediate",
-    "priority": "high",
-    "roi_months": 12,
-    "benefits": ["Benefício 1", "Benefício 2", "Benefício 3"]
-  }
-]`;
-
-      try {
-        const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openaiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: aiPrompt }],
-            temperature: 0.7,
-            max_tokens: 1500
-          })
-        });
-
-        if (aiResponse.ok) {
-          const aiData = await aiResponse.json();
-          const aiContent = aiData.choices[0].message.content;
-          const parsed = JSON.parse(aiContent.replace(/```json\n?|```/g, ''));
-          recommendedProducts = Array.isArray(parsed) ? parsed : [parsed];
-          console.log('[PRODUCT-GAPS] ✅ IA retornou:', recommendedProducts.length, 'produtos');
-        }
-      } catch (error) {
-        console.error('[PRODUCT-GAPS] ❌ Erro na IA, usando fallback:', error);
-        // Fallback simples se IA falhar
-        Object.entries(TOTVS_PRODUCTS).forEach(([category, products]) => {
-          if (usedCategories.has(category)) {
-            products.forEach(product => {
-              if (!detectedProducts.includes(product) && recommendedProducts.length < 3) {
-                recommendedProducts.push({
-                  name: product,
-                  category,
-                  fit_score: 85,
-                  value: 'R$ 50K-150K ARR',
-                  reason: `Complementar à stack TOTVS existente (${category})`,
-                  timing: 'immediate',
-                  priority: 'high',
-                  roi_months: 12,
-                  benefits: ['Integração nativa', 'Reduz custos', 'Melhora eficiência']
-                });
-              }
-            });
-          }
-        });
-      }
-
-      // Produtos de OUTRAS categorias (expansão)
-      Object.entries(TOTVS_PRODUCTS).forEach(([category, products]) => {
-        if (!usedCategories.has(category) && recommendedProducts.length < 5) {
-          recommendedProducts.push({
-            name: products[0],
-            category,
-            fit_score: 70 + Math.floor(Math.random() * 10),
-            value: 'R$ 100K-200K ARR',
-            reason: `Expandir stack TOTVS para ${category}`,
-            timing: 'short_term',
-            priority: 'medium',
-            roi_months: 18,
-            benefits: [
-              'Nova categoria de produto',
-              'Aproveitamento de infraestrutura existente',
-              'Cross-sell estratégico'
-            ]
-          });
-        }
-      });
-    }
+    // ==================================================================
+    // ETAPA 3: GAP ANALYSIS - OPORTUNIDADES PRIMÁRIAS E RELEVANTES
+    // ==================================================================
+    const strategy = detectedProducts.length > 0 ? 'cross-sell' : 'new-sale';
     
-    // ESTRATÉGIA 2: Empresa NÃO é cliente TOTVS (NEW SALE)
-    else {
-      strategy = 'new-sale';
-      console.log('[PRODUCT-GAPS] Prospect novo - NEW SALE');
+    // Oportunidades Primárias: Produtos nucleares NÃO detectados
+    const primaryGaps = segmentMatrix.primary.filter(p => !detectedProducts.includes(p));
+    
+    // Oportunidades Relevantes: Produtos complementares NÃO detectados
+    const relevantGaps = segmentMatrix.relevant.filter(p => !detectedProducts.includes(p));
 
-      // ✅ USAR IA PARA RECOMENDAR STACK INICIAL (não mais mock!)
-      const competitorInfo = competitors.length > 0 ? 
-        `\nCONCORRENTES DETECTADOS: ${competitors.map(c => c.name).join(', ')}` : '';
-      
-      const aiPrompt = `Você é especialista em produtos TOTVS.
+    console.log('[PRODUCT-GAPS] 🎯 Oportunidades Primárias:', primaryGaps.length);
+    console.log('[PRODUCT-GAPS] 💡 Oportunidades Relevantes:', relevantGaps.length);
+
+    // ==================================================================
+    // ETAPA 4: GERAR RECOMENDAÇÕES DETALHADAS COM IA
+    // ==================================================================
+    const competitorInfo = competitors.length > 0 ? 
+      `\nCONCORRENTES: ${competitors.map(c => c.name).join(', ')}` : '';
+
+    const aiPrompt = `Você é especialista em produtos TOTVS e vendas B2B.
 
 EMPRESA: ${companyName}
 SETOR: ${sector || 'não especificado'}
-PORTE: ${size || 'não especificado'} (${employees || '?'} funcionários)
+PORTE: ${size || 'médio'} (${employees || '?'} funcionários)
 CNAE: ${cnae || 'não especificado'}${competitorInfo}
+ESTRATÉGIA: ${strategy === 'cross-sell' ? 'CROSS-SELL (já é cliente TOTVS)' : 'NEW SALE (prospect)'}
 
-Recomende stack inicial de 3 produtos TOTVS para NEW SALE considerando porte e setor.
+PRODUTOS JÁ EM USO: ${detectedProducts.length > 0 ? detectedProducts.join(', ') : 'Nenhum'}
 
-Produtos disponíveis por categoria:
-- ERP: Protheus, Datasul, RM, Logix, Winthor
-- Fluig: Fluig BPM, Fluig ECM
-- CRM: TOTVS CRM
-- Cloud: TOTVS Cloud
-- IA: Carol AI
+OPORTUNIDADES PRIMÁRIAS (nucleares, alta prioridade):
+${primaryGaps.slice(0, 3).join(', ') || 'Nenhuma'}
+
+OPORTUNIDADES RELEVANTES (complementares, média prioridade):
+${relevantGaps.slice(0, 3).join(', ') || 'Nenhuma'}
+
+TAREFA: Gere recomendações COMPLETAS para os produtos acima.
+
+Responda APENAS JSON válido:
+{
+  "primary_opportunities": [
+    {
+      "name": "Nome do Produto",
+      "category": "Categoria",
+      "fit_score": 85-100,
+      "value": "R$ XXK-XXXK ARR",
+      "reason": "Por que esse produto faz sentido PARA ESSA EMPRESA ESPECÍFICA",
+      "use_case": "Caso de uso específico para ${sector}",
+      "roi_months": 12-24,
+      "priority": "high",
+      "timing": "immediate",
+      "benefits": ["Benefício específico 1", "Benefício 2", "Benefício 3"],
+      "case_study": "Exemplo real de sucesso no segmento ${sector}"
+    }
+  ],
+  "relevant_opportunities": [
+    {
+      "name": "Nome do Produto",
+      "category": "Categoria",
+      "fit_score": 70-85,
+      "value": "R$ XXK-XXXK ARR",
+      "reason": "Razão específica",
+      "use_case": "Caso de uso",
+      "roi_months": 15-24,
+      "priority": "medium",
+      "timing": "short_term",
+      "benefits": ["Benefício 1", "Benefício 2", "Benefício 3"],
+      "case_study": "Exemplo de sucesso"
+    }
+  ],
+  "estimated_potential": {
+    "min_revenue": "R$ XXXK",
+    "max_revenue": "R$ XXXK",
+    "close_probability": "70-85%",
+    "timeline_months": "6-12 meses"
+  }
+}`;
+
+    let aiRecommendations: any = null;
+
+    try {
+      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: aiPrompt }],
+          temperature: 0.7,
+          max_tokens: 2500
+        })
+      });
+
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json();
+        const aiContent = aiData.choices[0].message.content;
+        aiRecommendations = JSON.parse(aiContent.replace(/```json\n?|```/g, ''));
+        console.log('[PRODUCT-GAPS] ✅ IA gerou recomendações com sucesso');
+      }
+    } catch (error) {
+      console.error('[PRODUCT-GAPS] ⚠️ Erro na IA, usando fallback:', error);
+    }
+
+    // ==================================================================
+    // ETAPA 5: GERAR SCRIPTS DE VENDAS COM IA
+    // ==================================================================
+    const salesPrompt = `Você é especialista em vendas B2B de software empresarial.
+
+EMPRESA: ${companyName}
+SETOR: ${sector}
+ESTRATÉGIA: ${strategy === 'cross-sell' ? 'CROSS-SELL' : 'NEW SALE'}
+PRODUTOS OPORTUNIDADE: ${primaryGaps.slice(0, 2).join(', ')}
+
+Gere scripts de abordagem comercial profissionais e personalizados.
 
 Responda APENAS JSON:
-[
-  {
-    "name": "Produto TOTVS",
-    "category": "Categoria",
-    "fit_score": 85-100,
-    "value": "R$ XXK-XXXK ARR",
-    "reason": "Por que esse produto faz sentido para essa empresa específica",
-    "timing": "immediate|short_term|medium_term",
-    "priority": "high|medium",
-    "roi_months": 12-24,
-    "benefits": ["Benefício específico 1", "Benefício 2", "Benefício 3"]
-  }
-]`;
+{
+  "email_script": {
+    "subject": "Assunto atrativo e personalizado",
+    "body": "Email completo em HTML com 3-4 parágrafos, personalizado para ${sector}, mencionando dores específicas do segmento"
+  },
+  "call_script": {
+    "opening": "Abertura de ligação (30s)",
+    "discovery": "3 perguntas de descoberta específicas para ${sector}",
+    "pitch": "Pitch de valor em 60s",
+    "objections": ["Objeção comum 1 e resposta", "Objeção 2 e resposta"],
+    "closing": "Fechamento e próximos passos"
+  },
+  "talking_points": [
+    "Ponto-chave 1 específico para ${sector}",
+    "Ponto-chave 2",
+    "Ponto-chave 3"
+  ]
+}`;
 
-      try {
-        const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openaiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: aiPrompt }],
-            temperature: 0.7,
-            max_tokens: 1500
-          })
-        });
+    let salesScripts: any = null;
 
-        if (aiResponse.ok) {
-          const aiData = await aiResponse.json();
-          const aiContent = aiData.choices[0].message.content;
-          const parsed = JSON.parse(aiContent.replace(/```json\n?|```/g, ''));
-          recommendedProducts = Array.isArray(parsed) ? parsed.slice(0, 3) : [parsed];
-          
-          // Se tem concorrentes, adicionar displacement
-          if (competitors.length > 0 && recommendedProducts.length > 0) {
-            const competitorNames = competitors.map(c => c.name || '').join(', ');
-            recommendedProducts[0].competitor_displacement = `Substitui ${competitorNames}`;
-          }
-          
-          console.log('[PRODUCT-GAPS] ✅ IA retornou:', recommendedProducts.length, 'produtos');
-        }
-      } catch (error) {
-        console.error('[PRODUCT-GAPS] ❌ Erro na IA, usando fallback básico:', error);
-        // Fallback mínimo
-        recommendedProducts = [{
-          name: 'Protheus',
-          category: 'ERP',
-          fit_score: 85,
-          value: 'R$ 300K-500K ARR',
-          reason: `ERP base para porte ${size || 'médio'}`,
-          timing: 'immediate',
-          priority: 'high',
-          roi_months: 18,
-          benefits: ['Gestão integrada', 'Controle financeiro', 'Redução de custos']
-        }];
-      }
-    }
-
-    // ESTRATÉGIA 3: Analisar empresas SIMILARES (uso de produtos)
-    if (similarCompanies && similarCompanies.length > 0) {
-      console.log('[PRODUCT-GAPS] Analisando empresas similares:', similarCompanies.length);
-      
-      // Produtos usados por similares
-      const similarUsageMap = new Map<string, number>();
-      
-      similarCompanies.forEach((similar: any) => {
-        if (similar.detected_products) {
-          similar.detected_products.forEach((product: string) => {
-            similarUsageMap.set(product, (similarUsageMap.get(product) || 0) + 1);
-          });
-        }
+    try {
+      const salesResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: salesPrompt }],
+          temperature: 0.8,
+          max_tokens: 2000
+        })
       });
 
-      // Top 3 produtos mais usados por similares
-      const topSimilarProducts = Array.from(similarUsageMap.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([product, count]) => ({
-          product,
-          count,
-          percentage: Math.round((count / similarCompanies.length) * 100)
-        }));
-
-      // Adicionar insights de similares
-      topSimilarProducts.forEach(({ product, percentage }) => {
-        if (!detectedProducts.includes(product) && recommendedProducts.length < 6) {
-          recommendedProducts.push({
-            name: product,
-            category: Object.keys(TOTVS_PRODUCTS).find(cat => 
-              TOTVS_PRODUCTS[cat as keyof typeof TOTVS_PRODUCTS].includes(product)
-            ) || 'Outro',
-            fit_score: 70 + percentage / 2,
-            value: 'R$ 80K-200K ARR',
-            reason: `${percentage}% das empresas similares usam este produto`,
-            timing: 'medium_term',
-            priority: 'medium',
-            roi_months: 18,
-            benefits: [
-              `Usado por ${percentage}% dos concorrentes`,
-              'Padrão do mercado no setor',
-              'Benchmarking competitivo'
-            ]
-          });
-        }
-      });
+      if (salesResponse.ok) {
+        const salesData = await salesResponse.json();
+        const salesContent = salesData.choices[0].message.content;
+        salesScripts = JSON.parse(salesContent.replace(/```json\n?|```/g, ''));
+        console.log('[PRODUCT-GAPS] ✅ Scripts de vendas gerados');
+      }
+    } catch (error) {
+      console.error('[PRODUCT-GAPS] ⚠️ Erro ao gerar scripts:', error);
     }
 
-    // Calcular valor total estimado
-    const totalEstimatedValue = recommendedProducts.reduce((sum, prod) => {
-      const match = prod.value.match(/R\$ ([\d,]+)K/);
-      if (match) {
-        const avgValue = parseInt(match[1].replace(',', '')) * 1000;
-        return sum + avgValue;
-      }
-      return sum;
-    }, 0);
+    // ==================================================================
+    // ETAPA 6: MONTAR RESPOSTA FINAL
+    // ==================================================================
+    const primaryOpportunities = aiRecommendations?.primary_opportunities || [];
+    const relevantOpportunities = aiRecommendations?.relevant_opportunities || [];
+    const estimatedPotential = aiRecommendations?.estimated_potential || {
+      min_revenue: 'R$ 300K',
+      max_revenue: 'R$ 800K',
+      close_probability: '70-80%',
+      timeline_months: '6-12 meses'
+    };
 
-    const totalEstimatedValueFormatted = `R$ ${(totalEstimatedValue / 1000).toFixed(0)}K-${((totalEstimatedValue * 1.5) / 1000).toFixed(0)}K ARR`;
+    // Calcular valor total
+    const allOpportunities = [...primaryOpportunities, ...relevantOpportunities];
+    const totalEstimatedValue = allOpportunities.length > 0 
+      ? `R$ ${allOpportunities.length * 150}K-${allOpportunities.length * 300}K ARR`
+      : 'R$ 0';
 
     // Stack sugerido
     const stackSuggestion = {
-      core: recommendedProducts.filter(p => p.priority === 'high').map(p => p.name),
-      complementary: recommendedProducts.filter(p => p.priority === 'medium').map(p => p.name),
+      core: primaryOpportunities.map((p: any) => p.name),
+      complementary: relevantOpportunities.map((p: any) => p.name),
       future_expansion: ['Carol AI', 'TOTVS Analytics', 'TOTVS Cloud']
     };
 
     const response = {
       success: true,
       strategy,
-      recommended_products: recommendedProducts.slice(0, 5), // Top 5
-      total_estimated_value: totalEstimatedValueFormatted,
+      segment: segmentKey,
+      
+      // 1️⃣ PRODUTOS EM USO
+      products_in_use: productsInUse,
+      
+      // 2️⃣ OPORTUNIDADES PRIMÁRIAS (nucleares)
+      primary_opportunities: primaryOpportunities,
+      
+      // 3️⃣ OPORTUNIDADES RELEVANTES (complementares)
+      relevant_opportunities: relevantOpportunities,
+      
+      // 4️⃣ POTENCIAL ESTIMADO
+      estimated_potential: estimatedPotential,
+      
+      // 5️⃣ ABORDAGEM SUGERIDA (scripts IA)
+      sales_approach: salesScripts || {
+        email_script: { subject: 'Oportunidade TOTVS', body: 'Script não disponível' },
+        call_script: { opening: 'Script não disponível' },
+        talking_points: ['Ponto 1', 'Ponto 2', 'Ponto 3']
+      },
+      
+      // 6️⃣ STACK SUGERIDO
       stack_suggestion: stackSuggestion,
+      
+      // LEGADO (manter compatibilidade)
+      recommended_products: [...primaryOpportunities, ...relevantOpportunities].slice(0, 5),
+      total_estimated_value: totalEstimatedValue,
       insights: [
         strategy === 'cross-sell' 
-          ? `Cliente TOTVS: ${detectedProducts.length} produtos em uso. Oportunidade de cross-sell de ${recommendedProducts.length} produtos.`
-          : `Prospect novo: Stack inicial com ${recommendedProducts.length} produtos recomendados.`,
-        similarCompanies && similarCompanies.length > 0
-          ? `Benchmarking: ${similarCompanies.length} empresas similares analisadas para recomendações.`
-          : 'Recomendações baseadas em porte e setor da empresa.',
-        `Valor total estimado: ${totalEstimatedValueFormatted}`
+          ? `Cliente TOTVS: ${productsInUse.length} produtos em uso. ${primaryOpportunities.length + relevantOpportunities.length} oportunidades identificadas.`
+          : `Prospect: ${primaryOpportunities.length + relevantOpportunities.length} produtos recomendados para stack inicial.`,
+        `Potencial de receita: ${estimatedPotential.min_revenue} - ${estimatedPotential.max_revenue}`,
+        `Timeline estimado: ${estimatedPotential.timeline_months}`
       ],
       generated_at: new Date().toISOString()
     };
 
-    console.log('[PRODUCT-GAPS] Sucesso:', recommendedProducts.length, 'produtos recomendados');
+    console.log('[PRODUCT-GAPS] ✅ Análise completa finalizada');
+    console.log('[PRODUCT-GAPS] 📊 Total oportunidades:', primaryOpportunities.length + relevantOpportunities.length);
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -365,11 +361,11 @@ Responda APENAS JSON:
     });
 
   } catch (error: any) {
-    console.error('[PRODUCT-GAPS] Erro:', error);
+    console.error('[PRODUCT-GAPS] ❌ Erro:', error);
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'Erro ao gerar recomendações de produtos'
+        error: error.message || 'Erro ao gerar análise de produtos e oportunidades'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -378,4 +374,3 @@ Responda APENAS JSON:
     );
   }
 });
-
