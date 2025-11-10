@@ -528,28 +528,69 @@ export function DecisorsContactsTab({
               </div>
 
               <div className="space-y-4">
-                {analysisData.decisorsWithEmails.map((decisor: any, idx: number) => (
-                  <div key={idx} className="border border-slate-600 rounded-lg p-4 bg-slate-800 hover:border-border transition-all">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h5 className="font-semibold text-lg">{decisor.name}</h5>
-                          {decisor.buying_power === 'decision-maker' && (
-                            <Badge variant="default" className="text-xs">Decision Maker</Badge>
-                          )}
-                          {decisor.buying_power === 'influencer' && (
-                            <Badge variant="secondary" className="text-xs">Influencer</Badge>
-                          )}
+                {analysisData.decisorsWithEmails.map((decisor: any, idx: number) => {
+                  // Gerar iniciais para avatar
+                  const initials = decisor.name
+                    .split(' ')
+                    .filter((n: string) => n.length > 0)
+                    .slice(0, 2)
+                    .map((n: string) => n[0].toUpperCase())
+                    .join('');
+                  
+                  return (
+                  <div key={idx} className="border border-slate-600 rounded-lg p-5 bg-gradient-to-br from-slate-800 to-slate-900 hover:border-primary/50 transition-all hover:shadow-lg">
+                    <div className="flex items-start gap-4 mb-4">
+                      {/* 📸 FOTO/AVATAR DO DECISOR */}
+                      <div className="flex-shrink-0">
+                        {decisor.photo_url ? (
+                          <img 
+                            src={decisor.photo_url} 
+                            alt={decisor.name}
+                            className="w-16 h-16 rounded-full border-2 border-primary/30 object-cover"
+                            onError={(e) => {
+                              // Fallback para avatar com iniciais se imagem falhar
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white font-bold text-xl border-2 border-primary/50 shadow-md ${decisor.photo_url ? 'hidden' : ''}`}>
+                          {initials}
                         </div>
-                        <p className="text-sm text-muted-foreground">{decisor.title || decisor.position}</p>
-                        {decisor.city && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                            <MapPin className="w-3 h-3" />
-                            {decisor.city}, {decisor.state} - {decisor.country}
-                          </p>
-                        )}
                       </div>
-                      <Badge variant="outline" className="text-xs">Apollo</Badge>
+                      
+                      {/* INFO DO DECISOR */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h5 className="font-bold text-lg text-foreground">{decisor.name}</h5>
+                              {decisor.buying_power === 'decision-maker' && (
+                                <Badge variant="default" className="text-xs bg-emerald-600">🎯 Decision Maker</Badge>
+                              )}
+                              {decisor.buying_power === 'influencer' && (
+                                <Badge variant="secondary" className="text-xs">💡 Influencer</Badge>
+                              )}
+                              {decisor.seniority_level && (
+                                <Badge variant="outline" className="text-xs">{decisor.seniority_level}</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium text-muted-foreground mb-1">{decisor.title || decisor.position}</p>
+                            {decisor.department && (
+                              <p className="text-xs text-muted-foreground">📁 {decisor.department}</p>
+                            )}
+                            {decisor.city && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                <MapPin className="w-3 h-3" />
+                                {decisor.city}, {decisor.state} - {decisor.country}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {decisor.enriched_with || 'Apollo'}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Contatos - DESTAQUE MAIOR */}
@@ -641,7 +682,8 @@ export function DecisorsContactsTab({
                       </ul>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
           )}
