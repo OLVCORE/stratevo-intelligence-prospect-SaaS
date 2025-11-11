@@ -194,6 +194,7 @@ const menuGroups: MenuGroup[] = [
           { title: "Inbox Unificado", icon: Inbox, url: "/sdr/inbox", description: "Central de mensagens multi-canal consolidada" },
           { title: "Sequências", icon: Repeat, url: "/sdr/sequences", description: "Cadências automatizadas de follow-up" },
           { title: "Tarefas", icon: ListChecks, url: "/sdr/tasks", description: "Gestão de tarefas e lembretes inteligentes" },
+          { title: "Sales Coaching", icon: Award, url: "/sdr/coaching", description: "Análise de calls com IA e coaching personalizado" },
           { title: "Integrações", icon: Zap, url: "/sdr/integrations", description: "Conecte com CRM, e-mail e ferramentas externas" },
         ],
       },

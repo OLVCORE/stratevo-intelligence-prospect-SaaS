@@ -25,6 +25,8 @@ import { WhatsAppQuickSend } from '@/components/sdr/WhatsAppQuickSend';
 import { EnhancedWhatsAppInterface } from '@/components/sdr/EnhancedWhatsAppInterface';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
+import { ImportPlaudRecording } from '@/components/plaud/ImportPlaudRecording';
+import { CallRecordingsTab } from '@/components/plaud/CallRecordingsTab';
 interface DealDetailsDialogProps {
   deal: Deal | null;
   open: boolean;
@@ -41,6 +43,7 @@ export function DealDetailsDialog({ deal, open, onOpenChange }: DealDetailsDialo
   const [primaryContact, setPrimaryContact] = useState<{ id: string; name?: string; email?: string; phone?: string } | null>(null);
   const [loadingContact, setLoadingContact] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [showPlaudImport, setShowPlaudImport] = useState(false);
 
   useEffect(() => {
     if (!deal?.company_id) {
@@ -88,10 +91,11 @@ export function DealDetailsDialog({ deal, open, onOpenChange }: DealDetailsDialo
         </div>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="details">Detalhes</TabsTrigger>
             <TabsTrigger value="ai">IA Sugestões</TabsTrigger>
             <TabsTrigger value="comms">Comunicação</TabsTrigger>
+            <TabsTrigger value="calls">Calls</TabsTrigger>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
             <TabsTrigger value="activity">Atividades</TabsTrigger>
             <TabsTrigger value="notes">Notas</TabsTrigger>
@@ -260,6 +264,22 @@ export function DealDetailsDialog({ deal, open, onOpenChange }: DealDetailsDialo
             </ScrollArea>
           </TabsContent>
 
+          <TabsContent value="calls" className="space-y-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Gravações de Calls</h3>
+              <Button onClick={() => setShowPlaudImport(true)} size="sm">
+                <Phone className="h-4 w-4 mr-2" />
+                Importar Call
+              </Button>
+            </div>
+            <ScrollArea className="h-[55vh]">
+              <CallRecordingsTab 
+                dealId={deal?.id} 
+                companyId={deal?.company_id} 
+              />
+            </ScrollArea>
+          </TabsContent>
+
           <TabsContent value="comms" className="space-y-4">
             {showVideoCall ? (
               <VideoCallInterface
@@ -346,6 +366,19 @@ export function DealDetailsDialog({ deal, open, onOpenChange }: DealDetailsDialo
             />
           </TabsContent>
         </Tabs>
+
+        {/* Plaud Import Dialog */}
+        <ImportPlaudRecording
+          open={showPlaudImport}
+          onOpenChange={setShowPlaudImport}
+          dealId={deal.id}
+          companyId={deal.company_id}
+          companyName={deal.title}
+          onSuccess={() => {
+            setShowPlaudImport(false);
+            // Refresh the call recordings tab
+          }}
+        />
     </DraggableDialog>
   );
 }

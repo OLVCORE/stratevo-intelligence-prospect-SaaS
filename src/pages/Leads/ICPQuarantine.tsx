@@ -1203,7 +1203,7 @@ export default function ICPQuarantine() {
     }
     
     const confirmed = window.confirm(
-      `Tem certeza que deseja aprovar ${selectedIds.length} empresa(s) e movê-las para o pool de leads?`
+      `Tem certeza que deseja aprovar ${selectedIds.length} empresa(s) e criar deals no Pipeline (Discovery)?`
     );
     
     if (!confirmed) return;

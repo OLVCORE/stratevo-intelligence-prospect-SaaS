@@ -438,3 +438,4 @@ Após adicionar as variáveis no Vercel, seu app estará 100% funcional! 🚀
 
 
 
+

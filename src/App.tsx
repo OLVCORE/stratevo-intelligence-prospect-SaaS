@@ -91,6 +91,7 @@ const CommandCenter = lazy(() => import("./pages/CommandCenter"));
 const ApprovedLeads = lazy(() => import("./pages/Leads/ApprovedLeads"));
 const EmailSequencesPage = lazy(() => import("./pages/EmailSequencesPage"));
 const SmartTasksPage = lazy(() => import("./pages/SmartTasksPage"));
+const SalesCoachingDashboard = lazy(() => import("./pages/SalesCoachingDashboard"));
 const CSVUploadWithMapping = lazy(() => import("./components/leads/CSVUploadWithMapping"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Error500 = lazy(() => import("./pages/Error500"));
@@ -453,6 +454,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <SmartTasksPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/sdr/coaching"
+              element={
+                <ProtectedRoute>
+                  <SalesCoachingDashboard />
                 </ProtectedRoute>
               }
             />
