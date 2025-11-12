@@ -27,6 +27,7 @@ import { STCAgent } from '@/components/intelligence/STCAgent';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { ICPScoreTooltip } from '@/components/icp/ICPScoreTooltip';
+import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
 import { toast } from 'sonner';
 import * as Papa from 'papaparse';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1603,6 +1604,7 @@ export default function ICPQuarantine() {
                       onFilterChange={setFilterAnalysisStatus}
                     />
                   </TableHead>
+                  <TableHead className="min-w-[110px]"><span className="font-semibold text-[10px]">Status TOTVS</span></TableHead>
                   <TableHead className="min-w-[90px]"><span className="font-semibold text-[10px]">Website</span></TableHead>
                   <TableHead className="min-w-[50px]"><span className="font-semibold text-[10px]">STC</span></TableHead>
                   <TableHead className="w-[40px]"><span className="font-semibold text-[10px]">⚙️</span></TableHead>
@@ -1611,13 +1613,13 @@ export default function ICPQuarantine() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-8">
+                  <TableCell colSpan={14} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : paginatedCompanies.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
                     Nenhuma empresa encontrada
                   </TableCell>
                 </TableRow>
@@ -1781,6 +1783,33 @@ export default function ICPQuarantine() {
                       <QuarantineEnrichmentStatusBadge 
                         rawAnalysis={rawData}
                         showProgress
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TOTVSStatusBadge
+                        status={
+                          rawData?.stc_verification_history?.status || 
+                          rawData?.totvs_check?.status || 
+                          (company as any).totvs_status || 
+                          null
+                        }
+                        confidence={
+                          rawData?.stc_verification_history?.confidence || 
+                          rawData?.totvs_check?.confidence || 
+                          undefined
+                        }
+                        tripleMatches={
+                          rawData?.stc_verification_history?.triple_matches || 
+                          rawData?.totvs_check?.triple_matches || 
+                          0
+                        }
+                        doubleMatches={
+                          rawData?.stc_verification_history?.double_matches || 
+                          rawData?.totvs_check?.double_matches || 
+                          0
+                        }
+                        size="sm"
+                        showDetails={true}
                       />
                     </TableCell>
                     <TableCell>

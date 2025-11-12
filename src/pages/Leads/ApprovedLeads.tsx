@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
+import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
 import { 
   CheckCircle2, 
   Rocket, 
@@ -445,6 +446,33 @@ export default function ApprovedLeads() {
                           <QuarantineEnrichmentStatusBadge 
                             rawAnalysis={(lead as any).raw_data || {}}
                             showProgress={true}
+                          />
+                          
+                          {/* ✅ BADGE STATUS TOTVS */}
+                          <TOTVSStatusBadge
+                            status={
+                              (lead as any).raw_data?.stc_verification_history?.status || 
+                              (lead as any).raw_data?.totvs_check?.status || 
+                              (lead as any).totvs_status || 
+                              null
+                            }
+                            confidence={
+                              (lead as any).raw_data?.stc_verification_history?.confidence || 
+                              (lead as any).raw_data?.totvs_check?.confidence || 
+                              undefined
+                            }
+                            tripleMatches={
+                              (lead as any).raw_data?.stc_verification_history?.triple_matches || 
+                              (lead as any).raw_data?.totvs_check?.triple_matches || 
+                              0
+                            }
+                            doubleMatches={
+                              (lead as any).raw_data?.stc_verification_history?.double_matches || 
+                              (lead as any).raw_data?.totvs_check?.double_matches || 
+                              0
+                            }
+                            size="sm"
+                            showDetails={true}
                           />
                           
                           {lead.source_name && (

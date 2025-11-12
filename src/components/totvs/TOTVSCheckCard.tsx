@@ -37,6 +37,7 @@ import { ReportHistoryModal } from '@/components/icp/ReportHistoryModal';
 import SaveBar from './SaveBar';
 import { toast } from 'sonner';
 import { isDiagEnabled, dlog, dgroup, dgroupEnd, dtable } from '@/lib/diag';
+import { HeroStatusCard } from './HeroStatusCard';
 import {
   RefreshCw,
   CheckCircle,
@@ -1051,6 +1052,19 @@ export default function TOTVSCheckCard({
             </div>
           ) : (
             <>
+              {/* 🎨 HERO STATUS CARD - VISUAL IMPACTANTE */}
+              <div className="mb-6">
+                <HeroStatusCard
+                  status={data.status}
+                  confidence={data.confidence}
+                  tripleMatches={data.triple_matches || data.data?.tripleMatches || 0}
+                  doubleMatches={data.double_matches || data.data?.doubleMatches || 0}
+                  singleMatches={data.single_matches || data.data?.singleMatches || 0}
+                  totalScore={data.total_weight || data.total_score || data.data?.totalScore || 0}
+                  sources={data.methodology?.searched_sources || data.sources_consulted || data.data?.sourcesConsulted || 0}
+                />
+              </div>
+              
               {/* HEADER */}
               <div className="flex justify-between items-start mb-4">
                 <div>
