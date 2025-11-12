@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Users,
   Zap,
-  Filter
+  Filter,
+  XCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -338,7 +339,7 @@ export default function ApprovedLeads() {
             <div className="flex gap-4">
               <div className="flex-1">
                 <Input
-                  placeholder="Buscar por nome ou CNPJ..."
+                  placeholder="🔍 Buscar: nome, CNPJ, decisor, cargo, departamento, email, keywords..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full"
@@ -432,7 +433,8 @@ export default function ApprovedLeads() {
                   onClick={() => setApolloSearchQuery('')}
                   className="text-cyan-400 hover:text-cyan-300"
                 >
-                  <XCircle className="h-4 w-4" />
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Limpar
                 </Button>
               )}
             </div>
