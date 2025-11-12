@@ -1565,10 +1565,11 @@ serve(async (req) => {
       console.log('[SIMPLE-TOTVS] 🟡 NO-GO: 1 Double Match (Empresa+TOTVS) → 50%');
     } else {
       // 0 Matches = GO (sem evidências, NÃO é cliente)
+      // 🔥 CONFIANÇA ALTA: Buscou em MUITAS fontes e não encontrou NADA!
       status = 'go';
-      confidence = 'low';
-      confidencePercent = 0;
-      console.log('[SIMPLE-TOTVS] 🟢 GO: 0 Matches → Sem evidências, NÃO é cliente TOTVS');
+      confidence = 'high'; // ✅ INVERTIDO: 0 matches após buscar em 50+ fontes = ALTA confiança
+      confidencePercent = 95; // ✅ ALTA confiança (não 100% pois podem existir fontes não públicas)
+      console.log('[SIMPLE-TOTVS] 🟢 GO: 0 Matches → ALTA CONFIANÇA - Buscou em múltiplas fontes e não encontrou evidências');
     }
 
     console.log('[SIMPLE-TOTVS] 📊 Classificação:', {

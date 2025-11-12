@@ -109,91 +109,64 @@ export function HeroStatusCard({
       {/* Background gradient overlay */}
       <div className={cn('absolute inset-0', config.bgColor)} />
       
-      <CardContent className="relative p-8">
-        <div className="flex items-center justify-between">
+      <CardContent className="relative p-4">
+        <div className="flex items-center justify-between gap-4">
           {/* LEFT SIDE: Status Info */}
-          <div className="flex items-center gap-6">
-            {/* Icon Circle */}
+          <div className="flex items-center gap-4">
+            {/* Icon Circle - MENOR */}
             <div className={cn(
-              'flex items-center justify-center w-24 h-24 rounded-full border-4',
+              'flex items-center justify-center w-16 h-16 rounded-full border-4',
               config.borderColor,
-              config.bgColor,
-              'animate-pulse-slow'
+              config.bgColor
             )}>
-              <StatusIcon className={cn('w-12 h-12', config.iconColor)} strokeWidth={2.5} />
+              <StatusIcon className={cn('w-8 h-8', config.iconColor)} strokeWidth={2.5} />
             </div>
             
-            {/* Text Info */}
-            <div className="space-y-2">
-              <h2 className="text-3xl font-bold text-white tracking-tight">
+            {/* Text Info - MAIS COMPACTO */}
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold text-white tracking-tight">
                 {config.title}
               </h2>
-              <p className="text-base text-gray-300 max-w-md">
+              <p className="text-sm text-gray-300 max-w-md">
                 {config.subtitle}
               </p>
               
               {/* Confidence Badge */}
               {confidence && (
-                <div className="flex items-center gap-2 mt-3">
-                  <Badge variant="outline" className={cn(
-                    'text-sm font-semibold',
-                    confidence === 'high' && 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-                    confidence === 'medium' && 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-                    confidence === 'low' && 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-                  )}>
-                    {confidence === 'high' && '🔥 Confiança Alta'}
-                    {confidence === 'medium' && '⚠️ Confiança Média'}
-                    {confidence === 'low' && '❄️ Confiança Baixa'}
-                  </Badge>
-                </div>
+                <Badge variant="outline" className={cn(
+                  'text-xs font-semibold mt-1',
+                  confidence === 'high' && 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+                  confidence === 'medium' && 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+                  confidence === 'low' && 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                )}>
+                  {confidence === 'high' && '🔥 Confiança Alta'}
+                  {confidence === 'medium' && '⚠️ Confiança Média'}
+                  {confidence === 'low' && '❄️ Confiança Baixa'}
+                </Badge>
               )}
             </div>
           </div>
           
-          {/* RIGHT SIDE: Metrics */}
+          {/* RIGHT SIDE: Metrics - EM LINHA */}
           {status && (
-            <div className="grid grid-cols-2 gap-4">
-              {/* Matches Card */}
-              <div className="bg-background/50 backdrop-blur-sm rounded-lg p-4 border border-gray-700/50 min-w-[160px]">
-                <div className="flex items-center gap-2 mb-3">
-                  <Target className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-medium text-gray-400">Evidências</span>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Triple:</span>
-                    <span className="text-lg font-bold text-emerald-500">{tripleMatches}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Double:</span>
-                    <span className="text-lg font-bold text-blue-500">{doubleMatches}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Single:</span>
-                    <span className="text-sm font-medium text-gray-500">{singleMatches}</span>
-                  </div>
+            <div className="flex items-center gap-3">
+              {/* Evidências */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-background/50 backdrop-blur-sm rounded-lg border border-gray-700/50">
+                <Target className="w-4 h-4 text-primary flex-shrink-0" />
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-emerald-500 font-bold">{tripleMatches}T</span>
+                  <span className="text-blue-500 font-bold">{doubleMatches}D</span>
+                  <span className="text-gray-500 font-medium">{singleMatches}S</span>
                 </div>
               </div>
               
-              {/* Intelligence Card */}
-              <div className="bg-background/50 backdrop-blur-sm rounded-lg p-4 border border-gray-700/50 min-w-[160px]">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4 text-cyan-500" />
-                  <span className="text-xs font-medium text-gray-400">Inteligência</span>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Fontes:</span>
-                    <span className="text-xl font-bold text-cyan-500">{sources}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Score:</span>
-                    <span className="text-lg font-bold text-white">{totalScore} pts</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Total:</span>
-                    <span className="text-sm font-medium text-gray-300">{totalMatches} matches</span>
-                  </div>
+              {/* Inteligência */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-background/50 backdrop-blur-sm rounded-lg border border-gray-700/50">
+                <Sparkles className="w-4 h-4 text-cyan-500 flex-shrink-0" />
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-cyan-500 font-bold">{sources} fontes</span>
+                  <span className="text-gray-400">•</span>
+                  <span className="text-white font-bold">{totalScore} pts</span>
                 </div>
               </div>
             </div>
