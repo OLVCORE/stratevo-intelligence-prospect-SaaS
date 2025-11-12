@@ -908,6 +908,7 @@ export default function TOTVSCheckCard({
           toast.info('Exportação PDF em desenvolvimento');
         }}
         onShowHistory={() => setShowHistoryModal(true)}
+        onRefresh={handleVerify}
       />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full flex flex-col h-[calc(100vh-300px)]">
@@ -1063,14 +1064,6 @@ export default function TOTVSCheckCard({
                   totalScore={data.total_weight || data.total_score || data.data?.totalScore || 0}
                   sources={data.methodology?.searched_sources || data.sources_consulted || data.data?.sourcesConsulted || 0}
                 />
-              </div>
-              
-              {/* AÇÕES NO TOPO */}
-              <div className="flex justify-end items-center mb-4">
-                <Button variant="outline" size="sm" onClick={handleVerify}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Atualizar Verificação
-                </Button>
               </div>
 
           {/* FILTROS */}

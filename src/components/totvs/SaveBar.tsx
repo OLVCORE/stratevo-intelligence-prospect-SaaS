@@ -5,7 +5,7 @@
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { CheckCircle2, AlertCircle, Loader2, Save, FileText, Send, Shield, History, FileDown } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Save, FileText, Send, Shield, History, FileDown, RefreshCw } from 'lucide-react';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { isDiagEnabled, dlog, dgroup, dgroupEnd, dtable } from '@/lib/diag';
 import { SAFE_MODE, BLOCK_WRITES } from '@/lib/flags';
@@ -18,6 +18,7 @@ interface SaveBarProps {
   onApprove: () => Promise<void>;
   onExportPdf?: () => void;
   onShowHistory?: () => void; // 📜 Callback para abrir modal de histórico
+  onRefresh?: () => void; // 🔄 Callback para atualizar verificação TOTVS
   readOnly?: boolean;
   isSaving?: boolean;
 }
@@ -28,6 +29,7 @@ export default function SaveBar({
   onApprove,
   onExportPdf,
   onShowHistory,
+  onRefresh,
   readOnly = false,
   isSaving = false,
 }: SaveBarProps) {
@@ -188,6 +190,20 @@ export default function SaveBar({
               <Shield className="w-3 h-3" />
               {BLOCK_WRITES ? 'writes bloqueadas' : 'modo seguro'}
             </span>
+          )}
+
+          {/* 🔄 Botão Atualizar Verificação */}
+          {onRefresh && (
+            <Button
+              onClick={onRefresh}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              title="Atualizar verificação TOTVS"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Atualizar
+            </Button>
           )}
 
           {/* 📜 Botão Histórico */}
