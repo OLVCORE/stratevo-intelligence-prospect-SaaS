@@ -42,6 +42,7 @@ export default function ApprovedLeads() {
   const [filteredLeads, setFilteredLeads] = useState<ApprovedLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [apolloSearchQuery, setApolloSearchQuery] = useState(''); // 🆕 BUSCA APOLLO DECISORES
   const [temperatureFilter, setTemperatureFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [selectedLead, setSelectedLead] = useState<ApprovedLead | null>(null);
@@ -61,7 +62,7 @@ export default function ApprovedLeads() {
 
   useEffect(() => {
     filterLeads();
-  }, [searchTerm, temperatureFilter, sourceFilter, leads]);
+  }, [searchTerm, apolloSearchQuery, temperatureFilter, sourceFilter, leads]);
 
   useEffect(() => {
     // Extrair origens únicas dos leads
@@ -91,38 +92,31 @@ export default function ApprovedLeads() {
   const filterLeads = () => {
     let filtered = [...leads];
 
-    // 🔍 BUSCA ABRANGENTE: nome, CNPJ, departamento, cargo, decisor, email, keywords
+    // 🔍 BUSCA GERAL: nome e CNPJ (PRESERVADA)
     if (searchTerm) {
-      const query = searchTerm.toLowerCase();
+      filtered = filtered.filter(lead =>
+        lead.razao_social?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead.cnpj?.includes(searchTerm)
+      );
+    }
+    
+    // 👥 BUSCA APOLLO DECISORES (NOVA - ADICIONAL)
+    if (apolloSearchQuery) {
+      const query = apolloSearchQuery.toLowerCase();
       
       filtered = filtered.filter(lead => {
         const rawData = (lead as any).raw_data || {};
         
-        // Busca básica: nome e CNPJ
-        const matchesBasic = lead.razao_social?.toLowerCase().includes(query) ||
-          lead.cnpj?.includes(searchTerm);
-        
-        // Busca em dados Apollo (decisores)
+        // Busca em dados Apollo (decisores/colaboradores)
         const apolloData = rawData.apollo_organization || rawData.enrichment_360?.apollo || {};
         const apolloPeople = apolloData.people || [];
         
-        const matchesApollo = apolloPeople.some((person: any) => {
+        return apolloPeople.some((person: any) => {
           return person.name?.toLowerCase().includes(query) ||
             person.title?.toLowerCase().includes(query) ||
             person.email?.toLowerCase().includes(query) ||
             person.departments?.some((dept: string) => dept.toLowerCase().includes(query));
         });
-        
-        // Busca em keywords/tecnologias
-        const keywords = rawData.keywords || [];
-        const matchesKeywords = keywords.some((kw: string) => kw.toLowerCase().includes(query));
-        
-        // Busca em setor/atividade
-        const matchesSector = lead.segmento?.toLowerCase().includes(query) ||
-          rawData.setor_amigavel?.toLowerCase().includes(query) ||
-          rawData.atividade_economica?.toLowerCase().includes(query);
-        
-        return matchesBasic || matchesApollo || matchesKeywords || matchesSector;
       });
     }
 
@@ -344,7 +338,7 @@ export default function ApprovedLeads() {
             <div className="flex gap-4">
               <div className="flex-1">
                 <Input
-                  placeholder="🔍 Buscar: nome, CNPJ, decisor, cargo, departamento, email, keywords..."
+                  placeholder="Buscar por nome ou CNPJ..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full"
@@ -411,6 +405,42 @@ export default function ApprovedLeads() {
                 )}
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* 👥 BUSCA APOLLO DECISORES (NOVA - ADICIONAL) */}
+        <Card className="border-cyan-500/30 bg-cyan-500/5">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-cyan-400">
+                <Users className="h-5 w-5" />
+                <span className="font-semibold text-sm">Buscar Decisores/Colaboradores Apollo:</span>
+              </div>
+              <div className="flex-1 max-w-xl relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-cyan-400" />
+                <Input
+                  placeholder="👥 Digite: nome do decisor, cargo, departamento, email..."
+                  value={apolloSearchQuery}
+                  onChange={(e) => setApolloSearchQuery(e.target.value)}
+                  className="pl-10 border-cyan-500/30 focus:border-cyan-500"
+                />
+              </div>
+              {apolloSearchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setApolloSearchQuery('')}
+                  className="text-cyan-400 hover:text-cyan-300"
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            {apolloSearchQuery && (
+              <p className="text-xs text-cyan-400/70 mt-2 ml-7">
+                🔍 Filtrando empresas que têm decisores com: "{apolloSearchQuery}"
+              </p>
+            )}
           </CardContent>
         </Card>
 
