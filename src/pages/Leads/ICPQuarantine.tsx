@@ -512,11 +512,39 @@ export default function ICPQuarantine() {
 
   const filteredCompanies = companies
     .filter(c => {
-      // Filtro de busca por nome/CNPJ
-      const matchesSearch = c.razao_social?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.cnpj?.includes(searchQuery);
-      
-      if (!matchesSearch) return false;
+      // 🔍 BUSCA ABRANGENTE: nome, CNPJ, departamento, cargo, decisor, email, keywords
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const rawData = (c as any).raw_data || {};
+        
+        // Busca básica: nome e CNPJ
+        const matchesBasic = c.razao_social?.toLowerCase().includes(query) ||
+          c.cnpj?.includes(searchQuery);
+        
+        // Busca em dados Apollo (decisores)
+        const apolloData = rawData.apollo_organization || rawData.enrichment_360?.apollo || {};
+        const apolloPeople = apolloData.people || [];
+        
+        const matchesApollo = apolloPeople.some((person: any) => {
+          return person.name?.toLowerCase().includes(query) ||
+            person.title?.toLowerCase().includes(query) ||
+            person.email?.toLowerCase().includes(query) ||
+            person.departments?.some((dept: string) => dept.toLowerCase().includes(query));
+        });
+        
+        // Busca em keywords/tecnologias
+        const keywords = rawData.keywords || [];
+        const matchesKeywords = keywords.some((kw: string) => kw.toLowerCase().includes(query));
+        
+        // Busca em setor/atividade
+        const matchesSector = c.segmento?.toLowerCase().includes(query) ||
+          rawData.setor_amigavel?.toLowerCase().includes(query) ||
+          rawData.atividade_economica?.toLowerCase().includes(query);
+        
+        const matchesSearch = matchesBasic || matchesApollo || matchesKeywords || matchesSector;
+        
+        if (!matchesSearch) return false;
+      }
       
       // 🔍 FILTROS INTELIGENTES POR COLUNA
       
@@ -1440,7 +1468,7 @@ export default function ICPQuarantine() {
             <div className="flex-1 min-w-[200px] relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome ou CNPJ..."
+                placeholder="🔍 Buscar: nome, CNPJ, decisor, cargo, departamento, email, keywords..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"

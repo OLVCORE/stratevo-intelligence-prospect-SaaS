@@ -91,12 +91,39 @@ export default function ApprovedLeads() {
   const filterLeads = () => {
     let filtered = [...leads];
 
-    // Filtro de busca
+    // 🔍 BUSCA ABRANGENTE: nome, CNPJ, departamento, cargo, decisor, email, keywords
     if (searchTerm) {
-      filtered = filtered.filter(lead =>
-        lead.razao_social?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.cnpj?.includes(searchTerm)
-      );
+      const query = searchTerm.toLowerCase();
+      
+      filtered = filtered.filter(lead => {
+        const rawData = (lead as any).raw_data || {};
+        
+        // Busca básica: nome e CNPJ
+        const matchesBasic = lead.razao_social?.toLowerCase().includes(query) ||
+          lead.cnpj?.includes(searchTerm);
+        
+        // Busca em dados Apollo (decisores)
+        const apolloData = rawData.apollo_organization || rawData.enrichment_360?.apollo || {};
+        const apolloPeople = apolloData.people || [];
+        
+        const matchesApollo = apolloPeople.some((person: any) => {
+          return person.name?.toLowerCase().includes(query) ||
+            person.title?.toLowerCase().includes(query) ||
+            person.email?.toLowerCase().includes(query) ||
+            person.departments?.some((dept: string) => dept.toLowerCase().includes(query));
+        });
+        
+        // Busca em keywords/tecnologias
+        const keywords = rawData.keywords || [];
+        const matchesKeywords = keywords.some((kw: string) => kw.toLowerCase().includes(query));
+        
+        // Busca em setor/atividade
+        const matchesSector = lead.segmento?.toLowerCase().includes(query) ||
+          rawData.setor_amigavel?.toLowerCase().includes(query) ||
+          rawData.atividade_economica?.toLowerCase().includes(query);
+        
+        return matchesBasic || matchesApollo || matchesKeywords || matchesSector;
+      });
     }
 
     // Filtro de temperatura (mantido)
@@ -317,7 +344,7 @@ export default function ApprovedLeads() {
             <div className="flex gap-4">
               <div className="flex-1">
                 <Input
-                  placeholder="Buscar por nome ou CNPJ..."
+                  placeholder="🔍 Buscar: nome, CNPJ, decisor, cargo, departamento, email, keywords..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full"
