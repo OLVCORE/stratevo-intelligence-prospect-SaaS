@@ -7,7 +7,7 @@
  * - ⚪ NÃO VERIFICADO (cinza)
  */
 
-import { CheckCircle, XCircle, AlertTriangle, HelpCircle, Sparkles, Target, TrendingUp } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, HelpCircle, Sparkles, Target } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -100,41 +100,41 @@ export function HeroStatusCard({
   
   return (
     <Card className={cn(
-      'relative overflow-hidden border-2 transition-all duration-300 hover:scale-[1.02]',
+      'relative overflow-hidden border-2 transition-all duration-300',
       config.borderColor,
       config.glowColor,
-      'shadow-lg',
+      'shadow-lg max-w-5xl', // ✅ Largura máxima confortável
       className
     )}>
       {/* Background gradient overlay */}
       <div className={cn('absolute inset-0', config.bgColor)} />
       
-      <CardContent className="relative p-4">
-        <div className="flex items-center justify-between gap-4">
+      <CardContent className="relative p-6">
+        <div className="flex items-center justify-between gap-6">
           {/* LEFT SIDE: Status Info */}
-          <div className="flex items-center gap-4">
-            {/* Icon Circle - MENOR */}
+          <div className="flex items-center gap-5">
+            {/* Icon Circle */}
             <div className={cn(
-              'flex items-center justify-center w-16 h-16 rounded-full border-4',
+              'flex items-center justify-center w-20 h-20 rounded-full border-4',
               config.borderColor,
               config.bgColor
             )}>
-              <StatusIcon className={cn('w-8 h-8', config.iconColor)} strokeWidth={2.5} />
+              <StatusIcon className={cn('w-10 h-10', config.iconColor)} strokeWidth={2.5} />
             </div>
             
-            {/* Text Info - MAIS COMPACTO */}
-            <div className="space-y-1">
-              <h2 className="text-xl font-bold text-white tracking-tight">
+            {/* Text Info */}
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-white tracking-tight">
                 {config.title}
               </h2>
-              <p className="text-sm text-gray-300 max-w-md">
+              <p className="text-sm text-gray-300 max-w-sm">
                 {config.subtitle}
               </p>
               
               {/* Confidence Badge */}
               {confidence && (
                 <Badge variant="outline" className={cn(
-                  'text-xs font-semibold mt-1',
+                  'text-sm font-semibold mt-2',
                   confidence === 'high' && 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
                   confidence === 'medium' && 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
                   confidence === 'low' && 'bg-gray-500/20 text-gray-400 border-gray-500/30'
@@ -147,28 +147,56 @@ export function HeroStatusCard({
             </div>
           </div>
           
-          {/* RIGHT SIDE: Metrics - EM LINHA */}
+          {/* RIGHT SIDE: Metrics Cards - MAIORES E VISÍVEIS */}
           {status && (
-            <div className="flex items-center gap-3">
-              {/* Evidências */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-background/50 backdrop-blur-sm rounded-lg border border-gray-700/50">
-                <Target className="w-4 h-4 text-primary flex-shrink-0" />
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-emerald-500 font-bold">{tripleMatches}T</span>
-                  <span className="text-blue-500 font-bold">{doubleMatches}D</span>
-                  <span className="text-gray-500 font-medium">{singleMatches}S</span>
-                </div>
-              </div>
+            <div className="flex items-stretch gap-4">
+              {/* Card 1: Evidências */}
+              <Card className="bg-background/50 backdrop-blur-sm border-gray-700/50 min-w-[140px]">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-5 h-5 text-primary" />
+                    <span className="text-xs font-medium text-gray-400">Evidências</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Triple:</span>
+                      <span className="text-xl font-bold text-emerald-500">{tripleMatches}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Double:</span>
+                      <span className="text-xl font-bold text-blue-500">{doubleMatches}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Single:</span>
+                      <span className="text-lg font-bold text-gray-500">{singleMatches}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
               
-              {/* Inteligência */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-background/50 backdrop-blur-sm rounded-lg border border-gray-700/50">
-                <Sparkles className="w-4 h-4 text-cyan-500 flex-shrink-0" />
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-cyan-500 font-bold">{sources} fontes</span>
-                  <span className="text-gray-400">•</span>
-                  <span className="text-white font-bold">{totalScore} pts</span>
-                </div>
-              </div>
+              {/* Card 2: Inteligência */}
+              <Card className="bg-background/50 backdrop-blur-sm border-gray-700/50 min-w-[140px]">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="w-5 h-5 text-cyan-500" />
+                    <span className="text-xs font-medium text-gray-400">Inteligência</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Fontes:</span>
+                      <span className="text-xl font-bold text-cyan-500">{sources}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Score:</span>
+                      <span className="text-lg font-bold text-white">{totalScore} pts</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Total:</span>
+                      <span className="text-sm font-medium text-gray-300">{totalMatches}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </div>
