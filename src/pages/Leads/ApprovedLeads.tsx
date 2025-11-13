@@ -43,7 +43,6 @@ export default function ApprovedLeads() {
   const [filteredLeads, setFilteredLeads] = useState<ApprovedLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [apolloSearchQuery, setApolloSearchQuery] = useState(''); // 🆕 BUSCA APOLLO DECISORES
   const [temperatureFilter, setTemperatureFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [selectedLead, setSelectedLead] = useState<ApprovedLead | null>(null);
@@ -63,7 +62,7 @@ export default function ApprovedLeads() {
 
   useEffect(() => {
     filterLeads();
-  }, [searchTerm, apolloSearchQuery, temperatureFilter, sourceFilter, leads]);
+  }, [searchTerm, temperatureFilter, sourceFilter, leads]);
 
   useEffect(() => {
     // Extrair origens únicas dos leads
@@ -504,6 +503,7 @@ export default function ApprovedLeads() {
                           {/* ✅ BADGE STATUS ANÁLISE (IDÊNTICO QUARENTENA) */}
                           <QuarantineEnrichmentStatusBadge 
                             rawAnalysis={(lead as any).raw_data || {}}
+                            totvsStatus={(lead as any).totvs_status}
                             showProgress={true}
                           />
                           

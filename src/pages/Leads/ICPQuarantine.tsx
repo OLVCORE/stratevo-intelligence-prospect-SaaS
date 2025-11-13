@@ -1889,6 +1889,7 @@ export default function ICPQuarantine() {
                     <TableCell>
                       <QuarantineEnrichmentStatusBadge 
                         rawAnalysis={rawData}
+                        totvsStatus={company.totvs_status}
                         showProgress
                       />
                     </TableCell>

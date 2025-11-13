@@ -10,18 +10,20 @@ import {
 
 interface QuarantineEnrichmentStatusBadgeProps {
   rawAnalysis: any;
+  totvsStatus?: string; // ✅ NOVO: Receber totvs_status direto da linha
   showProgress?: boolean;
 }
 
 export function QuarantineEnrichmentStatusBadge({ 
-  rawAnalysis, 
+  rawAnalysis,
+  totvsStatus,
   showProgress = false 
 }: QuarantineEnrichmentStatusBadgeProps) {
   // ✅ VERIFICAR 4 ENRIQUECIMENTOS (NÃO 3!)
   const hasReceitaFederal = !!rawAnalysis?.receita_federal || !!rawAnalysis?.receita;
   const hasApollo = !!rawAnalysis?.apollo_organization || !!rawAnalysis?.apollo || !!rawAnalysis?.enriched_apollo;
   const hasEnrichment360 = !!rawAnalysis?.digital_intelligence || !!rawAnalysis?.enrichment_360;
-  const hasTOTVS = !!rawAnalysis?.totvs_report;
+  const hasTOTVS = !!rawAnalysis?.totvs_report || !!totvsStatus;
   
   // 🐛 DEBUG
   if (rawAnalysis && Object.keys(rawAnalysis).length > 0) {

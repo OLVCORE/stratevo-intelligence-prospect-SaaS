@@ -1617,6 +1617,7 @@ serve(async (req) => {
     };
 
     if (company_id) {
+      // 1️⃣ Salvar no cache
       const { error: saveError } = await supabase
         .from('simple_totvs_checks')
         .upsert({
@@ -1633,6 +1634,38 @@ serve(async (req) => {
         console.error('[SIMPLE-TOTVS] ❌ Erro ao salvar cache:', saveError);
       } else {
         console.log('[SIMPLE-TOTVS] ✅ Cache salvo');
+      }
+      
+      // 2️⃣ ATUALIZAR companies.totvs_status (para sincronizar nas 3 páginas!)
+      const { error: companyUpdateError } = await supabase
+        .from('companies')
+        .update({
+          totvs_status: status,
+          totvs_confidence: confidence,
+        })
+        .eq('id', company_id);
+      
+      if (companyUpdateError) {
+        console.error('[SIMPLE-TOTVS] ❌ Erro ao atualizar companies:', companyUpdateError);
+      } else {
+        console.log('[SIMPLE-TOTVS] ✅ Status TOTVS atualizado em companies');
+      }
+    }
+    
+    // 3️⃣ ATUALIZAR icp_analysis_results.totvs_status (para o badge funcionar!)
+    if (cnpj) {
+      const { error: icpUpdateError } = await supabase
+        .from('icp_analysis_results')
+        .update({
+          totvs_status: status,
+          totvs_confidence: confidence,
+        })
+        .eq('cnpj', cnpj);
+      
+      if (icpUpdateError) {
+        console.error('[SIMPLE-TOTVS] ❌ Erro ao atualizar icp_analysis_results:', icpUpdateError);
+      } else {
+        console.log('[SIMPLE-TOTVS] ✅ Status TOTVS atualizado em icp_analysis_results');
       }
     }
 

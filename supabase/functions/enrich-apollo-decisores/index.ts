@@ -426,6 +426,24 @@ serve(async (req) => {
         .update(updateData)
         .eq('id', companyId);
       
+      // ✅ ATUALIZAR TAMBÉM icp_analysis_results.raw_analysis (para o badge funcionar!)
+      const { data: companyRecord } = await supabaseClient
+        .from('companies')
+        .select('cnpj, raw_data')
+        .eq('id', companyId)
+        .single();
+      
+      if (companyRecord?.cnpj) {
+        await supabaseClient
+          .from('icp_analysis_results')
+          .update({
+            raw_analysis: companyRecord.raw_data
+          })
+          .eq('cnpj', companyRecord.cnpj);
+        
+        console.log('[ENRICH-APOLLO] ✅ Badge atualizado em icp_analysis_results');
+      }
+      
       console.log('[ENRICH-APOLLO] ✅', decisores.length, 'decisores salvos em decision_makers');
     } else {
       console.log('[ENRICH-APOLLO] Nenhum decisor para salvar ou companyId não informado');

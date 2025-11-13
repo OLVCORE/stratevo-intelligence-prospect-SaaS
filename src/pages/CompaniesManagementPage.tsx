@@ -1995,6 +1995,7 @@ export default function CompaniesManagementPage() {
                           {/* ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA */}
                           <QuarantineEnrichmentStatusBadge 
                             rawAnalysis={(company as any).raw_data || {}}
+                            totvsStatus={company.totvs_status}
                             showProgress={true}
                           />
                         </TableCell>
