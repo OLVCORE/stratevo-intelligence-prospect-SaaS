@@ -87,7 +87,7 @@ export async function consultarReceitaFederal(cnpj: string): Promise<{
   }
 
   // Usar ReceitaWS como base (mais completo) e preencher com BrasilAPI
-  const merged: ReceitaWSResponse = {
+  const merged: any = {
     status: receitaWSData?.status || brasilAPIData?.descricao_situacao_cadastral || 'OK',
     uf: receitaWSData?.uf || brasilAPIData?.uf || '',
     municipio: receitaWSData?.municipio || brasilAPIData?.municipio || '',
@@ -116,6 +116,19 @@ export async function consultarReceitaFederal(cnpj: string): Promise<{
           qual: s.qualificacao_socio || s.qualificacao || s.qual 
         }))
       : []),
+    
+    // 🆕 CAMPOS ADICIONAIS DO BRASILAPI (GRÁTIS!)
+    capital_social: brasilAPIData?.capital_social || receitaWSData?.capital_social || null,
+    abertura: brasilAPIData?.data_inicio_atividade || receitaWSData?.abertura || brasilAPIData?.data_abertura || null,
+    email: brasilAPIData?.email || receitaWSData?.email || null,
+    telefone: receitaWSData?.telefone || brasilAPIData?.ddd_telefone_1 || null,
+    data_situacao: brasilAPIData?.data_situacao_cadastral || null,
+    motivo_situacao: brasilAPIData?.motivo_situacao_cadastral || null,
+    situacao_especial: brasilAPIData?.situacao_especial || null,
+    data_situacao_especial: brasilAPIData?.data_situacao_especial || null,
+    tipo_unidade: brasilAPIData?.identificador_matriz_filial === 1 ? 'MATRIZ' : 'FILIAL',
+    cnae_fiscal: brasilAPIData?.cnae_fiscal || null,
+    cnae_fiscal_descricao: brasilAPIData?.cnae_fiscal_descricao || null,
   };
 
   console.log('[ReceitaFederal] 🔥 MERGE completo:', {

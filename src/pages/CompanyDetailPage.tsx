@@ -844,9 +844,9 @@ export default function CompanyDetailPage() {
                   <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Abertura</p>
                 </div>
                 <p className="font-bold text-base">
-                  {receitaData?.data_inicio_atividade 
-                    ? new Date(receitaData.data_inicio_atividade).toLocaleDateString('pt-BR')
-                    : rawData?.data_abertura || 'N/A'}
+                  {receitaData?.abertura || receitaData?.data_inicio_atividade || rawData?.data_abertura
+                    ? new Date(receitaData?.abertura || receitaData?.data_inicio_atividade || rawData?.data_abertura).toLocaleDateString('pt-BR')
+                    : 'N/A'}
                 </p>
               </CardContent>
             </Card>
@@ -858,9 +858,11 @@ export default function CompanyDetailPage() {
                   <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Funcionários</p>
                 </div>
                 <p className="font-bold text-base">
-                  {(company as any)?.raw_data?.apollo?.employee_count || 
+                  {rawData?.apollo_organization?.estimated_num_employees ||
+                   (company as any)?.raw_data?.apollo?.employee_count || 
                    rawData?.funcionarios_presumido_matriz_cnpj || 
-                   company.employees || 'N/A'}
+                   company.employees || 
+                   company.employee_count || 'N/A'}
                 </p>
               </CardContent>
             </Card>
