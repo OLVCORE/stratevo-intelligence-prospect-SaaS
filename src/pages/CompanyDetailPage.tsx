@@ -854,15 +854,11 @@ export default function CompanyDetailPage() {
             <Card className="glass-card hover-scale">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <Users className="h-4 w-4 text-primary" />
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Funcionários</p>
+                  <Building2 className="h-4 w-4 text-primary" />
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Nome Fantasia</p>
                 </div>
                 <p className="font-bold text-base">
-                  {rawData?.apollo_organization?.estimated_num_employees ||
-                   (company as any)?.raw_data?.apollo?.employee_count || 
-                   rawData?.funcionarios_presumido_matriz_cnpj || 
-                   company.employees || 
-                   company.employee_count || 'N/A'}
+                  {receitaData?.fantasia || rawData?.nome_fantasia || company.fantasia || 'N/A'}
                 </p>
               </CardContent>
             </Card>
