@@ -109,50 +109,73 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   // ✅ BUSCAR DO MESMO LUGAR QUE CompanyDetailPage: company.decision_makers
   let decisores = company.decision_makers || getDecisionMakers(company);
   
-  // 🎯 ORDENAR POR C-LEVEL (CEO > CFO > CTO > COO > CMO > VP > Director > Manager)
+  // 🎯 ORDENAR POR HIERARQUIA BRASILEIRA (Presidente > Diretor > Superintendente > Gerente)
   if (Array.isArray(decisores) && decisores.length > 0) {
     decisores = [...decisores].sort((a: any, b: any) => {
       const getPriority = (pos: string) => {
         const p = (pos || '').toLowerCase();
         
-        // C-LEVEL (Prioridade 1-5)
+        // 🇧🇷 HIERARQUIA BRASILEIRA
+        
+        // 1️⃣ PRESIDÊNCIA (Prioridade 1-3)
+        if (p.includes('presidente') || p.includes('president')) return 1;
         if (p.includes('ceo') || p.includes('chief executive')) return 1;
-        if (p.includes('cfo') || p.includes('chief financial')) return 2;
-        if (p.includes('cto') || p.includes('chief technology')) return 3;
-        if (p.includes('coo') || p.includes('chief operating')) return 4;
-        if (p.includes('cmo') || p.includes('chief marketing')) return 5;
+        if (p.includes('sócio') || p.includes('socio') || p.includes('proprietário') || p.includes('dono')) return 2;
+        if (p.includes('founder') || p.includes('fundador')) return 2;
         
-        // FOUNDER (Prioridade 1 também)
-        if (p.includes('founder') || p.includes('co-founder')) return 1;
-        
-        // VP / VICE PRESIDENT (Prioridade 10-14)
-        if (p.includes('vp ') || p.includes('vice president') || p.includes('vice-president')) {
-          if (p.includes('sales')) return 10;
-          if (p.includes('marketing')) return 11;
-          if (p.includes('operations')) return 12;
-          if (p.includes('technology') || p.includes('engineering')) return 13;
-          return 14; // VP genérico
-        }
-        
-        // DIRECTOR (Prioridade 20-29)
+        // 2️⃣ DIRETORIA (Prioridade 10-19)
         if (p.includes('diretor') || p.includes('director')) {
-          if (p.includes('executivo') || p.includes('executive')) return 20;
-          if (p.includes('vendas') || p.includes('sales')) return 21;
-          if (p.includes('marketing')) return 22;
-          if (p.includes('ti') || p.includes('technology')) return 23;
-          return 24; // Director genérico
+          if (p.includes('geral') || p.includes('executivo') || p.includes('executive')) return 10;
+          if (p.includes('comercial') || p.includes('vendas') || p.includes('sales')) return 11;
+          if (p.includes('financeiro') || p.includes('financial') || p.includes('cfo')) return 12;
+          if (p.includes('operações') || p.includes('operations') || p.includes('coo')) return 13;
+          if (p.includes('ti') || p.includes('tecnologia') || p.includes('technology') || p.includes('cto')) return 14;
+          if (p.includes('marketing') || p.includes('cmo')) return 15;
+          if (p.includes('industrial') || p.includes('produção')) return 16;
+          if (p.includes('rh') || p.includes('recursos humanos') || p.includes('people')) return 17;
+          return 18; // Diretor genérico
         }
         
-        // MANAGER / GERENTE (Prioridade 30-39)
-        if (p.includes('manager') || p.includes('gerente')) {
-          if (p.includes('senior')) return 30;
-          return 35; // Manager genérico
+        // 3️⃣ SUPERINTENDÊNCIA (Prioridade 20-24)
+        if (p.includes('superintendente') || p.includes('superintendent')) {
+          if (p.includes('geral')) return 20;
+          if (p.includes('comercial') || p.includes('vendas')) return 21;
+          if (p.includes('operações') || p.includes('industrial')) return 22;
+          return 23; // Superintendente genérico
         }
         
-        // HEAD OF (Prioridade 40)
-        if (p.includes('head of')) return 40;
+        // 4️⃣ VP / VICE-PRESIDENTE (Prioridade 25-29)
+        if (p.includes('vice') || p.includes('vp')) {
+          if (p.includes('executivo')) return 25;
+          if (p.includes('sales') || p.includes('vendas')) return 26;
+          if (p.includes('operations') || p.includes('operações')) return 27;
+          return 28; // VP genérico
+        }
         
-        // OUTROS (Prioridade 99)
+        // 5️⃣ GERÊNCIA (Prioridade 30-39)
+        if (p.includes('gerente') || p.includes('manager')) {
+          if (p.includes('geral') || p.includes('executivo')) return 30;
+          if (p.includes('senior') || p.includes('sênior')) return 31;
+          if (p.includes('comercial') || p.includes('vendas')) return 32;
+          if (p.includes('ti') || p.includes('tecnologia')) return 33;
+          if (p.includes('operações') || p.includes('produção')) return 34;
+          return 35; // Gerente genérico
+        }
+        
+        // 6️⃣ COORDENAÇÃO (Prioridade 40-44)
+        if (p.includes('coordenador') || p.includes('coordinator')) {
+          if (p.includes('geral')) return 40;
+          if (p.includes('senior') || p.includes('sênior')) return 41;
+          return 42; // Coordenador genérico
+        }
+        
+        // 7️⃣ HEAD OF (Prioridade 45)
+        if (p.includes('head of') || p.includes('líder de')) return 45;
+        
+        // 8️⃣ SUPERVISOR (Prioridade 50)
+        if (p.includes('supervisor')) return 50;
+        
+        // 9️⃣ OUTROS (Prioridade 99)
         return 99;
       };
       

@@ -19,37 +19,67 @@ interface EnrichApolloRequest {
   industry?: string; // 🎯 FILTRO INTELIGENTE: setor/CNAE
 }
 
-// Classificar poder de decisão baseado no título
+// 🇧🇷 Classificar poder de decisão - HIERARQUIA BRASILEIRA
 function classifyBuyingPower(title: string): 'decision-maker' | 'influencer' | 'user' {
   const titleLower = title.toLowerCase();
   
-  // Decision makers (CEO, CFO, CIO, Diretores)
+  // 1️⃣ DECISION MAKERS (Alta hierarquia - quem decide compras)
   if (
-    titleLower.includes('ceo') ||
-    titleLower.includes('cfo') ||
-    titleLower.includes('cio') ||
-    titleLower.includes('cto') ||
+    // Presidência
     titleLower.includes('presidente') ||
-    titleLower.includes('diretor') ||
+    titleLower.includes('president') ||
+    titleLower.includes('ceo') ||
+    
+    // Sócios e Proprietários
     titleLower.includes('sócio') ||
+    titleLower.includes('socio') ||
+    titleLower.includes('proprietário') ||
+    titleLower.includes('dono') ||
     titleLower.includes('owner') ||
-    titleLower.includes('founder')
+    titleLower.includes('founder') ||
+    titleLower.includes('fundador') ||
+    
+    // Diretoria (TODOS os diretores são decision-makers no Brasil!)
+    titleLower.includes('diretor') ||
+    titleLower.includes('director') ||
+    
+    // Superintendência
+    titleLower.includes('superintendente') ||
+    titleLower.includes('superintendent') ||
+    
+    // C-Level (internacional)
+    titleLower.includes('cfo') ||
+    titleLower.includes('cto') ||
+    titleLower.includes('coo') ||
+    titleLower.includes('cmo') ||
+    titleLower.includes('chief')
   ) {
     return 'decision-maker';
   }
   
-  // Influencers (Gerentes, Coordenadores)
+  // 2️⃣ INFLUENCERS (Influenciam decisões)
   if (
+    // Gerentes (especialmente Senior)
     titleLower.includes('gerente') ||
-    titleLower.includes('coordenador') ||
-    titleLower.includes('supervisor') ||
     titleLower.includes('manager') ||
-    titleLower.includes('head')
+    
+    // VP
+    titleLower.includes('vice') ||
+    titleLower.includes('vp') ||
+    
+    // Coordenadores
+    titleLower.includes('coordenador') ||
+    titleLower.includes('coordinator') ||
+    
+    // Head Of
+    titleLower.includes('head of') ||
+    titleLower.includes('head ') ||
+    titleLower.includes('líder')
   ) {
     return 'influencer';
   }
   
-  // Users (demais)
+  // 3️⃣ USERS (Demais - Supervisores, Analistas, Assistentes)
   return 'user';
 }
 
