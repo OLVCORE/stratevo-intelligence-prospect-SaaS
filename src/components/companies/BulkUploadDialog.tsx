@@ -574,24 +574,70 @@ if (error) {
 }
 
 const imported = (data?.success as number) ?? (Array.isArray(data?.inserted) ? data.inserted.length : 0);
+const insertedCompanies = data?.inserted || [];
 
 setProgress(100); // Completar barra
 
 toast.success('✅ Importação concluída!', {
-  description: `${imported} empresas de "${sourceName}" adicionadas ao estoque`,
-  action: {
-    label: 'Ir para Gerenciar Empresas',
-    onClick: () => navigate('/companies')
-  }
+  description: `${imported} empresas importadas. Auto-enriquecendo Receita Federal...`,
 });
+
+// 🤖 AUTO-ENRIQUECIMENTO RECEITA FEDERAL (GRÁTIS!)
+if (insertedCompanies.length > 0) {
+  console.log(`🤖 [AUTO-ENRICH] Iniciando auto-enriquecimento de ${insertedCompanies.length} empresas...`);
+  
+  let enriched = 0;
+  for (const company of insertedCompanies) {
+    if (company.cnpj) {
+      try {
+        const { consultarReceitaFederal } = await import('@/services/receitaFederal');
+        const result = await consultarReceitaFederal(company.cnpj);
+        
+        if (result.success && result.data) {
+          const { data: currentCompany } = await supabase
+            .from('companies')
+            .select('raw_data')
+            .eq('id', company.id)
+            .single();
+          
+          const existingRaw = currentCompany?.raw_data || {};
+          
+          await supabase
+            .from('companies')
+            .update({
+              raw_data: {
+                ...existingRaw,
+                receita_federal: result.data,
+                receita_source: result.source,
+              }
+            })
+            .eq('id', company.id);
+          
+          enriched++;
+          console.log(`✅ [AUTO-ENRICH] ${company.name}: Receita Federal OK`);
+        }
+      } catch (e) {
+        console.warn(`⚠️ [AUTO-ENRICH] ${company.name}: Falhou`, e);
+      }
+    }
+  }
+  
+  toast.success(`✅ Auto-enriquecimento concluído!`, {
+    description: `${enriched}/${insertedCompanies.length} empresas enriquecidas com Receita Federal`,
+    action: {
+      label: 'Ir para Gerenciar Empresas',
+      onClick: () => navigate('/companies')
+    }
+  });
+}
 
 setIsUploading(false);
 setIsOpen(false);
 
-// Redirecionar para Gerenciar Empresas (página correta)
+// Redirecionar para Gerenciar Empresas
 setTimeout(() => {
   navigate('/companies');
-}, 1500);
+}, 2000);
 
     } catch (error) {
       console.error('Erro no upload:', error);
