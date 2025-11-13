@@ -87,7 +87,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
     );
   }
   
-  const rawData = company.raw_data || {};
+  const rawData = company.raw_data || company.raw_analysis || {};
   const apolloData = rawData.apollo || rawData.apollo_organization || {};
   const receitaData = rawData.receita_federal || rawData.receita || {};
   
@@ -95,13 +95,14 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   console.log('[ExpandedCompanyCard] 📊 Company Data:', {
     id: company.id,
     name: company.name,
-    website: company.website,
+    website: company.website || company.domain || rawData.sites,
     domain: company.domain,
-    linkedin_url: company.linkedin_url,
-    apollo_id: company.apollo_id,
+    linkedin_url: company.linkedin_url || rawData.linkedin_url || rawData.linkedin,
+    apollo_id: company.apollo_id || rawData.apollo_id,
+    description: company.description || rawData.description,
     enrichment_source: company.enrichment_source,
-    rawData_linkedin: rawData.linkedin_url,
-    rawData_digital: rawData.digital_presence
+    decision_makers_count: rawData.decision_makers?.length || company.decision_makers?.length || 0,
+    rawData_keys: Object.keys(rawData).slice(0, 10)
   });
   
   const fitScore = getFitScore(company);
@@ -185,13 +186,14 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   const apolloLink = getApolloLink(company);
   const b2bType = getB2BType(company);
   
-  // 🌍 DESCRIÇÃO (múltiplas fontes)
+  // 🌍 DESCRIÇÃO (múltiplas fontes - incluindo raw_data direto)
   const description = 
+    company.description ||
+    rawData.description ||
     apolloData.short_description || 
     apolloData.description || 
-    company.description || 
-    rawData.description ||
     rawData.notes ||
+    rawData.notas ||
     rawData.company_details?.description || 
     '';
 
@@ -337,89 +339,105 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               </h4>
               <div className="space-y-2">
                 {/* WEBSITE */}
-                {(company.domain || company.website) && (
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={company.website?.startsWith('http') ? company.website : `https://${company.domain || company.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-primary hover:underline"
-                    >
-                      <Globe className="h-4 w-4" />
-                      {(company.domain || company.website).replace('https://', '').replace('http://', '').substring(0, 30)}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4 p-0"
-                      onClick={() => navigate(`/company/${company.id}`)}
-                      title="Editar website"
-                    >
-                      <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                    </Button>
-                  </div>
-                )}
+                {(() => {
+                  const websiteUrl = company.website || company.domain || rawData.sites || rawData.melhor_site;
+                  if (!websiteUrl) return null;
+                  
+                  return (
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <Globe className="h-4 w-4" />
+                        {websiteUrl.replace('https://', '').replace('http://', '').replace('www.', '').substring(0, 30)}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 p-0"
+                        onClick={() => navigate(`/company/${company.id}`)}
+                        title="Editar website"
+                      >
+                        <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                      </Button>
+                    </div>
+                  );
+                })()}
                 
                 {/* LINKEDIN */}
-                {(company.linkedin_url || rawData.linkedin_url || rawData.digital_presence?.linkedin) && (
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={company.linkedin_url || rawData.linkedin_url || rawData.digital_presence?.linkedin}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-primary hover:underline"
-                    >
-                      <Linkedin className="h-4 w-4" />
-                      LinkedIn
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4 p-0"
-                      onClick={() => navigate(`/company/${company.id}`)}
-                      title="Editar LinkedIn"
-                    >
-                      <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                    </Button>
-                  </div>
-                )}
+                {(() => {
+                  const linkedinUrl = company.linkedin_url || rawData.linkedin_url || rawData.linkedin || rawData.digital_presence?.linkedin;
+                  if (!linkedinUrl) return null;
+                  
+                  return (
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <Linkedin className="h-4 w-4" />
+                        LinkedIn
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 p-0"
+                        onClick={() => navigate(`/company/${company.id}`)}
+                        title="Editar LinkedIn"
+                      >
+                        <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                      </Button>
+                    </div>
+                  );
+                })()}
                 
                 {/* APOLLO.IO */}
-                {apolloLink && (
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={apolloLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-primary hover:underline"
-                    >
-                      <img src={apolloIcon} alt="Apollo" className="h-4 w-4" />
-                      Apollo.io
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    {company.enrichment_source === 'auto' && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                        🤖 AUTO
-                      </Badge>
-                    )}
-                    {company.enrichment_source === 'manual' && (
-                      <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
-                        ✅ VALIDADO
-                      </Badge>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4 p-0"
-                      onClick={() => navigate(`/company/${company.id}`)}
-                      title="Editar Apollo ID"
-                    >
-                      <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                    </Button>
-                  </div>
-                )}
+                {(() => {
+                  const apolloId = company.apollo_id || rawData.apollo_id;
+                  const apolloLink = apolloId ? `https://app.apollo.io/#/companies/${apolloId}` : getApolloLink(company);
+                  if (!apolloLink) return null;
+                  
+                  return (
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={apolloLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <img src={apolloIcon} alt="Apollo" className="h-4 w-4" />
+                        Apollo.io
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                      {company.enrichment_source === 'auto' && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          🤖 AUTO
+                        </Badge>
+                      )}
+                      {company.enrichment_source === 'manual' && (
+                        <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
+                          ✅ VALIDADO
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 p-0"
+                        onClick={() => navigate(`/company/${company.id}`)}
+                        title="Editar Apollo ID"
+                      >
+                        <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                      </Button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
