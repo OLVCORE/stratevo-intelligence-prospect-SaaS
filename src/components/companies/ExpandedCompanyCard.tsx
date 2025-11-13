@@ -129,22 +129,20 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                 Informações Gerais
               </h4>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Nome:</span>
-                  <span className="font-medium">{company.name || company.razao_social || company.company_name}</span>
+                <div className="flex items-start gap-2">
+                  <span className="text-muted-foreground min-w-[80px]">Nome:</span>
+                  <span className="font-medium flex-1 text-left">{company.name || company.razao_social || company.company_name}</span>
                 </div>
                 {company.industry && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Indústria:</span>
-                    <span className="font-medium">{company.industry}</span>
+                  <div className="flex items-start gap-2">
+                    <span className="text-muted-foreground min-w-[80px]">Indústria:</span>
+                    <span className="font-medium flex-1 text-left">{company.industry}</span>
                   </div>
                 )}
-                {company.source_name && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Origem:</span>
-                    <Badge variant="outline">{company.source_name}</Badge>
-                  </div>
-                )}
+                <div className="flex items-start gap-2">
+                  <span className="text-muted-foreground min-w-[80px]">Origem:</span>
+                  <Badge variant="outline">{company.source_name || company.data_source || 'N/A'}</Badge>
+                </div>
               </div>
             </div>
 
@@ -177,20 +175,42 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               </div>
             </div>
 
-            {/* DESCRIÇÃO */}
-            {description ? (
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Descrição</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {description}
-                </p>
-              </div>
-            ) : (
-              <div className="flex items-start gap-2 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/10 dark:text-yellow-500 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                <Award className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
-              </div>
-            )}
+            {/* DESCRIÇÃO - SEMPRE MOSTRAR */}
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Descrição</h4>
+              {description ? (
+                <div>
+                  <p className="text-sm text-muted-foreground leading-relaxed text-left">
+                    {description}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 text-xs h-7"
+                    onClick={() => navigate(`/company/${company.id}`)}
+                  >
+                    <Edit className="h-3 w-3 mr-1" />
+                    Editar Descrição
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/10 dark:text-yellow-500 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                    <Award className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span className="text-left">💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => navigate(`/company/${company.id}`)}
+                  >
+                    <Edit className="h-3 w-3 mr-1" />
+                    Adicionar Descrição
+                  </Button>
+                </div>
+              )}
+            </div>
             
           </div>
 
@@ -228,48 +248,126 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               </div>
             )}
 
-            {/* LINKS EXTERNOS */}
+            {/* LINKS EXTERNOS - SEMPRE MOSTRAR */}
             <div>
               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <Globe className="h-4 w-4" />
                 Links Externos
               </h4>
               <div className="space-y-2">
-                {(company.domain || company.website) && (
-                  <a
-                    href={`https://${company.domain || company.website}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                {/* WEBSITE */}
+                {(company.domain || company.website) ? (
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`https://${company.domain || company.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-primary hover:underline"
+                    >
+                      <Globe className="h-4 w-4" />
+                      Website
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4 p-0"
+                      onClick={() => navigate(`/company/${company.id}`)}
+                      title="Editar website"
+                    >
+                      <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => navigate(`/company/${company.id}`)}
                   >
-                    <Globe className="h-4 w-4" />
-                    Website
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
+                    <Globe className="h-3 w-3 mr-1" />
+                    Adicionar Website
+                  </Button>
                 )}
-                {(company.linkedin_url || rawData.linkedin_url) && (
-                  <a
-                    href={company.linkedin_url || rawData.linkedin_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                
+                {/* LINKEDIN */}
+                {(company.linkedin_url || rawData.linkedin_url || rawData.digital_presence?.linkedin) ? (
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={company.linkedin_url || rawData.linkedin_url || rawData.digital_presence?.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-primary hover:underline"
+                    >
+                      <Linkedin className="h-4 w-4" />
+                      LinkedIn
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4 p-0"
+                      onClick={() => navigate(`/company/${company.id}`)}
+                      title="Editar LinkedIn"
+                    >
+                      <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => navigate(`/company/${company.id}`)}
                   >
-                    <Linkedin className="h-4 w-4" />
-                    LinkedIn
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
+                    <Linkedin className="h-3 w-3 mr-1" />
+                    Adicionar LinkedIn
+                  </Button>
                 )}
-                {apolloLink && (
-                  <a
-                    href={apolloLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                
+                {/* APOLLO.IO */}
+                {apolloLink ? (
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={apolloLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-primary hover:underline"
+                    >
+                      <img src={apolloIcon} alt="Apollo" className="h-4 w-4" />
+                      Apollo.io
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    {company.enrichment_source === 'auto' && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        🤖 AUTO
+                      </Badge>
+                    )}
+                    {company.enrichment_source === 'manual' && (
+                      <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
+                        ✅ VALIDADO
+                      </Badge>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4 p-0"
+                      onClick={() => navigate(`/company/${company.id}`)}
+                      title="Editar Apollo ID"
+                    >
+                      <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => navigate(`/company/${company.id}`)}
                   >
-                    <img src={apolloIcon} alt="Apollo" className="h-4 w-4" />
-                    Apollo.io
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
+                    <img src={apolloIcon} alt="Apollo" className="h-3 w-3 mr-1" />
+                    Adicionar Apollo ID
+                  </Button>
                 )}
               </div>
             </div>
