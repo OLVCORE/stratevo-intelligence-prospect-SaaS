@@ -1,17 +1,26 @@
-import { Building2, MapPin, Globe, Mail, Linkedin, Award, Target, ExternalLink, TrendingUp, Phone, Briefcase, DollarSign, Users, Shield } from 'lucide-react';
+import {
+  Building2,
+  MapPin,
+  Globe,
+  Mail,
+  Linkedin,
+  Target,
+  ExternalLink,
+  TrendingUp,
+  Phone,
+  Users,
+  Award
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Avatar } from '@/components/ui/avatar';
 import { useNavigate } from 'react-router-dom';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface ExpandedCompanyCardProps {
   company: any;
 }
 
-// 🎯 CÁLCULO INTELIGENTE DO FIT SCORE
 function calculateFitScore(company: any): { score: number; label: string; color: string } {
   let score = 0;
   const rawData = company.raw_data || {};
@@ -19,16 +28,13 @@ function calculateFitScore(company: any): { score: number; label: string; color:
   const decisores = company.decision_makers || rawData.decision_makers || rawData.apollo_people || [];
   
   if (company.totvs_status === 'no-go') {
-    return { score: 0, label: 'Cliente TOTVS - Não qualificado', color: 'text-red-400' };
+    return { score: 0, label: 'Cliente TOTVS - Não qualificado', color: 'bg-red-500' };
   }
   
   if (company.totvs_status === 'go') score += 40;
   if (apolloData.organization_id || apolloData.name) score += 20;
   if (apolloData.short_description || apolloData.description || company.description) score += 15;
-  
-  const decisoresCount = Math.min(decisores.length, 5);
-  score += decisoresCount * 5;
-  
+  score += Math.min(decisores.length, 5) * 5;
   if (company.linkedin_url || rawData.linkedin_url) score += 10;
   if (company.domain || company.website) score += 5;
   
@@ -36,87 +42,66 @@ function calculateFitScore(company: any): { score: number; label: string; color:
   if (receitaData.situacao === 'ATIVA' || company.cnpj_status === 'ATIVA') score += 5;
   if (company.icp_score && company.icp_score >= 70) score += 10;
   
+  let color = 'bg-orange-500';
+  let label = 'Fit baixo - Dados incompletos';
+  
   if (score >= 80) {
-    return { score, label: 'Excelente fit para B2B', color: 'text-emerald-400' };
+    color = 'bg-green-500';
+    label = 'Excelente fit para B2B';
   } else if (score >= 60) {
-    return { score, label: 'Bom fit para prospecção', color: 'text-green-400' };
+    color = 'bg-yellow-500';
+    label = 'Bom fit para prospecção';
   } else if (score >= 40) {
-    return { score, label: 'Fit moderado', color: 'text-yellow-400' };
-  } else {
-    return { score, label: 'Fit baixo - Dados incompletos', color: 'text-orange-400' };
+    color = 'bg-yellow-500';
+    label = 'Fit moderado';
   }
+  
+  return { score, label, color };
 }
 
 export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   const navigate = useNavigate();
   const mapRef = useRef<HTMLDivElement>(null);
   
-  // 🎯 EXTRAIR DADOS
   const rawData = company.raw_data || {};
   const apolloData = rawData.apollo || rawData.apollo_organization || {};
-  const apolloPeople = rawData.apollo_people || [];
   const receitaData = rawData.receita_federal || rawData.receita || {};
-  const decisores = company.decision_makers || rawData.decision_makers || apolloPeople || [];
+  const decisores = company.decision_makers || rawData.decision_makers || rawData.apollo_people || [];
   
-  // 🌍 DESCRIÇÃO (múltiplas fontes)
-  const description = 
-    apolloData.short_description || 
-    apolloData.description || 
-    company.description || 
-    rawData.description ||
-    rawData.company_details?.description || 
-    '';
-  
-  // 📊 CALCULAR FIT SCORE
+  const description = apolloData.short_description || apolloData.description || company.description || rawData.description || rawData.company_details?.description || '';
   const fitScore = calculateFitScore(company);
   
-  // 📍 ENDEREÇO COMPLETO
   const logradouro = receitaData.logradouro || apolloData.street_address || '';
   const numero = receitaData.numero || '';
-  const complemento = receitaData.complemento || '';
   const bairro = receitaData.bairro || '';
   const cidade = apolloData.city || receitaData.municipio || company.city || '';
   const uf = apolloData.state || receitaData.uf || company.state || '';
   const cep = receitaData.cep || apolloData.postal_code || '';
   const pais = apolloData.country || receitaData.pais || company.country || 'Brazil';
-  
-  // 📞 CONTATOS
   const telefone = rawData.telefone1 || rawData.telefone || apolloData.phone || '';
   const email = rawData.email || apolloData.email || '';
   
-  // 🗺️ GEOCODING DINÂMICO
   useEffect(() => {
     const loadMap = async () => {
       if (!mapRef.current || typeof window === 'undefined') return;
-      
       // @ts-ignore
       if (!window.L) return;
-      
       // @ts-ignore
       const L = window.L;
       
-      // ✅ LIMPAR MAPA EXISTENTE
       if (mapRef.current._leaflet_id) {
         mapRef.current._leaflet_id = undefined;
         mapRef.current.innerHTML = '';
       }
       
-      let lat = -23.5505;
-      let lng = -46.6333;
+      let lat = -23.5505, lng = -46.6333;
       
-      // 🔍 GEOCODING POR CEP/ENDEREÇO
       if (cep || (logradouro && cidade && uf)) {
-        const endereco = cep 
-          ? `${cep}, Brazil`
-          : `${logradouro} ${numero}, ${cidade}, ${uf}, Brazil`;
-        
+        const endereco = cep ? `${cep}, Brazil` : `${logradouro} ${numero}, ${cidade}, ${uf}, Brazil`;
         try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`,
-            { headers: { 'User-Agent': 'STRATEVO-Intelligence/1.0' } }
-          );
+          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`, 
+            { headers: { 'User-Agent': 'STRATEVO-Intelligence/1.0' } });
           const data = await response.json();
-          
           if (data && data[0]) {
             lat = parseFloat(data[0].lat);
             lng = parseFloat(data[0].lon);
@@ -126,7 +111,6 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
         }
       }
       
-      // 🗺️ CRIAR MAPA
       const map = L.map(mapRef.current, {
         center: [lat, lng],
         zoom: 14,
@@ -141,247 +125,225 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
       
       L.marker([lat, lng]).addTo(map);
       
-      return () => {
-        if (map) map.remove();
-      };
+      return () => { if (map) map.remove(); };
     };
     
     loadMap();
   }, [cep, logradouro, cidade, uf]);
 
   return (
-    <div className="p-3 bg-slate-900/40 border-t border-slate-700/50">
-      
-      {/* 🎨 GRID 2 LINHAS x 3 COLUNAS (COMPACTO) */}
-      <div className="grid grid-cols-3 gap-3">
-        
-        {/* ========== LINHA 1: COLUNA 1-2 (DADOS) + COLUNA 3 (FIT + LINKS) ========== */}
-        
-        {/* COL 1-2: INFORMAÇÕES GERAIS + LOCALIZAÇÃO */}
-        <div className="col-span-2 grid grid-cols-2 gap-3">
+    <div className="bg-muted/30 p-0">
+      <div className="p-6">
+        <div className="grid grid-cols-2 gap-6">
           
-          {/* SUB-COL 1: INFORMAÇÕES GERAIS */}
-          <div className="space-y-1">
-            <h4 className="text-[10px] font-semibold mb-1 text-slate-400 uppercase">Informações Gerais</h4>
+          {/* ========== COLUNA ESQUERDA ========== */}
+          <div className="space-y-4">
             
-            <div className="space-y-0.5 text-[11px]">
-              <div>
-                <span className="text-slate-500 text-[9px]">Nome:</span>
-                <p className="text-white font-semibold leading-tight">{company.name || company.razao_social}</p>
+            {/* INFORMAÇÕES GERAIS */}
+            <div>
+              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Informações Gerais
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Nome:</span>
+                  <span className="font-medium">{company.name || company.razao_social}</span>
+                </div>
+                {company.cnpj && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">CNPJ:</span>
+                    <span className="font-mono text-xs">{company.cnpj}</span>
+                  </div>
+                )}
+                {company.industry && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Indústria:</span>
+                    <span className="font-medium">{company.industry}</span>
+                  </div>
+                )}
+                {(apolloData.estimated_num_employees || receitaData.qsa_count) && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Funcionários:</span>
+                    <Badge variant="secondary">
+                      {apolloData.estimated_num_employees || receitaData.qsa_count}
+                    </Badge>
+                  </div>
+                )}
+                {company.source_name && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Origem:</span>
+                    <Badge variant="outline">{company.source_name}</Badge>
+                  </div>
+                )}
               </div>
-              
-              {company.industry && (
-                <div>
-                  <span className="text-slate-500 text-[9px]">Indústria:</span>
-                  <p className="text-slate-300">{company.industry}</p>
-                </div>
-              )}
-              
-              {company.source_name && (
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-500 text-[9px]">Origem:</span>
-                  <Badge variant="outline" className="text-[8px] px-1 py-0 h-4">{company.source_name}</Badge>
-                </div>
-              )}
-              
-              {company.cnpj && (
-                <div className="pt-1 mt-1 border-t border-slate-700/30">
-                  <span className="text-slate-500 text-[9px]">CNPJ:</span>
-                  <p className="text-blue-400 font-mono text-[9px]">{company.cnpj}</p>
-                </div>
-              )}
-              
-              {receitaData.porte && (
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-500 text-[9px]">Porte:</span>
-                  <Badge variant="secondary" className="text-[8px] px-1 py-0 h-4">{receitaData.porte}</Badge>
-                </div>
-              )}
-              
-              {(apolloData.estimated_num_employees || receitaData.qsa_count) && (
-                <div className="flex items-center gap-1">
-                  <Users className="h-2.5 w-2.5 text-blue-400" />
-                  <span className="text-slate-300 text-[10px]">{apolloData.estimated_num_employees || receitaData.qsa_count}</span>
-                </div>
-              )}
-              
-              {receitaData.capital_social && (
-                <div>
-                  <span className="text-slate-500 text-[9px]">Capital:</span>
-                  <p className="text-emerald-400 font-mono text-[9px]">
-                    R$ {Number(receitaData.capital_social).toLocaleString('pt-BR')}
-                  </p>
-                </div>
-              )}
-              
-              {receitaData.cnae_fiscal && (
-                <div>
-                  <span className="text-slate-500 text-[9px]">CNAE:</span>
-                  <p className="text-slate-300 text-[9px]">{receitaData.cnae_fiscal}</p>
-                </div>
-              )}
             </div>
-          </div>
-          
-          {/* SUB-COL 2: LOCALIZAÇÃO + MAPA */}
-          <div className="space-y-1">
-            <h4 className="text-[10px] font-semibold mb-1 text-slate-400 uppercase">Localização</h4>
-            
-            {/* MAPA COMPACTO */}
-            <div ref={mapRef} className="w-full h-[100px] rounded border border-slate-700/50 mb-1" />
-            
-            <div className="space-y-0.5 text-[10px]">
-              {logradouro && (
-                <p className="text-slate-300 leading-tight">{logradouro}{numero && `, ${numero}`}</p>
-              )}
-              {bairro && <p className="text-slate-400 text-[9px]">{bairro}</p>}
-              {cidade && <p className="text-white font-medium">{cidade} - {uf}</p>}
-              {cep && <p className="text-slate-400 font-mono text-[9px]">CEP: {cep}</p>}
-              {pais && <p className="text-slate-300 text-[9px]">{pais}</p>}
-              
-              {telefone && (
-                <div className="flex items-center gap-1 pt-1 border-t border-slate-700/30 mt-1">
-                  <Phone className="h-2.5 w-2.5 text-blue-400" />
-                  <a href={`tel:${telefone}`} className="text-blue-400 text-[9px] hover:underline">{telefone}</a>
-                </div>
-              )}
-              
-              {email && (
-                <div className="flex items-center gap-1">
-                  <Mail className="h-2.5 w-2.5 text-blue-400" />
-                  <a href={`mailto:${email}`} className="text-blue-400 text-[9px] hover:underline truncate">{email}</a>
-                </div>
-              )}
+
+            {/* LOCALIZAÇÃO */}
+            <div>
+              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Localização
+              </h4>
+              <div className="space-y-2 text-sm">
+                {cidade && <p className="text-muted-foreground">{cidade}</p>}
+                {uf && <p className="text-muted-foreground">{uf}</p>}
+                {pais && <p className="font-medium">{pais}</p>}
+              </div>
             </div>
-          </div>
-          
-        </div>
-        
-        {/* COL 3: FIT SCORE + LINKS */}
-        <div className="space-y-2">
-          <div>
-            <h4 className="text-[10px] font-semibold mb-1 text-slate-400 uppercase">Fit Score</h4>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl font-bold text-white">{fitScore.score}</span>
-            </div>
-            <Progress value={fitScore.score} className="h-1.5 mb-1" />
-            <div className="flex items-center gap-1">
-              <div className={`h-1.5 w-1.5 rounded-full ${
-                fitScore.score >= 80 ? 'bg-emerald-400' : 
-                fitScore.score >= 60 ? 'bg-green-400' : 
-                fitScore.score >= 40 ? 'bg-yellow-400' : 
-                'bg-red-400'
-              }`} />
-              <span className={`text-[9px] ${fitScore.color}`}>{fitScore.label}</span>
-            </div>
-            {company.segmento && (
-              <Badge variant="secondary" className="text-[8px] px-1 py-0 h-4 mt-1">{company.segmento}</Badge>
+
+            {/* DESCRIÇÃO */}
+            {description && (
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Descrição</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {description}
+                </p>
+              </div>
             )}
+            
+            {!description && (
+              <div className="flex items-start gap-2 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/10 dark:text-yellow-500 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <Award className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
+              </div>
+            )}
+            
           </div>
-          
-          <div>
-            <h4 className="text-[10px] font-semibold mb-1 text-slate-400 uppercase">Links Externos</h4>
-            <div className="space-y-0.5">
-              {company.domain && (
-                <a href={`https://${company.domain}`} target="_blank" rel="noopener noreferrer"
-                   className="flex items-center gap-1 text-[9px] text-slate-300 hover:text-blue-400 p-0.5 rounded">
-                  <Globe className="h-2.5 w-2.5" />
-                  <span>Website</span>
-                  <ExternalLink className="h-2 w-2 ml-auto" />
-                </a>
-              )}
-              {company.linkedin_url && (
-                <a href={company.linkedin_url} target="_blank" rel="noopener noreferrer"
-                   className="flex items-center gap-1 text-[9px] text-slate-300 hover:text-blue-400 p-0.5 rounded">
-                  <Linkedin className="h-2.5 w-2.5 text-blue-400" />
-                  <span>LinkedIn</span>
-                  <ExternalLink className="h-2 w-2 ml-auto" />
-                </a>
-              )}
-              {apolloData.organization_id && (
-                <a href={`https://app.apollo.io/#/companies/${apolloData.organization_id}`} target="_blank" rel="noopener noreferrer"
-                   className="flex items-center gap-1 text-[9px] text-slate-300 hover:text-blue-400 p-0.5 rounded">
-                  <img src={apolloIcon} alt="Apollo" className="h-2.5 w-2.5" />
-                  <span>Apollo.io</span>
-                  <ExternalLink className="h-2 w-2 ml-auto" />
-                </a>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        {/* ========== LINHA 2: DESCRIÇÃO (COL 1-2) + DECISORES (COL 3) ========== */}
-        
-        {/* COL 1-2: DESCRIÇÃO */}
-        <div className="col-span-2">
-          <h4 className="text-[10px] font-semibold mb-1 text-slate-400 uppercase">Descrição</h4>
-          {description ? (
-            <p className="text-[10px] text-slate-300 leading-relaxed">{description}</p>
-          ) : (
-            <div className="flex items-start gap-1.5 text-[9px] text-yellow-500/80 bg-yellow-500/5 p-2 rounded border border-yellow-500/20">
-              <Award className="h-3 w-3 mt-0.5 flex-shrink-0" />
-              <span>💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
-            </div>
-          )}
-        </div>
-        
-        {/* COL 3: DECISORES */}
-        {decisores.length > 0 && (
-          <div>
-            <h4 className="text-[10px] font-semibold mb-1 text-slate-400 uppercase">Decisores ({decisores.length})</h4>
-            <div className="space-y-1.5">
-              {decisores.slice(0, 3).map((decisor: any, idx: number) => {
-                const fullName = decisor.name || `${decisor.first_name || ''} ${decisor.last_name || ''}`.trim();
-                const initials = fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-                
-                return (
-                  <div key={idx} className="flex items-start gap-1">
-                    <Avatar className="h-6 w-6 bg-gradient-to-br from-blue-500 to-purple-500 text-white text-[8px] font-bold flex items-center justify-center flex-shrink-0">
-                      {decisor.photo_url ? (
-                        <img src={decisor.photo_url} alt={fullName} className="h-full w-full object-cover rounded-full" />
-                      ) : (
-                        initials || '?'
-                      )}
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white font-semibold text-[9px] leading-tight truncate">{fullName}</p>
-                      <p className="text-slate-400 text-[8px] leading-tight truncate">{decisor.title}</p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        {decisor.linkedin_url && (
-                          <a href={decisor.linkedin_url} target="_blank" rel="noopener noreferrer"
-                             className="text-blue-400 text-[8px] hover:underline">LinkedIn</a>
-                        )}
-                        {decisor.email && (
-                          <a href={`mailto:${decisor.email}`} className="text-slate-400 text-[8px] hover:underline">Email</a>
-                        )}
-                      </div>
+
+          {/* ========== COLUNA DIREITA ========== */}
+          <div className="space-y-4">
+            
+            {/* FIT SCORE */}
+            {fitScore.score > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Fit Score
+                </h4>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${fitScore.color}`}
+                        style={{ width: `${fitScore.score}%` }}
+                      />
                     </div>
                   </div>
-                );
-              })}
-              {decisores.length > 3 && (
-                <p className="text-[8px] text-center text-slate-500">+ {decisores.length - 3} decisores</p>
-              )}
-            </div>
-          </div>
-        )}
-        
-      </div>
-      
-      {/* BOTÕES */}
-      <div className="flex items-center justify-end gap-2 pt-2 mt-2 border-t border-slate-700/30">
-        <Button size="sm" variant="outline" className="text-[10px] h-7 px-2"
-                onClick={() => navigate(`/company/${company.id}`)}>
-          <Building2 className="h-3 w-3 mr-1" />
-          Ver Detalhes Completos
-        </Button>
-        <Button size="sm" className="text-[10px] h-7 px-2 bg-blue-600 hover:bg-blue-700"
-                onClick={() => navigate(`/company/${company.id}/strategy`)}>
-          <TrendingUp className="h-3 w-3 mr-1" />
-          Criar Estratégia
-        </Button>
-      </div>
+                  <span className="text-2xl font-bold">{fitScore.score}</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">{fitScore.label}</p>
+              </div>
+            )}
 
+            {/* LINKS EXTERNOS */}
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Links Externos</h4>
+              <div className="space-y-2">
+                {company.domain && (
+                  <a
+                    href={`https://${company.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Globe className="h-4 w-4" />
+                    <span>Website</span>
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                )}
+                {company.linkedin_url && (
+                  <a
+                    href={company.linkedin_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Linkedin className="h-4 w-4 text-blue-500" />
+                    <span>LinkedIn</span>
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                )}
+                {apolloData.organization_id && (
+                  <a
+                    href={`https://app.apollo.io/#/companies/${apolloData.organization_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <img src={apolloIcon} alt="Apollo" className="h-4 w-4" />
+                    <span>Apollo.io</span>
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* DECISORES */}
+            {decisores.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Decisores ({decisores.length})
+                </h4>
+                <div className="space-y-3">
+                  {decisores.slice(0, 5).map((decisor: any, idx: number) => {
+                    const fullName = decisor.name || `${decisor.first_name || ''} ${decisor.last_name || ''}`.trim();
+                    
+                    return (
+                      <div key={idx} className="space-y-1">
+                        <p className="font-medium text-sm">{fullName}</p>
+                        {decisor.title && (
+                          <p className="text-xs text-muted-foreground">{decisor.title}</p>
+                        )}
+                        <div className="flex items-center gap-3">
+                          {decisor.linkedin_url && (
+                            <a
+                              href={decisor.linkedin_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+                            >
+                              <Linkedin className="h-3 w-3" />
+                              LinkedIn
+                            </a>
+                          )}
+                          {decisor.email && (
+                            <a
+                              href={`mailto:${decisor.email}`}
+                              className="text-xs text-muted-foreground hover:underline flex items-center gap-1"
+                            >
+                              <Mail className="h-3 w-3" />
+                              Email
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </div>
+          
+        </div>
+
+        {/* BOTÕES */}
+        <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t">
+          <Button variant="outline" size="sm"
+                  onClick={() => navigate(`/company/${company.id}`)}>
+            <Building2 className="h-4 w-4 mr-2" />
+            Ver Detalhes Completos
+          </Button>
+          <Button size="sm"
+                  onClick={() => navigate(`/company/${company.id}/strategy`)}>
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Criar Estratégia
+          </Button>
+        </div>
+
+      </div>
     </div>
   );
 }
