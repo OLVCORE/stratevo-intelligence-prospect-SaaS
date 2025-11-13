@@ -524,13 +524,14 @@ export function ExpandableCompaniesTableBR({
                                 </div>
                               </div>
 
-                              {/* 7️⃣ DECISORES */}
-                              {decisores.length > 0 && (
-                                <div className="p-4 bg-gradient-to-br from-green-500/10 to-blue-500/10 rounded-lg border border-green-500/30">
-                                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2 text-green-400">
-                                    <Users className="h-4 w-4" />
-                                    Decisores ({decisores.length})
-                                  </h4>
+                              {/* 7️⃣ DECISORES - SEMPRE MOSTRAR */}
+                              <div className="p-4 bg-gradient-to-br from-green-500/10 to-blue-500/10 rounded-lg border border-green-500/30">
+                                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2 text-green-400">
+                                  <Users className="h-4 w-4" />
+                                  Decisores ({decisores.length})
+                                </h4>
+                                
+                                {decisores.length > 0 ? (
                                   <div className="space-y-2 max-h-48 overflow-y-auto">
                                     {decisores.slice(0, 5).map((dm: any, idx: number) => (
                                       <div key={idx} className="p-3 bg-slate-800/60 rounded border border-slate-700/50">
@@ -565,7 +566,7 @@ export function ExpandableCompaniesTableBR({
                                               className="flex items-center gap-1 text-xs text-blue-400 hover:underline"
                                               onClick={(e) => e.stopPropagation()}
                                             >
-                                              <img src="https://cdn.simpleicons.org/linkedin" className="h-3 w-3" alt="LinkedIn" />
+                                              <Linkedin className="h-3 w-3" />
                                               LinkedIn
                                             </a>
                                           )}
@@ -578,8 +579,24 @@ export function ExpandableCompaniesTableBR({
                                       </p>
                                     )}
                                   </div>
-                                </div>
-                              )}
+                                ) : (
+                                  <div className="text-center py-6 space-y-3">
+                                    <p className="text-xs text-muted-foreground">Nenhum decisor cadastrado</p>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-xs h-8"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onRowClick?.(company);
+                                      }}
+                                    >
+                                      <Users className="h-3 w-3 mr-1.5" />
+                                      Buscar Decisores no Apollo
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
 
                               {/* 8️⃣ INFORMAÇÕES FINANCEIRAS */}
                               {receitaData.capital_social && (
