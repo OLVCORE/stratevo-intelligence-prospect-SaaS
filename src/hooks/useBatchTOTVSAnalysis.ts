@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface BatchCompany {
+  id?: string; // ✅ ID da empresa no banco (necessário para Apollo)
   cnpj: string;
   razao_social: string;
   nome_fantasia?: string;
@@ -80,15 +81,35 @@ export function useBatchTOTVSAnalysis() {
         // ===== ABA 2: DECISORES (só se for GO) =====
         let decisors = null;
         if (isGo) {
-          console.log(`[BATCH] 👥 Extraindo decisores...`);
+          console.log(`[BATCH] 👥 Extraindo decisores com Apollo (critério REFINADO)...`);
           try {
-            const { data: decisorsData } = await supabase.functions.invoke('enrich-apollo-decisores', {
+            // ✅ Se não tiver company.id, buscar pelo CNPJ
+            let companyId = company.id;
+            if (!companyId && company.cnpj) {
+              const { data: foundCompany } = await supabase
+                .from('companies')
+                .select('id')
+                .eq('cnpj', company.cnpj)
+                .maybeSingle();
+              companyId = foundCompany?.id;
+            }
+            
+            // ✅ USAR MESMA LÓGICA DA ENGRENAGEM INDIVIDUAL (QUE FUNCIONA!)
+            const { data: decisorsData, error: decisorsError } = await supabase.functions.invoke('enrich-apollo-decisores', {
               body: {
-                companyName: company.razao_social,
-                linkedinUrl: '', // Tentar descobrir automaticamente
+                company_id: companyId, // ✅ ID da empresa no banco
+                company_name: company.razao_social,
+                domain: company.domain,
+                modes: ['people', 'company'], // ✅ BUSCAR PESSOAS + ORGANIZAÇÃO (CRÍTICO!)
               },
             });
-            decisors = decisorsData;
+            
+            if (decisorsError) {
+              console.warn(`[BATCH] ⚠️ Erro Apollo (continuando):`, decisorsError);
+            } else {
+              decisors = decisorsData;
+              console.log(`[BATCH] ✅ ${decisorsData?.decisores?.length || 0} decisores encontrados`);
+            }
           } catch (err) {
             console.warn(`[BATCH] ⚠️ Erro ao extrair decisores (continuando):`, err);
           }

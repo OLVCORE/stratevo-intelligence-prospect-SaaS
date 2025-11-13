@@ -50,30 +50,58 @@ serve(async (req) => {
     const allUrls = await searchAllUrls(companyName, cnpj, domain);
     console.log(`[DIGITAL-INTEL] ✅ ${allUrls.length} URLs coletadas`);
 
-    // ETAPA 2: ANALISAR CADA URL COM IA (GPT-4o-mini)
-    console.log(`[DIGITAL-INTEL] 🧠 Iniciando análise de ${allUrls.length} URLs com GPT-4o-mini...`);
+    // ETAPA 2: ANALISAR TODAS AS URLs EM PARALELO (BATCH DE 10)
+    console.log(`[DIGITAL-INTEL] 🧠 Iniciando análise PARALELA de ${allUrls.length} URLs com GPT-4o-mini...`);
+    
     const analyzedUrls: AnalyzedURL[] = [];
     let aiSuccessCount = 0;
     let aiErrorCount = 0;
     
-    for (let i = 0; i < allUrls.length; i++) {
-      const urlData = allUrls[i];
-      console.log(`[DIGITAL-INTEL] 🔍 Analisando URL ${i + 1}/${allUrls.length}: ${urlData.url}`);
+    // Processar em lotes de 10 URLs por vez (evitar sobrecarga)
+    const batchSize = 10;
+    for (let i = 0; i < allUrls.length; i += batchSize) {
+      const batch = allUrls.slice(i, i + batchSize);
+      console.log(`[DIGITAL-INTEL] 📦 Processando lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(allUrls.length / batchSize)} (${batch.length} URLs)`);
       
-      const analysis = await analyzeUrlWithAI(urlData, companyName);
-      
-      if (analysis.buying_signal || analysis.temperature === 'hot') {
-        aiSuccessCount++;
-        console.log(`[DIGITAL-INTEL] 🔥 Sinal detectado! Temperature: ${analysis.temperature}, Relevance: ${analysis.sales_relevance}/10`);
-      } else {
-        aiErrorCount++;
-      }
-      
-      analyzedUrls.push({
-        ...urlData,
-        ai_analysis: analysis,
+      // Analisar TODAS as URLs do lote EM PARALELO
+      const batchPromises = batch.map(async (urlData) => {
+        try {
+          const analysis = await analyzeUrlWithAI(urlData, companyName);
+          return { ...urlData, ai_analysis: analysis };
+        } catch (error) {
+          console.error(`[DIGITAL-INTEL] ❌ Erro ao analisar ${urlData.url}:`, error);
+          // Retornar análise fria em caso de erro
+          return {
+            ...urlData,
+            ai_analysis: {
+              content_type: 'outro',
+              buying_signal: false,
+              temperature: 'cold' as const,
+              pain_point: null,
+              event: null,
+              sales_relevance: 1,
+              insight: 'Análise falhou',
+              script_suggestion: '',
+            }
+          };
+        }
       });
+      
+      const batchResults = await Promise.all(batchPromises);
+      
+      batchResults.forEach(result => {
+        if (result.ai_analysis.buying_signal || result.ai_analysis.temperature === 'hot') {
+          aiSuccessCount++;
+          console.log(`[DIGITAL-INTEL] 🔥 Sinal detectado! Temperature: ${result.ai_analysis.temperature}, Relevance: ${result.ai_analysis.sales_relevance}/10`);
+        } else {
+          aiErrorCount++;
+        }
+        analyzedUrls.push(result);
+      });
+      
+      console.log(`[DIGITAL-INTEL] ✅ Lote ${Math.floor(i / batchSize) + 1} completo`);
     }
+    
     console.log(`[DIGITAL-INTEL] ✅ Análise IA completa: ${aiSuccessCount} sinais positivos, ${aiErrorCount} neutros`);
 
     // ETAPA 3: CROSS-MATCHING E DIAGNÓSTICO FINAL
@@ -97,6 +125,7 @@ serve(async (req) => {
 // ============================================
 
 async function searchAllUrls(companyName: string, cnpj: string, domain?: string) {
+  // 🔥 TODAS AS 20 QUERIES MANTIDAS - MÁXIMA ASSERTIVIDADE
   const searches = [
     // Website oficial
     `site oficial ${companyName}`,
@@ -160,8 +189,8 @@ async function searchAllUrls(companyName: string, cnpj: string, domain?: string)
         }
       }
       
-      // Rate limiting
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Rate limiting (aumentado para 500ms - mais seguro)
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
       console.error(`[SEARCH] Erro na busca "${query}":`, error);
     }
