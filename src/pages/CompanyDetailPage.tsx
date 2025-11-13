@@ -376,7 +376,9 @@ export default function CompanyDetailPage() {
           modes: ['people', 'company'],
           city: receitaData?.municipio || company.city,
           state: receitaData?.uf || company.state,
-          industry: company.industry
+          industry: company.industry,
+          cep: receitaData?.cep || rawData?.cep,
+          fantasia: receitaData?.fantasia || rawData?.nome_fantasia
         }
       });
       
@@ -432,7 +434,9 @@ export default function CompanyDetailPage() {
           positions: ['CEO','CTO','CFO','Diretor','Gerente','VP'],
           city: receitaData?.municipio || company.city,
           state: receitaData?.uf || company.state,
-          industry: company.industry
+          industry: company.industry,
+          cep: receitaData?.cep || rawData?.cep,
+          fantasia: receitaData?.fantasia || rawData?.nome_fantasia
         }
       });
       

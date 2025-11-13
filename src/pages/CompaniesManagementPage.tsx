@@ -743,7 +743,9 @@ export default function CompaniesManagementPage() {
               modes: ['people', 'company'],
               city: (company as any).raw_data?.receita_federal?.municipio || (company as any).city,
               state: (company as any).raw_data?.receita_federal?.uf || (company as any).state,
-              industry: company.industry
+              industry: company.industry,
+              cep: (company as any).raw_data?.receita_federal?.cep || (company as any).raw_data?.cep,
+              fantasia: (company as any).raw_data?.receita_federal?.fantasia || (company as any).raw_data?.nome_fantasia
             }
           });
           
@@ -2098,7 +2100,11 @@ export default function CompaniesManagementPage() {
                                   company_id: company.id,
                                   company_name: company.name,
                                   domain: company.website || company.domain,
-                                  modes: ['people', 'company'] // 🔥 PESSOAS + ORGANIZAÇÃO
+                                  modes: ['people', 'company'], // 🔥 PESSOAS + ORGANIZAÇÃO
+                                  city: (company as any).raw_data?.receita_federal?.municipio || (company as any).city,
+                                  state: (company as any).raw_data?.receita_federal?.uf || (company as any).state,
+                                  cep: (company as any).raw_data?.receita_federal?.cep || (company as any).raw_data?.cep,
+                                  fantasia: (company as any).raw_data?.receita_federal?.fantasia || (company as any).raw_data?.nome_fantasia
                                 }
                               });
                               if (error) throw error;

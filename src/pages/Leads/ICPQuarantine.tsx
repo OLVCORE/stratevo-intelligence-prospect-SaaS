@@ -315,7 +315,9 @@ export default function ICPQuarantine() {
           modes: ['people', 'company'],
           city: analysis.city || analysis.municipio,
           state: analysis.state || analysis.uf,
-          industry: analysis.industry || analysis.setor
+          industry: analysis.industry || analysis.setor,
+          cep: analysis.cep || (analysis.raw_data as any)?.receita_federal?.cep,
+          fantasia: analysis.fantasia || (analysis.raw_data as any)?.receita_federal?.fantasia
         }
       });
       

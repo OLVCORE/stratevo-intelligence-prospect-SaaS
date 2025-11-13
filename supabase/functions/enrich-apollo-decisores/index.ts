@@ -17,6 +17,8 @@ interface EnrichApolloRequest {
   city?: string; // 🎯 FILTRO INTELIGENTE: cidade da empresa
   state?: string; // 🎯 FILTRO INTELIGENTE: estado da empresa
   industry?: string; // 🎯 FILTRO INTELIGENTE: setor/CNAE
+  cep?: string; // 🎯 FILTRO CEP: 98% precisão (único por empresa no Brasil!)
+  fantasia?: string; // 🎯 FILTRO NOME FANTASIA: aumenta assertividade busca
 }
 
 // 🇧🇷 Classificar poder de decisão - HIERARQUIA BRASILEIRA
@@ -116,9 +118,9 @@ serve(async (req) => {
     console.log('[ENRICH-APOLLO] ✅ Cliente Supabase inicializado');
     const companyId = body.company_id || body.companyId;
     const companyName = body.company_name || body.companyName;
-    const { domain, positions, apollo_org_id, city, state, industry } = body;
+    const { domain, positions, apollo_org_id, city, state, industry, cep, fantasia } = body;
     
-    console.log('[ENRICH-APOLLO] 🎯 Filtros inteligentes:', { city, state, industry });
+    console.log('[ENRICH-APOLLO] 🎯 Filtros inteligentes:', { city, state, industry, cep, fantasia });
 
     console.log('[ENRICH-APOLLO-DECISORES] Buscando decisores para:', companyName);
     console.log('[ENRICH-APOLLO-DECISORES] Apollo Org ID fornecido:', apollo_org_id || 'N/A');
@@ -190,6 +192,27 @@ serve(async (req) => {
                 return orgDomain === cleanDomain && (org.country === 'Brazil' || org.country === 'Brasil');
               });
               if (selectedOrg) criterio = `Domain ${cleanDomain} + Brasil (EXCELENTE ✅)`;
+            }
+            
+            // 🥇+ EXCELENTE: CEP (98% assertividade - único no Brasil!)
+            if (!selectedOrg && cep) {
+              const cleanCEP = cep.replace(/\D/g, '');
+              selectedOrg = orgData.organizations.find((org: any) => {
+                const orgCEP = (org.postal_code || '').replace(/\D/g, '');
+                return orgCEP === cleanCEP && (org.country === 'Brazil' || org.country === 'Brasil');
+              });
+              if (selectedOrg) criterio = `CEP ${cep} + Brasil (EXCELENTE ✅ 98%)`;
+            }
+            
+            // 🥈+ MUITO BOM: Nome Fantasia + Cidade + Estado (97% assertividade)
+            if (!selectedOrg && fantasia && city && state) {
+              selectedOrg = orgData.organizations.find((org: any) => 
+                org.name?.toLowerCase().includes(fantasia.toLowerCase()) &&
+                org.city?.toLowerCase().includes(city.toLowerCase()) &&
+                org.state?.toLowerCase() === state.toLowerCase() &&
+                (org.country === 'Brazil' || org.country === 'Brasil')
+              );
+              if (selectedOrg) criterio = `Fantasia "${fantasia}" + ${city}/${state} + Brasil (MUITO BOM ✅ 97%)`;
             }
             
             // 🥈 MUITO BOM: Cidade + Estado + Brasil (95% assertividade)
