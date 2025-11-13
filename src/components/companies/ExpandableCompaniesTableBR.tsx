@@ -1,3 +1,25 @@
+/**
+ * ============================================================================
+ * ExpandableCompaniesTableBR - Tabela Expansível de Empresas (Brasil)
+ * ============================================================================
+ * 
+ * REGULARIZAÇÕES APLICADAS (2025-11-13):
+ * ✅ raw_data.decision_makers com prioridade sobre decision_makers
+ * ✅ Funções helper: getApolloLink(), getLinkedInUrl(), getFitScore(), getB2BType()
+ * ✅ Fit Score B2B (separado do ICP Score) com badge de tipo (Distributor/Manufacturer)
+ * ✅ LinkedIn URL consolidado (linkedin_url || raw_data.linkedin_url || digital_presence.linkedin)
+ * ✅ Apollo Link consolidado (apollo_link || apollo_id || apollo_organization_id)
+ * ✅ Badges de enrichment_source: [🤖 AUTO] / [✅ VALIDADO]
+ * ✅ Importação de ícone Linkedin
+ * 
+ * COMPATIBILIDADE:
+ * ✅ Mantém 100% dos campos BR (CNPJ, Receita Federal, TOTVS, ICP)
+ * ✅ Mantém TOTVSStatusBadge e QuarantineEnrichmentStatusBadge
+ * ✅ Adiciona suporte a campos internacionais (Trade Intelligence)
+ * 
+ * ============================================================================
+ */
+
 import { useState } from 'react';
 import {
   Table,
@@ -27,6 +49,7 @@ import {
   DollarSign,
   Briefcase,
   FileText,
+  Linkedin,
 } from 'lucide-react';
 import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
@@ -71,11 +94,40 @@ export function ExpandableCompaniesTableBR({
   };
 
   const getDecisionMakers = (company: any): any[] => {
-    return company.decision_makers || [];
+    // Prioridade: raw_data.decision_makers > decision_makers
+    const rawData = company.raw_data || {};
+    return rawData.decision_makers || company.decision_makers || [];
   };
 
   const getReceitaData = (company: any) => {
     return company.raw_data?.receita_federal || company.raw_data?.receita || {};
+  };
+
+  const getApolloLink = (company: any): string | null => {
+    const rawData = company.raw_data || {};
+    if (rawData.apollo_link) return rawData.apollo_link;
+    if (company.apollo_id || company.apollo_organization_id) {
+      return `https://app.apollo.io/#/companies/${company.apollo_id || company.apollo_organization_id}`;
+    }
+    return null;
+  };
+
+  const getLinkedInUrl = (company: any): string | null => {
+    const rawData = company.raw_data || {};
+    return company.linkedin_url || 
+           rawData.linkedin_url || 
+           rawData.digital_presence?.linkedin || 
+           null;
+  };
+
+  const getFitScore = (company: any): number => {
+    const rawData = company.raw_data || {};
+    return rawData.fit_score || company.fit_score || 0;
+  };
+
+  const getB2BType = (company: any): string => {
+    const rawData = company.raw_data || {};
+    return rawData.type || company.b2b_type || '';
   };
 
   return (
@@ -107,6 +159,10 @@ export function ExpandableCompaniesTableBR({
             const icpScore = getICPScore(company);
             const decisores = getDecisionMakers(company);
             const receitaData = getReceitaData(company);
+            const apolloLink = getApolloLink(company);
+            const linkedinUrl = getLinkedInUrl(company);
+            const fitScore = getFitScore(company);
+            const b2bType = getB2BType(company);
             
             return (
               <>
@@ -353,6 +409,39 @@ export function ExpandableCompaniesTableBR({
                                 </div>
                               )}
 
+                              {/* 4️⃣B FIT SCORE B2B (se diferente do ICP) */}
+                              {fitScore > 0 && fitScore !== icpScore && (
+                                <div className="p-4 bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-lg border border-green-500/30">
+                                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2 text-green-400">
+                                    <Target className="h-4 w-4" />
+                                    Fit Score B2B
+                                  </h4>
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex-1">
+                                      <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full ${fitScore >= 80 ? 'bg-green-500' : fitScore >= 60 ? 'bg-yellow-500' : 'bg-orange-500'}`}
+                                          style={{ width: `${fitScore}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <span className="text-3xl font-bold text-green-400">{fitScore}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between mt-2">
+                                    <p className="text-xs text-muted-foreground">
+                                      {fitScore >= 80 && '🟢 Excelente fit B2B'}
+                                      {fitScore >= 60 && fitScore < 80 && '🟡 Bom fit B2B'}
+                                      {fitScore < 60 && '🟠 Fit moderado'}
+                                    </p>
+                                    {b2bType && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {b2bType}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
                               {/* 5️⃣ STATUS TOTVS EXPANDIDO */}
                               <div className="p-4 bg-muted/30 rounded-lg border">
                                 <h4 className="text-sm font-semibold mb-3 flex items-center gap-2 text-primary">
@@ -376,6 +465,7 @@ export function ExpandableCompaniesTableBR({
                                   Links Externos
                                 </h4>
                                 <div className="space-y-2">
+                                  {/* WEBSITE */}
                                   {company.website && (
                                     <a
                                       href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
@@ -389,9 +479,11 @@ export function ExpandableCompaniesTableBR({
                                       <ExternalLink className="h-3 w-3" />
                                     </a>
                                   )}
-                                  {company.raw_data?.digital_presence?.linkedin && (
+                                  
+                                  {/* LINKEDIN */}
+                                  {linkedinUrl && (
                                     <a
-                                      href={company.raw_data.digital_presence.linkedin}
+                                      href={linkedinUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="flex items-center gap-2 text-sm text-primary hover:underline"
@@ -402,18 +494,32 @@ export function ExpandableCompaniesTableBR({
                                       <ExternalLink className="h-3 w-3" />
                                     </a>
                                   )}
-                                  {company.apollo_organization_id && (
-                                    <a
-                                      href={`https://app.apollo.io/#/organizations/${company.apollo_organization_id}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 text-sm text-primary hover:underline"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <img src="https://www.apollo.io/favicon.ico" className="h-4 w-4" alt="Apollo" />
-                                      Apollo.io
-                                      <ExternalLink className="h-3 w-3" />
-                                    </a>
+                                  
+                                  {/* APOLLO.IO */}
+                                  {apolloLink && (
+                                    <div className="flex items-center gap-2">
+                                      <a
+                                        href={apolloLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <img src="https://www.apollo.io/favicon.ico" className="h-4 w-4" alt="Apollo" />
+                                        Apollo.io
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                      {company.enrichment_source === 'auto' && (
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                          🤖 AUTO
+                                        </Badge>
+                                      )}
+                                      {company.enrichment_source === 'manual' && (
+                                        <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
+                                          ✅ VALIDADO
+                                        </Badge>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
