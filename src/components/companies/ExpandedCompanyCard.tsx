@@ -9,27 +9,27 @@ import {
   TrendingUp,
   Phone,
   Users,
-  Award
+  Award,
+  Edit
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
-import { useEffect, useRef } from 'react';
 
 interface ExpandedCompanyCardProps {
   company: any;
 }
 
-function calculateFitScore(company: any): { score: number; label: string; color: string } {
+// 🎯 CALCULAR FIT SCORE
+function getFitScore(company: any): number {
   let score = 0;
   const rawData = company.raw_data || {};
   const apolloData = rawData.apollo || rawData.apollo_organization || {};
   const decisores = company.decision_makers || rawData.decision_makers || rawData.apollo_people || [];
   
-  if (company.totvs_status === 'no-go') {
-    return { score: 0, label: 'Cliente TOTVS - Não qualificado', color: 'bg-red-500' };
-  }
+  if (company.totvs_status === 'no-go') return 0;
   
   if (company.totvs_status === 'go') score += 40;
   if (apolloData.organization_id || apolloData.name) score += 20;
@@ -42,98 +42,61 @@ function calculateFitScore(company: any): { score: number; label: string; color:
   if (receitaData.situacao === 'ATIVA' || company.cnpj_status === 'ATIVA') score += 5;
   if (company.icp_score && company.icp_score >= 70) score += 10;
   
-  let color = 'bg-orange-500';
-  let label = 'Fit baixo - Dados incompletos';
+  return Math.min(score, 100);
+}
+
+function getFitScoreColor(score: number): string {
+  if (score >= 80) return 'bg-green-500';
+  if (score >= 60) return 'bg-yellow-500';
+  return 'bg-orange-500';
+}
+
+function getB2BType(company: any): string {
+  const rawData = company.raw_data || {};
+  return rawData.type || company.segmento || company.b2b_type || 'N/A';
+}
+
+function getDecisionMakers(company: any): any[] {
+  const rawData = company.raw_data || {};
+  return rawData.decision_makers || company.decision_makers || rawData.apollo_people || [];
+}
+
+function getApolloLink(company: any): string | null {
+  const rawData = company.raw_data || {};
+  const apolloData = rawData.apollo || rawData.apollo_organization || {};
   
-  if (score >= 80) {
-    color = 'bg-green-500';
-    label = 'Excelente fit para B2B';
-  } else if (score >= 60) {
-    color = 'bg-yellow-500';
-    label = 'Bom fit para prospecção';
-  } else if (score >= 40) {
-    color = 'bg-yellow-500';
-    label = 'Fit moderado';
-  }
+  if (rawData.apollo_link) return rawData.apollo_link;
+  if (apolloData.organization_id) return `https://app.apollo.io/#/companies/${apolloData.organization_id}`;
+  if (company.apollo_id) return `https://app.apollo.io/#/companies/${company.apollo_id}`;
   
-  return { score, label, color };
+  return null;
 }
 
 export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   const navigate = useNavigate();
-  const mapRef = useRef<HTMLDivElement>(null);
   
   const rawData = company.raw_data || {};
   const apolloData = rawData.apollo || rawData.apollo_organization || {};
   const receitaData = rawData.receita_federal || rawData.receita || {};
-  const decisores = company.decision_makers || rawData.decision_makers || rawData.apollo_people || [];
   
-  const description = apolloData.short_description || apolloData.description || company.description || rawData.description || rawData.company_details?.description || '';
-  const fitScore = calculateFitScore(company);
+  const fitScore = getFitScore(company);
+  const decisores = getDecisionMakers(company);
+  const apolloLink = getApolloLink(company);
+  const b2bType = getB2BType(company);
   
-  const logradouro = receitaData.logradouro || apolloData.street_address || '';
-  const numero = receitaData.numero || '';
-  const bairro = receitaData.bairro || '';
-  const cidade = apolloData.city || receitaData.municipio || company.city || '';
-  const uf = apolloData.state || receitaData.uf || company.state || '';
-  const cep = receitaData.cep || apolloData.postal_code || '';
-  const pais = apolloData.country || receitaData.pais || company.country || 'Brazil';
-  const telefone = rawData.telefone1 || rawData.telefone || apolloData.phone || '';
-  const email = rawData.email || apolloData.email || '';
-  
-  useEffect(() => {
-    const loadMap = async () => {
-      if (!mapRef.current || typeof window === 'undefined') return;
-      // @ts-ignore
-      if (!window.L) return;
-      // @ts-ignore
-      const L = window.L;
-      
-      if (mapRef.current._leaflet_id) {
-        mapRef.current._leaflet_id = undefined;
-        mapRef.current.innerHTML = '';
-      }
-      
-      let lat = -23.5505, lng = -46.6333;
-      
-      if (cep || (logradouro && cidade && uf)) {
-        const endereco = cep ? `${cep}, Brazil` : `${logradouro} ${numero}, ${cidade}, ${uf}, Brazil`;
-        try {
-          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`, 
-            { headers: { 'User-Agent': 'STRATEVO-Intelligence/1.0' } });
-          const data = await response.json();
-          if (data && data[0]) {
-            lat = parseFloat(data[0].lat);
-            lng = parseFloat(data[0].lon);
-          }
-        } catch (error) {
-          console.warn('[MAP] Geocoding falhou', error);
-        }
-      }
-      
-      const map = L.map(mapRef.current, {
-        center: [lat, lng],
-        zoom: 14,
-        zoomControl: false,
-        scrollWheelZoom: false,
-        dragging: false
-      });
-      
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-      }).addTo(map);
-      
-      L.marker([lat, lng]).addTo(map);
-      
-      return () => { if (map) map.remove(); };
-    };
-    
-    loadMap();
-  }, [cep, logradouro, cidade, uf]);
+  // 🌍 DESCRIÇÃO (múltiplas fontes)
+  const description = 
+    apolloData.short_description || 
+    apolloData.description || 
+    company.description || 
+    rawData.description ||
+    rawData.notes ||
+    rawData.company_details?.description || 
+    '';
 
   return (
-    <div className="bg-muted/30 p-0">
-      <div className="p-6">
+    <Card className="border-0 shadow-none">
+      <CardContent className="p-6">
         <div className="grid grid-cols-2 gap-6">
           
           {/* ========== COLUNA ESQUERDA ========== */}
@@ -148,26 +111,12 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Nome:</span>
-                  <span className="font-medium">{company.name || company.razao_social}</span>
+                  <span className="font-medium">{company.name || company.razao_social || company.company_name}</span>
                 </div>
-                {company.cnpj && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">CNPJ:</span>
-                    <span className="font-mono text-xs">{company.cnpj}</span>
-                  </div>
-                )}
                 {company.industry && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Indústria:</span>
                     <span className="font-medium">{company.industry}</span>
-                  </div>
-                )}
-                {(apolloData.estimated_num_employees || receitaData.qsa_count) && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Funcionários:</span>
-                    <Badge variant="secondary">
-                      {apolloData.estimated_num_employees || receitaData.qsa_count}
-                    </Badge>
                   </div>
                 )}
                 {company.source_name && (
@@ -186,23 +135,37 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                 Localização
               </h4>
               <div className="space-y-2 text-sm">
-                {cidade && <p className="text-muted-foreground">{cidade}</p>}
-                {uf && <p className="text-muted-foreground">{uf}</p>}
-                {pais && <p className="font-medium">{pais}</p>}
+                <div className="flex items-start gap-2">
+                  <div>
+                    {(apolloData.city || receitaData.municipio || company.city) && (
+                      <p className="text-muted-foreground">
+                        {apolloData.city || receitaData.municipio || company.city}
+                      </p>
+                    )}
+                    {(apolloData.state || receitaData.uf || company.state) && (
+                      <p className="text-muted-foreground">
+                        {apolloData.state || receitaData.uf || company.state}
+                      </p>
+                    )}
+                    {(apolloData.country || receitaData.pais || company.country || 'Brazil') && (
+                      <p className="font-medium">
+                        {apolloData.country || receitaData.pais || company.country || 'Brazil'}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* DESCRIÇÃO */}
-            {description && (
+            {description ? (
               <div>
                 <h4 className="text-sm font-semibold mb-2">Descrição</h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {description}
                 </p>
               </div>
-            )}
-            
-            {!description && (
+            ) : (
               <div className="flex items-start gap-2 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/10 dark:text-yellow-500 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
                 <Award className="h-4 w-4 mt-0.5 flex-shrink-0" />
                 <span>💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
@@ -215,7 +178,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
           <div className="space-y-4">
             
             {/* FIT SCORE */}
-            {fitScore.score > 0 && (
+            {fitScore > 0 && (
               <div>
                 <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                   <Target className="h-4 w-4" />
@@ -225,55 +188,67 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                   <div className="flex-1">
                     <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                       <div
-                        className={`h-full ${fitScore.color}`}
-                        style={{ width: `${fitScore.score}%` }}
+                        className={`h-full ${getFitScoreColor(fitScore)}`}
+                        style={{ width: `${fitScore}%` }}
                       />
                     </div>
                   </div>
-                  <span className="text-2xl font-bold">{fitScore.score}</span>
+                  <span className="text-2xl font-bold">{fitScore}</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">{fitScore.label}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {fitScore >= 80 && '🟢 Excelente fit para B2B'}
+                  {fitScore >= 60 && fitScore < 80 && '🟡 Bom fit para B2B'}
+                  {fitScore < 60 && '🟠 Fit moderado'}
+                </p>
+                {b2bType !== 'N/A' && (
+                  <Badge variant="default" className="mt-2">
+                    {b2bType}
+                  </Badge>
+                )}
               </div>
             )}
 
             {/* LINKS EXTERNOS */}
             <div>
-              <h4 className="text-sm font-semibold mb-2">Links Externos</h4>
+              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Links Externos
+              </h4>
               <div className="space-y-2">
-                {company.domain && (
+                {(company.domain || company.website) && (
                   <a
-                    href={`https://${company.domain}`}
+                    href={`https://${company.domain || company.website}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
                   >
                     <Globe className="h-4 w-4" />
-                    <span>Website</span>
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                    Website
+                    <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
-                {company.linkedin_url && (
+                {(company.linkedin_url || rawData.linkedin_url) && (
                   <a
-                    href={company.linkedin_url}
+                    href={company.linkedin_url || rawData.linkedin_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
                   >
-                    <Linkedin className="h-4 w-4 text-blue-500" />
-                    <span>LinkedIn</span>
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                    <Linkedin className="h-4 w-4" />
+                    LinkedIn
+                    <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
-                {apolloData.organization_id && (
+                {apolloLink && (
                   <a
-                    href={`https://app.apollo.io/#/companies/${apolloData.organization_id}`}
+                    href={apolloLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
                   >
                     <img src={apolloIcon} alt="Apollo" className="h-4 w-4" />
-                    <span>Apollo.io</span>
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                    Apollo.io
+                    <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
               </div>
@@ -286,32 +261,30 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                   <Users className="h-4 w-4" />
                   Decisores ({decisores.length})
                 </h4>
-                <div className="space-y-3">
-                  {decisores.slice(0, 5).map((decisor: any, idx: number) => {
-                    const fullName = decisor.name || `${decisor.first_name || ''} ${decisor.last_name || ''}`.trim();
+                <div className="space-y-2">
+                  {decisores.slice(0, 5).map((dm: any, idx: number) => {
+                    const fullName = dm.name || `${dm.first_name || ''} ${dm.last_name || ''}`.trim();
                     
                     return (
-                      <div key={idx} className="space-y-1">
-                        <p className="font-medium text-sm">{fullName}</p>
-                        {decisor.title && (
-                          <p className="text-xs text-muted-foreground">{decisor.title}</p>
-                        )}
-                        <div className="flex items-center gap-3">
-                          {decisor.linkedin_url && (
+                      <div key={idx} className="p-2 bg-muted/30 rounded text-xs border">
+                        <div className="font-medium">{fullName}</div>
+                        <div className="text-muted-foreground">{dm.title}</div>
+                        <div className="flex gap-3 mt-2">
+                          {dm.linkedin_url && (
                             <a
-                              href={decisor.linkedin_url}
+                              href={dm.linkedin_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+                              className="flex items-center gap-1 text-primary hover:underline"
                             >
                               <Linkedin className="h-3 w-3" />
                               LinkedIn
                             </a>
                           )}
-                          {decisor.email && (
+                          {dm.email && (
                             <a
-                              href={`mailto:${decisor.email}`}
-                              className="text-xs text-muted-foreground hover:underline flex items-center gap-1"
+                              href={`mailto:${dm.email}`}
+                              className="flex items-center gap-1 text-primary hover:underline"
                             >
                               <Mail className="h-3 w-3" />
                               Email
@@ -329,21 +302,26 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
           
         </div>
 
-        {/* BOTÕES */}
+        {/* BOTÕES DE AÇÃO */}
         <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t">
-          <Button variant="outline" size="sm"
-                  onClick={() => navigate(`/company/${company.id}`)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/company/${company.id}`)}
+          >
             <Building2 className="h-4 w-4 mr-2" />
             Ver Detalhes Completos
           </Button>
-          <Button size="sm"
-                  onClick={() => navigate(`/company/${company.id}/strategy`)}>
+          <Button
+            size="sm"
+            onClick={() => navigate(`/company/${company.id}/strategy`)}
+          >
             <TrendingUp className="h-4 w-4 mr-2" />
             Criar Estratégia
           </Button>
         </div>
 
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
