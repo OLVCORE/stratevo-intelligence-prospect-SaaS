@@ -28,6 +28,7 @@ import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnri
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { ICPScoreTooltip } from '@/components/icp/ICPScoreTooltip';
 import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
+import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/companies/EnrichmentProgressModal';
 import { toast } from 'sonner';
 import * as Papa from 'papaparse';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -68,6 +69,11 @@ export default function ICPQuarantine() {
   const [rejectReason, setRejectReason] = useState<string>('');
   const [rejectCustomReason, setRejectCustomReason] = useState<string>('');
   const [showDiscardedModal, setShowDiscardedModal] = useState(false);
+  
+  // ✅ MODAL DE PROGRESSO EM TEMPO REAL
+  const [enrichmentModalOpen, setEnrichmentModalOpen] = useState(false);
+  const [enrichmentProgress, setEnrichmentProgress] = useState<EnrichmentProgress[]>([]);
+  const [cancelEnrichment, setCancelEnrichment] = useState(false);
 
   const { data: companies = [], isLoading, refetch } = useQuarantineCompanies({
     status: statusFilter === 'all' ? undefined : statusFilter,
@@ -947,27 +953,71 @@ export default function ICPQuarantine() {
       return;
     }
     
-    toast.loading(`Enriquecendo ${selectedIds.length} empresa(s) com Apollo...`, { id: 'bulk-apollo' });
+    setCancelEnrichment(false);
+    
+    const selectedCompanies = companies.filter(c => selectedIds.includes(c.id));
+    
+    // ✅ INICIALIZAR MODAL DE PROGRESSO
+    const initialProgress: EnrichmentProgress[] = selectedCompanies.map(c => ({
+      companyId: c.id,
+      companyName: c.razao_social,
+      status: 'pending',
+    }));
+    
+    setEnrichmentProgress(initialProgress);
+    setEnrichmentModalOpen(true);
     
     let success = 0;
     let errors = 0;
     
-    for (const id of selectedIds) {
+    for (let i = 0; i < selectedCompanies.length; i++) {
+      // ✅ VERIFICAR CANCELAMENTO
+      if (cancelEnrichment) {
+        toast.info('❌ Processo cancelado pelo usuário');
+        break;
+      }
+      
+      const company = selectedCompanies[i];
+      
       try {
-        await enrichApolloMutation.mutateAsync(id);
+        // ✅ ATUALIZAR STATUS: PROCESSANDO
+        setEnrichmentProgress(prev => prev.map(p => 
+          p.companyId === company.id 
+            ? { ...p, status: 'processing', message: 'Buscando decisores no Apollo...' }
+            : p
+        ));
+        
+        await enrichApolloMutation.mutateAsync(company.id);
+        
+        // ✅ ATUALIZAR STATUS: SUCESSO
+        setEnrichmentProgress(prev => prev.map(p => 
+          p.companyId === company.id 
+            ? { ...p, status: 'success', message: 'Decisores identificados!' }
+            : p
+        ));
+        
         success++;
       } catch (error) {
         errors++;
-        console.error(`Erro ao enriquecer ${id}:`, error);
+        console.error(`Erro ao enriquecer ${company.razao_social}:`, error);
+        
+        // ✅ ATUALIZAR STATUS: ERRO
+        setEnrichmentProgress(prev => prev.map(p => 
+          p.companyId === company.id 
+            ? { ...p, status: 'error', message: 'Falha ao buscar decisores' }
+            : p
+        ));
+      }
+      
+      // Delay entre empresas (evitar rate limit)
+      if (i < selectedCompanies.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
     
-    toast.dismiss('bulk-apollo');
-    if (errors === 0) {
-      toast.success(`✅ ${success} empresa(s) enriquecida(s) com Apollo!`);
-    } else {
-      toast.warning(`Concluído: ${success} sucesso, ${errors} erro(s)`);
-    }
+    toast.success(`✅ Enriquecimento concluído!`, {
+      description: `${success} sucesso, ${errors} erro(s)`
+    });
   };
 
   const handleBulkEnrich360 = async () => {
@@ -2373,6 +2423,16 @@ export default function ICPQuarantine() {
       <DiscardedCompaniesModal
         open={showDiscardedModal}
         onOpenChange={setShowDiscardedModal}
+      />
+      
+      {/* ✅ MODAL DE PROGRESSO EM TEMPO REAL */}
+      <EnrichmentProgressModal
+        open={enrichmentModalOpen}
+        onOpenChange={setEnrichmentModalOpen}
+        title="Enriquecimento Apollo - Decisores"
+        companies={enrichmentProgress}
+        onCancel={() => setCancelEnrichment(true)}
+        isCancelling={cancelEnrichment}
       />
       
       <ScrollControls />
