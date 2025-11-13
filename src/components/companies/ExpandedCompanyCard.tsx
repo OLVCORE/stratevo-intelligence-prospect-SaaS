@@ -91,6 +91,19 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   const apolloData = rawData.apollo || rawData.apollo_organization || {};
   const receitaData = rawData.receita_federal || rawData.receita || {};
   
+  // 🔍 DEBUG: Ver dados da empresa
+  console.log('[ExpandedCompanyCard] 📊 Company Data:', {
+    id: company.id,
+    name: company.name,
+    website: company.website,
+    domain: company.domain,
+    linkedin_url: company.linkedin_url,
+    apollo_id: company.apollo_id,
+    enrichment_source: company.enrichment_source,
+    rawData_linkedin: rawData.linkedin_url,
+    rawData_digital: rawData.digital_presence
+  });
+  
   const fitScore = getFitScore(company);
   
   // ✅ BUSCAR DO MESMO LUGAR QUE CompanyDetailPage: company.decision_makers
@@ -260,7 +273,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               </div>
             )}
 
-            {/* LINKS EXTERNOS - SEMPRE MOSTRAR */}
+            {/* LINKS EXTERNOS */}
             <div>
               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <Globe className="h-4 w-4" />
@@ -268,7 +281,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               </h4>
               <div className="space-y-2">
                 {/* WEBSITE */}
-                {(company.domain || company.website) ? (
+                {(company.domain || company.website) && (
                   <div className="flex items-center gap-2">
                     <a
                       href={company.website?.startsWith('http') ? company.website : `https://${company.domain || company.website}`}
@@ -290,12 +303,10 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                       <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
                     </Button>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Website não cadastrado</p>
                 )}
                 
                 {/* LINKEDIN */}
-                {(company.linkedin_url || rawData.linkedin_url || rawData.digital_presence?.linkedin) ? (
+                {(company.linkedin_url || rawData.linkedin_url || rawData.digital_presence?.linkedin) && (
                   <div className="flex items-center gap-2">
                     <a
                       href={company.linkedin_url || rawData.linkedin_url || rawData.digital_presence?.linkedin}
@@ -317,12 +328,10 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                       <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
                     </Button>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">LinkedIn não cadastrado</p>
                 )}
                 
                 {/* APOLLO.IO */}
-                {apolloLink ? (
+                {apolloLink && (
                   <div className="flex items-center gap-2">
                     <a
                       href={apolloLink}
@@ -354,8 +363,6 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                       <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
                     </Button>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Apollo.io não integrado</p>
                 )}
               </div>
             </div>
@@ -439,7 +446,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
           </Button>
           <Button
             size="sm"
-            onClick={() => navigate(`/company/${company.id}/strategy`)}
+            onClick={() => navigate(`/account-strategy/${company.id}`)}
           >
             <TrendingUp className="h-4 w-4 mr-2" />
             Criar Estratégia
