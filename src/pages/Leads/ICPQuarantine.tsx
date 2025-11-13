@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatus
 import { ICPScoreTooltip } from '@/components/icp/ICPScoreTooltip';
 import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
 import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/companies/EnrichmentProgressModal';
+import { ExpandedCompanyCard } from '@/components/companies/ExpandedCompanyCard';
 import { toast } from 'sonner';
 import * as Papa from 'papaparse';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -75,6 +76,7 @@ export default function ICPQuarantine() {
   const [enrichmentModalOpen, setEnrichmentModalOpen] = useState(false);
   const [enrichmentProgress, setEnrichmentProgress] = useState<EnrichmentProgress[]>([]);
   const [cancelEnrichment, setCancelEnrichment] = useState(false);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null); // 🆕 EXPANSÃO DE LINHAS
 
   const { data: companies = [], isLoading, refetch } = useQuarantineCompanies({
     status: statusFilter === 'all' ? undefined : statusFilter,
@@ -1597,6 +1599,7 @@ export default function ICPQuarantine() {
             <Table className="text-[10px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-10"></TableHead>
                   <TableHead className="w-[44px]">
                     <Checkbox
                       checked={selectedIds.length === filteredCompanies.length && filteredCompanies.length > 0}
@@ -1764,7 +1767,25 @@ export default function ICPQuarantine() {
                     : {};
                   
                   return (
-                  <TableRow key={company.id}>
+                    <>
+                  <TableRow key={company.id} className={expandedRow === company.id ? 'bg-muted/30' : ''}>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedRow(expandedRow === company.id ? null : company.id);
+                        }}
+                      >
+                        {expandedRow === company.id ? (
+                          <ChevronUp className="h-4 w-4 text-primary" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </TableCell>
                     <TableCell>
                       <Checkbox
                         checked={selectedIds.includes(company.id)}
@@ -2077,6 +2098,16 @@ export default function ICPQuarantine() {
                       />
                     </TableCell>
                   </TableRow>
+                  
+                  {/* 🎨 LINHA EXPANDIDA COM CARD COMPLETO */}
+                  {expandedRow === company.id && (
+                    <TableRow>
+                      <TableCell colSpan={14} className="bg-muted/20 p-0 border-t-0">
+                        <ExpandedCompanyCard company={company} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </>
                 );
                 })
               )}

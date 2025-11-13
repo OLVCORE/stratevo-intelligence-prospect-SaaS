@@ -37,7 +37,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe } from 'lucide-react';
+import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp } from 'lucide-react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
@@ -57,6 +57,7 @@ import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatus
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
 import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/companies/EnrichmentProgressModal';
 import { PartnerSearchModal } from '@/components/companies/PartnerSearchModal';
+import { ExpandedCompanyCard } from '@/components/companies/ExpandedCompanyCard';
 
 
 export default function CompaniesManagementPage() {
@@ -217,6 +218,7 @@ export default function CompaniesManagementPage() {
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isBatchEnriching, setIsBatchEnriching] = useState(false);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null); // 🆕 EXPANSÃO DE LINHAS
   const [isBatchEnriching360, setIsBatchEnriching360] = useState(false);
   const [enrichingReceitaId, setEnrichingReceitaId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -1708,6 +1710,7 @@ export default function CompaniesManagementPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10"></TableHead>
                     <TableHead className="w-12">
                       <Checkbox
                         checked={selectedCompanies.length === companies.length && companies.length > 0}
@@ -1827,7 +1830,25 @@ export default function CompaniesManagementPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedCompanies.map((company) => (
-                    <TableRow key={company.id}>
+                    <>
+                    <TableRow key={company.id} className={expandedRow === company.id ? 'bg-muted/30' : ''}>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedRow(expandedRow === company.id ? null : company.id);
+                          }}
+                        >
+                          {expandedRow === company.id ? (
+                            <ChevronUp className="h-4 w-4 text-primary" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </TableCell>
                       <TableCell>
                         <Checkbox
                           checked={selectedCompanies.includes(company.id)}
@@ -2114,6 +2135,16 @@ export default function CompaniesManagementPage() {
                         </div>
                       </TableCell>
                     </TableRow>
+                    
+                    {/* 🎨 LINHA EXPANDIDA COM CARD COMPLETO */}
+                    {expandedRow === company.id && (
+                      <TableRow>
+                        <TableCell colSpan={11} className="bg-muted/20 p-0 border-t-0">
+                          <ExpandedCompanyCard company={company} />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    </>
                   ))}
                 </TableBody>
               </Table>
