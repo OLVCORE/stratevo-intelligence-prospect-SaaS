@@ -1,4 +1,4 @@
-import { Building2, MapPin, Globe, Mail, Linkedin, Award, Target, ExternalLink, TrendingUp } from 'lucide-react';
+import { Building2, MapPin, Globe, Mail, Linkedin, Award, Target, ExternalLink, TrendingUp, Phone, Briefcase, DollarSign, Users, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -85,11 +85,22 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   const decisores = company.decision_makers || rawData.decision_makers || apolloPeople || [];
   const enrichmentSource = company.enrichment_source;
   
-  // 🌍 DESCRIÇÃO (Apollo ou LinkedIn)
-  const description = apolloData.short_description || apolloData.description || company.description || '';
+  // 🌍 DESCRIÇÃO (Apollo ou LinkedIn ou CompanyDetailPage)
+  const description = apolloData.short_description || apolloData.description || company.description || rawData.description || '';
   
   // 📊 CALCULAR FIT SCORE
   const fitScore = calculateFitScore(company);
+  
+  // 📞 CONTATOS
+  const telefones = rawData.telefones || rawData.telefone1 ? [rawData.telefone1, rawData.telefone2].filter(Boolean) : [];
+  const emails = rawData.emails || rawData.email ? [rawData.email].filter(Boolean) : [];
+  
+  // 🗺️ COORDENADAS PARA MAPA (se existir)
+  const lat = apolloData.latitude || rawData.latitude;
+  const lng = apolloData.longitude || rawData.longitude;
+  const city = apolloData.city || receitaData.municipio || company.city || '';
+  const state = apolloData.state || receitaData.uf || company.state || '';
+  const country = apolloData.country || receitaData.pais || company.country || 'Brazil';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1.5fr,1fr] gap-4 p-4 bg-slate-900/40 border-t border-slate-700/50">
@@ -122,25 +133,90 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
           </div>
         </div>
 
-        {/* 2️⃣ LOCALIZAÇÃO */}
+        {/* 2️⃣ LOCALIZAÇÃO + MINI MAPA */}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <h4 className="text-xs font-semibold mb-2 text-slate-400 uppercase tracking-wider">
+              Localização
+            </h4>
+            <div className="text-sm text-slate-300 space-y-0.5">
+              {city && <div>{city}</div>}
+              {state && <div>{state}</div>}
+              {country && <div>{country}</div>}
+              
+              {/* 📞 TELEFONES */}
+              {telefones.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-2 text-xs">
+                  <Phone className="h-3 w-3 text-blue-400" />
+                  <span className="text-slate-400">{telefones[0]}</span>
+                </div>
+              )}
+              
+              {/* 📧 EMAILS */}
+              {emails.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  <Mail className="h-3 w-3 text-blue-400" />
+                  <a href={`mailto:${emails[0]}`} className="text-blue-400 hover:underline">
+                    {emails[0]}
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* 🗺️ MINI MAPA (5cm x 5cm ≈ 120px x 120px) */}
+          {lat && lng && (
+            <div className="w-[120px] h-[120px] flex-shrink-0 rounded border border-slate-700/50 overflow-hidden">
+              <iframe
+                title="Company Location"
+                width="120"
+                height="120"
+                frameBorder="0"
+                style={{ border: 0 }}
+                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${lat},${lng}&zoom=13`}
+                allowFullScreen
+              />
+            </div>
+          )}
+          
+          {/* 🗺️ MAPA ALTERNATIVO (se não tiver coordenadas, usar endereço) */}
+          {!lat && !lng && city && state && (
+            <div className="w-[120px] h-[120px] flex-shrink-0 rounded border border-slate-700/50 overflow-hidden bg-slate-800/40 flex items-center justify-center">
+              <MapPin className="h-8 w-8 text-slate-600" />
+            </div>
+          )}
+        </div>
+
+        {/* 3️⃣ ATIVIDADE ECONÔMICA + CNPJ */}
         <div>
           <h4 className="text-xs font-semibold mb-2 text-slate-400 uppercase tracking-wider">
-            Localização
+            Atividade Econômica
           </h4>
-          <div className="text-sm text-slate-300 space-y-0.5">
-            {(apolloData.city || receitaData.municipio || company.city) && (
-              <div>{apolloData.city || receitaData.municipio || company.city}</div>
+          <div className="space-y-1.5 text-sm">
+            {company.cnpj && (
+              <div className="flex items-start gap-2">
+                <span className="text-slate-500 min-w-[80px] text-xs">CNPJ:</span>
+                <span className="text-blue-400 font-mono text-xs">{company.cnpj}</span>
+              </div>
             )}
-            {(apolloData.state || receitaData.uf || company.state) && (
-              <div>{apolloData.state || receitaData.uf || company.state}</div>
+            {receitaData.cnae_fiscal && (
+              <div className="flex items-start gap-2">
+                <span className="text-slate-500 min-w-[80px] text-xs">CNAE:</span>
+                <span className="text-slate-300 text-xs">{receitaData.cnae_fiscal}</span>
+              </div>
             )}
-            {(apolloData.country || receitaData.pais || company.country || 'Brazil') && (
-              <div>{apolloData.country || receitaData.pais || company.country || 'Brazil'}</div>
+            {(receitaData.porte || apolloData.estimated_num_employees) && (
+              <div className="flex items-start gap-2">
+                <span className="text-slate-500 min-w-[80px] text-xs">Porte:</span>
+                <Badge variant="secondary" className="text-xs">
+                  {receitaData.porte || `${apolloData.estimated_num_employees} funcionários`}
+                </Badge>
+              </div>
             )}
           </div>
         </div>
 
-        {/* 3️⃣ DESCRIÇÃO (Apollo/LinkedIn) */}
+        {/* 4️⃣ DESCRIÇÃO (Apollo/LinkedIn) */}
         <div>
           <h4 className="text-xs font-semibold mb-2 text-slate-400 uppercase tracking-wider">
             Descrição
@@ -164,7 +240,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
       {/* ========== COLUNA DIREITA ========== */}
       <div className="space-y-3">
         
-        {/* 4️⃣ FIT SCORE */}
+        {/* 5️⃣ FIT SCORE */}
         <div>
           <h4 className="text-xs font-semibold mb-2 text-slate-400 uppercase tracking-wider">
             Fit Score
@@ -198,7 +274,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
           </div>
         </div>
 
-        {/* 5️⃣ LINKS EXTERNOS */}
+        {/* 6️⃣ LINKS EXTERNOS */}
         <div>
           <h4 className="text-xs font-semibold mb-2 text-slate-400 uppercase tracking-wider">
             Links Externos
@@ -243,54 +319,88 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
           </div>
         </div>
 
-        {/* 6️⃣ DECISORES */}
+        {/* 7️⃣ DECISORES C-LEVEL (Top 3-5) */}
         {decisores.length > 0 && (
           <div>
             <h4 className="text-xs font-semibold mb-2 text-slate-400 uppercase tracking-wider">
               Decisores ({decisores.length})
             </h4>
             <div className="space-y-2.5">
-              {decisores.slice(0, 5).map((decisor: any, idx: number) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-6 w-6 bg-blue-500/20 text-xs">
-                      {decisor.name?.charAt(0) || decisor.first_name?.charAt(0) || '?'}
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">
-                        {decisor.name || `${decisor.first_name || ''} ${decisor.last_name || ''}`.trim()}
-                      </p>
-                      <p className="text-xs text-slate-400 truncate">{decisor.title}</p>
+              {decisores.slice(0, 5).map((decisor: any, idx: number) => {
+                const fullName = decisor.name || `${decisor.first_name || ''} ${decisor.last_name || ''}`.trim();
+                const initials = fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                
+                return (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-500 text-white text-xs font-semibold flex items-center justify-center">
+                        {decisor.photo_url ? (
+                          <img src={decisor.photo_url} alt={fullName} className="h-full w-full object-cover" />
+                        ) : (
+                          initials || '?'
+                        )}
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">
+                          {fullName}
+                        </p>
+                        <p className="text-xs text-slate-400 truncate">{decisor.title}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-10">
+                      {decisor.linkedin_url && (
+                        <a 
+                          href={decisor.linkedin_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-xs text-blue-400 hover:underline flex items-center gap-1"
+                        >
+                          <Linkedin className="h-3 w-3" />
+                          LinkedIn
+                        </a>
+                      )}
+                      {decisor.email && (
+                        <a 
+                          href={`mailto:${decisor.email}`} 
+                          className="text-xs text-slate-400 hover:underline flex items-center gap-1"
+                        >
+                          <Mail className="h-3 w-3" />
+                          Email
+                        </a>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-8">
-                    {decisor.linkedin_url && (
-                      <a 
-                        href={decisor.linkedin_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-xs text-blue-400 hover:underline flex items-center gap-1"
-                      >
-                        <Linkedin className="h-3 w-3" />
-                        LinkedIn
-                      </a>
-                    )}
-                    {decisor.email && (
-                      <a 
-                        href={`mailto:${decisor.email}`} 
-                        className="text-xs text-slate-400 hover:underline flex items-center gap-1"
-                      >
-                        <Mail className="h-3 w-3" />
-                        Email
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {decisores.length > 5 && (
                 <p className="text-xs text-center text-slate-500 pt-1">
                   + {decisores.length - 5} decisores adicionais
                 </p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* 8️⃣ INFORMAÇÕES FINANCEIRAS */}
+        {(receitaData.capital_social || apolloData.estimated_annual_revenue) && (
+          <div>
+            <h4 className="text-xs font-semibold mb-2 text-slate-400 uppercase tracking-wider">
+              Informações Financeiras
+            </h4>
+            <div className="space-y-1.5 text-sm">
+              {receitaData.capital_social && (
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-500 min-w-[100px] text-xs">Capital Social:</span>
+                  <span className="text-emerald-400 font-mono text-xs">
+                    R$ {Number(receitaData.capital_social).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+              )}
+              {apolloData.estimated_annual_revenue && (
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-500 min-w-[100px] text-xs">Receita Estimada:</span>
+                  <span className="text-emerald-400 text-xs">{apolloData.estimated_annual_revenue}</span>
+                </div>
               )}
             </div>
           </div>
@@ -305,7 +415,6 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
           variant="outline"
           className="text-xs"
           onClick={() => {
-            // 🔥 CORRIGIR: usar company.id direto (não company_id)
             navigate(`/company/${company.id}`);
           }}
         >
