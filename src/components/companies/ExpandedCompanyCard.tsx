@@ -94,6 +94,13 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
       if (window.L) {
         // @ts-ignore
         const L = window.L;
+        
+        // ✅ LIMPAR MAPA EXISTENTE ANTES DE CRIAR NOVO
+        if (mapRef.current._leaflet_id) {
+          mapRef.current._leaflet_id = undefined;
+          mapRef.current.innerHTML = '';
+        }
+        
         const map = L.map(mapRef.current, {
           center: [lat, lng],
           zoom: 13,
@@ -107,6 +114,13 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
         }).addTo(map);
         
         L.marker([lat, lng]).addTo(map);
+        
+        // ✅ CLEANUP ao desmontar
+        return () => {
+          if (map) {
+            map.remove();
+          }
+        };
       }
     }
   }, [lat, lng]);
