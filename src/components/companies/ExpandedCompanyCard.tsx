@@ -80,7 +80,27 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   const receitaData = rawData.receita_federal || rawData.receita || {};
   
   const fitScore = getFitScore(company);
-  const decisores = getDecisionMakers(company);
+  
+  // ✅ BUSCAR DO MESMO LUGAR QUE CompanyDetailPage: company.decision_makers
+  let decisores = company.decision_makers || getDecisionMakers(company);
+  
+  // 🎯 ORDENAR POR C-LEVEL
+  if (Array.isArray(decisores) && decisores.length > 0) {
+    decisores = [...decisores].sort((a: any, b: any) => {
+      const getPriority = (pos: string) => {
+        const p = (pos || '').toLowerCase();
+        if (p.includes('ceo') || p.includes('founder')) return 1;
+        if (p.includes('cfo')) return 2;
+        if (p.includes('cto')) return 3;
+        if (p.includes('coo')) return 4;
+        if (p.includes('cmo')) return 5;
+        if (p.includes('diretor') || p.includes('director')) return 6;
+        if (p.includes('gerente') || p.includes('manager')) return 7;
+        return 99;
+      };
+      return getPriority(a.position || a.title || '') - getPriority(b.position || b.title || '');
+    });
+  }
   const apolloLink = getApolloLink(company);
   const b2bType = getB2BType(company);
   
