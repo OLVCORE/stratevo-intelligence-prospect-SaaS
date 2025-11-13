@@ -109,20 +109,53 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   // ✅ BUSCAR DO MESMO LUGAR QUE CompanyDetailPage: company.decision_makers
   let decisores = company.decision_makers || getDecisionMakers(company);
   
-  // 🎯 ORDENAR POR C-LEVEL
+  // 🎯 ORDENAR POR C-LEVEL (CEO > CFO > CTO > COO > CMO > VP > Director > Manager)
   if (Array.isArray(decisores) && decisores.length > 0) {
     decisores = [...decisores].sort((a: any, b: any) => {
       const getPriority = (pos: string) => {
         const p = (pos || '').toLowerCase();
-        if (p.includes('ceo') || p.includes('founder')) return 1;
-        if (p.includes('cfo')) return 2;
-        if (p.includes('cto')) return 3;
-        if (p.includes('coo')) return 4;
-        if (p.includes('cmo')) return 5;
-        if (p.includes('diretor') || p.includes('director')) return 6;
-        if (p.includes('gerente') || p.includes('manager')) return 7;
+        
+        // C-LEVEL (Prioridade 1-5)
+        if (p.includes('ceo') || p.includes('chief executive')) return 1;
+        if (p.includes('cfo') || p.includes('chief financial')) return 2;
+        if (p.includes('cto') || p.includes('chief technology')) return 3;
+        if (p.includes('coo') || p.includes('chief operating')) return 4;
+        if (p.includes('cmo') || p.includes('chief marketing')) return 5;
+        
+        // FOUNDER (Prioridade 1 também)
+        if (p.includes('founder') || p.includes('co-founder')) return 1;
+        
+        // VP / VICE PRESIDENT (Prioridade 10-14)
+        if (p.includes('vp ') || p.includes('vice president') || p.includes('vice-president')) {
+          if (p.includes('sales')) return 10;
+          if (p.includes('marketing')) return 11;
+          if (p.includes('operations')) return 12;
+          if (p.includes('technology') || p.includes('engineering')) return 13;
+          return 14; // VP genérico
+        }
+        
+        // DIRECTOR (Prioridade 20-29)
+        if (p.includes('diretor') || p.includes('director')) {
+          if (p.includes('executivo') || p.includes('executive')) return 20;
+          if (p.includes('vendas') || p.includes('sales')) return 21;
+          if (p.includes('marketing')) return 22;
+          if (p.includes('ti') || p.includes('technology')) return 23;
+          return 24; // Director genérico
+        }
+        
+        // MANAGER / GERENTE (Prioridade 30-39)
+        if (p.includes('manager') || p.includes('gerente')) {
+          if (p.includes('senior')) return 30;
+          return 35; // Manager genérico
+        }
+        
+        // HEAD OF (Prioridade 40)
+        if (p.includes('head of')) return 40;
+        
+        // OUTROS (Prioridade 99)
         return 99;
       };
+      
       return getPriority(a.position || a.title || '') - getPriority(b.position || b.title || '');
     });
   }
@@ -377,33 +410,61 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               {decisores.length > 0 ? (
                 <div className="space-y-2">
                   {decisores.slice(0, 5).map((dm: any, idx: number) => {
-                    const fullName = dm.name || `${dm.first_name || ''} ${dm.last_name || ''}`.trim();
+                    const fullName = dm.name || dm.full_name || `${dm.first_name || ''} ${dm.last_name || ''}`.trim();
+                    const photoUrl = dm.photo_url || dm.raw_data?.photo_url;
+                    
+                    // Gerar iniciais para avatar
+                    const initials = fullName
+                      .split(' ')
+                      .filter(n => n.length > 0)
+                      .slice(0, 2)
+                      .map(n => n[0])
+                      .join('')
+                      .toUpperCase();
                     
                     return (
-                      <div key={idx} className="p-2 bg-muted/30 rounded text-xs border">
-                        <div className="font-medium">{fullName}</div>
-                        <div className="text-muted-foreground">{dm.title}</div>
-                        <div className="flex gap-3 mt-2">
-                          {dm.linkedin_url && (
-                            <a
-                              href={dm.linkedin_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-primary hover:underline"
-                            >
-                              <Linkedin className="h-3 w-3" />
-                              LinkedIn
-                            </a>
+                      <div key={idx} className="p-3 bg-muted/30 rounded text-xs border flex items-start gap-3">
+                        {/* FOTO/AVATAR */}
+                        <div className="flex-shrink-0">
+                          {photoUrl ? (
+                            <img 
+                              src={photoUrl} 
+                              alt={fullName}
+                              className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                              {initials}
+                            </div>
                           )}
-                          {dm.email && (
-                            <a
-                              href={`mailto:${dm.email}`}
-                              className="flex items-center gap-1 text-primary hover:underline"
-                            >
-                              <Mail className="h-3 w-3" />
-                              Email
-                            </a>
-                          )}
+                        </div>
+                        
+                        {/* DADOS */}
+                        <div className="flex-1">
+                          <div className="font-medium">{fullName}</div>
+                          <div className="text-muted-foreground">{dm.title || dm.position}</div>
+                          <div className="flex gap-3 mt-2">
+                            {dm.linkedin_url && (
+                              <a
+                                href={dm.linkedin_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-primary hover:underline"
+                              >
+                                <Linkedin className="h-3 w-3" />
+                                LinkedIn
+                              </a>
+                            )}
+                            {dm.email && (
+                              <a
+                                href={`mailto:${dm.email}`}
+                                className="flex items-center gap-1 text-primary hover:underline"
+                              >
+                                <Mail className="h-3 w-3" />
+                                Email
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
