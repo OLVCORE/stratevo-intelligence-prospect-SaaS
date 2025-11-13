@@ -423,11 +423,21 @@ serve(async (req) => {
           ...existingRawData,
           enriched_apollo: true,
           apollo_decisores_count: decisores.length,
+          // ✅ Lista simplificada de decisores para o componente acessar
+          decision_makers: decisores.slice(0, 10).map(d => ({
+            name: d.name,
+            title: d.title,
+            linkedin_url: d.linkedin_url,
+            email: d.email,
+            classification: d.buying_power,
+            priority: d.buying_power === 'decision-maker' ? 1 : d.buying_power === 'influencer' ? 2 : 3
+          })),
           // ✅ NOVO: Dados completos da organização
           apollo_organization: organizationData ? {
             id: organizationData.id,
             name: organizationData.name,
             industry: organizationData.industry,
+            short_description: organizationData.short_description,
             keywords: organizationData.keywords || [],
             estimated_num_employees: organizationData.estimated_num_employees,
             website_url: organizationData.website_url,
@@ -444,10 +454,33 @@ serve(async (req) => {
         }
       };
       
-      // ✅ ATUALIZAR CAMPO 'industry' SE APOLLO TROUXE
+      // ✅ ATUALIZAR CAMPOS DIRETOS (para aparecer no componente sem precisar acessar raw_data)
       if (organizationData?.industry) {
         updateData.industry = organizationData.industry;
       }
+      
+      if (organizationData?.linkedin_url) {
+        updateData.linkedin_url = organizationData.linkedin_url;
+      }
+      
+      if (organizationData?.short_description) {
+        updateData.description = organizationData.short_description;
+      }
+      
+      if (organizationData?.id) {
+        updateData.apollo_id = organizationData.id;
+      }
+      
+      // ✅ MARCAR COMO ENRIQUECIDO MANUALMENTE
+      updateData.enrichment_source = 'manual';
+      updateData.enriched_at = new Date().toISOString();
+
+      console.log('[ENRICH-APOLLO] 💾 Salvando em companies:', {
+        linkedin_url: updateData.linkedin_url || 'N/A',
+        description: updateData.description ? 'SIM' : 'NÃO',
+        apollo_id: updateData.apollo_id || 'N/A',
+        decision_makers_count: updateData.raw_data.decision_makers?.length || 0
+      });
 
       await supabaseClient
         .from('companies')
@@ -481,6 +514,13 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         decisores,
+        decisores_salvos: decisores.length,
+        organization: organizationData ? {
+          name: organizationData.name,
+          linkedin_url: organizationData.linkedin_url,
+          description: organizationData.short_description,
+          apollo_id: organizationData.id
+        } : null,
         statistics: {
           total: decisores.length,
           decision_makers: decisionMakers.length,
@@ -488,7 +528,7 @@ serve(async (req) => {
           users: users.length
         },
         main_decision_maker: mainDecisionMaker || null,
-        message: `${decisores.length} decisores encontrados`
+        message: `${decisores.length} decisores encontrados e salvos`
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
