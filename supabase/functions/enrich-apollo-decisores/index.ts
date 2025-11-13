@@ -105,14 +105,22 @@ serve(async (req) => {
     if (!organizationId) {
       console.log('[ENRICH-APOLLO-DECISORES] Buscando Organization ID por nome...');
       
-      // Apollo funciona melhor com "Primeira + Segunda palavra"
-      const words = (companyName || '').split(/\s+/);
-      const firstTwo = words.slice(0, 2).join(' ');
-      const firstOne = words[0];
+      // 🎯 ESTRATÉGIA REFINADA: Primeira palavra → Segunda palavra → Nome completo
+      const words = (companyName || '').split(/\s+/).filter(w => w.length > 2);
+      const firstWord = words[0];
+      const secondWord = words[1];
       
-      const namesToTry = [firstTwo, firstOne, companyName];
+      const namesToTry = [
+        firstWord,           // ✅ PRIORIDADE 1: "CARBON13"
+        secondWord,          // ✅ PRIORIDADE 2: "INDUSTRIA"
+        companyName          // ✅ PRIORIDADE 3: Nome completo
+      ].filter(Boolean);
       
-      console.log('[ENRICH-APOLLO-DECISORES] Tentando nomes:', namesToTry);
+      console.log('[ENRICH-APOLLO-DECISORES] 🎯 Estratégia de busca:', {
+        original: companyName,
+        tentativas: namesToTry,
+        filtros: { city, state, domain, country: 'Brazil' }
+      });
       
       for (const name of namesToTry) {
         if (!name) continue;
@@ -140,29 +148,49 @@ serve(async (req) => {
           if (orgData.organizations && orgData.organizations.length > 0) {
             console.log('[ENRICH-APOLLO-DECISORES] 🔍 Encontradas', orgData.organizations.length, 'empresas com nome', name);
             
-            // 🎯 FILTRO INTELIGENTE: Priorizar por Brasil → Cidade → Estado
+            // 🎯 FILTRO INTELIGENTE REFINADO: Domain → Cidade → Estado → Brasil
             let selectedOrg = null;
             let criterio = '';
             
-            // 1️⃣ MELHOR: Mesma cidade + Brasil
-            if (city) {
+            // 🥇 EXCELENTE: Domain + Brasil (99% assertividade!)
+            if (domain) {
+              const cleanDomain = domain.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+              selectedOrg = orgData.organizations.find((org: any) => {
+                const orgDomain = (org.primary_domain || org.website_url || '').toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+                return orgDomain === cleanDomain && (org.country === 'Brazil' || org.country === 'Brasil');
+              });
+              if (selectedOrg) criterio = `Domain ${cleanDomain} + Brasil (EXCELENTE ✅)`;
+            }
+            
+            // 🥈 MUITO BOM: Cidade + Estado + Brasil (95% assertividade)
+            if (!selectedOrg && city && state) {
+              selectedOrg = orgData.organizations.find((org: any) => 
+                (org.country === 'Brazil' || org.country === 'Brasil') &&
+                org.city?.toLowerCase().includes(city.toLowerCase()) &&
+                org.state?.toLowerCase() === state.toLowerCase()
+              );
+              if (selectedOrg) criterio = `${city}/${state} + Brasil (MUITO BOM ✅)`;
+            }
+            
+            // 🥉 BOM: Apenas Cidade + Brasil (80% assertividade)
+            if (!selectedOrg && city) {
               selectedOrg = orgData.organizations.find((org: any) => 
                 (org.country === 'Brazil' || org.country === 'Brasil') &&
                 org.city?.toLowerCase().includes(city.toLowerCase())
               );
-              if (selectedOrg) criterio = `Cidade ${city} + Brasil (PERFEITO)`;
+              if (selectedOrg) criterio = `Cidade ${city} + Brasil (BOM ✅)`;
             }
             
-            // 2️⃣ BOM: Mesmo estado + Brasil
+            // 🏅 RAZOÁVEL: Estado + Brasil (60% assertividade)
             if (!selectedOrg && state) {
               selectedOrg = orgData.organizations.find((org: any) => 
                 (org.country === 'Brazil' || org.country === 'Brasil') &&
-                org.state?.toLowerCase().includes(state.toLowerCase())
+                org.state?.toLowerCase() === state.toLowerCase()
               );
-              if (selectedOrg) criterio = `Estado ${state} + Brasil (BOM)`;
+              if (selectedOrg) criterio = `Estado ${state} + Brasil (RAZOÁVEL ⚠️)`;
             }
             
-            // 3️⃣ OK: Qualquer do Brasil
+            // ⚠️ ARRISCADO: Qualquer do Brasil (.br domain)
             if (!selectedOrg) {
               selectedOrg = orgData.organizations.find((org: any) => 
                 org.country === 'Brazil' || 
@@ -170,13 +198,13 @@ serve(async (req) => {
                 org.primary_domain?.includes('.br') ||
                 org.website_url?.includes('.br')
               );
-              if (selectedOrg) criterio = 'Brasil genérico (OK)';
+              if (selectedOrg) criterio = 'Brasil genérico (.br) (ARRISCADO ⚠️)';
             }
             
-            // 4️⃣ FALLBACK: Primeira da lista
+            // ❌ FALLBACK: Primeira da lista (pode estar errado!)
             if (!selectedOrg) {
               selectedOrg = orgData.organizations[0];
-              criterio = 'Primeira da lista (FALLBACK - pode estar errado!)';
+              criterio = 'Primeira da lista (FALLBACK - pode estar ERRADO! ❌)';
             }
             
             organizationId = selectedOrg.id;
