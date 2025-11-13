@@ -75,6 +75,18 @@ function getApolloLink(company: any): string | null {
 export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
   const navigate = useNavigate();
   
+  // 🚨 VALIDAÇÃO CRÍTICA: Verificar se company existe e tem ID
+  if (!company || !company.id) {
+    console.error('[ExpandedCompanyCard] ❌ ERRO: company ou company.id é undefined!', company);
+    return (
+      <Card className="border-0 shadow-none">
+        <CardContent className="p-6 text-center">
+          <p className="text-destructive">Erro: Dados da empresa não encontrados</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  
   const rawData = company.raw_data || {};
   const apolloData = rawData.apollo || rawData.apollo_organization || {};
   const receitaData = rawData.receita_federal || rawData.receita || {};
@@ -259,13 +271,13 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                 {(company.domain || company.website) ? (
                   <div className="flex items-center gap-2">
                     <a
-                      href={`https://${company.domain || company.website}`}
+                      href={company.website?.startsWith('http') ? company.website : `https://${company.domain || company.website}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 text-sm text-primary hover:underline"
                     >
                       <Globe className="h-4 w-4" />
-                      Website
+                      {(company.domain || company.website).replace('https://', '').replace('http://', '').substring(0, 30)}
                       <ExternalLink className="h-3 w-3" />
                     </a>
                     <Button
@@ -279,15 +291,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-7"
-                    onClick={() => navigate(`/company/${company.id}`)}
-                  >
-                    <Globe className="h-3 w-3 mr-1" />
-                    Adicionar Website
-                  </Button>
+                  <p className="text-xs text-muted-foreground">Website não cadastrado</p>
                 )}
                 
                 {/* LINKEDIN */}
@@ -314,15 +318,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-7"
-                    onClick={() => navigate(`/company/${company.id}`)}
-                  >
-                    <Linkedin className="h-3 w-3 mr-1" />
-                    Adicionar LinkedIn
-                  </Button>
+                  <p className="text-xs text-muted-foreground">LinkedIn não cadastrado</p>
                 )}
                 
                 {/* APOLLO.IO */}
@@ -359,15 +355,7 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-7"
-                    onClick={() => navigate(`/company/${company.id}`)}
-                  >
-                    <img src={apolloIcon} alt="Apollo" className="h-3 w-3 mr-1" />
-                    Adicionar Apollo ID
-                  </Button>
+                  <p className="text-xs text-muted-foreground">Apollo.io não integrado</p>
                 )}
               </div>
             </div>
