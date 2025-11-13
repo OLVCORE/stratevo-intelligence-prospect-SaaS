@@ -55,6 +55,7 @@ export default function ICPQuarantine() {
   const [filterSector, setFilterSector] = useState<string[]>([]);
   const [filterUF, setFilterUF] = useState<string[]>([]);
   const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
+  const [filterTOTVSStatus, setFilterTOTVSStatus] = useState<string[]>([]); // 🆕 FILTRO STATUS TOTVS
   
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCompany, setPreviewCompany] = useState<any>(null);
@@ -606,6 +607,17 @@ export default function ICPQuarantine() {
         });
         
         if (!matchesApolloPeople) return false;
+      }
+      
+      // 🆕 FILTRO STATUS TOTVS
+      if (filterTOTVSStatus.length > 0) {
+        const totvsStatus = c.totvs_status || 'nao-verificado';
+        // Mapear para label legível
+        let totvsLabel = 'Não Verificado';
+        if (totvsStatus === 'go') totvsLabel = 'GO - Não é Cliente';
+        if (totvsStatus === 'no-go') totvsLabel = 'NO-GO - É Cliente';
+        
+        if (!filterTOTVSStatus.includes(totvsLabel)) return false;
       }
       
       return true;
@@ -1711,7 +1723,21 @@ export default function ICPQuarantine() {
                       onFilterChange={setFilterAnalysisStatus}
                     />
                   </TableHead>
-                  <TableHead className="min-w-[110px]"><span className="font-semibold text-[10px]">Status TOTVS</span></TableHead>
+                  <TableHead className="min-w-[110px]">
+                    <ColumnFilter
+                      column="totvs_status"
+                      title="Status TOTVS"
+                      values={companies.map(c => {
+                        const status = c.totvs_status || 'nao-verificado';
+                        // Mapear para labels legíveis
+                        if (status === 'go') return 'GO - Não é Cliente';
+                        if (status === 'no-go') return 'NO-GO - É Cliente';
+                        return 'Não Verificado';
+                      })}
+                      selectedValues={filterTOTVSStatus}
+                      onFilterChange={setFilterTOTVSStatus}
+                    />
+                  </TableHead>
                   <TableHead className="min-w-[90px]"><span className="font-semibold text-[10px]">Website</span></TableHead>
                   <TableHead className="min-w-[50px]"><span className="font-semibold text-[10px]">STC</span></TableHead>
                   <TableHead className="w-[40px]"><span className="font-semibold text-[10px]">⚙️</span></TableHead>

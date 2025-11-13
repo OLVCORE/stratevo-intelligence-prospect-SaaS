@@ -47,28 +47,28 @@ export function TOTVSStatusBadge({
     }
     
     if (status === 'no-go') {
-      // ❌ CLIENTE TOTVS
+      // ❌ NO-GO = JÁ É CLIENTE TOTVS
       return {
         icon: XCircle,
         iconColor: 'text-red-500',
         bgColor: 'bg-red-500/20',
         textColor: 'text-red-400',
         borderColor: 'border-red-500/40',
-        label: 'Cliente',
-        description: 'JÁ É CLIENTE TOTVS - não abordar',
+        label: 'NO-GO - É Cliente',
+        description: '❌ Cliente TOTVS confirmado - NÃO ABORDAR para venda!',
       };
     }
     
     if (status === 'go') {
-      // ✅ NÃO CLIENTE
+      // ✅ GO = NÃO É CLIENTE
       return {
         icon: CheckCircle,
         iconColor: 'text-green-500',
         bgColor: 'bg-green-500/20',
         textColor: 'text-green-400',
         borderColor: 'border-green-500/40',
-        label: 'Não Cliente',
-        description: 'NÃO É CLIENTE - pode abordar',
+        label: 'GO - Não é Cliente',
+        description: '✅ Prospect confirmado - PODE ABORDAR para venda!',
       };
     }
     
@@ -108,21 +108,29 @@ export function TOTVSStatusBadge({
   
   const sizeClasses = sizeConfig[size];
   
+  // 🎨 BADGE ELEGANTE COM QUEBRA DE LINHA
   const badge = (
     <Badge
       variant="outline"
       className={cn(
-        'font-semibold border transition-all duration-200 hover:scale-105',
+        'font-semibold border transition-all duration-200 hover:scale-105 flex flex-col items-center gap-0 py-1.5 px-2 min-w-[110px]',
         config.bgColor,
-        config.textColor,
         config.borderColor,
-        sizeClasses.padding,
-        sizeClasses.textSize,
         className
       )}
     >
-      <Icon className={cn(sizeClasses.iconSize, config.iconColor, 'mr-1.5')} />
-      {config.label}
+      <div className={cn('flex items-center gap-1.5', config.textColor, 'text-xs font-bold')}>
+        <Icon className={cn('w-3.5 h-3.5', config.iconColor)} />
+        {status === 'go' && 'GO'}
+        {status === 'no-go' && 'NO-GO'}
+        {!status && 'N/A'}
+      </div>
+      <div className={cn('text-[10px] font-medium', config.textColor, 'opacity-80')}>
+        {status === 'go' && 'Não é Cliente'}
+        {status === 'no-go' && 'É Cliente'}
+        {!status && 'Não Verificado'}
+        {status === 'revisar' && 'Revisar'}
+      </div>
     </Badge>
   );
   
