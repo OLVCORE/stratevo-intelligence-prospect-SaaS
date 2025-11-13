@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 import { 
   Mail, 
   Phone, 
@@ -20,7 +21,9 @@ import {
   GraduationCap,
   Filter,
   Unlock,
-  Loader2
+  Loader2,
+  Search,
+  XCircle
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -88,6 +91,7 @@ interface ApolloDecisorsCardProps {
 }
 
 export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
+  const [apolloSearchQuery, setApolloSearchQuery] = useState<string>('');
   const [filterSeniority, setFilterSeniority] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterLocation, setFilterLocation] = useState<string>('all');
@@ -123,8 +127,23 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
     return d.country;
   }).filter(Boolean))];
 
-  // Aplicar filtros
+  // Aplicar filtros (incluindo busca por texto)
   const filteredDecisors = apolloDecisors.filter(d => {
+    // Filtro de busca Apollo (nome, cargo, departamento, email)
+    if (apolloSearchQuery) {
+      const query = apolloSearchQuery.toLowerCase();
+      const matchesName = d.name?.toLowerCase().includes(query);
+      const matchesTitle = d.title?.toLowerCase().includes(query);
+      const matchesHeadline = d.headline?.toLowerCase().includes(query);
+      const matchesEmail = d.email?.toLowerCase().includes(query);
+      const matchesDepartments = d.departments?.some(dept => dept.toLowerCase().includes(query));
+      
+      if (!matchesName && !matchesTitle && !matchesHeadline && !matchesEmail && !matchesDepartments) {
+        return false;
+      }
+    }
+    
+    // Filtros de dropdown
     if (filterSeniority !== 'all' && d.seniority_level !== filterSeniority) return false;
     if (filterDepartment !== 'all' && !d.departments?.includes(filterDepartment)) return false;
     if (filterLocation !== 'all') {
@@ -217,8 +236,41 @@ export function ApolloDecisorsCard({ decisors }: ApolloDecisorsCardProps) {
         </div>
       </CardHeader>
       
-      {/* Filtros - 3 Colunas Compactas */}
+      {/* 🔍 BUSCA APOLLO - ACIMA DOS FILTROS */}
       <CardContent className="pt-0">
+        <div className="mb-4 p-3 bg-cyan-500/5 rounded-lg border border-cyan-500/30">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-cyan-400">
+              <Search className="h-4 w-4" />
+              <span className="font-semibold text-xs">Buscar Decisor/Colaborador:</span>
+            </div>
+            <div className="flex-1 relative">
+              <Input
+                placeholder="👥 Digite: nome, cargo, departamento, email..."
+                value={apolloSearchQuery}
+                onChange={(e) => setApolloSearchQuery(e.target.value)}
+                className="pl-3 border-cyan-500/30 focus:border-cyan-500 text-sm"
+              />
+            </div>
+            {apolloSearchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setApolloSearchQuery('')}
+                className="text-cyan-400 hover:text-cyan-300 h-8"
+              >
+                <XCircle className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {apolloSearchQuery && (
+            <p className="text-xs text-cyan-400/70 mt-2">
+              🔍 Filtrando decisores com: "{apolloSearchQuery}"
+            </p>
+          )}
+        </div>
+
+        {/* Filtros - 3 Colunas Compactas */}
         <div className="grid grid-cols-3 gap-2 mb-4 p-3 bg-muted/20 rounded-lg border">
           <div className="space-y-1">
             <label className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">Senioridade</label>

@@ -46,6 +46,7 @@ import { ApolloDecisorsCard } from '@/components/companies/ApolloDecisorsCard';
 import { SeniorDecisorsPanel } from '@/components/companies/SeniorDecisorsPanel';
 import { ApolloOrgIdDialog } from '@/components/companies/ApolloOrgIdDialog';
 import { ApolloDebugDialog } from '@/components/companies/ApolloDebugDialog';
+import { CollapsibleCard } from '@/components/companies/CollapsibleCard';
 import { DiagnosticAIPanel } from '@/components/companies/DiagnosticAIPanel';
 import { CompanyIntelligenceChat } from '@/components/companies/CompanyIntelligenceChat';
 import { MultiLayerEnrichButton } from '@/components/canvas/MultiLayerEnrichButton';
@@ -898,16 +899,13 @@ export default function CompanyDetailPage() {
             </Card>
           </div>
 
-          {/* Identificação Cadastral - 4 Colunas Compactas */}
-          <Card className="glass-card">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Shield className="h-4 w-4 text-primary" />
-                Identificação Cadastral
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {/* ✅ CARD 1: Identificação Cadastral - COLAPSÁVEL */}
+          <CollapsibleCard
+            title="Identificação Cadastral"
+            icon={Shield}
+            defaultExpanded={true}
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 border rounded bg-muted/10">
                   <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Razão Social</p>
                   <p className="text-xs font-semibold truncate">{receitaData?.razao_social || company.name}</p>
@@ -925,20 +923,17 @@ export default function CompanyDetailPage() {
                   <p className="text-xs font-semibold">{receitaData?.natureza_juridica || rawData.natureza_juridica || 'N/A'}</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+          </CollapsibleCard>
 
           {/* Localização + Mapa - Grid 2 Colunas */}
           <div className="grid lg:grid-cols-2 gap-4">
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  Localização Completa
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {/* ✅ CARD 2: Localização - COLAPSÁVEL */}
+            <CollapsibleCard
+              title="Localização Completa"
+              icon={MapPin}
+              defaultExpanded={true}
+            >
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   <div className="p-2 border rounded bg-muted/10">
                     <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-0.5">Logradouro</p>
                     <p className="text-xs font-medium">{receitaData?.logradouro || rawData.logradouro || 'N/A'}</p>
@@ -976,18 +971,15 @@ export default function CompanyDetailPage() {
                     <p className="text-xs font-medium">{rawData.mesorregiao || 'N/A'}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
+            {/* ✅ CARD 3: Mapa - COLAPSÁVEL */}
             {receitaData?.cep && (
-              <Card className="glass-card">
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <MapPinned className="h-5 w-5 text-primary" />
-                    Visualização no Mapa
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+              <CollapsibleCard
+                title="Visualização no Mapa"
+                icon={MapPinned}
+                defaultExpanded={false}
+              >
                   <LocationMap
                     address={receitaData?.logradouro}
                     numero={receitaData?.numero}
@@ -995,20 +987,17 @@ export default function CompanyDetailPage() {
                     estado={receitaData?.uf}
                     cep={receitaData?.cep}
                   />
-                </CardContent>
-              </Card>
+              </CollapsibleCard>
             )}
           </div>
 
-          {/* Contatos Completos */}
-          <Card className="glass-card">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Phone className="h-5 w-5 text-primary" />
-                Informações de Contato
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          {/* ✅ CARD 4: Contatos - COLAPSÁVEL */}
+          <CollapsibleCard
+            title="Informações de Contato"
+            icon={Phone}
+            defaultExpanded={false}
+          >
+            <div className="space-y-4">
               {/* Telefones - Layout Compacto 4 Colunas */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 border rounded bg-muted/10">
@@ -1101,18 +1090,16 @@ export default function CompanyDetailPage() {
                   <p className="text-xs truncate">{rawData.email_receita_federal || receitaData?.email || 'N/A'}</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CollapsibleCard>
 
-          {/* Atividade Econômica Completa */}
-          <Card className="glass-card">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Briefcase className="h-5 w-5 text-primary" />
-                Atividade Econômica
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          {/* ✅ CARD 5: Atividade Econômica - COLAPSÁVEL */}
+          <CollapsibleCard
+            title="Atividade Econômica"
+            icon={Briefcase}
+            defaultExpanded={false}
+          >
+            <div className="space-y-3">
               {/* Info Rápida - 4 Colunas Compactas */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 border rounded bg-muted/10">
@@ -1169,19 +1156,18 @@ export default function CompanyDetailPage() {
                   <p className="text-xs font-mono">{rawData.cod_ncms_primarios}</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </CollapsibleCard>
 
           {/* Estrutura Organizacional - Grid 2 Colunas */}
           <div className="grid lg:grid-cols-2 gap-4">
-            <Card className="glass-card">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Users className="h-5 w-5 text-primary" />
-                  Quadro de Pessoal
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
+            {/* ✅ CARD 6: Quadro Pessoal - COLAPSÁVEL */}
+            <CollapsibleCard
+              title="Quadro de Pessoal"
+              icon={Users}
+              defaultExpanded={false}
+            >
+              <div className="space-y-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   <div className="p-2 border rounded bg-muted/10">
                     <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Funcionários Total</p>
@@ -1200,17 +1186,15 @@ export default function CompanyDetailPage() {
                     <p className="text-sm font-semibold">{rawData.qtd_filiais || '0'}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CollapsibleCard>
 
-            <Card className="glass-card">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <UserPlus className="h-5 w-5 text-primary" />
-                  Sócios e Administradores
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            {/* ✅ CARD 7: Sócios - COLAPSÁVEL */}
+            <CollapsibleCard
+              title="Sócios e Administradores"
+              icon={UserPlus}
+              defaultExpanded={false}
+            >
                 <div className="max-h-48 overflow-y-auto">
                   {receitaData?.qsa && receitaData.qsa.length > 0 ? (
                     <div className="space-y-1.5">
@@ -1225,19 +1209,16 @@ export default function CompanyDetailPage() {
                     <p className="text-xs text-muted-foreground text-center py-4">Nenhum sócio cadastrado</p>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
           </div>
 
-          {/* Informações Financeiras */}
-          <Card className="glass-card">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <DollarSign className="h-5 w-5 text-primary" />
-                Informações Financeiras
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          {/* ✅ CARD 8: Financeiro - COLAPSÁVEL */}
+          <CollapsibleCard
+            title="Informações Financeiras"
+            icon={DollarSign}
+            defaultExpanded={false}
+          >
+            <div className="space-y-3">
               {/* Info Financeira Principal */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 bg-blue-50 dark:bg-lime-500/10 rounded border border-blue-200 dark:border-lime-500/30">
@@ -1303,20 +1284,19 @@ export default function CompanyDetailPage() {
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CollapsibleCard>
 
           {/* ❌ REMOVIDO: Card "Decisores & Colaboradores" (redundante e inútil) */}
 
+          {/* ✅ CARD 9: Decisores - COLAPSÁVEL */}
           {decisors.length > 0 && (
-            <Card className="glass-card border-2 border-blue-500/30">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Target className="h-5 w-5 text-primary" />
-                  Decisores Cadastrados ({decisors.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <CollapsibleCard
+              title={`Decisores Cadastrados (${decisors.length})`}
+              icon={Target}
+              defaultExpanded={true}
+              className="border-2 border-blue-500/30"
+            >
                 {console.log('[CompanyDetail] 🎯 Renderizando', decisors.length, 'decisores')}
                 
                 {/* 🔍 FILTROS AVANÇADOS */}
@@ -1513,12 +1493,11 @@ export default function CompanyDetailPage() {
                             🔗 LinkedIn →
                           </a>
                         )}
-                      </div>
-                    );
-                  })}
+                       </div>
+                     );
+                   })}
                 </div>
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
           )}
         </TabsContent>
 
