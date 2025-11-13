@@ -274,13 +274,14 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               </div>
             </div>
 
-            {/* DECISORES */}
-            {decisores.length > 0 && (
-              <div>
-                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Decisores ({decisores.length})
-                </h4>
+            {/* DECISORES - SEMPRE MOSTRAR */}
+            <div>
+              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Decisores ({decisores.length})
+              </h4>
+              
+              {decisores.length > 0 ? (
                 <div className="space-y-2">
                   {decisores.slice(0, 5).map((dm: any, idx: number) => {
                     const fullName = dm.name || `${dm.first_name || ''} ${dm.last_name || ''}`.trim();
@@ -314,9 +315,27 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                       </div>
                     );
                   })}
+                  {decisores.length > 5 && (
+                    <p className="text-xs text-center text-muted-foreground mt-2">
+                      + {decisores.length - 5} decisores • Clique na empresa para ver todos
+                    </p>
+                  )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="text-center py-6 space-y-3 bg-muted/30 rounded-lg border border-dashed">
+                  <p className="text-xs text-muted-foreground">Nenhum decisor cadastrado</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-8"
+                    onClick={() => navigate(`/company/${company.id}`)}
+                  >
+                    <Users className="h-3 w-3 mr-1.5" />
+                    Buscar Decisores no Apollo
+                  </Button>
+                </div>
+              )}
+            </div>
 
           </div>
           
