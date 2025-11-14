@@ -60,7 +60,11 @@ serve(async (req: Request) => {
       const searchResults = await apolloSearchOrganizations(
         body.name || '',
         body.domain || '',
-        apolloKey
+        apolloKey,
+        body.city,
+        body.state,
+        body.cep,
+        body.fantasia
       );
 
       return J({
@@ -90,7 +94,8 @@ serve(async (req: Request) => {
       company_id: body.company_id,
       modes: body.modes as Array<'company'|'people'|'similar'>,
       force: body.force || false,
-      activity_id: body.activity_id
+      activity_id: body.activity_id,
+      dry_run: body.dry_run || false // 🎯 SUPORTE A DRY RUN (estimativa de créditos)
     };
 
     const url = Deno.env.get('SUPABASE_URL')!;
@@ -104,6 +109,31 @@ serve(async (req: Request) => {
     const sb = createClient(url, serviceKey, { auth: { persistSession: false } });
 
     console.log('[enrich-apollo] ⚠️ Verificação de créditos DESABILITADA para testes');
+
+    // 🎯 DRY RUN: Apenas estimar créditos, sem executar
+    if (input.dry_run) {
+      console.log('[enrich-apollo] 💰 DRY RUN: Estimando créditos...');
+      const estimate = await estimateCredits(sb, input.organization_id, input.modes);
+      
+      // Buscar créditos disponíveis
+      const { data: credits } = await sb
+        .from('apollo_credits')
+        .select('available_credits')
+        .single();
+      
+      const creditsAvailable = credits?.available_credits || 0;
+      const creditWarning = estimate.total > creditsAvailable 
+        ? `⚠️ Você tem ${creditsAvailable} créditos, mas a operação precisa de ${estimate.total}`
+        : undefined;
+      
+      return J({
+        ok: true,
+        dry_run: true,
+        estimate,
+        creditsAvailable,
+        creditWarning
+      }, 200, c);
+    }
 
     const requestId = crypto.randomUUID();
     const activityId = input.activity_id || crypto.randomUUID();
@@ -899,29 +929,114 @@ function deduplicatePeople(people: any[]): any[] {
   return result;
 }
 
-async function apolloSearchOrganizations(name: string, domain: string, apiKey: string): Promise<any> {
+async function apolloSearchOrganizations(
+  name: string, 
+  domain: string, 
+  apiKey: string,
+  city?: string,
+  state?: string,
+  cep?: string,
+  fantasia?: string
+): Promise<any> {
   try {
-    const response = await fetch('https://api.apollo.io/v1/organizations/search', {
-      method: 'POST',
-      headers: {
-        'X-Api-Key': apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        q_organization_name: name,
-        q_organization_domains: domain ? [domain] : undefined,
-        page: 1,
-        per_page: 10
-      })
-    });
+    console.log('[Apollo] 🎯 FILTROS DE BUSCA:', { name, domain, city, state, cep, fantasia });
+    
+    // 🎯 BUSCA INTELIGENTE: Tentar múltiplas estratégias
+    const namesToTry = [
+      fantasia,        // Prioridade 1: Nome Fantasia
+      name.split(/\s+/).filter((w: string) => w.length > 2)[0], // Prioridade 2: Primeira palavra
+      name             // Prioridade 3: Nome completo
+    ].filter(Boolean);
+    
+    let bestResults: any = { organizations: [], pagination: { total_entries: 0 } };
+    
+    for (const searchName of namesToTry) {
+      console.log('[Apollo] 🔍 Tentando busca com nome:', searchName);
+      
+      const response = await fetch('https://api.apollo.io/v1/organizations/search', {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          q_organization_name: searchName,
+          q_organization_domains: domain ? [domain] : undefined,
+          page: 1,
+          per_page: 10
+        })
+      });
 
-    if (!response.ok) {
-      console.error('[Apollo] Erro ao buscar organizações:', response.status);
-      return { organizations: [], pagination: { total_entries: 0 } };
+      if (!response.ok) {
+        console.error('[Apollo] Erro ao buscar organizações:', response.status);
+        continue;
+      }
+
+      const data = await response.json();
+      
+      if (data.organizations && data.organizations.length > 0) {
+        console.log('[Apollo] ✅ Encontradas', data.organizations.length, 'empresas');
+        
+        // 🎯 APLICAR FILTROS INTELIGENTES (prioridade)
+        const orgs = data.organizations;
+        let filtered = orgs;
+        
+        // Filtro 1: CEP (98% precisão!) - só para Brasil
+        if (cep) {
+          const cleanCEP = cep.replace(/\D/g, '');
+          const cepMatch = orgs.filter((org: any) => {
+            const orgCEP = (org.postal_code || '').replace(/\D/g, '');
+            return orgCEP === cleanCEP && (org.country === 'Brazil' || org.country === 'Brasil');
+          });
+          if (cepMatch.length > 0) {
+            console.log('[Apollo] 🎯 Filtrado por CEP (98%): ', cepMatch.length, 'empresa(s)');
+            filtered = cepMatch;
+          }
+        }
+        
+        // Filtro 2: Domain (99%)
+        if (filtered.length > 1 && domain) {
+          const cleanDomain = domain.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+          const domainMatch = filtered.filter((org: any) => {
+            const orgDomain = (org.primary_domain || org.website_url || '').toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+            return orgDomain === cleanDomain;
+          });
+          if (domainMatch.length > 0) {
+            console.log('[Apollo] 🎯 Filtrado por Domain (99%): ', domainMatch.length, 'empresa(s)');
+            filtered = domainMatch;
+          }
+        }
+        
+        // Filtro 3: City + State (95%)
+        if (filtered.length > 1 && city && state) {
+          const locationMatch = filtered.filter((org: any) => 
+            org.city?.toLowerCase().includes(city.toLowerCase()) &&
+            org.state?.toLowerCase() === state.toLowerCase() &&
+            (org.country === 'Brazil' || org.country === 'Brasil')
+          );
+          if (locationMatch.length > 0) {
+            console.log('[Apollo] 🎯 Filtrado por City/State (95%): ', locationMatch.length, 'empresa(s)');
+            filtered = locationMatch;
+          }
+        }
+        
+        // Retornar resultados filtrados
+        if (filtered.length > 0) {
+          return {
+            organizations: filtered,
+            pagination: { total_entries: filtered.length }
+          };
+        }
+        
+        // Se não filtrou, guardar melhor resultado
+        if (data.organizations.length > bestResults.organizations.length) {
+          bestResults = data;
+        }
+      }
     }
-
-    const data = await response.json();
-    return data;
+    
+    console.log('[Apollo] ℹ️ Retornando melhor resultado:', bestResults.organizations.length, 'empresa(s)');
+    return bestResults;
   } catch (error) {
     console.error('[Apollo] Exceção ao buscar organizações:', error);
     return { organizations: [], pagination: { total_entries: 0 } };

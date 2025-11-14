@@ -10,7 +10,6 @@ import {
   Building2,
   Download,
   FileSpreadsheet,
-  Zap,
   MoreHorizontal,
   Target,
   Search,
@@ -45,7 +44,6 @@ interface BulkActionsToolbarProps {
   onBulkEnrichReceita: () => Promise<void>;
   onBulkEnrich360: () => Promise<void>;
   onBulkEnrichApollo: () => Promise<void>;
-  onBulkEnrichEconodata: () => Promise<void>;
   onBulkEnrichTotvsCheck?: () => Promise<void>;
   onBulkDiscoverCNPJ?: () => Promise<void>;
   onBulkApprove?: () => Promise<void>;
@@ -63,7 +61,6 @@ export function BulkActionsToolbar({
   onBulkEnrichReceita,
   onBulkEnrich360,
   onBulkEnrichApollo,
-  onBulkEnrichEconodata,
   onBulkEnrichTotvsCheck,
   onBulkDiscoverCNPJ,
   onBulkApprove,
@@ -168,13 +165,6 @@ export function BulkActionsToolbar({
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
                   Apollo (Decisores)
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={onBulkEnrichEconodata}
-                  disabled={isProcessing}
-                >
-                  <Zap className="h-4 w-4 mr-2" />
-                  Eco-Booster
                 </DropdownMenuItem>
                 {onBulkEnrichTotvsCheck && (
                   <DropdownMenuItem 

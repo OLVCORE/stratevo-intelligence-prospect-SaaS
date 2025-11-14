@@ -1129,11 +1129,19 @@ export default function ICPQuarantine() {
         // Custo baixo e pode ser útil no futuro mesmo se NO-GO
         let decisors = null;
         try {
+          const receitaData = company.raw_data?.receita_federal || {};
+          
           const { data: decisorsData } = await supabase.functions.invoke('enrich-apollo-decisores', {
             body: {
               companyName: company.razao_social,
+              company_id: company.company_id,
               linkedinUrl: company.linkedin_url || '',
-              modes: ['people', 'company'], // 🔥 PESSOAS + ORGANIZAÇÃO
+              modes: ['people', 'company'],
+              domain: company.website || company.domain,
+              city: receitaData?.municipio || company.city || company.municipio,
+              state: receitaData?.uf || company.state || company.uf,
+              cep: receitaData?.cep || company.raw_data?.cep || company.zip_code,
+              fantasia: receitaData?.fantasia || company.raw_data?.fantasia || company.fantasy_name
             },
           });
           decisors = decisorsData;
@@ -2015,9 +2023,9 @@ export default function ICPQuarantine() {
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div>
+                            <div className="flex items-center gap-2">
                               <STCAgent
-                                companyId={company.id}
+                                companyId={company.company_id || company.id}
                                 companyName={company.razao_social}
                                 cnpj={company.cnpj}
                               />

@@ -39,7 +39,6 @@ import DecisionMakerAddDialog from "@/components/companies/DecisionMakerAddDialo
 import { DecisorsCollaboratorsCard } from "@/components/companies/DecisorsCollaboratorsCard";
 import { RichContactsCard } from "@/components/companies/RichContactsCard";
 import { FinancialDebtCard } from "@/components/companies/FinancialDebtCard";
-import { EconodataEnrichButton } from "@/components/companies/EconodataEnrichButton";
 import { EnrichmentActionsCard } from '@/components/companies/EnrichmentActionsCard';
 import { ApolloDataSection } from '@/components/companies/ApolloDataSection';
 import { ApolloDecisorsCard } from '@/components/companies/ApolloDecisorsCard';
@@ -60,6 +59,8 @@ import { CreditUsageHistory } from '@/components/companies/CreditUsageHistory';
 import CompanyGlobalSearch from '@/components/companies/CompanyGlobalSearch';
 import { useRealtimeCompanyChanges } from '@/hooks/useRealtimeCompanyChanges';
 import { CompanyActionsMenu } from '@/components/companies/CompanyActionsMenu';
+import { DecisionMakersTab } from '@/components/companies/DecisionMakersTab';
+import { DecisionMakerSearchDialog } from '@/components/companies/DecisionMakerSearchDialog';
 
 export default function CompanyDetailPage() {
   const { id } = useParams();
@@ -99,15 +100,62 @@ export default function CompanyDetailPage() {
     });
   };
 
-  const { data: company, isLoading } = useQuery({
+  const { data: company, isLoading, error: queryError } = useQuery({
     queryKey: ['company-detail', id],
     queryFn: async () => {
-      const { data: base, error: baseErr } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('id', id!)
-        .single();
-      if (baseErr) throw baseErr;
+      if (!id) throw new Error('ID da empresa não fornecido');
+      
+      // ✅ CORRIGIR 406: Buscar empresa de forma simples primeiro
+      let base: any = null;
+      
+      try {
+        // ✅ ESTRATÉGIA: Buscar empresa básica primeiro (evita erro 406 com joins)
+        const { data: companyData, error: companyErr } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', id!)
+          .single();
+        
+        if (companyErr) {
+          // ✅ Se erro 406 ou não encontrado, verificar se é ID de quarentena
+          if (companyErr.code === 'PGRST116' || companyErr.message?.includes('406') || companyErr.message?.includes('not found')) {
+            console.warn('[CompanyDetail] ⚠️ Empresa não encontrada na tabela companies, verificando quarentena:', id);
+            
+            // Buscar na quarentena para verificar se existe
+            const { data: quarantineData } = await supabase
+              .from('icp_analysis_results')
+              .select('*')
+              .eq('id', id!)
+              .maybeSingle();
+            
+            if (quarantineData && quarantineData.company_id) {
+              // Empresa existe na quarentena mas não foi aprovada ainda - redirecionar
+              throw new Error('EMPREZA_NAO_APROVADA');
+            }
+            
+            throw new Error('Empresa não encontrada');
+          }
+          throw companyErr;
+        }
+        
+        if (!companyData) {
+          throw new Error('Empresa não encontrada');
+        }
+        
+        base = companyData;
+        
+      } catch (err: any) {
+        console.error('[CompanyDetail] ❌ Erro ao buscar empresa:', err);
+        
+        // ✅ Se empresa não aprovada, lançar erro específico
+        if (err.message === 'EMPREZA_NAO_APROVADA') {
+          throw err;
+        }
+        
+        // ✅ Outros erros: relançar
+        throw err;
+      }
+      
       if (!base) return null;
 
       // AUTO-ENRIQUECIMENTO: Se não tem dados da Receita Federal, buscar agora
@@ -140,7 +188,7 @@ export default function CompanyDetailPage() {
           // Recarregar dados após enriquecimento
           const { data: updated } = await supabase
             .from('companies')
-            .select('*')
+            .select('id, raw_data')
             .eq('id', id!)
             .single();
           
@@ -152,19 +200,47 @@ export default function CompanyDetailPage() {
         }
       }
 
-      const [decisorsRes, maturityRes, insightsRes, presenceRes] = await Promise.all([
-        supabase.from('decision_makers').select('*').eq('company_id', id!),
-        supabase.from('digital_maturity').select('*').eq('company_id', id!),
-        supabase.from('insights').select('*').eq('company_id', id!),
-        supabase.from('digital_presence').select('*').eq('company_id', id!).maybeSingle(),
-      ]);
+      // ✅ Buscar relacionamentos separadamente (evita erro 406 com joins)
+      let decisionMakers: any[] = base.decision_makers || [];
+      let digitalMaturity: any[] = base.digital_maturity || [];
+      let insights: any[] = base.insights || [];
+      let digitalPresence: any = base.digital_presence || null;
+
+      try {
+        const { data: dm } = await supabase.from('decision_makers').select('*').eq('company_id', id!);
+        if (dm) decisionMakers = dm;
+      } catch (e: any) {
+        console.warn('[CompanyDetail] ⚠️ Erro ao buscar decision_makers:', e?.message || e);
+      }
+
+      // ✅ Tabelas opcionais - ignorar erros silenciosamente
+      try {
+        const { data: dm } = await supabase.from('digital_maturity').select('*').eq('company_id', id!);
+        if (dm) digitalMaturity = dm;
+      } catch (e: any) {
+        // Tabela pode não existir - ignorar
+      }
+
+      try {
+        const { data: ins } = await supabase.from('insights').select('*').eq('company_id', id!);
+        if (ins) insights = ins;
+      } catch (e: any) {
+        // Tabela pode não existir - ignorar
+      }
+
+      try {
+        const { data: dp } = await supabase.from('digital_presence').select('*').eq('company_id', id!).maybeSingle();
+        if (dp) digitalPresence = dp;
+      } catch (e: any) {
+        // Tabela pode não existir - ignorar
+      }
 
       return {
         ...base,
-        decision_makers: decisorsRes.data || [],
-        digital_maturity: maturityRes.data || [],
-        insights: insightsRes.data || [],
-        digital_presence: presenceRes.data,
+        decision_makers: decisionMakers,
+        digital_maturity: digitalMaturity,
+        insights: insights,
+        digital_presence: digitalPresence,
       } as any;
     },
     staleTime: 0,
@@ -175,6 +251,38 @@ export default function CompanyDetailPage() {
       <div className="p-8 space-y-6">
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  // ✅ TRATAR ERRO DE EMPRESA NÃO APROVADA
+  if (queryError) {
+    const errorMessage = (queryError as any)?.message || '';
+    if (errorMessage.includes('EMPREZA_NAO_APROVADA') || errorMessage.includes('não foi aprovada')) {
+      return (
+        <div className="p-8 text-center space-y-4">
+          <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold">Empresa ainda não aprovada</h2>
+          <p className="text-muted-foreground">
+            Esta empresa está na quarentena e precisa ser aprovada antes de acessar os detalhes completos.
+          </p>
+          <Button onClick={() => navigate('/leads/icp-quarantine')}>
+            Ir para Quarentena
+          </Button>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="p-8 text-center space-y-4">
+        <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+        <h2 className="text-xl font-semibold">Erro ao carregar empresa</h2>
+        <p className="text-muted-foreground">
+          {errorMessage || 'Não foi possível carregar os dados da empresa.'}
+        </p>
+        <Button onClick={() => navigate('/companies')}>
+          Voltar para Empresas
+        </Button>
       </div>
     );
   }
@@ -354,8 +462,28 @@ export default function CompanyDetailPage() {
       console.log('[CompanyDetail] 🚀 Buscando decisores Apollo para:', company.name);
       console.log('[CompanyDetail] 📋 Apollo Org ID:', apolloOrgId || 'N/A');
       
+      // 🔍 DEBUG: Ver dados disponíveis
+      console.log('[APOLLO-DEBUG] 🔍 receitaData completo:', receitaData);
+      console.log('[APOLLO-DEBUG] 🔍 rawData completo:', rawData);
+      console.log('[APOLLO-DEBUG] 🔍 company.city:', company.city);
+      console.log('[APOLLO-DEBUG] 🔍 company.state:', company.state);
+      console.log('[APOLLO-DEBUG] 🔍 company.zip_code:', (company as any).zip_code);
+      console.log('[APOLLO-DEBUG] 🔍 company.fantasy_name:', (company as any).fantasy_name);
+      
+      // Extrair dados com fallback completo
+      const cityToSend = receitaData?.municipio || rawData?.receita_federal?.municipio || company.city;
+      const stateToSend = receitaData?.uf || rawData?.receita_federal?.uf || company.state;
+      const cepToSend = receitaData?.cep || rawData?.receita_federal?.cep || rawData?.cep || (company as any).zip_code;
+      const fantasiaToSend = receitaData?.fantasia || rawData?.receita_federal?.fantasia || rawData?.nome_fantasia || (company as any).fantasy_name;
+      
+      console.log('[APOLLO-DEBUG] ✅ DADOS QUE SERÃO ENVIADOS:');
+      console.log('[APOLLO-DEBUG]    city:', cityToSend);
+      console.log('[APOLLO-DEBUG]    state:', stateToSend);
+      console.log('[APOLLO-DEBUG]    cep:', cepToSend);
+      console.log('[APOLLO-DEBUG]    fantasia:', fantasiaToSend);
+      
       toast.info('Buscando decisores no Apollo.io...', {
-        description: apolloOrgId ? 'Usando Organization ID manual' : 'Usando nome da empresa'
+        description: apolloOrgId ? 'Usando Organization ID manual' : 'Usando filtros inteligentes (CEP + Fantasia)'
       });
       
       // Salvar Apollo Org ID na empresa se fornecido
@@ -374,11 +502,11 @@ export default function CompanyDetailPage() {
           domain: company.domain || company.website,
           apollo_org_id: apolloOrgId || company.apollo_organization_id,
           modes: ['people', 'company'],
-          city: receitaData?.municipio || company.city,
-          state: receitaData?.uf || company.state,
+          city: cityToSend,
+          state: stateToSend,
           industry: company.industry,
-          cep: receitaData?.cep || rawData?.cep,
-          fantasia: receitaData?.fantasia || rawData?.nome_fantasia
+          cep: cepToSend,
+          fantasia: fantasiaToSend
         }
       });
       
@@ -631,13 +759,6 @@ export default function CompanyDetailPage() {
                       onEnrich={handleEnrichApollo}
                       disabled={isEnriching}
                     />
-
-                    <EconodataEnrichButton
-                      companyId={id!}
-                      cnpj={company.cnpj || ''}
-                      variant="outline"
-                      size="icon"
-                    />
                   </TooltipProvider>
                 </div>
               </div>
@@ -706,6 +827,28 @@ export default function CompanyDetailPage() {
                 </TooltipTrigger>
                 <TooltipContent>
                   Hub analítico: empresa + decisores + similares + insights da IA
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TabsTrigger 
+                    value="decisores" 
+                    className="gap-2 data-[state=active]:glass-card data-[state=active]:text-primary"
+                  >
+                    <Users className="h-4 w-4" />
+                    Decisores
+                    {decisors.length > 0 && (
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {decisors.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Decisores e contatos da empresa. Busque e gerencie decisores via Apollo.io
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1503,6 +1646,49 @@ export default function CompanyDetailPage() {
           )}
         </TabsContent>
 
+        {/* TAB: Decisores */}
+        <TabsContent value="decisores" className="space-y-4 animate-fade-in">
+          <Card className="glass-card">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Decisores da Empresa
+                  </CardTitle>
+                  <CardDescription>
+                    {decisors.length > 0 
+                      ? `${decisors.length} decisor(es) cadastrado(s)`
+                      : 'Busque decisores no Apollo.io para começar'
+                    }
+                  </CardDescription>
+                </div>
+                <DecisionMakerSearchDialog
+                  companyId={id!}
+                  companyName={company.name || company.razao_social || company.company_name}
+                  companyDomain={company.domain || company.website || (rawData as any)?.melhor_site}
+                  apolloOrganizationId={(company as any)?.apollo_organization_id || (company as any)?.apollo_id || (rawData as any)?.apollo_id}
+                  city={receitaData?.municipio || company.city}
+                  country={receitaData?.pais || company.country || 'Brazil'}
+                  onPeopleFound={() => {
+                    queryClient.invalidateQueries({ queryKey: ['decision_makers', id] });
+                    queryClient.invalidateQueries({ queryKey: ['company-detail', id] });
+                  }}
+                  trigger={
+                    <Button variant="default" size="sm">
+                      <Users className="h-4 w-4 mr-2" />
+                      Buscar Decisores no Apollo
+                    </Button>
+                  }
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <DecisionMakersTab companyId={id!} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* TAB 3: Financeiro */}
         <TabsContent value="financeiro" className="space-y-3">
           <FinancialDebtCard rawData={rawData} />
@@ -1699,16 +1885,6 @@ export default function CompanyDetailPage() {
                 />
 
                 <Separator />
-
-                <EconodataEnrichButton 
-                  companyId={id!}
-                  cnpj={company.cnpj}
-                  variant="default"
-                  size="default"
-                  className="w-full"
-                />
-                
-                <Separator />
                 
                 <Button
                   onClick={handleSmartRefresh}
@@ -1828,6 +2004,10 @@ export default function CompanyDetailPage() {
                     companyName={company.name}
                     companyDomain={company.domain || company.website}
                     apolloOrganizationId={company.apollo_organization_id}
+                    city={receitaData?.municipio || rawData?.receita_federal?.municipio || company.city}
+                    state={receitaData?.uf || rawData?.receita_federal?.uf || company.state}
+                    cep={receitaData?.cep || rawData?.receita_federal?.cep || rawData?.cep || (company as any).zip_code}
+                    fantasia={receitaData?.fantasia || rawData?.receita_federal?.fantasia || rawData?.nome_fantasia || (company as any).fantasy_name}
                     onSuccess={() => {
                       queryClient.invalidateQueries({ queryKey: ['company-detail', id] });
                       queryClient.invalidateQueries({ queryKey: ['decision_makers', id] });

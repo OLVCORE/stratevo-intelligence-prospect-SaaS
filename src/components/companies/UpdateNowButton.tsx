@@ -47,6 +47,10 @@ interface UpdateNowButtonProps {
   companyName: string;
   companyDomain?: string;
   apolloOrganizationId?: string;
+  city?: string; // 🎯 FILTRO INTELIGENTE
+  state?: string; // 🎯 FILTRO INTELIGENTE
+  cep?: string; // 🎯 FILTRO CEP (98% precisão!)
+  fantasia?: string; // 🎯 FILTRO NOME FANTASIA
   onSuccess?: () => void;
 }
 
@@ -55,6 +59,10 @@ export function UpdateNowButton({
   companyName,
   companyDomain,
   apolloOrganizationId,
+  city,
+  state,
+  cep,
+  fantasia,
   onSuccess
 }: UpdateNowButtonProps) {
   const [updating, setUpdating] = useState(false);
@@ -104,10 +112,16 @@ export function UpdateNowButton({
           .replace(/\/.*$/, '')
           .trim();
 
+        console.log('[UpdateNow] 🎯 FILTROS INTELIGENTES:', { city, state, cep, fantasia });
+        
         const data = await invokeEnrichApollo({
           type: 'search_organizations',
           name: companyName,
           domain: cleanDomain,
+          city: city,
+          state: state,
+          cep: cep,
+          fantasia: fantasia,
         });
 
         const orgs = (data?.organizations ?? []) as OrgResult[];

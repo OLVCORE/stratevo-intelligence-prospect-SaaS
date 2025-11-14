@@ -12,7 +12,6 @@ import {
   Upload,
   Building2,
   Sparkles,
-  Zap,
   Search,
   Database,
   Loader2,
@@ -28,7 +27,6 @@ interface HeaderActionsMenuProps {
   onBatchEnrichReceita: () => Promise<void>;
   onBatchEnrich360: () => Promise<void>;
   onBatchEnrichApollo: () => Promise<void>;
-  onBatchEnrichEconodata: () => Promise<void>;
   onSendToQuarantine?: () => Promise<void>; // 🆕 NOVO
   onApolloImport: () => void;
   onSearchCompanies: () => void;
@@ -41,7 +39,6 @@ export function HeaderActionsMenu({
   onBatchEnrichReceita,
   onBatchEnrich360,
   onBatchEnrichApollo,
-  onBatchEnrichEconodata,
   onSendToQuarantine, // 🆕 NOVO
   onApolloImport,
   onSearchCompanies,
@@ -167,21 +164,6 @@ export function HeaderActionsMenu({
               <img src={apolloIcon} alt="Apollo" className="h-4 w-4 mr-2" />
             )}
             Apollo (Decisores & Contatos)
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onClick={() => handleEnrich('Eco-Booster', onBatchEnrichEconodata)}
-            disabled={isEnriching}
-            data-testid="action-batch-econodata"
-            className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
-          >
-            {enrichingAction === 'Eco-Booster' ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Zap className="h-4 w-4 mr-2" />
-            )}
-            Eco-Booster (Premium)
-            <span className="ml-auto text-xs text-muted-foreground">Com CNPJ</span>
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

@@ -223,7 +223,6 @@ export default function CompaniesManagementPage() {
   const [enrichingReceitaId, setEnrichingReceitaId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   
-  const [isBatchEnrichingEconodata, setIsBatchEnrichingEconodata] = useState(false);
   const [isApolloImportOpen, setIsApolloImportOpen] = useState(false);
   const hasSelection = selectedCompanies.length > 0;
 
@@ -1197,41 +1196,6 @@ export default function CompaniesManagementPage() {
               onBatchEnrichReceita={handleBatchEnrichReceitaWS}
               onBatchEnrich360={handleBatchEnrich360}
               onBatchEnrichApollo={handleBatchEnrichApollo}
-              onBatchEnrichEconodata={async () => {
-                try {
-                  setIsBatchEnrichingEconodata(true);
-                  toast.info('Iniciando enriquecimento em lote com Eco-Booster...', {
-                    description: 'Apenas empresas com CNPJ serão processadas'
-                  });
-
-                  const companiesWithCNPJ = companies.filter(c => c.cnpj);
-                  let enriched = 0;
-                  let errors = 0;
-
-                  for (const company of companiesWithCNPJ) {
-                    try {
-                      const { error } = await supabase.functions.invoke('enrich-econodata', {
-                        body: { companyId: company.id, cnpj: company.cnpj }
-                      });
-                      if (error) throw error;
-                      enriched++;
-                    } catch (e) {
-                      console.error(`Error enriching ${company.name}:`, e);
-                      errors++;
-                    }
-                  }
-
-                  toast.success(
-                    `Eco-Booster concluído! ${enriched} empresas atualizadas, ${errors} erros.`
-                  );
-                  refetch();
-                } catch (error) {
-                  console.error('Error batch enriching Econodata:', error);
-                  toast.error('Erro ao executar Eco-Booster em lote');
-                } finally {
-                  setIsBatchEnrichingEconodata(false);
-                }
-              }}
               onSendToQuarantine={async () => {
                 try {
                   toast.info('🎯 Integrando TODAS as empresas ao ICP...', {
@@ -1335,7 +1299,7 @@ export default function CompaniesManagementPage() {
               onApolloImport={() => setIsApolloImportOpen(true)}
               onSearchCompanies={() => navigate('/search')}
               onPartnerSearch={() => setPartnerSearchOpen(true)}
-              isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo || isBatchEnrichingEconodata}
+              isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
             />
             
             {/* Hidden trigger for BulkUploadDialog */}
@@ -1634,41 +1598,7 @@ export default function CompaniesManagementPage() {
                     onBulkEnrichReceita={handleBatchEnrichReceitaWS}
                     onBulkEnrichApollo={handleBatchEnrichApollo}
                     onBulkEnrich360={handleBatchEnrich360}
-                    onBulkEcoBooster={async () => {
-                  try {
-                    setIsBatchEnrichingEconodata(true);
-                    toast.info('Iniciando enriquecimento em lote com Eco-Booster...');
-
-                    const selectedComps = selectedCompanies.length > 0
-                      ? companies.filter(c => selectedCompanies.includes(c.id) && c.cnpj)
-                      : companies.filter(c => c.cnpj);
-                      
-                    let enriched = 0;
-                    let errors = 0;
-
-                    for (const company of selectedComps) {
-                      try {
-                        const { error } = await supabase.functions.invoke('enrich-econodata', {
-                          body: { companyId: company.id, cnpj: company.cnpj }
-                        });
-                        if (error) throw error;
-                        enriched++;
-                      } catch (e) {
-                        console.error(`Error enriching ${company.name}:`, e);
-                        errors++;
-                      }
-                    }
-
-                    toast.success(`Eco-Booster concluído! ${enriched} empresas atualizadas, ${errors} erros.`);
-                    refetch();
-                  } catch (error) {
-                    console.error('Error batch enriching Econodata:', error);
-                    toast.error('Erro ao executar Eco-Booster em lote');
-                  } finally {
-                    setIsBatchEnrichingEconodata(false);
-                  }
-                    }}
-                    isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo || isBatchEnrichingEconodata}
+                    isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
                   />
 
                   {/* Paginação */}
@@ -2113,24 +2043,6 @@ export default function CompaniesManagementPage() {
                             } catch (error) {
                               console.error('Error enriching Apollo:', error);
                               toast.error('Erro ao buscar decisores Apollo');
-                            }
-                          }}
-                          onEnrichEconodata={async () => {
-                            if (!company.cnpj) {
-                              toast.error('CNPJ não disponível');
-                              return;
-                            }
-                            try {
-                              toast.info('Iniciando enriquecimento Eco-Booster...');
-                              const { data, error } = await supabase.functions.invoke('enrich-econodata', {
-                                body: { companyId: company.id, cnpj: company.cnpj }
-                              });
-                              if (error) throw error;
-                              toast.success('Eco-Booster concluído!');
-                              refetch();
-                            } catch (error) {
-                              console.error('Error enriching Econodata:', error);
-                              toast.error('Erro no Eco-Booster');
                             }
                           }}
                           onDiscoverCNPJ={!company.cnpj ? () => { 

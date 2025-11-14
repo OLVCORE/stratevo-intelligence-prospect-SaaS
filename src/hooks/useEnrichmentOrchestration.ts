@@ -105,13 +105,14 @@ export function useEnrichmentOrchestration() {
         required: !!cnpj,
         prerequisite: 'lock'
       },
-      {
-        id: 'econodata',
-        name: 'Econodata',
-        status: includePremium ? 'pending' : 'skipped',
-        required: false,
-        prerequisite: 'receita'
-      }
+      // ECONODATA: Removido - não utilizado no momento
+      // {
+      //   id: 'econodata',
+      //   name: 'Econodata',
+      //   status: includePremium ? 'pending' : 'skipped',
+      //   required: false,
+      //   prerequisite: 'receita'
+      // }
     ];
 
     setSteps(initialSteps);
@@ -222,26 +223,25 @@ export function useEnrichmentOrchestration() {
         }
       }
 
+      // ECONODATA: Removido - não utilizado no momento
       // 5. Econodata (Premium)
-      if (includePremium && cnpj && checkPrerequisite(initialSteps[4], steps)) {
-        updateStep('econodata', { status: 'running' }, onProgress);
-        try {
-          const { data, error } = await supabase.functions.invoke('enrich-econodata', {
-            body: { companyId, cnpj }
-          });
-
-          if (error) throw error;
-
-          updateStep('econodata', { status: 'success' }, onProgress);
-          logActivity(companyId, 'econodata_enriched', 'success');
-        } catch (error: any) {
-          updateStep('econodata', { 
-            status: 'error', 
-            error: error.message 
-          }, onProgress);
-          logActivity(companyId, 'econodata_failed', 'error', { error: error.message });
-        }
-      }
+      // if (includePremium && cnpj && checkPrerequisite(initialSteps[4], steps)) {
+      //   updateStep('econodata', { status: 'running' }, onProgress);
+      //   try {
+      //     const { data, error } = await supabase.functions.invoke('enrich-econodata', {
+      //       body: { companyId, cnpj }
+      //     });
+      //     if (error) throw error;
+      //     updateStep('econodata', { status: 'success' }, onProgress);
+      //     logActivity(companyId, 'econodata_enriched', 'success');
+      //   } catch (error: any) {
+      //     updateStep('econodata', { 
+      //       status: 'error', 
+      //       error: error.message 
+      //     }, onProgress);
+      //     logActivity(companyId, 'econodata_failed', 'error', { error: error.message });
+      //   }
+      // }
 
       const successCount = steps.filter(s => s.status === 'success').length;
       const errorCount = steps.filter(s => s.status === 'error').length;

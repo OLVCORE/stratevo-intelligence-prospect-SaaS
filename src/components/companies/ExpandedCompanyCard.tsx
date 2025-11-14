@@ -10,7 +10,8 @@ import {
   Phone,
   Users,
   Award,
-  Edit
+  Edit,
+  ArrowRight
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -229,36 +230,32 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
               </div>
             </div>
 
-            {/* LOCALIZAÇÃO */}
+            {/* LOCALIZAÇÃO (formatação exata da imagem: cidade, estado, país cada um em linha) */}
             <div>
               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
                 Localização
               </h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-start gap-2">
-                  <div>
-                    {(apolloData.city || receitaData.municipio || company.city) && (
-                      <p className="text-muted-foreground">
-                        {apolloData.city || receitaData.municipio || company.city}
-                      </p>
-                    )}
-                    {(apolloData.state || receitaData.uf || company.state) && (
-                      <p className="text-muted-foreground">
-                        {apolloData.state || receitaData.uf || company.state}
-                      </p>
-                    )}
-                    {(apolloData.country || receitaData.pais || company.country || 'Brazil') && (
-                      <p className="font-medium">
-                        {apolloData.country || receitaData.pais || company.country || 'Brazil'}
-                      </p>
-                    )}
-                  </div>
-                </div>
+              <div className="space-y-1 text-sm">
+                {(apolloData.city || receitaData.municipio || company.city) && (
+                  <p className="text-muted-foreground">
+                    {apolloData.city || receitaData.municipio || company.city}
+                  </p>
+                )}
+                {(apolloData.state || receitaData.uf || company.state) && (
+                  <p className="text-muted-foreground">
+                    {apolloData.state || receitaData.uf || company.state}
+                  </p>
+                )}
+                {(apolloData.country || receitaData.pais || company.country || 'Brazil') && (
+                  <p className="font-medium">
+                    {apolloData.country || receitaData.pais || company.country || 'Brazil'}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* DESCRIÇÃO - SEMPRE MOSTRAR */}
+            {/* DESCRIÇÃO - SEMPRE MOSTRAR (formatação exata da imagem) */}
             <div>
               <h4 className="text-sm font-semibold mb-2">Descrição</h4>
               {description ? (
@@ -266,31 +263,20 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                   <p className="text-sm text-muted-foreground leading-relaxed text-left">
                     {description}
                   </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2 text-xs h-7"
-                    onClick={() => navigate(`/company/${company.id}`)}
-                  >
-                    <Edit className="h-3 w-3 mr-1" />
-                    Editar Descrição
-                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2 flex items-start gap-1">
+                    <Award className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    <span>💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/10 dark:text-yellow-500 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                    <Award className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span className="text-left">💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-7"
-                    onClick={() => navigate(`/company/${company.id}`)}
-                  >
-                    <Edit className="h-3 w-3 mr-1" />
-                    Adicionar Descrição
-                  </Button>
+                <div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Nenhuma descrição disponível.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2 flex items-start gap-1">
+                    <Award className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    <span>💡 Esta descrição pode ser enriquecida via Apollo/LinkedIn</span>
+                  </p>
                 </div>
               )}
             </div>
@@ -338,67 +324,45 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                 Links Externos
               </h4>
               <div className="space-y-2">
-                {/* WEBSITE */}
+                {/* WEBSITE (formatação exata da imagem - sem botão editar) */}
                 {(() => {
                   const websiteUrl = company.website || company.domain || rawData.sites || rawData.melhor_site;
                   if (!websiteUrl) return null;
                   
                   return (
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-sm text-primary hover:underline"
-                      >
-                        <Globe className="h-4 w-4" />
-                        {websiteUrl.replace('https://', '').replace('http://', '').replace('www.', '').substring(0, 30)}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4 p-0"
-                        onClick={() => navigate(`/company/${company.id}`)}
-                        title="Editar website"
-                      >
-                        <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                      </Button>
-                    </div>
+                    <a
+                      href={websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-primary hover:underline"
+                    >
+                      <Globe className="h-4 w-4" />
+                      Website
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   );
                 })()}
                 
-                {/* LINKEDIN */}
+                {/* LINKEDIN (formatação exata da imagem - sem botão editar) */}
                 {(() => {
                   const linkedinUrl = company.linkedin_url || rawData.linkedin_url || rawData.linkedin || rawData.digital_presence?.linkedin;
                   if (!linkedinUrl) return null;
                   
                   return (
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={linkedinUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-sm text-primary hover:underline"
-                      >
-                        <Linkedin className="h-4 w-4" />
-                        LinkedIn
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4 p-0"
-                        onClick={() => navigate(`/company/${company.id}`)}
-                        title="Editar LinkedIn"
-                      >
-                        <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                      </Button>
-                    </div>
+                    <a
+                      href={linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-primary hover:underline"
+                    >
+                      <Linkedin className="h-4 w-4" />
+                      LinkedIn
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   );
                 })()}
                 
-                {/* APOLLO.IO */}
+                {/* APOLLO.IO (formatação exata da imagem) */}
                 {(() => {
                   const apolloId = company.apollo_id || rawData.apollo_id;
                   const apolloLink = apolloId ? `https://app.apollo.io/#/companies/${apolloId}` : getApolloLink(company);
@@ -416,32 +380,13 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                         Apollo.io
                         <ExternalLink className="h-3 w-3" />
                       </a>
-                      {company.enrichment_source === 'auto' && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                          🤖 AUTO
-                        </Badge>
-                      )}
-                      {company.enrichment_source === 'manual' && (
-                        <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
-                          ✅ VALIDADO
-                        </Badge>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4 p-0"
-                        onClick={() => navigate(`/company/${company.id}`)}
-                        title="Editar Apollo ID"
-                      >
-                        <Edit className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                      </Button>
                     </div>
                   );
                 })()}
               </div>
             </div>
 
-            {/* DECISORES - SEMPRE MOSTRAR */}
+            {/* DECISORES - SEMPRE MOSTRAR (formatação exata da imagem) */}
             <div>
               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <Users className="h-4 w-4" />
@@ -517,17 +462,30 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
                   )}
                 </div>
               ) : (
-                <div className="text-center py-6 space-y-3 bg-muted/30 rounded-lg border border-dashed">
-                  <p className="text-xs text-muted-foreground">Nenhum decisor cadastrado</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-8"
-                    onClick={() => navigate(`/company/${company.id}`)}
+                <div className="text-center py-6 space-y-3">
+                  <p className="text-sm text-muted-foreground">Nenhum decisor cadastrado</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-sm"
+                    onClick={() => {
+                      // ✅ USAR company_id se disponível (empresa já aprovada)
+                      const targetId = (company as any)?.company_id || company.id;
+                      if ((company as any)?.company_id) {
+                        navigate(`/company/${targetId}?tab=decisores`);
+                      } else {
+                        // Se não tem company_id, empresa ainda não foi aprovada - mostrar mensagem
+                        navigate(`/leads/icp-quarantine`);
+                      }
+                    }}
                   >
                     <Users className="h-3 w-3 mr-1.5" />
-                    Buscar Decisores no Apollo
+                    Ver Aba Decisores
+                    <ArrowRight className="h-3 w-3 ml-1.5" />
                   </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Busque decisores na página de detalhes da empresa
+                  </p>
                 </div>
               )}
             </div>
@@ -538,21 +496,41 @@ export function ExpandedCompanyCard({ company }: ExpandedCompanyCardProps) {
 
         {/* BOTÕES DE AÇÃO */}
         <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/company/${company.id}`)}
-          >
-            <Building2 className="h-4 w-4 mr-2" />
-            Ver Detalhes Completos
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => navigate(`/account-strategy/${company.id}`)}
-          >
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Criar Estratégia
-          </Button>
+          {/* ✅ USAR company_id se disponível (empresa já aprovada), senão usar id da quarentena */}
+          {(() => {
+            const targetId = (company as any)?.company_id || company.id;
+            if (!targetId) return null;
+            
+            return (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // ✅ VALIDAR SE company_id EXISTE ANTES DE NAVEGAR
+                    if ((company as any)?.company_id) {
+                      navigate(`/company/${targetId}`);
+                    } else {
+                      // Se não tem company_id, empresa ainda não foi aprovada
+                      navigate(`/leads/icp-quarantine`);
+                    }
+                  }}
+                >
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Ver Detalhes Completos
+                </Button>
+                {(company as any)?.company_id && (
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/account-strategy/${targetId}`)}
+                  >
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Criar Estratégia
+                  </Button>
+                )}
+              </>
+            );
+          })()}
         </div>
 
       </CardContent>

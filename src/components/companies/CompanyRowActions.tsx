@@ -15,7 +15,6 @@ import {
   Search,
   Building2,
   Sparkles,
-  Zap,
   Trash2,
   ExternalLink,
   Loader2,
@@ -33,7 +32,6 @@ interface CompanyRowActionsProps {
   onEnrichReceita: () => Promise<void>;
   onEnrich360: () => Promise<void>;
   onEnrichApollo: () => Promise<void>;
-  onEnrichEconodata: () => Promise<void>;
   onDiscoverCNPJ?: () => void;
 }
 
@@ -43,7 +41,6 @@ export function CompanyRowActions({
   onEnrichReceita,
   onEnrich360,
   onEnrichApollo,
-  onEnrichEconodata,
   onDiscoverCNPJ
 }: CompanyRowActionsProps) {
   const navigate = useNavigate();
@@ -66,13 +63,11 @@ export function CompanyRowActions({
 
   const isDisabled = (action: string) => {
     if (action === 'receita' && !company.cnpj) return true;
-    if (action === 'econodata' && !company.cnpj) return true;
     return false;
   };
 
   const getTooltip = (action: string) => {
     if (action === 'receita' && !company.cnpj) return 'Requer CNPJ';
-    if (action === 'econodata' && !company.cnpj) return 'Requer CNPJ';
     return '';
   };
 
@@ -171,21 +166,6 @@ export function CompanyRowActions({
             <img src={apolloIcon} alt="Apollo" className="h-4 w-4 mr-2" />
           )}
           Apollo (Decisores)
-        </DropdownMenuItem>
-
-        {/* Eco-Booster */}
-        <DropdownMenuItem
-          onClick={() => handleEnrich('Eco-Booster', onEnrichEconodata)}
-          disabled={isDisabled('econodata') || isEnriching}
-          className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-        >
-          {enrichingAction === 'Eco-Booster' ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Zap className="h-4 w-4 mr-2" />
-          )}
-          Eco-Booster
-          {getTooltip('econodata') && <span className="ml-auto text-xs text-muted-foreground">{getTooltip('econodata')}</span>}
         </DropdownMenuItem>
 
         {/* 360° Completo */}

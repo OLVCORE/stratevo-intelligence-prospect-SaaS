@@ -34,12 +34,39 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
   const [costInfo, setCostInfo] = useState<{ tokens: any; cost: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Carregar histórico ao abrir modal
+  // Carregar histórico ao abrir modal (em background, não bloqueia)
   useEffect(() => {
-    if (open && messages.length === 0) {
+    if (open) {
+      // Permitir perguntas IMEDIATAMENTE ao abrir - SEM DELAY
+      setInitialCheckDone(true);
+      
+      // Carregar histórico em background (não bloqueia)
+      if (messages.length === 0) {
       loadConversationHistory();
+      }
+      
+      // Focar no input IMEDIATAMENTE (sem delay)
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select();
+          console.log('[STCAgent] ✅ Input focado via ref');
+        } else {
+          const input = document.querySelector('input[placeholder="Faça uma pergunta sobre a empresa..."]') as HTMLInputElement;
+          if (input) {
+            input.focus();
+            console.log('[STCAgent] ✅ Input focado via querySelector');
+          } else {
+            console.error('[STCAgent] ❌ Input não encontrado ainda');
+          }
+        }
+      }, 100); // ✅ REDUZIDO: 300ms → 100ms (mais rápido)
+    } else {
+      // Reset ao fechar
+      setInitialCheckDone(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -65,12 +92,18 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
         setMessages(loadedMessages);
         setInitialCheckDone(true);
       } else {
-        // Se não tem histórico, fazer check inicial
-        startInitialCheck();
+        // ✅ SEM BUSCA EXTERNA - apenas mensagem de boas-vindas
+        setMessages([{
+          role: 'agent',
+          content: `👋 Olá! Sou o STC Agent, seu assistente de análise inteligente.\n\n**Dados Disponíveis:**\n✅ Análise das 9 abas enriquecidas\n✅ Decisores já identificados\n✅ Análise Digital completa\n✅ Produtos TOTVS recomendados\n✅ Estratégia de abordagem\n\n**Pergunte sobre:**\n• Decisores da empresa\n• Momento de compra\n• Produtos TOTVS ideais\n• Estratégia de abordagem\n• Análise completa\n\nFaça sua pergunta abaixo! ⬇️`,
+          timestamp: new Date()
+        }]);
+        setInitialCheckDone(true);
       }
     } catch (err) {
       console.error('Error loading history:', err);
-      startInitialCheck();
+      // ✅ SEM BUSCA EXTERNA - apenas marcar como pronto
+      setInitialCheckDone(true);
     } finally {
       setLoadingHistory(false);
     }
@@ -78,7 +111,19 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
 
   const saveMessage = async (role: 'user' | 'agent', content: string, data?: any, metadata?: any) => {
     try {
-      await supabase
+      // Verificar se company_id existe antes de salvar
+      const { data: companyExists } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('id', companyId)
+        .single();
+      
+      if (!companyExists) {
+        console.warn('[STCAgent] ⚠️ Company ID não existe, não salvando conversa:', companyId);
+        return; // Não bloquear, apenas não salvar
+      }
+      
+      const { error } = await supabase
         .from('stc_agent_conversations')
         .insert({
           company_id: companyId,
@@ -87,8 +132,18 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
           data,
           metadata
         });
+      
+      if (error) {
+        // Erro 409 (Conflict) ou 23503 (foreign key) - não bloquear
+        if (error.code === '23505' || error.code === '23503' || error.message?.includes('409')) {
+          console.warn('[STCAgent] Mensagem não salva (duplicada ou FK inválida) - ignorando:', error.message);
+        } else {
+          console.error('[STCAgent] Error saving message:', error);
+        }
+      }
     } catch (err) {
-      console.error('Error saving message:', err);
+      console.error('[STCAgent] Error saving message:', err);
+      // Não bloquear a UI mesmo com erro ao salvar
     }
   };
 
@@ -154,68 +209,262 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
     };
   }, [open]);
 
-  const startInitialCheck = async () => {
-    setLoading(true);
+  // ❌ REMOVIDO: startInitialCheck - não precisa mais fazer buscas externas
+  // Os dados já estão enriquecidos nas 9 abas!
+  
+  // Função helper para análise local (fallback quando edge functions falharem)
+  const generateLocalAnalysis = (question: string, context: any, companyData: any): string => {
+    const questionLower = question.toLowerCase();
     
-    setMessages([{
-      role: 'agent',
-      content: '🔍 Iniciando verificação TOTVS...',
-      timestamp: new Date()
-    }]);
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('stc-agent', {
-        body: { 
-          companyId,
-          companyName, 
-          cnpj,
-          mode: 'initial_check'
-        }
+    // Análise de Decisores
+    if (questionLower.includes('decisor') || questionLower.includes('contato') || questionLower.includes('quem são')) {
+      const decisores = context.decisores || [];
+      if (decisores.length === 0) {
+        return '**Decisores**\n\n❌ Nenhum decisor identificado para esta empresa.\n\nVerifique a aba "Decisores" após o enriquecimento com Apollo.';
+      }
+      
+      let resposta = `**Decisores Identificados (${decisores.length})**\n\n`;
+      decisores.slice(0, 10).forEach((d: any, i: number) => {
+        resposta += `${i + 1}. **${d.nome}**\n`;
+        if (d.cargo) resposta += `   Cargo: ${d.cargo}\n`;
+        if (d.email) resposta += `   Email: ${d.email}\n`;
+        if (d.linkedin) resposta += `   LinkedIn: ${d.linkedin}\n`;
+        if (d.telefone) resposta += `   Telefone: ${d.telefone}\n`;
+        resposta += '\n';
       });
       
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Erro desconhecido');
+      if (decisores.length > 10) {
+        resposta += `\n... e mais ${decisores.length - 10} decisor(es).\n`;
+      }
       
-      const result = data.data;
-      const metadata = data.metadata;
+      return resposta;
+    }
+    
+    // Análise de Produtos TOTVS (200+ produtos no banco!)
+    if (questionLower.includes('produto') || questionLower.includes('totvs') || questionLower.includes('solução')) {
+      const produtos = context.produtos || [];
+      const produtosCount = context.produtos_count || produtos.length;
+      const usaTotvs = context.totvs?.usaTotvs || false;
       
-      // Salvar info de custo
-      if (metadata?.tokens) {
-        setCostInfo({
-          tokens: metadata.tokens,
-          cost: metadata.estimatedCost
+      let resposta = `**Análise de Produtos TOTVS**\n\n`;
+      
+      if (usaTotvs) {
+        resposta += `✅ **Usa TOTVS** (Confiança: ${context.totvs?.confianca || 0}%)\n\n`;
+      } else {
+        resposta += `❌ **Não confirmado uso de TOTVS**\n\n`;
+      }
+      
+      if (produtosCount > 0) {
+        resposta += `**Produtos Recomendados (${produtosCount} do catálogo de 200+):**\n\n`;
+        produtos.slice(0, 10).forEach((p: any, i: number) => {
+          resposta += `${i + 1}. **${typeof p === 'string' ? p : p.name || p.nome || p.sku || p}**\n`;
+          if (p.description || p.descricao) resposta += `   ${(p.description || p.descricao).substring(0, 100)}...\n`;
+          if (p.recommendation_score || p.score) resposta += `   Score: ${p.recommendation_score || p.score}\n`;
+          if (p.reason) resposta += `   Motivo: ${p.reason}\n`;
+          resposta += `\n`;
+        });
+        
+        if (produtosCount > 10) {
+          resposta += `\n... e mais ${produtosCount - 10} produto(s) recomendado(s) do catálogo.\n`;
+        }
+      } else {
+        resposta += `💡 **Produtos sugeridos:** Baseado no setor e porte, considere produtos TOTVS para ${context.empresa.setor || 'este segmento'}.\n`;
+        resposta += `📚 Catálogo disponível com 200+ produtos TOTVS.\n`;
+      }
+      
+      return resposta;
+    }
+    
+    // Análise de Similar Companies
+    if (questionLower.includes('similar') || questionLower.includes('empresas similares')) {
+      const similar = context.similar || [];
+      const similarCount = context.similar_count || similar.length;
+      
+      if (similarCount === 0) {
+        return '**Empresas Similares**\n\n❌ Nenhuma empresa similar identificada ainda.\n\nComplete a aba "Similar" para análise de empresas similares.';
+      }
+      
+      let resposta = `**Empresas Similares (${similarCount})**\n\n`;
+      similar.slice(0, 10).forEach((s: any, i: number) => {
+        resposta += `${i + 1}. **${s.nome}**\n`;
+        if (s.score) resposta += `   Score de Similaridade: ${s.score}\n`;
+        if (s.location) resposta += `   Localização: ${s.location}\n`;
+        if (s.employees_min || s.employees_max) {
+          resposta += `   Funcionários: ${s.employees_min || '?'}-${s.employees_max || '?'}\n`;
+        }
+        if (s.source) resposta += `   Fonte: ${s.source}\n`;
+        resposta += `\n`;
+      });
+      
+      if (similarCount > 10) {
+        resposta += `\n... e mais ${similarCount - 10} empresa(s) similar(es).\n`;
+      }
+      
+      return resposta;
+    }
+    
+    // Análise de Clients
+    if (questionLower.includes('client') || questionLower.includes('clientes')) {
+      const clientes = context.clientes || [];
+      const clientesCount = context.clientes_count || clientes.length;
+      
+      if (clientesCount === 0) {
+        return '**Clientes**\n\n❌ Nenhum cliente identificado ainda.\n\nComplete a aba "Clients" para análise de clientes da empresa.';
+      }
+      
+      let resposta = `**Clientes Identificados (${clientesCount})**\n\n`;
+      clientes.slice(0, 10).forEach((c: any, i: number) => {
+        resposta += `${i + 1}. **${c.nome}**\n`;
+        if (c.tipo) resposta += `   Tipo: ${c.tipo}\n`;
+        if (c.valor) resposta += `   Valor: R$ ${c.valor.toLocaleString('pt-BR')}\n`;
+        if (c.status) resposta += `   Status: ${c.status}\n`;
+        resposta += `\n`;
+      });
+      
+      if (clientesCount > 10) {
+        resposta += `\n... e mais ${clientesCount - 10} cliente(s).\n`;
+      }
+      
+      return resposta;
+    }
+    
+    // Análise de Competitors
+    if (questionLower.includes('competidor') || questionLower.includes('concorrente')) {
+      const competidores = context.competidores || [];
+      const competidoresCount = context.competidores_count || competidores.length;
+      
+      if (competidoresCount === 0) {
+        return '**Concorrentes**\n\n❌ Nenhum concorrente identificado ainda.\n\nComplete a aba "Competitors" para análise de concorrentes TOTVS.';
+      }
+      
+      let resposta = `**Concorrentes TOTVS Identificados (${competidoresCount})**\n\n`;
+      competidores.slice(0, 10).forEach((c: any, i: number) => {
+        resposta += `${i + 1}. **${c.nome}**\n`;
+        if (c.categoria) resposta += `   Categoria: ${c.categoria}\n`;
+        if (c.posicao_mercado) resposta += `   Posição: ${c.posicao_mercado}\n`;
+        if (c.vantagens_totvs?.length > 0) {
+          resposta += `   ✅ Vantagens TOTVS: ${c.vantagens_totvs.slice(0, 3).join(', ')}\n`;
+        }
+        resposta += `\n`;
+      });
+      
+      if (competidoresCount > 10) {
+        resposta += `\n... e mais ${competidoresCount - 10} concorrente(s).\n`;
+      }
+      
+      return resposta;
+    }
+    
+    // Análise de Momento de Compra / Estratégia
+    if (questionLower.includes('momento') || questionLower.includes('compra') || questionLower.includes('estratégia') || questionLower.includes('abordagem')) {
+      const temperatura = context.icp?.temperatura || 'N/A';
+      const icpScore = context.icp?.score || 0;
+      
+      let resposta = `**Momento de Compra e Estratégia**\n\n`;
+      resposta += `🌡️ **Temperatura:** ${temperatura}\n`;
+      resposta += `📊 **ICP Score:** ${icpScore}/100\n\n`;
+      
+      if (temperatura === 'Hot' || icpScore > 70) {
+        resposta += `✅ **Momento Ideal:** Empresa com alta probabilidade de compra.\n\n`;
+        resposta += `**Estratégia Recomendada:**\n`;
+        resposta += `- Abordagem direta via LinkedIn dos decisores\n`;
+        resposta += `- Apresentação de casos de sucesso do setor\n`;
+        resposta += `- Foco em ROI e resultados rápidos\n`;
+      } else if (temperatura === 'Warm' || icpScore > 40) {
+        resposta += `🟡 **Momento Moderado:** Empresa com potencial, requer nutrição.\n\n`;
+        resposta += `**Estratégia Recomendada:**\n`;
+        resposta += `- Envio de conteúdo educacional\n`;
+        resposta += `- Build relationship com decisores\n`;
+        resposta += `- Acompanhamento trimestral\n`;
+      } else {
+        resposta += `🔵 **Momento Frio:** Requer trabalho de educação e relacionamento.\n\n`;
+        resposta += `**Estratégia Recomendada:**\n`;
+        resposta += `- Newsletter mensal\n`;
+        resposta += `- Webinars e eventos\n`;
+        resposta += `- Acompanhamento de sinais de compra\n`;
+      }
+      
+      return resposta;
+    }
+    
+    // Análise Digital / URLs
+    if (questionLower.includes('digital') || questionLower.includes('url') || questionLower.includes('site') || questionLower.includes('web')) {
+      const urls = context.digital?.urls || [];
+      
+      if (urls.length === 0) {
+        return '**Análise Digital**\n\n❌ Nenhuma URL analisada ainda.\n\nComplete a aba "Digital" para análise profunda de URLs.';
+      }
+      
+      let resposta = `**Análise Digital Completa (${urls.length} URLs)**\n\n`;
+      
+      urls.slice(0, 10).forEach((url: any, i: number) => {
+        resposta += `${i + 1}. **${url.titulo || url.url}**\n`;
+        resposta += `   🔗 ${url.url}\n`;
+        if (url.descricao) resposta += `   📝 ${url.descricao.substring(0, 150)}...\n`;
+        if (url.palavras_chave?.length > 0) {
+          resposta += `   🔑 Keywords: ${url.palavras_chave.slice(0, 5).join(', ')}\n`;
+        }
+        if (url.conteudo) {
+          resposta += `   📄 Análise: ${url.conteudo.substring(0, 200)}...\n`;
+        }
+        resposta += `\n`;
+      });
+      
+      if (urls.length > 10) {
+        resposta += `\n... e mais ${urls.length - 10} URL(s) analisada(s).\n`;
+      }
+      
+      if (context.digital?.tecnologias?.length > 0) {
+        resposta += `\n**Tecnologias Identificadas:**\n`;
+        context.digital.tecnologias.slice(0, 10).forEach((tech: any) => {
+          resposta += `- ${typeof tech === 'string' ? tech : tech.nome || tech}\n`;
         });
       }
       
-      // Formatar mensagem de resposta
-      let responseText = `## 📊 Análise Inicial Concluída\n\n`;
-      responseText += `**Status:** ${result.status || 'N/A'}\n`;
-      responseText += `**Confiança:** ${result.confidence || 'N/A'}\n`;
-      responseText += `**Score:** ${result.totalScore || 0} pts\n`;
-      responseText += `**Matches:** 🎯 ${result.tripleMatches || 0} Triple | 🔍 ${result.doubleMatches || 0} Double\n\n`;
-      responseText += `### 💡 Análise\n${result.quickAnalysis || 'Análise não disponível'}\n\n`;
-      responseText += `### 🎯 Recomendação\n${result.recommendation || 'Recomendação não disponível'}`;
-      
-      setMessages([{
-        role: 'agent',
-        content: responseText,
-        data: result,
-        timestamp: new Date()
-      }]);
-      
-      // Salvar mensagem do agente
-      await saveMessage('agent', responseText, result, metadata);
-      
-      setInitialCheckDone(true);
-    } catch (err: any) {
-      setMessages([{
-        role: 'agent',
-        content: `❌ **Erro na análise**\n\n${err.message}\n\nTente novamente ou reformule a consulta.`,
-        timestamp: new Date()
-      }]);
-    } finally {
-      setLoading(false);
+      return resposta;
     }
+    
+    // Resposta padrão (análise geral)
+    let resposta = `**Análise Geral da Empresa**\n\n`;
+    resposta += `**Empresa:** ${context.empresa.nome}\n`;
+    if (context.empresa.cnpj) resposta += `**CNPJ:** ${context.empresa.cnpj}\n`;
+    if (context.empresa.setor) resposta += `**Setor:** ${context.empresa.setor}\n`;
+    if (context.empresa.porte) resposta += `**Porte:** ${context.empresa.porte}\n`;
+    
+    // ✅ Incluir análise de descrição e mercado (da aba TOTVS)
+    if (context.totvs?.analise_descricao) {
+      resposta += `\n**📝 Análise de Descrição:**\n${context.totvs.analise_descricao.substring(0, 300)}...\n`;
+    }
+    if (context.totvs?.analise_mercado) {
+      resposta += `\n**🏭 Análise de Mercado:**\n${context.totvs.analise_mercado.substring(0, 300)}...\n`;
+    }
+    if (context.totvs?.palavras_chave?.length > 0) {
+      resposta += `\n**🔑 Palavras-chave:** ${context.totvs.palavras_chave.slice(0, 10).join(', ')}\n`;
+    }
+    
+    resposta += `\n📊 **Resumo das 9 Abas:**\n`;
+    resposta += `\n**1. TOTVS:** ${context.totvs?.usaTotvs ? '✅ Usa' : '❌ Não confirmado'} (${context.totvs?.confianca || 0}% confiança)\n`;
+    resposta += `**2. Decisores:** ${context.decisores.length} identificados\n`;
+    resposta += `**3. Digital:** ${context.digital?.urls_count || 0} URLs analisadas\n`;
+    resposta += `**4. Similar:** ${context.similar_count || 0} empresas similares\n`;
+    resposta += `**5. Clients:** ${context.clientes_count || 0} clientes\n`;
+    resposta += `**6. Competitors:** ${context.competidores_count || 0} concorrentes\n`;
+    resposta += `**7. 360°:** Score ${context.icp?.score || 0}/100 (${context.icp?.temperatura || 'N/A'})\n`;
+    resposta += `**8. Products:** ${context.produtos_count || 0} produtos recomendados (200+ no catálogo)\n`;
+    resposta += `**9. Executive:** ${context.executivo?.resumo ? '✅ Resumo disponível' : '❌ Não disponível'}\n`;
+    
+    resposta += `\n💡 **Dica:** Faça perguntas específicas sobre:\n`;
+    resposta += `- "Quem são os decisores?"\n`;
+    resposta += `- "Quais produtos TOTVS recomendar?" (200+ no catálogo)\n`;
+    resposta += `- "Quais são os concorrentes?"\n`;
+    resposta += `- "Quem são os clientes?"\n`;
+    resposta += `- "Quais empresas são similares?"\n`;
+    resposta += `- "Qual o momento de compra?"\n`;
+    resposta += `- "Como abordar esta empresa?"\n`;
+    resposta += `- "O que encontraram nas URLs digitais?"\n`;
+    resposta += `- "Análise de mercado da empresa"\n`;
+    
+    return resposta;
   };
 
   const sendMessage = async () => {
@@ -223,6 +472,11 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
     
     const userMessage = userInput.trim();
     setUserInput('');
+    
+    // Marcar como done para permitir perguntas imediatas
+    if (!initialCheckDone) {
+      setInitialCheckDone(true);
+    }
     
     // Adicionar mensagem do usuário
     setMessages(prev => [...prev, {
@@ -244,47 +498,525 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
     }]);
     
     try {
-      const { data, error } = await supabase.functions.invoke('stc-agent', {
-        body: { 
-          companyId,
-          companyName, 
-          cnpj,
-          mode: 'deep_analysis',
-          userQuestion: userMessage,
-          conversationHistory: messages.slice(-6).map(m => ({
-            role: m.role === 'user' ? 'user' : 'assistant',
-            content: m.content
-          }))
+      // ✅ NOVO: Buscar dados já enriquecidos da empresa (9 abas)
+      console.log('[STCAgent] 📊 Buscando dados enriquecidos da empresa...', { companyId });
+      
+      // Buscar empresa e decisores separadamente (Supabase não suporta nested selects assim)
+      // Se companyId não existir em companies, pode ser um ID de quarentena - tentar buscar
+      let companyData = null;
+      let companyError = null;
+      
+      const { data, error } = await supabase
+        .from('companies')
+        .select('*, raw_data')
+        .eq('id', companyId)
+        .maybeSingle(); // ✅ maybeSingle ao invés de single (não erro se não encontrar)
+      
+      if (data) {
+        companyData = data;
+      } else if (error) {
+        console.warn('[STCAgent] ⚠️ Empresa não encontrada em companies, tentando quarentena...', error);
+        // Se não encontrar, pode ser que seja um ID de quarentena - buscar via company_id
+        const { data: quarantineData } = await supabase
+          .from('quarantine_companies')
+          .select('*, raw_data')
+          .eq('id', companyId)
+          .maybeSingle();
+        
+        if (quarantineData) {
+          // Usar dados da quarentena se não tiver company_id
+          companyData = {
+            id: quarantineData.company_id || quarantineData.id,
+            name: quarantineData.razao_social,
+            cnpj: quarantineData.cnpj,
+            raw_data: quarantineData.raw_data || {}
+          };
+        } else {
+          throw new Error(`Empresa não encontrada (ID: ${companyId})`);
         }
+      }
+      
+      if (!companyData) {
+        throw new Error(`Empresa não encontrada (ID: ${companyId})`);
+      }
+      
+      // Buscar decisores separadamente (usar ID da empresa real, não quarentena)
+      const realCompanyId = companyData.id || companyData.company_id || companyId;
+      console.log('[STCAgent] 🔍 Buscando decisores para company_id:', realCompanyId);
+      
+      // Buscar decisores (sem order por coluna que pode não existir)
+      const { data: decisionMakers, error: decisoresError } = await supabase
+        .from('decision_makers')
+        .select('*')
+        .eq('company_id', realCompanyId);
+      
+      if (decisoresError) {
+        console.warn('[STCAgent] ⚠️ Erro ao buscar decisores (continuando sem eles):', decisoresError);
+      }
+      
+      // Adicionar decisores ao companyData
+      const enrichedCompanyData = {
+        ...companyData,
+        decision_makers: decisionMakers || []
+      };
+      
+      // ✅ NOVO: Usar edge function que analisa dados INTERNOS (não busca externa)
+      // Esta função usa apenas os dados já enriquecidos das 9 abas!
+      console.log('[STCAgent] 📊 Enviando pergunta com dados internos...');
+      
+      // Buscar dados das 9 abas (mesmo que a edge function precise)
+      // realCompanyId já foi definido acima na linha 289
+      
+      // ✅ Buscar Relatório TOTVS COMPLETO (com análise profunda, descrição, mercado, keywords)
+      // Tratar caso a tabela não exista (PGRST205) ou erro de cache
+      let totvsCheck: any = null;
+      try {
+        const { data, error } = await supabase
+          .from('simple_totvs_checks')
+          .select('*')
+          .eq('company_id', realCompanyId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!error) {
+          totvsCheck = data;
+        } else if (error.code !== 'PGRST116' && error.code !== 'PGRST205') {
+          console.warn('[STCAgent] ⚠️ Erro ao buscar TOTVS check:', error);
+        }
+      } catch (err) {
+        // Tabela não existe ou erro de cache - continuar sem ela
+        console.debug('[STCAgent] ℹ️ Tabela simple_totvs_checks não disponível');
+      }
+      
+      // ✅ Buscar Relatório Completo TOTVS (com full_report)
+      const { data: totvsReport, error: totvsReportError } = await supabase
+        .from('icp_analysis_results')
+        .select('full_report')
+        .eq('company_id', realCompanyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (totvsReportError && totvsReportError.code !== 'PGRST116') {
+        console.warn('[STCAgent] ⚠️ Erro ao buscar TOTVS report:', totvsReportError);
+      }
+      
+      // ✅ Buscar ICP Analysis COMPLETO (com análise de mercado, descrição, keywords)
+      const { data: icpData, error: icpError } = await supabase
+        .from('icp_analysis_results')
+        .select('*')
+        .eq('company_id', realCompanyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (icpError && icpError.code !== 'PGRST116') {
+        console.warn('[STCAgent] ⚠️ Erro ao buscar ICP analysis:', icpError);
+      }
+      
+      // ✅ Buscar Análise Digital COMPLETA (com URLs analisadas profundamente)
+      const { data: digitalAnalysis, error: digitalError } = await supabase
+        .from('digital_maturity')
+        .select('*')
+        .eq('company_id', realCompanyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (digitalError && digitalError.code !== 'PGRST116') {
+        console.warn('[STCAgent] ⚠️ Erro ao buscar digital analysis:', digitalError);
+      }
+      
+      // ✅ Buscar SIMILAR COMPANIES (Aba Similar)
+      let similarCompanies: any[] = [];
+      try {
+        const { data, error } = await supabase
+          .from('similar_companies')
+          .select('*')
+          .eq('company_id', realCompanyId)
+          .order('similarity_score', { ascending: false })
+          .limit(20);
+        
+        if (!error && data) {
+          similarCompanies = data;
+        } else if (error && error.code !== 'PGRST116' && error.code !== 'PGRST205' && error.code !== '42703') {
+          console.warn('[STCAgent] ⚠️ Erro ao buscar similar companies:', error);
+        }
+      } catch (err) {
+        // Tabela não existe ou coluna não existe - continuar sem ela
+        console.debug('[STCAgent] ℹ️ Tabela similar_companies não disponível ou estrutura diferente');
+      }
+      
+      // ✅ Buscar COMPETITORS (Aba Competitors)
+      // Usar competitor_stc_matches (relaciona empresas com competidores) em vez de competitors (tabela geral)
+      let competitors: any[] = [];
+      try {
+        const { data: competitorMatches, error: competitorsError } = await supabase
+          .from('competitor_stc_matches')
+          .select('*')
+          .eq('company_id', realCompanyId)
+          .order('confidence', { ascending: false })
+          .limit(20);
+        
+        if (!competitorsError && competitorMatches) {
+          competitors = competitorMatches.map((m: any) => ({
+            name: m.competitor_name,
+            match_type: m.match_type,
+            confidence: m.confidence,
+            evidence: m.evidence,
+            source_url: m.source_url,
+            source_title: m.source_title
+          }));
+        } else if (competitorsError && competitorsError.code !== 'PGRST116' && competitorsError.code !== 'PGRST205') {
+          console.warn('[STCAgent] ⚠️ Erro ao buscar competitors:', competitorsError);
+        }
+      } catch (err) {
+        // Tabela não existe - continuar sem ela
+        console.debug('[STCAgent] ℹ️ Tabela competitor_stc_matches não disponível');
+      }
+      
+      // ✅ Buscar CLIENTS (Aba Clients)
+      // Tabela 'clients' não existe - usar dados de similar_companies ou raw_data
+      let finalClients: any[] = [];
+      try {
+        // Tentar buscar de similar_companies (pode ter relationship_type no futuro)
+        const { data: similarAsClients } = await supabase
+          .from('similar_companies')
+          .select('*')
+          .eq('company_id', realCompanyId)
+          .limit(20);
+        
+        if (similarAsClients && similarAsClients.length > 0) {
+          finalClients = similarAsClients;
+        }
+      } catch (err) {
+        // Continuar sem clients se não houver dados
+        console.debug('[STCAgent] ℹ️ Dados de clients não disponíveis');
+      }
+      
+      // ✅ Buscar EXECUTIVE SUMMARY (Aba Executive)
+      let executiveData: any = null;
+      try {
+        const { data, error } = await supabase
+          .from('executive_summaries')
+          .select('*')
+          .eq('company_id', realCompanyId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!error) {
+          executiveData = data;
+        } else if (error.code !== 'PGRST116' && error.code !== 'PGRST205') {
+          console.warn('[STCAgent] ⚠️ Erro ao buscar executive summary:', error);
+        }
+      } catch (err) {
+        // Tabela não existe - continuar sem ela
+        console.debug('[STCAgent] ℹ️ Tabela executive_summaries não disponível');
+      }
+      
+      // ✅ Preparar dados ENRIQUECIDOS das 3 abas principais
+      const rawData = enrichedCompanyData?.raw_data || {};
+      const fullReport = totvsReport?.full_report || icpData?.full_report || {};
+      const digitalIntel = rawData?.digital_intelligence || {};
+      
+      // ✅ Buscar PRODUCT RECOMMENDATIONS (Aba Products) - Mais de 200 produtos no banco!
+      // Tabela 'product_recommendations' não existe ainda - usar dados de raw_data/full_report
+      let recommendedProducts: any[] = [];
+      
+      // Extrair análise TOTVS completa (da aba TOTVS) - declarar uma única vez
+      const totvsAnalysis = fullReport?.TOTVS || fullReport?.totvs || {};
+      
+      recommendedProducts = rawData?.totvs_products || totvsAnalysis?.produtos || rawData?.product_recommendations || [];
+      
+      // Se não encontrou produtos, tentar extrair do TOTVS check
+      if (recommendedProducts.length === 0 && totvsCheck?.evidences) {
+        const detectedProducts = new Set<string>();
+        (totvsCheck.evidences || []).forEach((ev: any) => {
+          if (ev.detected_products && Array.isArray(ev.detected_products)) {
+            ev.detected_products.forEach((p: string) => detectedProducts.add(p));
+          }
+        });
+        recommendedProducts = Array.from(detectedProducts).map((p: string) => ({ name: p, category: 'TOTVS' }));
+      }
+      
+      // Extrair análise profunda das URLs (da aba Digital)
+      const urlsAnalisadas = digitalIntel.urls || rawData?.digital_urls || [];
+      const urlsDetalhadas = urlsAnalisadas.map((url: any) => ({
+        url: typeof url === 'string' ? url : url.url || url,
+        titulo: url.titulo || url.title || '',
+        descricao: url.descricao || url.description || '',
+        conteudo: url.conteudo || url.content || url.analise || '',
+        palavras_chave: url.palavras_chave || url.keywords || [],
+        relevancia: url.relevancia || url.relevance || 0,
+        tipo: url.tipo || url.type || ''
+      }));
+      
+      // ✅ totvsAnalysis já foi declarado acima - usar diretamente aqui
+      const totvsDescription = totvsAnalysis.description || totvsAnalysis.analise_descricao || rawData?.totvs_analise_descricao || '';
+      const totvsKeywords = totvsAnalysis.keywords || totvsAnalysis.palavras_chave || rawData?.totvs_keywords || [];
+      const totvsMarket = totvsAnalysis.market || totvsAnalysis.mercado || rawData?.totvs_market_analysis || '';
+      
+      const intelligenceContext = {
+        empresa: {
+          nome: enrichedCompanyData?.name || companyName,
+          cnpj: enrichedCompanyData?.cnpj || cnpj,
+          setor: enrichedCompanyData?.industry || rawData?.setor_amigavel || rawData?.atividade_economica,
+          porte: enrichedCompanyData?.employees_count || rawData?.porte_estimado,
+          website: enrichedCompanyData?.website || rawData?.melhor_site,
+          descricao: enrichedCompanyData?.description || rawData?.descricao || totvsDescription,
+          mercado: totvsMarket || icpData?.market_analysis || '',
+          palavras_chave: totvsKeywords.length > 0 ? totvsKeywords : rawData?.keywords || [],
+        },
+        decisores: (decisionMakers || []).map((d: any) => ({
+          nome: d.name || d.full_name,
+          cargo: d.title || d.role,
+          email: d.email,
+          linkedin: d.linkedin_url,
+          telefone: d.phone,
+          departamento: d.department,
+          seniority: d.seniority || d.seniority_level,
+        })),
+        totvs: {
+          usaTotvs: totvsCheck?.status === 'confirmed',
+          confianca: totvsCheck?.confidence_percent || 0,
+          produtos: rawData?.totvs_products || totvsAnalysis?.produtos || [],
+          // ✅ DADOS COMPLETOS DA ABA TOTVS
+          analise_descricao: totvsDescription,
+          palavras_chave: totvsKeywords,
+          analise_mercado: totvsMarket,
+          evidencias: totvsCheck?.evidences || [],
+          triple_matches: totvsCheck?.triple_matches || 0,
+          double_matches: totvsCheck?.double_matches || 0,
+          single_matches: totvsCheck?.single_matches || 0,
+          relatorio_completo: fullReport?.TOTVS || {},
+        },
+        digital: {
+          // ✅ URLs ANALISADAS PROFUNDAMENTE (da aba Digital)
+          urls: urlsDetalhadas,
+          urls_count: urlsDetalhadas.length,
+          tecnologias: digitalIntel.tecnologias || rawData?.tecnologias || [],
+          redes_sociais: {
+            linkedin: digitalIntel.linkedin_url || rawData?.linkedin_url,
+            facebook: digitalIntel.facebook || rawData?.facebook,
+            instagram: digitalIntel.instagram || rawData?.instagram,
+            twitter: digitalIntel.twitter || rawData?.twitter,
+          },
+          digital_maturity: digitalAnalysis?.maturity_score || 0,
+          keywords_seo: digitalIntel.keywords || rawData?.keywords_seo || [],
+          analise_completa: digitalAnalysis || digitalIntel.analise_completa || {},
+        },
+        icp: {
+          score: icpData?.icp_score || 0,
+          temperatura: icpData?.temperatura,
+          pain_points: icpData?.pain_points || rawData?.pain_points || [],
+          oportunidades: icpData?.opportunities || rawData?.opportunities || [],
+          market_analysis: icpData?.market_analysis || '',
+          recomendacoes: icpData?.recomendacoes || [],
+        },
+        // ✅ ABA PRODUCTS - Produtos Recomendados (200+ produtos no banco)
+        produtos: recommendedProducts || rawData?.totvs_products || totvsAnalysis?.produtos || [],
+        produtos_count: recommendedProducts?.length || 0,
+        
+        // ✅ ABA SIMILAR - Empresas Similares
+        similar: (similarCompanies || []).map((s: any) => ({
+          nome: s.similar_name || s.name,
+          score: s.similarity_score || s.score,
+          location: s.location,
+          employees_min: s.employees_min,
+          employees_max: s.employees_max,
+          source: s.source,
+        })),
+        similar_count: similarCompanies?.length || 0,
+        
+        // ✅ ABA CLIENTS - Clientes da Empresa
+        clientes: (finalClients || []).map((c: any) => ({
+          nome: c.client_name || c.name || c.similar_name,
+          tipo: c.client_type || c.type || c.relationship_type,
+          valor: c.deal_value || c.value,
+          status: c.status,
+          source: c.source,
+        })),
+        clientes_count: finalClients?.length || 0,
+        
+        // ✅ ABA COMPETITORS - Concorrentes TOTVS
+        competidores: (competitors || []).map((c: any) => ({
+          nome: c.name || c.competitor_name,
+          categoria: c.category,
+          posicao_mercado: c.market_position,
+          forcas: c.strengths || [],
+          fraquezas: c.weaknesses || [],
+          vantagens_totvs: c.totvs_advantages || [],
+          relevancia: c.relevance_score || c.score,
+        })),
+        competidores_count: competitors?.length || 0,
+        
+        // ✅ ABA EXECUTIVE - Resumo Executivo
+        executivo: {
+          resumo: executiveData?.summary || executiveData?.resumo || fullReport?.Executive?.summary || '',
+          principais_insights: executiveData?.key_insights || executiveData?.insights || [],
+          recomendacoes: executiveData?.recommendations || executiveData?.recomendacoes || [],
+          score_overall: executiveData?.overall_score || icpData?.icp_score || 0,
+        },
+        
+        // ✅ Incluir full_report completo para análise profunda
+        full_report: fullReport || {},
+      };
+      
+      console.log('[STCAgent] 📊 Contexto enriquecido das 9 ABAS:', {
+        // Aba 1: TOTVS
+        totvs_status: intelligenceContext.totvs.usaTotvs,
+        totvs_analise_descricao: !!intelligenceContext.totvs.analise_descricao,
+        totvs_keywords: intelligenceContext.totvs.palavras_chave.length,
+        totvs_mercado: !!intelligenceContext.totvs.analise_mercado,
+        
+        // Aba 2: Decisores
+        decisores: intelligenceContext.decisores.length,
+        
+        // Aba 3: Digital
+        urls_analisadas: intelligenceContext.digital.urls_count,
+        
+        // Aba 4: Similar
+        similar_count: intelligenceContext.similar_count,
+        
+        // Aba 5: Clients
+        clientes_count: intelligenceContext.clientes_count,
+        
+        // Aba 6: Competitors
+        competidores_count: intelligenceContext.competidores_count,
+        
+        // Aba 7: 360°
+        icp_score: intelligenceContext.icp.score,
+        temperatura: intelligenceContext.icp.temperatura,
+        
+        // Aba 8: Products
+        produtos_count: intelligenceContext.produtos_count,
+        
+        // Aba 9: Executive
+        executivo_resumo: !!intelligenceContext.executivo.resumo,
       });
       
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || 'Erro desconhecido');
+      // Tentar usar edge function, se falhar usar fallback no frontend
+      let aiResponse = '';
+      let metadata: any = {};
       
-      const result = data.data;
-      const metadata = data.metadata;
-      
-      // Atualizar info de custo
-      if (metadata?.tokens) {
-        setCostInfo({
-          tokens: metadata.tokens,
-          cost: metadata.estimatedCost
+      try {
+        const { data, error } = await supabase.functions.invoke('stc-agent-internal', {
+        body: { 
+            companyId: realCompanyId,
+          companyName, 
+          cnpj,
+            question: userMessage,
+            companyData: enrichedCompanyData || null,
+          }
         });
+        
+        if (!error && data?.success) {
+          aiResponse = data.response || 'Resposta não disponível';
+          metadata = data.metadata || {};
+        } else {
+          throw new Error('Edge function não disponível, usando fallback');
+        }
+      } catch (edgeError) {
+        console.warn('[STCAgent] ⚠️ Edge function stc-agent-internal não disponível, usando fallback...', edgeError);
+        
+        // ✅ FALLBACK: Análise direta usando company-intelligence-chat (já existe e funciona)
+        try {
+          const { data: fallbackResponse, error: fallbackError } = await supabase.functions.invoke('company-intelligence-chat', {
+            body: {
+              companyId: realCompanyId,
+              question: userMessage,
+              companyData: {
+                ...enrichedCompanyData,
+                // Adicionar contexto das 9 abas já coletadas
+                intelligence: intelligenceContext,
+                // Passar dados extras para contexto
+                decisores: intelligenceContext.decisores,
+                totvs: intelligenceContext.totvs,
+                digital: intelligenceContext.digital,
+                icp: intelligenceContext.icp,
+                produtos: intelligenceContext.produtos,
+              }
+            }
+          });
+          
+          if (fallbackError) {
+            throw fallbackError;
+          }
+          
+          // A função company-intelligence-chat retorna { response: string }
+          if (!fallbackResponse || !fallbackResponse.response) {
+            throw new Error('Resposta vazia do fallback');
+          }
+          
+          aiResponse = fallbackResponse.response;
+          metadata = { model: 'gpt-4o-mini', source: 'fallback-company-intelligence-chat' };
+          
+          console.log('[STCAgent] ✅ Fallback funcionou!', { answerLength: aiResponse.length });
+        } catch (fallbackErr: any) {
+          console.error('[STCAgent] ❌ Fallback também falhou:', fallbackErr);
+          console.warn('[STCAgent] ⚠️ Todas as edge functions falharam, gerando resposta básica com dados coletados...');
+          
+          // ✅ FALLBACK FINAL: Análise local básica com os dados já coletados (sem IA)
+          aiResponse = generateLocalAnalysis(userMessage, intelligenceContext, enrichedCompanyData);
+          metadata = { model: 'local', source: 'fallback-local-analysis' };
+          
+          console.log('[STCAgent] ✅ Análise local gerada!');
+        }
       }
       
       // Remover mensagem de loading
       setMessages(prev => prev.slice(0, -1));
       
+      // Calcular stats das 9 ABAS
+      const stats = {
+        // Aba 1: TOTVS
+        totvs_status: intelligenceContext.totvs.usaTotvs,
+        totvs_confianca: intelligenceContext.totvs.confianca,
+        
+        // Aba 2: Decisores
+        decisores: intelligenceContext.decisores.length,
+        
+        // Aba 3: Digital
+        urlsDigitais: intelligenceContext.digital.urls_count || 0,
+        tecnologias: intelligenceContext.digital.tecnologias?.length || 0,
+        
+        // Aba 4: Similar
+        similar_count: intelligenceContext.similar_count || 0,
+        
+        // Aba 5: Clients
+        clientes_count: intelligenceContext.clientes_count || 0,
+        
+        // Aba 6: Competitors
+        competidores_count: intelligenceContext.competidores_count || 0,
+        
+        // Aba 7: 360°
+        icp_score: intelligenceContext.icp.score || 0,
+        temperatura: intelligenceContext.icp.temperatura,
+        
+        // Aba 8: Products
+        produtosTotvs: intelligenceContext.produtos_count || 0,
+        
+        // Aba 9: Executive
+        executivo_disponivel: !!intelligenceContext.executivo.resumo
+      };
+      
       // Adicionar resposta do agente
       setMessages(prev => [...prev, {
         role: 'agent',
-        content: result.answer || 'Resposta não disponível',
-        data: result,
+        content: aiResponse,
+        data: {
+          answer: aiResponse,
+          intelligence: intelligenceContext,
+          stats: stats,
+          ...intelligenceContext // Incluir decisores, notícias, tecnologias, etc.
+        },
         timestamp: new Date()
       }]);
       
       // Salvar resposta do agente
-      await saveMessage('agent', result.answer || 'Resposta não disponível', result, metadata);
+      await saveMessage('agent', aiResponse, { intelligence: intelligenceContext, stats }, metadata);
     } catch (err: any) {
       // Remover mensagem de loading
       setMessages(prev => prev.slice(0, -1));
@@ -528,10 +1260,11 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
     <>
       <Button 
         onClick={() => { 
+          console.log('[STCAgent] Abrindo dialog...');
           setOpen(true); 
-          if (!initialCheckDone && messages.length === 0) {
-            startInitialCheck();
-          }
+          // Permitir input imediatamente
+          setInitialCheckDone(true);
+          console.log('[STCAgent] Dialog aberto, initialCheckDone:', true);
         }}
         variant="outline"
         size="sm"
@@ -541,7 +1274,10 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
         <span className="text-[10px] font-medium leading-tight">STC</span>
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(newOpen) => {
+        console.log('[STCAgent] Dialog onOpenChange:', newOpen);
+        setOpen(newOpen);
+      }}>
         <DialogContent className="max-w-4xl h-[90vh] flex flex-col min-h-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
@@ -623,27 +1359,57 @@ export function STCAgent({ companyId, companyName, cnpj }: Props) {
             </div>
           </ScrollArea>
           
-          {/* Input */}
+          {/* Input - SEMPRE DISPONÍVEL */}
           <div className="flex gap-2 pt-4 border-t">
-            <Input
+            <input
+              ref={inputRef}
+              type="text"
               placeholder="Faça uma pergunta sobre a empresa..."
               value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+              onChange={(e) => {
+                console.log('[STCAgent] Input onChange:', e.target.value, 'disabled:', loading);
+                if (!loading) {
+                  setUserInput(e.target.value);
+                }
+              }}
+              onKeyDown={(e) => {
+                console.log('[STCAgent] KeyDown:', e.key, 'value:', e.currentTarget.value, 'disabled:', loading);
+                if (e.key === 'Enter' && !e.shiftKey && !loading && userInput.trim()) {
+                  e.preventDefault();
+                  console.log('[STCAgent] Enter pressionado, enviando mensagem...');
+                  sendMessage();
+                }
+              }}
+              onFocus={(e) => {
+                console.log('[STCAgent] ✅ Input focado e pronto para digitar!');
+              }}
+              onBlur={(e) => {
+                console.log('[STCAgent] Input perdeu foco');
+              }}
               disabled={loading}
-              className="flex-1"
+              readOnly={loading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ 
+                pointerEvents: loading ? 'none' : 'auto',
+                cursor: loading ? 'not-allowed' : 'text',
+              }}
+              autoComplete="off"
             />
             <Button
               onClick={sendMessage}
               size="icon"
               disabled={loading || !userInput.trim()}
             >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
               <Send className="w-4 h-4" />
+              )}
             </Button>
           </div>
           
-          {/* Sugestões rápidas */}
-          {initialCheckDone && messages.length === 1 && (
+          {/* Sugestões rápidas - Mostrar sempre que houver espaço, não apenas após check inicial */}
+          {!loadingHistory && (
             <div className="flex flex-wrap gap-2 pt-2">
               <Button
                 variant="outline"

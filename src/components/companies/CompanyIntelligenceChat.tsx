@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Brain, Send, Loader2, Sparkles } from "lucide-react";
+import { Brain, Send, Loader2, Sparkles, Minimize2, Maximize2, X, Maximize } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -16,11 +16,15 @@ interface Message {
   content: string;
 }
 
+type ViewMode = 'minimized' | 'normal' | 'fullscreen';
+
 export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true); // Iniciar aberto quando renderizado
+  const [viewMode, setViewMode] = useState<ViewMode>('normal');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -67,6 +71,13 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
     }
   };
 
+  // Auto-scroll para última mensagem
+  useEffect(() => {
+    if (scrollRef.current && viewMode !== 'minimized') {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, viewMode]);
+
   const suggestedQuestions = [
     "Qual o perfil de decisor ideal para essa empresa?",
     "Quais são os principais concorrentes desta empresa?",
@@ -75,40 +86,132 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
     "Qual o potencial de negócio desta empresa?"
   ];
 
+  const handleToggleView = () => {
+    if (viewMode === 'normal') {
+      setViewMode('minimized');
+    } else if (viewMode === 'minimized') {
+      setViewMode('normal');
+    }
+  };
+
+  const handleFullscreen = () => {
+    if (viewMode === 'fullscreen') {
+      setViewMode('normal');
+    } else {
+      setViewMode('fullscreen');
+    }
+  };
+
   if (!isOpen) {
+    // Não mostrar botão flutuante - o chat é aberto via CompanyChatButton na tabela
+    return null;
+  }
+
+  const getCardClasses = () => {
+    const baseClasses = "fixed shadow-2xl border-2 border-primary/20 z-50";
+    
+    if (viewMode === 'fullscreen') {
+      return `${baseClasses} inset-4`;
+    } else if (viewMode === 'minimized') {
+      // Quando minimizado, ficar à direita mas acima do TREVO
+      return `${baseClasses} bottom-24 right-6 w-[350px] h-[100px]`;
+    } else {
+      // Quando aberto, ficar à esquerda para não sobrepor TREVO (bottom-right)
+      return `${baseClasses} bottom-6 left-6 w-[450px]`;
+    }
+  };
+
+  const getScrollAreaHeight = () => {
+    if (viewMode === 'fullscreen') {
+      return 'calc(100vh - 280px)';
+    } else if (viewMode === 'minimized') {
+      return '0px';
+    } else {
+      return '400px';
+    }
+  };
+
+  if (viewMode === 'minimized') {
     return (
-      <Button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-primary to-primary/80 z-40"
-        size="icon"
-      >
-        <Brain className="h-6 w-6" />
-      </Button>
+      <Card className={getCardClasses()}>
+        <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5 p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm">Intelligence Copilot</CardTitle>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={handleToggleView}
+                title="Expandir"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => setIsOpen(false)}
+                title="Fechar"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
     );
   }
 
   return (
-    <Card className="fixed bottom-6 right-6 w-[450px] shadow-2xl border-2 border-primary/20 z-50">
+    <Card className={getCardClasses()}>
       <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Brain className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Intelligence Copilot</CardTitle>
+            <div>
+              <CardTitle className="text-lg">Intelligence Copilot</CardTitle>
+              <CardDescription className="text-xs">
+                {company.name || 'Empresa'}
+              </CardDescription>
+            </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsOpen(false)}
-          >
-            ✕
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={handleToggleView}
+              title="Minimizar"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={handleFullscreen}
+              title={viewMode === 'fullscreen' ? 'Sair da Tela Cheia' : 'Tela Cheia'}
+            >
+              <Maximize className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setIsOpen(false)}
+              title="Fechar"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <CardDescription>
-          Pergunte sobre dados, análises e inteligência desta empresa
-        </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className="h-[400px] p-4">
+      <CardContent className="p-0 flex flex-col" style={{ height: viewMode === 'fullscreen' ? 'calc(100vh - 120px)' : 'auto' }}>
+        <ScrollArea ref={scrollRef} className="flex-1 p-4" style={{ height: getScrollAreaHeight() }}>
           {messages.length === 0 ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground mb-3">
@@ -157,7 +260,7 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
             </div>
           )}
         </ScrollArea>
-        <div className="p-4 border-t">
+        <div className="p-4 border-t bg-background">
           <div className="flex gap-2">
             <Textarea
               value={input}
