@@ -593,8 +593,9 @@ Responda APENAS JSON:
       }
     }
     
-    // Fallback: validação básica se IA falhar
-    return { fullText, hasBusinessContext: true };
+    // 🔥 CRÍTICO: Fallback deve ser false para rejeitar se não tiver contexto claro
+    // Não aceitar por padrão, só aceitar se tiver correlação real
+    return { fullText, hasBusinessContext: false };
     
   } catch (error) {
     console.log('[URL-CONTEXT] ❌ Erro ao fetch URL:', error);

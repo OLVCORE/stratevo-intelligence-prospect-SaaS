@@ -166,7 +166,7 @@ export function QuarantineRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72 bg-popover z-[100]">
-          <DropdownMenuLabel>Ações</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-sm font-semibold">Ações da Empresa</DropdownMenuLabel>
           <DropdownMenuSeparator />
           
           {/* Ver Detalhes (mesclado com Preview) */}
@@ -308,161 +308,31 @@ export function QuarantineRowActions({
             </TooltipContent>
           </Tooltip>
 
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-primary font-bold">⚡ Enriquecimento Inteligente</DropdownMenuLabel>
-
-          {/* NOVO: Análise Completa 360° - UNIFICADO! */}
-          {onEnrichCompleto && (
-            <Tooltip delayDuration={100}>
-              <TooltipTrigger asChild>
-                <div className="px-2 py-1.5">
-                  <DropdownMenuItem
-                    onClick={() => handleEnrich('Análise Completa 360°', onEnrichCompleto)}
-                    disabled={isEnriching || !company.cnpj}
-                    className="relative bg-gradient-to-r from-primary/30 via-primary/20 to-primary/30 hover:from-primary/40 hover:via-primary/30 hover:to-primary/40 border-l-4 border-primary font-bold cursor-pointer transition-all animate-pulse"
-                  >
-                    {enrichingAction === 'Análise Completa 360°' ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin text-primary" />
-                    ) : (
-                      <Zap className="h-4 w-4 mr-2 text-primary" />
-                    )}
-                    <span className="text-primary">Análise Completa 360°</span>
-                    <Sparkles className="h-3 w-3 ml-auto text-primary animate-pulse" />
-                  </DropdownMenuItem>
-                  {/* PROGRESS BAR VISUAL */}
-                  {enrichingAction === 'Análise Completa 360°' && isEnriching && (
-                    <div className="mt-2 space-y-1">
-                      <Progress value={enrichmentProgress} className="h-2" />
-                      <p className="text-xs text-center text-primary font-medium">
-                        {enrichmentProgress === 33 && '1/3: Receita Federal...'}
-                        {enrichmentProgress === 67 && '2/3: Intelligence 360°...'}
-                        {enrichmentProgress === 100 && '3/3: Concluído!'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-sm bg-primary text-primary-foreground">
-                <p className="font-bold text-sm">⚡ SUPER ENRIQUECIMENTO - TUDO EM 1 CLIQUE!</p>
-                <p className="text-xs mt-2">Executa automaticamente:</p>
-                <ul className="text-xs mt-1 space-y-1 list-disc list-inside">
-                  <li>✅ Receita Federal (dados oficiais)</li>
-                  <li>✅ Apollo Decisores (C-Level + contatos)</li>
-                  <li>✅ Intelligence 360° (IA completa)</li>
-                </ul>
-                <p className="text-xs mt-2 italic">Economia: 3 cliques → 1 clique! 🚀</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-xs text-muted-foreground">Enriquecimentos Individuais</DropdownMenuLabel>
-
-          {/* Descobrir CNPJ */}
+          {/* Descobrir CNPJ - Mantido pois é específico da linha e necessário antes do enriquecimento */}
           {!company.cnpj && onDiscoverCNPJ && (
-            <Tooltip delayDuration={100}>
-              <TooltipTrigger asChild>
-                <DropdownMenuItem 
-                  onClick={() => {
-                    onDiscoverCNPJ(company.id);
-                    setIsOpen(false);
-                  }}
-                  className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-                >
-                  <Search className="h-4 w-4 mr-2" />
-                  Descobrir CNPJ
-                </DropdownMenuItem>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-xs">
-                <p className="font-semibold text-sm">Busca Automática de CNPJ</p>
-                <p className="text-xs text-muted-foreground mt-1">Pesquisa CNPJ através de APIs públicas e motores de busca usando razão social e domínio da empresa</p>
-              </TooltipContent>
-            </Tooltip>
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-semibold text-primary">🔍 Pré-Requisito</DropdownMenuLabel>
+              <Tooltip delayDuration={100}>
+                <TooltipTrigger asChild>
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      onDiscoverCNPJ(company.id);
+                      setIsOpen(false);
+                    }}
+                    className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
+                  >
+                    <Search className="h-4 w-4 mr-2" />
+                    Descobrir CNPJ
+                  </DropdownMenuItem>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <p className="font-semibold text-sm">Busca Automática de CNPJ</p>
+                  <p className="text-xs text-muted-foreground mt-1">Pesquisa CNPJ através de APIs públicas e motores de busca usando razão social e domínio da empresa. Necessário para enriquecimento.</p>
+                </TooltipContent>
+              </Tooltip>
+            </>
           )}
-
-          {/* Receita Federal */}
-          <Tooltip delayDuration={100}>
-            <TooltipTrigger asChild>
-              <DropdownMenuItem
-                onClick={() => handleEnrich('Receita Federal', onEnrichReceita)}
-                disabled={isDisabled('receita') || isEnriching}
-                className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-              >
-                {enrichingAction === 'Receita Federal' ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Building2 className="h-4 w-4 mr-2" />
-                )}
-                Receita Federal
-                {getTooltip('receita') && <span className="ml-auto text-xs text-muted-foreground">{getTooltip('receita')}</span>}
-              </DropdownMenuItem>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="max-w-xs">
-              <p className="font-semibold text-sm">Consulta Receita Federal</p>
-              <p className="text-xs text-muted-foreground mt-1">Busca dados oficiais da empresa: situação cadastral, atividade econômica (CNAE), porte, endereço completo e sócios diretamente da base da Receita Federal (requer CNPJ)</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Apollo */}
-          <Tooltip delayDuration={100}>
-            <TooltipTrigger asChild>
-              <DropdownMenuItem
-                onClick={() => handleEnrich('Apollo', onEnrichApollo)}
-                disabled={isEnriching}
-                className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-              >
-                {enrichingAction === 'Apollo' ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <img src={apolloIcon} alt="Apollo" className="h-4 w-4 mr-2" />
-                )}
-                Apollo (Decisores)
-              </DropdownMenuItem>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="max-w-xs">
-              <p className="font-semibold text-sm">Apollo.io - Pessoas Decisoras</p>
-              <p className="text-xs text-muted-foreground mt-1">Identifica contatos C-Level, diretores e decisores com nome, cargo, e-mail, telefone e perfil LinkedIn usando base Apollo.io</p>
-            </TooltipContent>
-          </Tooltip>
-
-        {/* ECONODATA: Desabilitado - fase 2 */}
-        {/* Eco-Booster
-        <DropdownMenuItem
-          onClick={() => handleEnrich('Eco-Booster', onEnrichEconodata)}
-          disabled={isDisabled('econodata') || isEnriching}
-          className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-        >
-          {enrichingAction === 'Eco-Booster' ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Zap className="h-4 w-4 mr-2" />
-          )}
-          Eco-Booster
-          {getTooltip('econodata') && <span className="ml-auto text-xs text-muted-foreground">{getTooltip('econodata')}</span>}
-        </DropdownMenuItem>
-        */}
-
-          {/* 360° Completo */}
-          <Tooltip delayDuration={100}>
-            <TooltipTrigger asChild>
-              <DropdownMenuItem
-                onClick={() => handleEnrich('360° Completo', onEnrich360)}
-                disabled={isEnriching}
-                className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-              >
-                {enrichingAction === '360° Completo' ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4 mr-2" />
-                )}
-                360° Completo
-              </DropdownMenuItem>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="max-w-xs">
-              <p className="font-semibold text-sm">Intelligence 360° - Análise Completa</p>
-              <p className="text-xs text-muted-foreground mt-1">Executa diagnóstico completo com IA: análise de site, redes sociais, notícias, tech stack, maturidade digital, saúde online, benchmark setorial e recomendações estratégicas personalizadas</p>
-            </TooltipContent>
-          </Tooltip>
 
           <DropdownMenuSeparator />
 

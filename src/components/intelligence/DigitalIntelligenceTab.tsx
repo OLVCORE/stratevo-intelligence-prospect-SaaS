@@ -39,6 +39,8 @@ interface DigitalIntelligenceTabProps {
   domain?: string;
   sector?: string;
   stcStatus?: 'go' | 'no-go' | 'revisar'; // ✅ Status do TOTVS Check
+  savedData?: any; // 🔥 DADOS SALVOS DO FULL_REPORT
+  stcHistoryId?: string;
   onDataChange?: (data: any) => void;
 }
 
@@ -108,24 +110,45 @@ export default function DigitalIntelligenceTab({
   domain,
   sector,
   stcStatus,
+  savedData, // 🔥 DADOS SALVOS
+  stcHistoryId,
   onDataChange
 }: DigitalIntelligenceTabProps) {
   const [isUrlsExpanded, setIsUrlsExpanded] = useState(false);
   
-  // 🔥 BUSCAR DADOS JÁ EXISTENTES (de enrichment em massa)
+  // 🔥 PRIORIZAR DADOS SALVOS (full_report.digital_report) > dados 360° > análise nova
+  // Ordem: savedData > existingData > nova análise
   const { data: existingData } = useQuery({
     queryKey: ['digital-existing', companyId],
     queryFn: async () => {
       if (!companyId) return null;
-      const { data } = await supabase
+      
+      // 1️⃣ BUSCAR DE FULL_REPORT (fonte principal!)
+      if (stcHistoryId) {
+        const { data: historyData } = await supabase
+          .from('stc_verification_history')
+          .select('full_report')
+          .eq('id', stcHistoryId)
+          .single();
+        
+        const fullReport = (historyData?.full_report as any);
+        if (fullReport?.digital_report) {
+          console.log('[DIGITAL-TAB] ✅ Dados encontrados em full_report.digital_report');
+          return fullReport.digital_report;
+        }
+      }
+      
+      // 2️⃣ FALLBACK: buscar de enrichment em massa (raw_data.enriched_360)
+      const { data: companyData } = await supabase
         .from('companies')
-        .select('raw_data, website')
+        .select('*')
         .eq('id', companyId)
         .single();
       
-      if (data?.raw_data?.enriched_360) {
-        console.log('[DIGITAL-TAB] ✅ Dados 360° encontrados, carregando...');
-        return data.raw_data.enriched_360;
+      const rawData = (companyData as any)?.raw_data;
+      if (rawData?.enriched_360) {
+        console.log('[DIGITAL-TAB] ✅ Dados 360° encontrados como fallback');
+        return rawData.enriched_360;
       }
       return null;
     },
@@ -135,6 +158,9 @@ export default function DigitalIntelligenceTab({
   // ⚠️ Se é NO-GO (já cliente TOTVS), não faz sentido analisar vendas
   const isExistingClient = stcStatus === 'no-go';
 
+  // 🔥 USAR DADOS SALVOS COMO PRIORIDADE MÁXIMA!
+  const loadedData = savedData || existingData || null;
+  
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['digital-intelligence', companyId, companyName],
     queryFn: async (): Promise<DigitalIntelligenceData> => {
@@ -162,15 +188,55 @@ export default function DigitalIntelligenceTab({
     },
     enabled: false, // ✅ Desabilitado por padrão (aba opcional)
     staleTime: 5 * 60 * 1000,
+    initialData: loadedData as DigitalIntelligenceData | undefined, // 🔥 CARREGAR DADOS SALVOS!
   });
 
-  // 🔥 NOTIFICAR MUDANÇAS PARA SALVAMENTO
+  // 🔗 REGISTRY: Registrar aba para SaveBar global
   useEffect(() => {
-    if (data) {
+    import('@/components/icp/tabs/tabsRegistry').then(({ registerTab }) => {
+      console.info('[REGISTRY] ✅ Registering: digital');
+      
+      registerTab('digital', {
+        flushSave: async () => {
+          const dataToSave = data || loadedData;
+          console.log('[DIGITAL] 📤 Registry: flushSave() chamado');
+          console.log('[DIGITAL] 📦 Dados para salvar:', dataToSave);
+          if (dataToSave) {
+            if (onDataChange) {
+              onDataChange(dataToSave);
+              console.log('[DIGITAL] ✅ onDataChange chamado com sucesso');
+            } else {
+              console.error('[DIGITAL] ❌ onDataChange NÃO EXISTE!');
+            }
+          } else {
+            console.warn('[DIGITAL] ⚠️ Nenhum dado para salvar');
+          }
+        },
+        getStatus: () => {
+          if (loadedData || data) return 'completed';
+          return 'draft';
+        },
+      });
+    });
+    
+    // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry
+  }, [data, loadedData, onDataChange]);
+
+  // 🔥 NOTIFICAR MUDANÇAS PARA SALVAMENTO (apenas se dados novos)
+  useEffect(() => {
+    if (data && data !== loadedData) { // Só notificar se for dado novo, não salvado
       console.log('[DIGITAL-INTEL] 📤 Dados mudaram, notificando parent...');
       onDataChange?.(data);
     }
-  }, [data, onDataChange]);
+  }, [data, loadedData, onDataChange]);
+  
+  // 🔥 CARREGAR DADOS SALVOS AO MONTAR (se existirem)
+  useEffect(() => {
+    if (savedData && !data) {
+      console.log('[DIGITAL-TAB] 🔄 Carregando dados salvos:', savedData);
+      // Dados salvos serão usados via initialData do useQuery
+    }
+  }, [savedData, data]);
 
   const getTemperatureIcon = (temp: string) => {
     if (temp === 'hot') return <Flame className="w-6 h-6 text-red-500" />;
@@ -210,7 +276,10 @@ export default function DigitalIntelligenceTab({
     return grouped;
   };
 
-  if (isLoading) {
+  // 🔥 USAR DADOS CARREGADOS (savedData > existingData > data)
+  const displayData = loadedData || data;
+
+  if (isLoading && !displayData) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -219,7 +288,7 @@ export default function DigitalIntelligenceTab({
     );
   }
 
-  if (error) {
+  if (error && !displayData) {
     return (
       <Alert variant="destructive">
         <AlertTriangle className="w-4 h-4" />
@@ -230,7 +299,7 @@ export default function DigitalIntelligenceTab({
     );
   }
 
-  if (!data) {
+  if (!displayData) {
     return (
       <div className="space-y-4">
         {isExistingClient && (
@@ -275,7 +344,7 @@ export default function DigitalIntelligenceTab({
     );
   }
 
-  const groupedUrls = groupUrlsBySource(data.analyzed_urls);
+  const groupedUrls = groupUrlsBySource(displayData.analyzed_urls);
 
   return (
     <div className="space-y-6">
@@ -289,73 +358,73 @@ export default function DigitalIntelligenceTab({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {data.digital_presence.website && (
+            {displayData.digital_presence.website && (
               <Button
                 variant="outline"
                 className="h-32 flex-col gap-4 py-8 hover:scale-105 transition-transform hover:border-blue-500/50"
                 asChild
               >
-                <a href={data.digital_presence.website} target="_blank" rel="noopener noreferrer">
+                <a href={displayData.digital_presence.website} target="_blank" rel="noopener noreferrer">
                   <Globe className="w-16 h-16 text-blue-500" />
                   <span className="text-sm font-semibold">Website</span>
                 </a>
               </Button>
             )}
-            {data.digital_presence.linkedin && (
+            {displayData.digital_presence.linkedin && (
               <Button
                 variant="outline"
                 className="h-32 flex-col gap-4 py-8 hover:scale-105 transition-transform hover:border-blue-600/50"
                 asChild
               >
-                <a href={data.digital_presence.linkedin} target="_blank" rel="noopener noreferrer">
+                <a href={displayData.digital_presence.linkedin} target="_blank" rel="noopener noreferrer">
                   <Linkedin className="w-16 h-16 text-blue-600" />
                   <span className="text-sm font-semibold">LinkedIn</span>
                 </a>
               </Button>
             )}
-            {data.digital_presence.instagram && (
+            {displayData.digital_presence.instagram && (
               <Button
                 variant="outline"
                 className="h-32 flex-col gap-4 py-8 hover:scale-105 transition-transform hover:border-pink-500/50"
                 asChild
               >
-                <a href={data.digital_presence.instagram} target="_blank" rel="noopener noreferrer">
+                <a href={displayData.digital_presence.instagram} target="_blank" rel="noopener noreferrer">
                   <Instagram className="w-16 h-16 text-pink-500" />
                   <span className="text-sm font-semibold">Instagram</span>
                 </a>
               </Button>
             )}
-            {data.digital_presence.facebook && (
+            {displayData.digital_presence.facebook && (
               <Button
                 variant="outline"
                 className="h-32 flex-col gap-4 py-8 hover:scale-105 transition-transform hover:border-blue-700/50"
                 asChild
               >
-                <a href={data.digital_presence.facebook} target="_blank" rel="noopener noreferrer">
+                <a href={displayData.digital_presence.facebook} target="_blank" rel="noopener noreferrer">
                   <Facebook className="w-16 h-16 text-blue-700" />
                   <span className="text-sm font-semibold">Facebook</span>
                 </a>
               </Button>
             )}
-            {data.digital_presence.youtube && (
+            {displayData.digital_presence.youtube && (
               <Button
                 variant="outline"
                 className="h-32 flex-col gap-4 py-8 hover:scale-105 transition-transform hover:border-red-600/50"
                 asChild
               >
-                <a href={data.digital_presence.youtube} target="_blank" rel="noopener noreferrer">
+                <a href={displayData.digital_presence.youtube} target="_blank" rel="noopener noreferrer">
                   <Youtube className="w-16 h-16 text-red-600" />
                   <span className="text-sm font-semibold">YouTube</span>
                 </a>
               </Button>
             )}
-            {data.digital_presence.twitter && (
+            {displayData.digital_presence.twitter && (
               <Button
                 variant="outline"
                 className="h-32 flex-col gap-4 py-8 hover:scale-105 transition-transform hover:border-sky-500/50"
                 asChild
               >
-                <a href={data.digital_presence.twitter} target="_blank" rel="noopener noreferrer">
+                <a href={displayData.digital_presence.twitter} target="_blank" rel="noopener noreferrer">
                   <Twitter className="w-16 h-16 text-sky-500" />
                   <span className="text-sm font-semibold">Twitter/X</span>
                 </a>
@@ -366,11 +435,11 @@ export default function DigitalIntelligenceTab({
       </Card>
 
       {/* 🌡️ TEMPERATURA DE VENDAS */}
-      <Card className={`border-2 ${getTemperatureColor(data.temperature)}`}>
+      <Card className={`border-2 ${getTemperatureColor(displayData.temperature)}`}>
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
-            {getTemperatureIcon(data.temperature)}
-            TEMPERATURA: {data.temperature.toUpperCase()} ({data.temperature_score}°C)
+            {getTemperatureIcon(displayData.temperature)}
+            TEMPERATURA: {displayData.temperature.toUpperCase()} ({displayData.temperature_score}°C)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -378,15 +447,15 @@ export default function DigitalIntelligenceTab({
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Sales Readiness</p>
-                <p className="text-3xl font-bold">{data.sales_readiness_score}/10</p>
+                <p className="text-3xl font-bold">{displayData.sales_readiness_score}/10</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Prob. Fechamento</p>
-                <p className="text-3xl font-bold">{data.closing_probability}%</p>
+                <p className="text-3xl font-bold">{displayData.closing_probability}%</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">URLs Analisadas</p>
-                <p className="text-3xl font-bold">{data.analyzed_urls.length}</p>
+                <p className="text-3xl font-bold">{displayData.analyzed_urls.length}</p>
               </div>
             </div>
           </div>
@@ -401,7 +470,7 @@ export default function DigitalIntelligenceTab({
               <Button variant="ghost" className="w-full justify-between hover:bg-accent">
                 <CardTitle className="flex items-center gap-2">
                   <ExternalLink className="w-5 h-5" />
-                  Todas as URLs Analisadas ({data.analyzed_urls.length})
+                  Todas as URLs Analisadas ({displayData.analyzed_urls.length})
                 </CardTitle>
                 {isUrlsExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               </Button>

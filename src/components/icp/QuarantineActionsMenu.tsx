@@ -100,11 +100,11 @@ export function QuarantineActionsMenu({
         </DropdownMenuTrigger>
       <DropdownMenuContent 
         align="end" 
-        className="w-64 z-[100] bg-popover"
+        className="w-72 z-[100] bg-popover"
         data-testid="quarantine-actions-dropdown"
       >
-        <DropdownMenuLabel>
-          {selectedCount > 0 ? `${selectedCount} selecionada(s)` : 'Nenhuma empresa selecionada'}
+        <DropdownMenuLabel className="text-sm font-semibold">
+          {selectedCount > 0 ? `${selectedCount} empresa(s) selecionada(s)` : 'Nenhuma empresa selecionada'}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         
@@ -191,7 +191,7 @@ export function QuarantineActionsMenu({
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Verificação TOTVS em Massa</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-semibold text-primary">🎯 Verificação TOTVS em Massa</DropdownMenuLabel>
         
         <DropdownMenuGroup>
           {onBulkTotvsCheck && (
@@ -215,7 +215,7 @@ export function QuarantineActionsMenu({
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Enriquecimento em Massa</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-semibold text-primary">⚡ Enriquecimento em Massa</DropdownMenuLabel>
         
         <DropdownMenuGroup>
           {onBulkDiscoverCNPJ && (
@@ -276,7 +276,7 @@ export function QuarantineActionsMenu({
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Aprovar/Rejeitar</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-semibold">Aprovar/Rejeitar</DropdownMenuLabel>
         
         <DropdownMenuGroup>
           {onBulkApprove && (
@@ -294,6 +294,38 @@ export function QuarantineActionsMenu({
           )}
           
         </DropdownMenuGroup>
+
+        {/* Restaurar Descartadas */}
+        {onRestoreDiscarded && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-semibold text-blue-600">↩️ Restaurar</DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuItem 
+                onClick={async () => {
+                  if (!onRestoreDiscarded) return;
+                  try {
+                    setIsRestoring(true);
+                    await onRestoreDiscarded();
+                  } catch (error) {
+                    console.error('Error restoring:', error);
+                  } finally {
+                    setIsRestoring(false);
+                  }
+                }}
+                disabled={isRestoring || isProcessing}
+                className="transition-all duration-200 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:shadow-md hover:border-l-2 hover:border-blue-500"
+              >
+                {isRestoring ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Undo2 className="h-4 w-4 mr-2 text-blue-600" />
+                )}
+                Restaurar Descartadas
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        )}
 
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">Ações Perigosas</DropdownMenuLabel>

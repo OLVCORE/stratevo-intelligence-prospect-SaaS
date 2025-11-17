@@ -77,7 +77,7 @@ export default function SaveBar({
         {/* 📊 PROGRESS BAR REAL (Heat Map: Frio → Quente) */}
         <div className="flex-1 max-w-md">
           {(() => {
-            const totalTabs = 9; // FIXO: 9 abas no relatório TOTVS completo
+            const totalTabs = 10; // FIXO: 10 abas no relatório TOTVS completo (incluindo Oportunidades)
             const registeredTabs = Object.keys(statuses).length;
             const completedTabs = Object.values(statuses).filter(s => s === 'completed').length;
             const progressPercent = Math.round((completedTabs / totalTabs) * 100);
@@ -145,18 +145,27 @@ export default function SaveBar({
 
         {/* 🎯 Ações Críticas */}
         <div className="flex items-center gap-3">
-          {/* Indicador de mudanças não salvas */}
+          {/* Indicador de mudanças não salvas - MELHORADO */}
           {!readOnly && anyDraft && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/30 animate-pulse">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span className="font-semibold">Alterações não salvas</span>
+                  <div className="flex items-center gap-2 text-xs text-amber-400 bg-gradient-to-r from-amber-500/20 via-amber-500/15 to-amber-500/20 px-4 py-2 rounded-lg border-2 border-amber-500/50 shadow-lg animate-pulse hover:animate-none hover:bg-amber-500/25 transition-all cursor-pointer">
+                    <AlertCircle className="w-4 h-4 animate-pulse" />
+                    <span className="font-bold">⚠️ Alterações não salvas</span>
+                    <span className="bg-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                      {Object.values(statuses).filter(s => s === 'draft').length} aba(s)
+                    </span>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">Existem abas em rascunho. Clique em "Salvar Relatório".</p>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-xs font-semibold mb-1">⚠️ Atenção: Alterações não salvas</p>
+                  <p className="text-xs">
+                    {Object.values(statuses).filter(s => s === 'draft').length === 1 
+                      ? 'Existe 1 aba em rascunho. Clique em "Salvar Relatório" para salvar.'
+                      : `Existem ${Object.values(statuses).filter(s => s === 'draft').length} abas em rascunho. Clique em "Salvar Relatório" para salvar todas.`
+                    }
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

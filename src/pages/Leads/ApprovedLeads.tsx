@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
@@ -24,6 +25,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { toast } from 'sonner';
 import { DealFormDialog } from '@/components/sdr/DealFormDialog';
+import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { consultarReceitaFederal } from '@/services/receitaFederal';
+import { enrichment360Simplificado } from '@/services/enrichment360';
+import { searchApolloOrganizations, searchApolloPeople } from '@/services/apolloDirect';
 
 interface ApprovedLead {
   id: string;
@@ -32,13 +38,15 @@ interface ApprovedLead {
   razao_social: string;
   icp_score: number;
   temperatura: 'hot' | 'warm' | 'cold';
-  segmento: string;
+  segmento?: string;
   status: string;
   created_at: string;
+  [key: string]: any; // Para propriedades dinâmicas (source_name, raw_data, etc.)
 }
 
 export default function ApprovedLeads() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [leads, setLeads] = useState<ApprovedLead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<ApprovedLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +57,8 @@ export default function ApprovedLeads() {
   const [dealFormOpen, setDealFormOpen] = useState(false);
   const [uniqueSources, setUniqueSources] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(50); // 🔢 Paginação configurável
+  const [selectedIds, setSelectedIds] = useState<string[]>([]); // Para UnifiedEnrichButton
+  const [apolloSearchQuery, setApolloSearchQuery] = useState<string>(''); // Busca Apollo
   
   // 🔍 FILTROS INTELIGENTES POR COLUNA
   const [filterCNPJStatus, setFilterCNPJStatus] = useState<string[]>([]);
@@ -62,11 +72,11 @@ export default function ApprovedLeads() {
 
   useEffect(() => {
     filterLeads();
-  }, [searchTerm, temperatureFilter, sourceFilter, leads]);
+  }, [searchTerm, temperatureFilter, sourceFilter, leads, apolloSearchQuery, filterCNPJStatus, filterSector, filterUF, filterAnalysisStatus]);
 
   useEffect(() => {
     // Extrair origens únicas dos leads
-    const sources = Array.from(new Set(leads.map(l => l.source_name).filter(Boolean)));
+    const sources = Array.from(new Set(leads.map(l => (l as any).source_name).filter(Boolean)));
     setUniqueSources(sources as string[]);
   }, [leads]);
 
@@ -80,13 +90,213 @@ export default function ApprovedLeads() {
         .order('icp_score', { ascending: false });
 
       if (error) throw error;
-      setLeads(data || []);
+      setLeads((data || []) as ApprovedLead[]);
     } catch (error) {
       console.error('Error loading approved leads:', error);
       toast.error('Erro ao carregar leads aprovados');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handlers de enriquecimento (similar à Quarentena)
+  const enrichReceitaMutation = useMutation({
+    mutationFn: async (analysisId: string) => {
+      const { data: analysis } = await supabase
+        .from('icp_analysis_results')
+        .select('*')
+        .eq('id', analysisId)
+        .single();
+
+      if (!analysis?.cnpj) throw new Error('CNPJ não disponível');
+
+      const result = await consultarReceitaFederal(analysis.cnpj);
+      if (!result.success || !result.data) throw new Error(result.error || 'Erro ao buscar Receita');
+
+      const rawData = ((analysis as any).raw_data && typeof (analysis as any).raw_data === 'object' && !Array.isArray((analysis as any).raw_data)) 
+        ? (analysis as any).raw_data as Record<string, any>
+        : {};
+
+      await supabase
+        .from('icp_analysis_results')
+        .update({
+          raw_data: {
+            ...rawData,
+            receita_federal: result.data as any, // Type assertion para Json
+            receita_source: result.source,
+          } as any,
+        })
+        .eq('id', analysisId);
+
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('✅ Receita Federal atualizada!');
+      loadApprovedLeads();
+    },
+    onError: (error: any) => {
+      toast.error('Erro ao enriquecer Receita Federal', { description: error.message });
+    },
+  });
+
+  const enrich360Mutation = useMutation({
+    mutationFn: async (analysisId: string) => {
+      const { data: analysis } = await supabase
+        .from('icp_analysis_results')
+        .select('*')
+        .eq('id', analysisId)
+        .single();
+
+      if (!analysis) throw new Error('Empresa não encontrada');
+
+      const rawData = ((analysis as any).raw_data && typeof (analysis as any).raw_data === 'object' && !Array.isArray((analysis as any).raw_data)) 
+        ? (analysis as any).raw_data as Record<string, any>
+        : {};
+
+      const result = await enrichment360Simplificado({
+        razao_social: analysis.razao_social,
+        website: (analysis as any).website,
+        domain: (analysis as any).domain,
+        uf: (analysis as any).uf,
+        porte: (analysis as any).porte,
+        cnae: (analysis as any).cnae_principal,
+        raw_data: rawData,
+      });
+
+      if (!result.success) throw new Error(result.error || 'Erro ao calcular 360°');
+
+      await supabase
+        .from('icp_analysis_results')
+        .update({
+          raw_data: {
+            ...rawData,
+            enrichment_360: {
+              scores: result.scores,
+              analysis: result.analysis,
+              calculated_at: new Date().toISOString(),
+            },
+          },
+        })
+        .eq('id', analysisId);
+
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('✅ Enriquecimento 360° concluído!');
+      loadApprovedLeads();
+    },
+    onError: (error: any) => {
+      toast.error('Erro no enriquecimento 360°', { description: error.message });
+    },
+  });
+
+  const handleEnrichReceita = async (id: string) => {
+    await enrichReceitaMutation.mutateAsync(id).catch(() => {});
+  };
+
+  const handleEnrich360 = async (id: string) => {
+    await enrich360Mutation.mutateAsync(id).catch(() => {});
+  };
+
+  // Mutation para enriquecimento Apollo
+  const enrichApolloMutation = useMutation({
+    mutationFn: async (analysisId: string) => {
+      const { data: analysis } = await supabase
+        .from('icp_analysis_results')
+        .select('*')
+        .eq('id', analysisId)
+        .single();
+
+      if (!analysis) throw new Error('Empresa não encontrada');
+
+      const rawData = ((analysis as any).raw_data && typeof (analysis as any).raw_data === 'object' && !Array.isArray((analysis as any).raw_data)) 
+        ? (analysis as any).raw_data as Record<string, any>
+        : {};
+
+      // Buscar organização Apollo
+      const orgResult = await searchApolloOrganizations(
+        analysis.razao_social,
+        (analysis as any).domain || (analysis as any).website
+      );
+
+      if (!orgResult.success || !orgResult.organizations?.[0]) {
+        throw new Error('Organização não encontrada no Apollo');
+      }
+
+      const org = orgResult.organizations[0];
+
+      // Buscar pessoas da organização
+      const peopleResult = await searchApolloPeople(org.id, 50);
+
+      await supabase
+        .from('icp_analysis_results')
+        .update({
+          raw_data: {
+            ...rawData,
+            apollo_organization: {
+              id: org.id,
+              name: org.name,
+              website: org.website,
+              linkedin_url: org.linkedin_url,
+              people: peopleResult.people || [],
+              enriched_at: new Date().toISOString(),
+            },
+            apollo_organization_id: org.id,
+          },
+        })
+        .eq('id', analysisId);
+
+      return { org, people: peopleResult.people || [] };
+    },
+    onSuccess: () => {
+      toast.success('✅ Apollo enriquecido com sucesso!');
+      loadApprovedLeads();
+    },
+    onError: (error: any) => {
+      toast.error('Erro ao enriquecer Apollo', { description: error.message });
+    },
+  });
+
+  // Mutation para enriquecimento completo (Receita + Apollo + 360°)
+  const enrichCompletoMutation = useMutation({
+    mutationFn: async (analysisId: string) => {
+      // 1. Receita Federal
+      await handleEnrichReceita(analysisId);
+      
+      // 2. Apollo (apenas se status GO)
+      const { data: analysis } = await supabase
+        .from('icp_analysis_results')
+        .select('*')
+        .eq('id', analysisId)
+        .single();
+      
+      const totvsStatus = (analysis as any)?.totvs_status;
+      const isGO = totvsStatus === 'go' || totvsStatus === 'GO';
+      
+      if (isGO) {
+        await enrichApolloMutation.mutateAsync(analysisId).catch(() => {});
+      }
+      
+      // 3. 360°
+      await handleEnrich360(analysisId);
+      
+      return { success: true };
+    },
+    onSuccess: () => {
+      toast.success('✅ Enriquecimento completo concluído!');
+      loadApprovedLeads();
+    },
+    onError: (error: any) => {
+      toast.error('Erro no enriquecimento completo', { description: error.message });
+    },
+  });
+
+  const handleEnrichApollo = async (id: string) => {
+    await enrichApolloMutation.mutateAsync(id).catch(() => {});
+  };
+
+  const handleEnrichCompleto = async (id: string) => {
+    await enrichCompletoMutation.mutateAsync(id).catch(() => {});
   };
 
   const filterLeads = () => {
@@ -127,7 +337,7 @@ export default function ApprovedLeads() {
 
     // Filtro de origem (mantido)
     if (sourceFilter !== 'all') {
-      filtered = filtered.filter(lead => lead.source_name === sourceFilter);
+      filtered = filtered.filter(lead => (lead as any).source_name === sourceFilter);
     }
 
     // 🔍 FILTROS INTELIGENTES ADICIONAIS
@@ -230,6 +440,49 @@ export default function ApprovedLeads() {
             </p>
           </div>
           <div className="flex gap-3">
+            {/* UnifiedEnrichButton - Visível quando 1 lead selecionado */}
+            {selectedIds.length === 1 && (() => {
+              const selectedLead = filteredLeads.find(l => selectedIds.includes(l.id));
+              if (!selectedLead) return null;
+              
+              const totvsStatus = (selectedLead as any)?.totvs_status;
+              const isGO = totvsStatus === 'go' || totvsStatus === 'GO';
+              
+              return (
+                <UnifiedEnrichButton
+                  onQuickRefresh={async () => {
+                    const id = selectedIds[0];
+                    await handleEnrichReceita(id);
+                  }}
+                  onFullEnrich={async () => {
+                    const id = selectedIds[0];
+                    // ✅ FLUXO CORRETO: Sempre enriquecer Receita primeiro (sem verificar GO/NO-GO)
+                    // Depois o usuário vai para Relatório STC → Aba TOTVS → Define GO/NO-GO
+                    // Só então pode enriquecer Apollo se for GO
+                    await handleEnrichReceita(id);
+                    toast.info('✅ Receita Federal atualizada! Agora abra o Relatório STC → Aba TOTVS para verificar GO/NO-GO. Se GO, você poderá enriquecer Apollo.');
+                  }}
+                  onReceita={async () => {
+                    const id = selectedIds[0];
+                    await handleEnrichReceita(id).catch(() => {});
+                  }}
+                  onApollo={isGO ? async () => {
+                    const id = selectedIds[0];
+                    await handleEnrichApollo(id).catch(() => {});
+                  } : undefined}
+                  on360={async () => {
+                    const id = selectedIds[0];
+                    await handleEnrich360(id).catch(() => {});
+                  }}
+                  isProcessing={enrichReceitaMutation.isPending || enrichApolloMutation.isPending || enrich360Mutation.isPending || enrichCompletoMutation.isPending}
+                  hasCNPJ={!!selectedLead?.cnpj}
+                  hasApolloId={!!((selectedLead as any)?.raw_data?.apollo_organization_id)}
+                  variant="default"
+                  size="sm"
+                />
+              );
+            })()}
+            
             <Button 
               variant="outline"
               onClick={() => navigate('/comando')}
@@ -342,7 +595,6 @@ export default function ApprovedLeads() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full"
-                  icon={<Search className="h-4 w-4" />}
                 />
               </div>
               <div className="flex gap-4">
@@ -473,19 +725,32 @@ export default function ApprovedLeads() {
             (pageSize === 9999 ? filteredLeads : filteredLeads.slice(0, pageSize)).map((lead) => (
               <Card 
                 key={lead.id}
-                className="hover:border-primary/50 transition-all cursor-pointer"
+                className={`hover:border-primary/50 transition-all cursor-pointer ${selectedIds.includes(lead.id) ? 'border-primary border-2' : ''}`}
                 onClick={() => {
-                  // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
-                  if (lead.company_id) {
-                    navigate(`/company/${lead.company_id}`);
-                  } else {
-                    toast.error('Empresa sem ID vinculado');
-                  }
+                  // Toggle seleção ao clicar
+                  setSelectedIds(prev => 
+                    prev.includes(lead.id) 
+                      ? prev.filter(id => id !== lead.id)
+                      : [...prev, lead.id]
+                  );
                 }}
               >
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
+                      {/* Checkbox para seleção */}
+                      <Checkbox
+                        checked={selectedIds.includes(lead.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedIds(prev => [...prev, lead.id]);
+                          } else {
+                            setSelectedIds(prev => prev.filter(id => id !== lead.id));
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      
                       <Building2 className="h-10 w-10 text-primary" />
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">{lead.razao_social}</h3>
@@ -534,12 +799,12 @@ export default function ApprovedLeads() {
                             showDetails={true}
                           />
                           
-                          {lead.source_name && (
+                          {(lead as any).source_name && (
                             <Badge 
                               variant="secondary" 
                               className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
                             >
-                              {lead.source_name}
+                              {(lead as any).source_name}
                             </Badge>
                           )}
                         </div>
@@ -561,17 +826,35 @@ export default function ApprovedLeads() {
                         {getTemperatureLabel(lead.temperatura)}
                       </Badge>
 
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // 🎯 ABRIR MODAL DE DEAL (mantido)
-                          handleCreateDeal(lead);
-                        }}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Rocket className="mr-2 h-4 w-4" />
-                        Criar Deal
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {/* Botão de ação rápida: Ver Detalhes */}
+                        <Button
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
+                            if (lead.company_id) {
+                              navigate(`/company/${lead.company_id}`);
+                            } else {
+                              toast.error('Empresa sem ID vinculado');
+                            }
+                          }}
+                        >
+                          Ver Detalhes
+                        </Button>
+                        
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // 🎯 ABRIR MODAL DE DEAL (mantido)
+                            handleCreateDeal(lead);
+                          }}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <Rocket className="mr-2 h-4 w-4" />
+                          Criar Deal
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -584,8 +867,6 @@ export default function ApprovedLeads() {
         <DealFormDialog
           open={dealFormOpen}
           onOpenChange={setDealFormOpen}
-          mode="icp"
-          preSelectedLead={selectedLead}
         />
       </div>
     </AppLayout>

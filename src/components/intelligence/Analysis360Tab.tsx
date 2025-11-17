@@ -282,7 +282,13 @@ export function Analysis360Tab({
       flushSave: async () => {
         console.log('[360] 📤 Registry: flushSave() chamado');
         const dataToSave = data || { skipped: true, reason: 'Análise opcional não executada' };
-        onDataChange?.(dataToSave);
+        console.log('[360] 📦 Dados para salvar:', dataToSave);
+        if (onDataChange) {
+          onDataChange(dataToSave);
+          console.log('[360] ✅ onDataChange chamado com sucesso');
+        } else {
+          console.error('[360] ❌ onDataChange NÃO EXISTE!');
+        }
         sonnerToast.success('✅ Análise 360° Salva!');
       },
       getStatus: () => 'completed', // ✅ SEMPRE completed (aba opcional)

@@ -48,7 +48,7 @@ import { ApolloDebugDialog } from '@/components/companies/ApolloDebugDialog';
 import { CollapsibleCard } from '@/components/companies/CollapsibleCard';
 import { DiagnosticAIPanel } from '@/components/companies/DiagnosticAIPanel';
 import { CompanyIntelligenceChat } from '@/components/companies/CompanyIntelligenceChat';
-import { MultiLayerEnrichButton } from '@/components/canvas/MultiLayerEnrichButton';
+import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
 import apolloLogo from "@/assets/logos/apollo.ico";
 import phantomLogo from "@/assets/logos/phantombuster.png";
 import { CompanyEnrichmentTabs } from '@/components/companies/CompanyEnrichmentTabs';
@@ -1328,7 +1328,38 @@ export default function CompanyDetailPage() {
                   </div>
                   <div className="p-2 border rounded bg-muted/10">
                     <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Qtd. Filiais</p>
-                    <p className="text-sm font-semibold">{rawData.qtd_filiais || '0'}</p>
+                    <p className="text-sm font-semibold">
+                      {(() => {
+                        // ✅ Prioridade 1: Dados da Receita Federal (BrasilAPI retorna array de estabelecimentos)
+                        const estabelecimentos = receitaData?.estabelecimentos || receitaData?.estabelecimento;
+                        if (Array.isArray(estabelecimentos) && estabelecimentos.length > 0) {
+                          // Filtrar apenas filiais (excluir a matriz, se presente)
+                          const filiais = estabelecimentos.filter((est: any) => 
+                            est.identificador_matriz_filial === 2 || // 2 = Filial
+                            (est.tipo_unidade && est.tipo_unidade.toLowerCase() === 'filial') ||
+                            (est.tipo && est.tipo.toLowerCase() === 'filial')
+                          );
+                          return filiais.length > 0 ? filiais.length.toString() : '0';
+                        }
+                        
+                        // ✅ Prioridade 2: Campo direto qtd_filiais da Receita Federal
+                        if (receitaData?.qtd_filiais || receitaData?.qtd_estabelecimentos) {
+                          return (receitaData.qtd_filiais || receitaData.qtd_estabelecimentos).toString();
+                        }
+                        
+                        // ✅ Prioridade 3: rawData (dados já processados)
+                        if (rawData.qtd_filiais && rawData.qtd_filiais !== '0' && rawData.qtd_filiais !== 0) {
+                          return rawData.qtd_filiais.toString();
+                        }
+                        
+                        // ✅ Fallback: Se tem estabelecimentos mas não são filiais, mostrar total - 1 (matriz)
+                        if (Array.isArray(estabelecimentos) && estabelecimentos.length > 1) {
+                          return (estabelecimentos.length - 1).toString(); // Total - matriz
+                        }
+                        
+                        return '0';
+                      })()}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1878,52 +1909,25 @@ export default function CompanyDetailPage() {
                 <CardDescription>Buscar decisores e enriquecer informações</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <MultiLayerEnrichButton
-                  companyId={id!}
-                  cnpj={company.cnpj}
-                  onComplete={() => queryClient.invalidateQueries({ queryKey: ['company-detail', id] })}
+                {/* UNIFICADO: Um único botão com dropdown inteligente */}
+                <UnifiedEnrichButton
+                  onQuickRefresh={handleSmartRefresh}
+                  onFullEnrich={handleFullEnrichment}
+                  onReceita={() => handleEnrichReceita(id!)}
+                  onApollo={handleTestApollo}
+                  on360={handleFullEnrichment}
+                  isProcessing={isSmartRefreshing || isEnriching || isEnrichingReceita || isTestingApollo}
+                  hasCNPJ={!!company.cnpj}
+                  hasApolloId={!!company.apollo_id}
+                  variant="default"
+                  size="default"
                 />
 
-                <Separator />
-                
-                <Button
-                  onClick={handleSmartRefresh}
-                  disabled={isSmartRefreshing}
-                  className="w-full justify-start"
-                  variant="secondary"
-                >
-                  {isSmartRefreshing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                  Atualização Inteligente (360°)
-                </Button>
-
+                {/* Botões de decisores mantidos abaixo */}
                 <Separator />
 
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Buscar Decisores</p>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={handleTestApollo}
-                          disabled={isTestingApollo}
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start"
-                        >
-                          {isTestingApollo ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <img src={apolloLogo} className="h-4 w-4 mr-2" alt="Apollo" />
-                          )}
-                          Apollo.io
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        Busca decisores via Apollo.io (API paga)
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Ferramentas Adicionais</p>
 
                   <TooltipProvider>
                     <Tooltip>

@@ -12,14 +12,16 @@ interface TrevoAssistantProps {
   context: TrevoContext;
 }
 
+type ViewMode = 'minimized' | 'normal' | 'expanded';
+
 export function TrevoAssistant({ context }: TrevoAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('normal');
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
-
+  
   const { messages, isLoading, sendMessage, clearMessages } = useTrevoAssistant(context);
 
   // Função para extrair links sugeridos das mensagens
@@ -72,57 +74,80 @@ export function TrevoAssistant({ context }: TrevoAssistantProps) {
 
   if (!isOpen) {
     return (
-      <div className="fixed bottom-6 right-6 z-50 group">
-        {/* Botão principal com design neutro e profissional */}
+      <div className="fixed top-2 right-4 z-[60] group">
+        {/* Botão principal com TREVO VERDE mais visível */}
         <Button
           onClick={() => setIsOpen(true)}
-          size="lg"
-          className="h-16 w-16 rounded-2xl shadow-2xl bg-card text-foreground border border-border relative overflow-hidden transition-all duration-300 hover:scale-110 hover:shadow-lg hover:bg-accent hover:text-accent-foreground"
+          size="sm"
+          className="h-10 w-10 rounded-xl shadow-xl bg-green-600 hover:bg-green-700 text-white border-2 border-green-500 relative overflow-hidden transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:border-green-400"
           aria-label="Abrir TREVO, assistente inteligente"
         >
           {/* brilho suave ao passar o mouse */}
-          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-foreground/5 to-transparent" />
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-green-400/30 to-transparent" />
           
-          {/* Ícone */}
+          {/* Ícone TREVO VERDE */}
           <div className="relative z-10">
-            <Clover className="h-7 w-7 text-primary" />
+            <Clover className="h-5 w-5 text-white fill-white" />
           </div>
           
-          {/* Detalhe sutil */}
-          <Sparkles className="absolute top-2 right-2 h-3 w-3 text-primary/70" />
+          {/* Detalhe sutil verde brilhante */}
+          <Sparkles className="absolute top-0.5 right-0.5 h-2.5 w-2.5 text-green-200 animate-pulse" />
           
-          {/* Indicador de status */}
-          <span className="absolute -top-1 -right-1 h-5 w-5 bg-primary rounded-full border-2 border-background flex items-center justify-center">
-            <span className="h-2 w-2 bg-background rounded-full animate-pulse" />
+          {/* Indicador de status verde */}
+          <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-background flex items-center justify-center shadow-lg">
+            <span className="h-1.5 w-1.5 bg-white rounded-full animate-pulse" />
           </span>
           
-          {/* Tooltip */}
-          <div className="absolute bottom-full right-0 mb-3 px-4 py-3 bg-popover text-popover-foreground rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap border border-border backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <Clover className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold">TREVO · Assistente</p>
+          {/* Tooltip melhorado */}
+          <div className="absolute bottom-full right-0 mb-3 px-4 py-2 bg-green-600 text-white rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap border-2 border-green-500 backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <Clover className="h-4 w-4 text-white fill-white" />
+              <p className="text-sm font-bold">TREVO Assistente</p>
             </div>
-            <p className="text-xs text-muted-foreground">Seu guia inteligente de vendas</p>
-            <div className="absolute bottom-0 right-4 translate-y-1/2 rotate-45 w-2 h-2 bg-popover border-r border-b border-border" />
+            <p className="text-xs text-green-100 mt-1">Seu guia inteligente de vendas</p>
+            <div className="absolute bottom-0 right-4 translate-y-1/2 rotate-45 w-2 h-2 bg-green-600 border-r-2 border-b-2 border-green-500" />
           </div>
         </Button>
         
-        {/* Anel pulsante discreto */}
-        <div className="pointer-events-none absolute inset-0 rounded-2xl bg-primary/30 animate-ping opacity-15" />
+        {/* Anel pulsante verde mais visível */}
+        <div className="pointer-events-none absolute inset-0 rounded-xl bg-green-500/40 animate-ping opacity-30" />
       </div>
     );
   }
 
+  // TREVO sempre na DIREITA (top-right), respeitando sidebar
+  // Sidebar: expandido = 16rem (256px), colapsado = 4rem (64px)
+  // Modos: minimized (pequeno), normal (médio), expanded (até o meio da página)
+  const getContainerClasses = () => {
+    const baseClasses = 'fixed top-16 right-4 z-[60]';
+    
+    if (viewMode === 'minimized') {
+      // Minimizado: pequeno (barra de título)
+      // Responsivo: menor em mobile
+      return `${baseClasses} w-[calc(100vw-2rem)] sm:w-[440px] h-[70px] max-w-[calc(100vw-20rem)]`;
+    } else if (viewMode === 'expanded') {
+      // Expandido: até o meio da página (50% da largura, menos sidebar e margens)
+      // Responsivo: ajusta para mobile (tela cheia em mobile, 50vw em desktop)
+      return `${baseClasses} w-[calc(100vw-2rem)] sm:w-[50vw] max-w-[calc((100vw-20rem)/2)] h-[calc(100vh-5rem)] min-w-[320px] sm:min-w-[600px]`;
+    } else {
+      // Normal: tamanho padrão (440px)
+      // Responsivo: ajusta para mobile
+      return `${baseClasses} w-[calc(100vw-2rem)] sm:w-[440px] h-[calc(100vh-5rem)] max-w-[calc(100vw-20rem)]`;
+    }
+  };
+  
+  const isMinimized = viewMode === 'minimized';
+
   return (
     <div 
-      className={`fixed bottom-6 right-6 z-50 w-[440px] transition-all duration-300 ${isMinimized ? 'h-[70px]' : 'h-[650px]'}`}
+      className={`${getContainerClasses()} transition-all duration-300 ease-in-out`}
     >
       <Card className="flex flex-col h-full shadow-2xl border border-border overflow-hidden bg-background/95">
         {/* Header neutro */}
         <div className="flex items-center justify-between p-4 border-b bg-card relative">
           <div className="flex items-center gap-3 relative z-10">
-            <div className="h-11 w-11 rounded-xl bg-accent flex items-center justify-center border border-border shadow-sm">
-              <Clover className="h-6 w-6 text-primary" />
+            <div className="h-11 w-11 rounded-xl bg-green-600 flex items-center justify-center border-2 border-green-500 shadow-lg">
+              <Clover className="h-6 w-6 text-white fill-white" />
             </div>
             <div>
               <h3 className="font-bold text-foreground flex items-center gap-2 text-lg">
@@ -134,28 +159,55 @@ export function TrevoAssistant({ context }: TrevoAssistantProps) {
           </div>
           
           <div className="flex items-center gap-1 relative z-10">
+            {!isMinimized && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={clearMessages}
+                className="h-9 w-9 hover:bg-accent rounded-lg transition-all duration-200"
+                title="Limpar conversa"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
-              onClick={clearMessages}
+              onClick={() => {
+                // Ciclo: minimized -> normal -> expanded -> normal -> minimized
+                if (viewMode === 'minimized') {
+                  setViewMode('normal');
+                } else if (viewMode === 'normal') {
+                  setViewMode('expanded');
+                } else {
+                  setViewMode('normal');
+                }
+              }}
               className="h-9 w-9 hover:bg-accent rounded-lg transition-all duration-200"
-              title="Limpar conversa"
+              title={viewMode === 'minimized' ? 'Ampliar' : viewMode === 'normal' ? 'Expandir' : 'Reduzir'}
             >
-              <Trash2 className="h-4 w-4" />
+              {viewMode === 'minimized' ? <Maximize2 className="h-4 w-4" /> : viewMode === 'normal' ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
             </Button>
+            {!isMinimized && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setViewMode('minimized')}
+                className="h-9 w-9 hover:bg-accent rounded-lg transition-all duration-200"
+                title="Minimizar"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsMinimized(!isMinimized)}
+              onClick={() => {
+                setIsOpen(false);
+                setViewMode('normal');
+              }}
               className="h-9 w-9 hover:bg-accent rounded-lg transition-all duration-200"
-            >
-              {isMinimized ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsOpen(false)}
-              className="h-9 w-9 hover:bg-accent rounded-lg transition-all duration-200"
+              title="Fechar"
             >
               <X className="h-4 w-4" />
             </Button>

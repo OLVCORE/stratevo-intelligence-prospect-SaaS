@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Plus, Check, PackagePlus } from "lucide-react";
-import { TOTVS_PRODUCTS } from "@/lib/engines/ai/fit";
+import { TOTVS_CATALOG } from "@/lib/constants/productSegmentMatrix";
 import { useProductCatalog } from "@/hooks/useProductCatalog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -33,10 +33,60 @@ export function ProductCatalogManager() {
 
   const existingByName = useMemo(() => new Set(catalog.map(p => p.name.toLowerCase())), [catalog]);
 
+  // 🔥 NOVO: Usar matriz completa TOTVS_CATALOG (270+ produtos)
+  // Mapeamento inteligente de categorias TOTVS para categorias CPQ
+  const categoryMapping: Record<string, typeof CATEGORIES[number]> = {
+    // AVANÇADO
+    'Carol AI': 'AVANÇADO',
+    'Advanced Analytics': 'AVANÇADO',
+    'Data Platform': 'AVANÇADO',
+    'Análise Preditiva': 'AVANÇADO',
+    'IA Generativa': 'AVANÇADO',
+    // ESPECIALIZADO
+    'TOTVS Techfin': 'ESPECIALIZADO',
+    'TOTVS Banking': 'ESPECIALIZADO',
+    'TOTVS Agro': 'ESPECIALIZADO',
+    'TOTVS Hotelaria': 'ESPECIALIZADO',
+    'RM Saúde': 'ESPECIALIZADO',
+    'RM Educacional': 'ESPECIALIZADO',
+    'RM Obras': 'ESPECIALIZADO',
+    'RM Jurídico': 'ESPECIALIZADO',
+    // INTERMEDIÁRIO
+    'TOTVS BI': 'INTERMEDIÁRIO',
+    'Fluig BPM': 'INTERMEDIÁRIO',
+    'Fluig ECM': 'INTERMEDIÁRIO',
+    'Fluig Workflow': 'INTERMEDIÁRIO',
+    'TOTVS Cloud': 'INTERMEDIÁRIO',
+    'TOTVS iPaaS': 'INTERMEDIÁRIO',
+    'TOTVS CRM': 'INTERMEDIÁRIO',
+    'RD Station': 'INTERMEDIÁRIO',
+    // BÁSICO (default)
+  };
+  
   const grouped = useMemo(() => {
+    // Transformar TOTVS_CATALOG em estrutura compatível
+    const allProducts: Array<{ name: string; category: typeof CATEGORIES[number]; description: string }> = [];
+    
+    // Mapear todas as categorias e produtos do TOTVS_CATALOG (270+ produtos)
+    Object.entries(TOTVS_CATALOG).forEach(([categoryKey, products]) => {
+      products.forEach((productName: string) => {
+        // Mapear categoria usando mapeamento inteligente
+        const mappedCategory = categoryMapping[productName] || 
+          (categoryKey.includes('Vertical') ? 'ESPECIALIZADO' : 
+           categoryKey.includes('Cloud') || categoryKey.includes('iPaaS') ? 'INTERMEDIÁRIO' : 'BÁSICO');
+        
+        allProducts.push({
+          name: productName,
+          category: mappedCategory,
+          description: `Solução TOTVS ${categoryKey}: ${productName}`
+        });
+      });
+    });
+    
+    // Agrupar por categoria CPQ
     return CATEGORIES.map(cat => ({
       category: cat,
-      items: TOTVS_PRODUCTS.filter(p => p.category === cat)
+      items: allProducts.filter(p => p.category === cat)
     }));
   }, []);
 

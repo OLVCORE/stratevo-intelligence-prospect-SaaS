@@ -13,63 +13,27 @@ import {
   Edit,
   Target,
   Search,
-  Building2,
-  Sparkles,
   Trash2,
   ExternalLink,
-  Loader2,
   FileText
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { ExecutiveReportModal } from '@/components/reports/ExecutiveReportModal';
 
 interface CompanyRowActionsProps {
   company: any;
   onDelete: () => void;
-  onEnrichReceita: () => Promise<void>;
-  onEnrich360: () => Promise<void>;
-  onEnrichApollo: () => Promise<void>;
   onDiscoverCNPJ?: () => void;
 }
 
 export function CompanyRowActions({
   company,
   onDelete,
-  onEnrichReceita,
-  onEnrich360,
-  onEnrichApollo,
   onDiscoverCNPJ
 }: CompanyRowActionsProps) {
   const navigate = useNavigate();
-  const [isEnriching, setIsEnriching] = useState(false);
-  const [enrichingAction, setEnrichingAction] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
-
-  const handleEnrich = async (action: string, fn: () => Promise<void>) => {
-    try {
-      setIsEnriching(true);
-      setEnrichingAction(action);
-      await fn();
-    } catch (error) {
-      toast.error(`Erro ao executar ${action}`);
-    } finally {
-      setIsEnriching(false);
-      setEnrichingAction(null);
-    }
-  };
-
-  const isDisabled = (action: string) => {
-    if (action === 'receita' && !company.cnpj) return true;
-    return false;
-  };
-
-  const getTooltip = (action: string) => {
-    if (action === 'receita' && !company.cnpj) return 'Requer CNPJ';
-    return '';
-  };
 
   return (
     <DropdownMenu>
@@ -84,8 +48,8 @@ export function CompanyRowActions({
           <Settings className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Ações</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-64 bg-popover z-[100]">
+        <DropdownMenuLabel className="text-sm font-semibold">Ações da Empresa</DropdownMenuLabel>
         <DropdownMenuSeparator />
         
         {/* Visualizar */}
@@ -125,11 +89,11 @@ export function CompanyRowActions({
           {company.cnpj ? 'Criar Estratégia' : 'Criar Estratégia (requer CNPJ)'}
         </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Enriquecimento</DropdownMenuLabel>
-
-        {/* Descobrir CNPJ */}
+        {/* Descobrir CNPJ - Mantido apenas se não tiver CNPJ (pré-requisito) */}
         {!company.cnpj && onDiscoverCNPJ && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-semibold text-primary">🔍 Pré-Requisito</DropdownMenuLabel>
           <DropdownMenuItem 
             onClick={onDiscoverCNPJ}
             className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
@@ -137,50 +101,9 @@ export function CompanyRowActions({
             <Search className="h-4 w-4 mr-2" />
             Descobrir CNPJ
           </DropdownMenuItem>
-        )}
-
-        {/* Receita Federal */}
-        <DropdownMenuItem
-          onClick={() => handleEnrich('Receita Federal', onEnrichReceita)}
-          disabled={isDisabled('receita') || isEnriching}
-          className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-        >
-          {enrichingAction === 'receita' ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Building2 className="h-4 w-4 mr-2" />
+            <DropdownMenuSeparator />
+          </>
           )}
-          Receita Federal
-          {getTooltip('receita') && <span className="ml-auto text-xs text-muted-foreground">{getTooltip('receita')}</span>}
-        </DropdownMenuItem>
-
-        {/* Apollo */}
-        <DropdownMenuItem
-          onClick={() => handleEnrich('Apollo', onEnrichApollo)}
-          disabled={isEnriching}
-          className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-        >
-          {enrichingAction === 'Apollo' ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <img src={apolloIcon} alt="Apollo" className="h-4 w-4 mr-2" />
-          )}
-          Apollo (Decisores)
-        </DropdownMenuItem>
-
-        {/* 360° Completo */}
-        <DropdownMenuItem
-          onClick={() => handleEnrich('360°', onEnrich360)}
-          disabled={isEnriching}
-          className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-        >
-          {enrichingAction === '360°' ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Sparkles className="h-4 w-4 mr-2" />
-          )}
-          360° Completo
-        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 

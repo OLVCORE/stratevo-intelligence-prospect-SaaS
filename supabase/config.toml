@@ -269,3 +269,6 @@ verify_jwt = false
 
   [functions.stc-agent]
   verify_jwt = false
+
+  [functions.generate-product-gaps]
+  verify_jwt = false

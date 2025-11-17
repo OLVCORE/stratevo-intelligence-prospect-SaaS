@@ -10,7 +10,6 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import TOTVSCheckReport from "@/pages/Leads/TOTVSCheckReport";
 import { Loader2 } from "lucide-react";
-import { TrevoAssistant } from "./components/trevo/TrevoAssistant";
 import SafeModeBanner from "@/components/dev/SafeModeBanner";
 import { AuthTokenGuard } from "./components/auth/AuthTokenGuard";
 
@@ -116,26 +115,8 @@ const PageLoader = () => (
   </div>
 );
 
-// Wrapper component que tem acesso ao location
-function TrevoAssistantWrapper() {
-  const location = useLocation();
-  
-  // Não mostrar em páginas de auth
-  if (location.pathname === '/login' || 
-      location.pathname === '/forgot-password' || 
-      location.pathname === '/reset-password' ||
-      location.pathname === '/') {
-    return null;
-  }
-  
-  return (
-    <TrevoAssistant 
-      context={{
-        currentPage: location.pathname
-      }}
-    />
-  );
-}
+// TREVO agora está no AppLayout header - não precisa mais deste wrapper
+// Removido para evitar duplicação
 
 // Componente de fallback quando há erro
 function ErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
@@ -582,16 +563,6 @@ const App = () => (
               }
             />
             <Route
-              path="/central-icp/batch-analysis"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <BatchAnalysis />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/central-icp/batch-totvs"
               element={
                 <ProtectedRoute>
@@ -895,9 +866,6 @@ const App = () => (
             <Route path="/offline" element={<OfflinePage />} />
             <Route path="*" element={<NotFound />} />
             </Routes>
-            
-            {/* TREVO Assistant - disponível em todas as páginas protegidas */}
-            <TrevoAssistantWrapper />
           </Suspense>
           </AuthProvider>
         </BrowserRouter>

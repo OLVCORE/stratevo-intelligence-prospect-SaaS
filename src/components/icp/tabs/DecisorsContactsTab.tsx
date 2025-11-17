@@ -17,6 +17,7 @@ import { performFullLinkedInAnalysis } from '@/services/phantomBusterEnhanced';
 import { corporateTheme } from '@/lib/theme/corporateTheme';
 import type { LinkedInProfileData } from '@/services/phantomBusterEnhanced';
 import { registerTab, unregisterTab } from './tabsRegistry';
+import { ApolloOrgIdDialog } from '@/components/companies/ApolloOrgIdDialog';
 
 interface DecisorsContactsTabProps {
   companyId?: string;
@@ -601,6 +602,94 @@ export function DecisorsContactsTab({
     sonnerToast.success('✅ Decisores & Contatos Salvos!');
   };
 
+  // 🚀 Enriquecimento Apollo via ApolloOrgIdDialog (similar ao CompanyDetailPage)
+  const [isEnrichingApollo, setIsEnrichingApollo] = useState(false);
+  const handleEnrichApollo = async (apolloOrgId?: string) => {
+    if (!companyId || !companyName) {
+      sonnerToast.error('Erro: ID ou nome da empresa não disponível');
+      return;
+    }
+    
+    setIsEnrichingApollo(true);
+    try {
+      console.log('[DECISORES-TAB] 🚀 Buscando decisores Apollo para:', companyName);
+      console.log('[DECISORES-TAB] 📋 Apollo Org ID:', apolloOrgId || 'N/A');
+      
+      // Buscar dados da empresa para obter CEP, fantasia, etc.
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', companyId)
+        .single();
+      
+      if (!companyData) {
+        throw new Error('Empresa não encontrada');
+      }
+      
+      const companyDataAny = companyData as any;
+      const rawDataLocal = companyDataAny.raw_data || {};
+      const receitaFederal = rawDataLocal.receita_federal || {};
+      
+      // Extrair dados com fallback completo
+      const cityToSend = receitaFederal.municipio || companyDataAny.city || '';
+      const stateToSend = receitaFederal.uf || companyDataAny.state || '';
+      const cepToSend = receitaFederal.cep || companyDataAny.zip_code || '';
+      const fantasiaToSend = receitaFederal.fantasia || receitaFederal.nome_fantasia || companyDataAny.fantasy_name || '';
+      
+      // Salvar Apollo Org ID na empresa se fornecido
+      if (apolloOrgId) {
+        await supabase
+          .from('companies')
+          .update({ apollo_organization_id: apolloOrgId } as any)
+          .eq('id', companyId);
+        
+        // Atualizar customApolloUrl para refletir o ID salvo
+        setCustomApolloUrl(`https://app.apollo.io/#/organizations/${apolloOrgId}`);
+      }
+      
+      sonnerToast.info('Buscando decisores no Apollo.io...', {
+        description: apolloOrgId ? 'Usando Organization ID manual' : 'Usando filtros inteligentes (CEP + Fantasia)'
+      });
+      
+      // Usar função enrich-apollo-decisores COM FILTROS INTELIGENTES
+      const { data, error } = await supabase.functions.invoke('enrich-apollo-decisores', {
+        body: {
+          company_id: companyId,
+          company_name: companyName,
+          domain: domain || companyDataAny.domain || companyDataAny.website,
+          apollo_org_id: apolloOrgId || companyDataAny.apollo_organization_id,
+          modes: ['people', 'company'],
+          city: cityToSend,
+          state: stateToSend,
+          industry: companyDataAny.industry,
+          cep: cepToSend,
+          fantasia: fantasiaToSend
+        }
+      });
+      
+      if (error) {
+        console.error('[DECISORES-TAB] ❌ Erro Apollo:', error);
+        throw error;
+      }
+
+      console.log('[DECISORES-TAB] ✅ Apollo retornou:', data);
+      
+      // Recarregar dados após enrichment
+      await handleRefreshData();
+      
+      sonnerToast.success('Decisores encontrados!', {
+        description: `${(data as any)?.decisores_salvos || 0} decisores salvos no banco`
+      });
+    } catch (e: any) {
+      console.error('[DECISORES-TAB] ❌ Erro completo:', e);
+      sonnerToast.error('Erro ao buscar decisores', { 
+        description: e.message || 'Verifique o Apollo Organization ID'
+      });
+    } finally {
+      setIsEnrichingApollo(false);
+    }
+  };
+
   // 🚀 Enriquecimento TRIPLO (Apollo → Hunter.io → PhantomBuster)
   const apolloMutation = useMutation({
     mutationFn: async () => {
@@ -873,7 +962,7 @@ export function DecisorsContactsTab({
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={handleRefreshData}
               variant="outline"
@@ -885,6 +974,11 @@ export function DecisorsContactsTab({
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               {isRefreshing ? 'Carregando...' : 'Recarregar'}
             </Button>
+            
+            <ApolloOrgIdDialog 
+              onEnrich={handleEnrichApollo}
+              disabled={isEnrichingApollo}
+            />
             
             <Button
               onClick={() => linkedinMutation.mutate()}
@@ -914,28 +1008,6 @@ export function DecisorsContactsTab({
                 Enriquecer Contatos (Apollo + Hunter + Phantom)
               </Button>
             )}
-          </div>
-        </div>
-        
-        {/* Campos editáveis - LinkedIn e Apollo URLs */}
-        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-600">
-          <div>
-            <Label className="text-slate-300 text-xs mb-2">LinkedIn Company URL (opcional)</Label>
-            <Input 
-              value={customLinkedInUrl} 
-              onChange={(e) => setCustomLinkedInUrl(e.target.value)}
-              placeholder="https://linkedin.com/company/..."
-              className="bg-slate-700 border-slate-600 text-slate-200"
-            />
-          </div>
-          <div>
-            <Label className="text-slate-300 text-xs mb-2">Apollo Company URL (opcional)</Label>
-            <Input 
-              value={customApolloUrl} 
-              onChange={(e) => setCustomApolloUrl(e.target.value)}
-              placeholder="https://app.apollo.io/#/organizations/..."
-              className="bg-slate-700 border-slate-600 text-slate-200"
-            />
           </div>
         </div>
       </Card>

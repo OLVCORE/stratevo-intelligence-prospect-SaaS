@@ -7,7 +7,9 @@ import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { InsightsDock } from "@/components/insights/InsightsDock";
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import ScrollToTop from "@/components/common/ScrollToTop";
-import { useNavigate } from "react-router-dom";
+import ScrollToBottom from "@/components/common/ScrollToBottom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { TrevoAssistant } from "@/components/trevo/TrevoAssistant";
 
 import { Button } from "@/components/ui/button";
 import { Sparkles, Home } from "lucide-react";
@@ -19,6 +21,7 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -53,6 +56,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex items-center gap-1 md:gap-2">
             <NotificationBell />
             <ModeToggle />
+            <TrevoAssistant context={{ currentPage: location.pathname }} />
           </div>
         </header>
 
@@ -69,8 +73,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         <InsightsDock open={insightsOpen} onOpenChange={setInsightsOpen} />
         
-        {/* ScrollToTop Universal - Aparece em TODAS as páginas */}
+        {/* ScrollToTop e ScrollToBottom Universal - Aparecem em TODAS as páginas */}
         <ScrollToTop />
+        <ScrollToBottom />
       </div>
     </SidebarProvider>
   );

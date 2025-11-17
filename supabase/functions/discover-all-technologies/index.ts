@@ -257,7 +257,9 @@ Responda APENAS JSON:
       }
     }
     
-    return { fullText, hasBusinessContext: true };
+    // 🔥 CRÍTICO: Fallback deve ser false para rejeitar se não tiver contexto claro
+    // Não aceitar por padrão, só aceitar se tiver correlação real
+    return { fullText, hasBusinessContext: false };
   } catch (error) {
     console.log('[URL-CONTEXT-COMP] ❌ Erro ao fetch URL:', error);
     return { fullText: '', hasBusinessContext: false };

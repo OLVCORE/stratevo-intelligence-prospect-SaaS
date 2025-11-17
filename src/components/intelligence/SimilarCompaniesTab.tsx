@@ -1432,7 +1432,13 @@ export function SimilarCompaniesTab({
     registerTab('similar', {
       flushSave: async () => {
         console.log('[SIMILAR] 📤 Registry: flushSave() chamado');
-        onDataChange?.(data?.similar_companies);
+        console.log('[SIMILAR] 📦 Dados para salvar:', data?.similar_companies);
+        if (onDataChange) {
+          onDataChange(data?.similar_companies);
+          console.log('[SIMILAR] ✅ onDataChange chamado com sucesso');
+        } else {
+          console.error('[SIMILAR] ❌ onDataChange NÃO EXISTE!');
+        }
         sonnerToast.success('✅ Empresas Similares Salvas!');
       },
       getStatus: () => data?.similar_companies?.length > 0 ? 'completed' : 'draft',

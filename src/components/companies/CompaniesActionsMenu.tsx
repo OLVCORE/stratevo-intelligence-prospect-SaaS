@@ -15,8 +15,7 @@ import {
   MoreHorizontal,
   Sparkles,
   Target,
-  Building2,
-  Zap
+  Building2
 } from 'lucide-react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { useState } from 'react';
@@ -28,7 +27,6 @@ interface CompaniesActionsMenuProps {
   onBulkEnrichReceita?: () => Promise<void>;
   onBulkEnrichApollo?: () => Promise<void>;
   onBulkEnrich360?: () => Promise<void>;
-  onBulkEcoBooster?: () => Promise<void>;
   onBulkSendToQuarantine?: () => Promise<void>;
   isProcessing?: boolean;
 }
@@ -40,7 +38,6 @@ export function CompaniesActionsMenu({
   onBulkEnrichReceita,
   onBulkEnrichApollo,
   onBulkEnrich360,
-  onBulkEcoBooster,
   onBulkSendToQuarantine,
   isProcessing = false,
 }: CompaniesActionsMenuProps) {
@@ -76,17 +73,17 @@ export function CompaniesActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent 
         align="end" 
-        className="w-64 z-[100] bg-popover"
+        className="w-72 z-[100] bg-popover"
       >
-        <DropdownMenuLabel>
-          {selectedCount > 0 ? `${selectedCount} selecionada(s)` : 'Nenhuma empresa selecionada'}
+        <DropdownMenuLabel className="text-sm font-semibold">
+          {selectedCount > 0 ? `${selectedCount} empresa(s) selecionada(s)` : 'Nenhuma empresa selecionada'}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         
         {/* ENRIQUECIMENTOS */}
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Enriquecimentos
+          <DropdownMenuLabel className="text-xs font-semibold text-primary">
+            ⚡ Enriquecimento em Massa
           </DropdownMenuLabel>
           
           {onBulkEnrichReceita && (
@@ -121,24 +118,13 @@ export function CompaniesActionsMenu({
               360° em Lote
             </DropdownMenuItem>
           )}
-
-          {onBulkEcoBooster && (
-            <DropdownMenuItem 
-              onClick={onBulkEcoBooster}
-              disabled={selectedCount === 0 || isDeleting}
-              className="cursor-pointer hover:bg-accent"
-            >
-              <Zap className="h-4 w-4 mr-2 text-green-500" />
-              Eco-Booster em Lote
-            </DropdownMenuItem>
-          )}
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
 
         {/* AÇÕES */}
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-xs text-muted-foreground">
+          <DropdownMenuLabel className="text-xs font-semibold">
             Ações
           </DropdownMenuLabel>
 

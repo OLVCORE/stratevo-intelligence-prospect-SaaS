@@ -1422,6 +1422,117 @@ R: 1) Deixar recado curto e profissional | 2) Mandar email de acompanhamento | 3
 
 ---
 
+## 🔄 FLUXO DE ENRIQUECIMENTO CORRETO (IMPORTANTE!)
+
+### ⚠️ FLUXO OBRIGATÓRIO E SEQUENCIAL:
+
+**O enriquecimento de dados segue uma ordem específica para economizar créditos e garantir eficiência:**
+
+#### **ETAPA 1: RECEITA FEDERAL** (Sempre Primeiro ✅)
+- ✅ **Sempre disponível** - não requer verificação GO/NO-GO
+- ✅ **Enriquecimento gratuito** - dados públicos da Receita Federal
+- ✅ **Dados essenciais:** CNPJ, Razão Social, Endereço, Porte, Natureza Jurídica
+- ✅ **Tempo:** ~10-15 segundos
+
+**Como fazer:**
+- Menu "Atualizar Dados" → "Receita Federal" OU
+- Menu "Atualizar Dados" → "Atualização Rápida" (sempre começa pela Receita)
+
+**📋 IMPORTANTE:** A Receita Federal é **SEMPRE** o primeiro passo, independente do status TOTVS.
+
+---
+
+#### **ETAPA 2: RELATÓRIO STC → ABA TOTVS** (Definir GO/NO-GO 🎯)
+- 🎯 **Após enriquecer Receita Federal**, abra o **Relatório STC** (9 abas)
+- 🎯 Na **primeira aba "TOTVS"**, execute o check para verificar se a empresa já é cliente TOTVS
+- 🎯 O sistema define automaticamente: **GO** (não é cliente) ou **NO-GO** (é cliente)
+
+**Como fazer:**
+1. Após enriquecer Receita Federal, clique no menu de ações da empresa
+2. Selecione "Ver Relatório Completo" ou "Simple TOTVS Check (STC)"
+3. Na primeira aba "TOTVS", clique em "Verificar" ou "Reverificar"
+4. Sistema consulta 47 fontes premium e define status: GO ou NO-GO
+
+**📋 IMPORTANTE:** O status GO/NO-GO **DEVE** ser definido no Relatório STC antes de enriquecer Apollo.
+
+---
+
+#### **ETAPA 3: APOLLO (DECISORES)** - Apenas se GO ✅
+- ✅ **Só aparece/se torna disponível** se totvs_status for 'go' (definido no Relatório STC)
+- ✅ **Economiza créditos** - não enriquece empresas que já são clientes (NO-GO)
+- ✅ **Dados enriquecidos:** Decisores, Contatos, Emails, LinkedIn, Cargos
+- ✅ **Tempo:** ~30-60 segundos
+- ✅ **Custo:** Consome créditos Apollo (só vale se GO)
+
+**Como fazer:**
+1. Verifique se status é GO no Relatório STC (Aba TOTVS)
+2. Se GO: Menu "Atualizar Dados" → "Apollo (Decisores)" fica disponível
+3. Se NO-GO: Apollo não aparece (economiza créditos automaticamente)
+
+**📋 IMPORTANTE:** Nunca enriqueça Apollo sem verificar GO/NO-GO primeiro!
+
+---
+
+#### **ETAPA 4: 360° + OUTRAS ABAS** - Disponível Sempre ✅
+- ✅ **360° Completo** - sempre disponível (análise profunda)
+- ✅ **Outras 9 abas do Relatório STC** - disponíveis sempre
+- ✅ **Enriquecimento completo:** Digital, Competidores, Similares, Produtos, etc.
+
+**Como fazer:**
+- Menu "Atualizar Dados" → "360° Completo" OU
+- Relatório STC → Navegar pelas 9 abas e enriquecer individualmente
+
+---
+
+### 📊 FLUXO VISUAL COMPLETO:
+
+**ETAPA 1:** ENRIQUECER RECEITA FEDERAL (sempre primeiro, sem verificação GO/NO-GO)
+- Dados: CNPJ, Razão Social, Endereço, Porte
+
+**ETAPA 2:** ABRIR RELATÓRIO STC → ABA TOTVS (usuário faz check e define GO/NO-GO)
+- Status: GO (não é cliente) ou NO-GO (é cliente)
+
+**ETAPA 3 - SE GO:**
+- ✅ Apollo fica disponível (decisores)
+- ✅ 360° disponível
+- ✅ Enriquecer outras 9 abas vale a pena
+
+**ETAPA 4 - SE NO-GO:**
+- ❌ Apollo NÃO aparece (economiza créditos)
+- ✅ 360° ainda disponível
+- ⚠️ Não vale gastar créditos Apollo
+
+---
+
+### ⚠️ REGRAS CRÍTICAS:
+
+1. **NUNCA** enriqueça Apollo antes de verificar GO/NO-GO no Relatório STC
+2. **SEMPRE** enriqueça Receita Federal primeiro (sempre disponível)
+3. **SÓ** enriqueça Apollo se status for GO (economiza créditos)
+4. O status GO/NO-GO **DEVE** ser definido no Relatório STC (Aba TOTVS)
+5. Se não tem certeza do status, **SEMPRE** verifique no Relatório STC primeiro
+
+---
+
+### 💡 PERGUNTAS FREQUENTES:
+
+**P: Por que não posso enriquecer Apollo diretamente?**
+R: Apollo consome créditos pagos. Se a empresa já é cliente TOTVS (NO-GO), não vale a pena gastar créditos. Por isso, verificamos GO/NO-GO primeiro no Relatório STC.
+
+**P: O que acontece se eu enriquecer Apollo sem verificar GO/NO-GO?**
+R: O sistema agora protege: Apollo só aparece no menu se status for GO. Se você tentar enriquecer manualmente uma empresa NO-GO, o sistema não permite (proteção automática).
+
+**P: Posso enriquecer Receita Federal várias vezes?**
+R: Sim! Receita Federal é gratuito e sempre disponível. Pode atualizar sempre que necessário.
+
+**P: O que fazer se o Relatório STC não está disponível?**
+R: Sempre execute o "Simple TOTVS Check (STC)" primeiro. Isso cria o relatório e define o status GO/NO-GO.
+
+**P: O que é "Atualização Completa" no botão?**
+R: "Atualização Completa" enriquece Receita Federal e sugere abrir o Relatório STC para verificar GO/NO-GO. Após definir GO, você pode enriquecer Apollo individualmente.
+
+---
+
 ## ROTAS E NAVEGAÇÃO
 
 **Principais URLs:**
@@ -1500,6 +1611,11 @@ R: 1) Deixar recado curto e profissional | 2) Mandar email de acompanhamento | 3
 - /central-icp/home - Pool de Leads (visão geral)
 - /central-icp/discovery - Buscar Empresas (web scraping)
 
+**GESTÃO DE EMPRESAS:**
+- /companies - Gerenciar Empresas (base completa)
+- /companies/:id - Detalhes da Empresa
+- /leads/totvs-check-report/:id - Relatório TOTVS Check (10 abas)
+
 **SALES WORKSPACE (Centro de Comando):**
 - /sdr/workspace - Sales Workspace com 11 abas (principal)
 - /sdr/dashboard - Redireciona para /sdr/workspace
@@ -1550,6 +1666,336 @@ R: 1) Deixar recado curto e profissional | 2) Mandar email de acompanhamento | 3
 - Usuário tem dúvidas sobre como usar a plataforma
 - Precisa de manual detalhado
 - Quer aprender sobre funcionalidades
+
+**Use /companies quando:**
+- Usuário quer gerenciar a base completa de empresas
+- Precisa buscar empresas por sócio
+- Quer fazer enriquecimento em lote
+
+**Use /leads/totvs-check-report/:id quando:**
+- Usuário quer ver relatório completo de análise TOTVS
+- Precisa verificar GO/NO-GO de uma empresa
+- Quer analisar oportunidades de cross-sell/upsell
+
+---
+
+## 🔍 NOVA FUNCIONALIDADE: DESCOBRIR EMPRESAS POR SÓCIO
+
+### O QUE É:
+Funcionalidade para buscar empresas através do nome ou CPF do sócio/proprietário.
+
+### COMO USAR:
+1. Acesse: **Menu → Gerenciar Empresas** ou vá para **/companies**
+2. Clique no botão **"🔍 Buscar por Sócio"** no cabeçalho da página
+3. Preencha os filtros:
+   - **Nome do Sócio:** Exato ou Semelhante
+   - **CPF (Opcional):** 6 dígitos do meio (ex: 222.333)
+   - **Tipo de Pessoa:** Física ou Jurídica
+   - **Qualificação:** Todas, Acionista, Diretor, Sócio-Administrador
+   - **UF:** Filtro por estado
+   - **Situação:** Todas, Ativas, Baixadas, Suspensas
+4. Clique em **"Buscar Empresas"**
+5. O sistema busca na base de dados usando o QSA (Quadro Societário) já cadastrado
+6. Selecione as empresas que deseja importar
+7. Clique em **"Importar"** para adicionar à base
+
+### ONDE ESTÁ LOCALIZADA:
+- **Página:** /companies (Gerenciar Empresas)
+- **Botão:** Cabeçalho da página "🔍 Buscar por Sócio"
+- **Componente:** PartnerSearchModal
+
+### BENEFÍCIOS:
+- ✅ Descobre empresas relacionadas através de sócios conhecidos
+- ✅ Busca rápida na base de dados (sem APIs externas)
+- ✅ Filtros avançados para refinar resultados
+- ✅ Importação direta para a base de empresas
+- ✅ Enriquecimento automático com Receita Federal após importação
+
+### EXEMPLO DE USO:
+"Encontrei que Marcos Francisco de Oliveira é sócio de 3 empresas. Quero encontrar todas as empresas dele para prospectar."
+
+**Como fazer:**
+1. Vá para /companies
+2. Clique em "🔍 Buscar por Sócio"
+3. Digite "Marcos Francisco de Oliveira"
+4. Escolha "Semelhante" para busca parcial
+5. Clique em "Buscar Empresas"
+6. Sistema retorna todas as empresas onde ele é sócio
+7. Selecione e importe
+
+---
+
+## 🎯 NOVA FUNCIONALIDADE: ABA OPORTUNIDADES NO RELATÓRIO TOTVS
+
+### O QUE É:
+Nova aba no Relatório TOTVS Check que mostra produtos em uso, oportunidades de cross-sell/upsell e scripts de abordagem.
+
+### ONDE ESTÁ LOCALIZADA:
+- **Página:** /leads/totvs-check-report/:id (Relatório TOTVS Check)
+- **Aba:** "Oportunidades" (9ª aba, antes de Executive)
+- **Total de Abas:** 10 abas agora (era 9 antes)
+
+### O QUE MOSTRA:
+
+**1. PRODUTOS EM USO** ✅
+- Lista todos os produtos TOTVS detectados nas evidências
+- Mostra contagem de evidências por produto
+- Confirmação visual de produtos já em uso
+
+**2. OPORTUNIDADES PRIMÁRIAS** 🔥
+- Produtos primários (nucleares) recomendados para o segmento
+- Produtos que ainda não foram detectados
+- Mostra: ARR, ROI estimado, Tempo de implementação
+- Baseado na MATRIZ DE PRODUTOS POR SEGMENTO
+
+**3. OPORTUNIDADES RELEVANTES** ✨
+- Produtos complementares que agregam valor
+- Segunda prioridade de abordagem
+- Produtos relevantes mas não nucleares
+
+**4. POTENCIAL ESTIMADO** 💰
+- Cálculo de ARR (Annual Recurring Revenue) por categoria
+- Potencial mínimo e máximo
+- Soma de oportunidades primárias + relevantes
+
+**5. ABORDAGEM SUGERIDA** 📝
+- **Script de Email:** Gerado automaticamente com dados da empresa
+- **Script de Ligação:** Roteiro completo de abordagem
+- Botões para copiar scripts (pronto para usar)
+
+### COMO USAR:
+1. Acesse o **Relatório TOTVS Check** de uma empresa
+2. Navegue até a aba **"Oportunidades"** (9ª aba)
+3. Veja os produtos em uso (confirmados)
+4. Analise oportunidades primárias (prioridade alta)
+5. Revise oportunidades relevantes (prioridade média)
+6. Verifique o potencial estimado (ARR projetado)
+7. Copie os scripts de email ou ligação
+8. Use os scripts para abordar a empresa
+
+### BENEFÍCIOS:
+- ✅ Identifica oportunidades de cross-sell/upsell automaticamente
+- ✅ Mostra potencial de receita estimado
+- ✅ Scripts prontos para usar (email e ligação)
+- ✅ Baseado em matriz validada de produtos por setor
+- ✅ Economiza tempo criando abordagens personalizadas
+
+### EXEMPLO DE USO:
+"Quero saber quais oportunidades de produtos TOTVS tenho com a empresa X que opera no segmento Educação."
+
+**Como fazer:**
+1. Abra o Relatório TOTVS Check da empresa X
+2. Vá para a aba "Oportunidades"
+3. Veja que ela usa "RM Educacional" (produto em uso)
+4. Veja oportunidades primárias: "RD Station", "TOTVS Chatbot" (não detectados)
+5. Veja potencial estimado: R$ 70K-220K/ano
+6. Copie o script de email ou ligação
+7. Use para abordar com foco nas oportunidades identificadas
+
+---
+
+## 📊 RELATÓRIO TOTVS CHECK - ESTRUTURA COMPLETA (10 ABAS)
+
+### ABA 1: TOTVS (GO/NO-GO) 🎯
+- **Localização:** Primeira aba do relatório
+- **Função:** Verifica se empresa já é cliente TOTVS
+- **Status:** Define GO (não é cliente) ou NO-GO (é cliente)
+- **Importância:** CRÍTICA - Define se vale a pena enriquecer Apollo
+- **Como usar:** Clique em "Verificar" ou "Reverificar" para executar check
+- **Resultado:** Lista evidências encontradas (vagas, notícias, etc.)
+
+### ABA 2: DECISORES 👥
+- **Localização:** Segunda aba (bloqueada até salvar TOTVS)
+- **Função:** Lista decisores identificados (Apollo)
+- **Importância:** Alta - contatos para abordagem
+- **Como usar:** Após definir GO, enriqueça Apollo para ver decisores
+- **Resultado:** Lista de decisores com cargo, email, LinkedIn
+
+### ABA 3: DIGITAL INTELLIGENCE 🌐
+- **Localização:** Terceira aba (bloqueada até salvar TOTVS)
+- **Função:** Análise de presença digital e maturidade
+- **Importância:** Média - insights de maturidade digital
+- **Como usar:** Visualize análise de site, redes sociais, SEO
+- **Resultado:** Score de maturidade digital e recomendações
+
+### ABA 4: COMPETITORS 🎯
+- **Localização:** Quarta aba (bloqueada até salvar TOTVS)
+- **Função:** Lista concorrentes identificados
+- **Importância:** Média - contexto competitivo
+- **Como usar:** Veja empresas similares que usam TOTVS
+- **Resultado:** Lista de concorrentes com produtos usados
+
+### ABA 5: SIMILAR 🏢
+- **Localização:** Quinta aba (bloqueada até salvar TOTVS)
+- **Função:** Empresas similares identificadas
+- **Importância:** Média - benchmark e referências
+- **Como usar:** Veja empresas similares para comparar
+- **Resultado:** Lista de empresas similares por setor/tamanho
+
+### ABA 6: CLIENTS 👥
+- **Localização:** Sexta aba (bloqueada até salvar TOTVS)
+- **Função:** Clientes identificados
+- **Importância:** Média - base de referências
+- **Como usar:** Veja empresas que podem ser clientes
+- **Resultado:** Lista de potenciais clientes
+
+### ABA 7: 360° ANALYSIS 📊
+- **Localização:** Sétima aba (bloqueada até salvar TOTVS)
+- **Função:** Análise 360° completa da empresa
+- **Importância:** Alta - visão holística
+- **Como usar:** Visualize análise completa em todas as dimensões
+- **Resultado:** Análise detalhada de todos os aspectos
+
+### ABA 8: PRODUCTS 📦
+- **Localização:** Oitava aba (bloqueada até salvar TOTVS)
+- **Função:** Produtos recomendados para o segmento
+- **Importância:** Alta - recomendações de produtos
+- **Como usar:** Veja produtos recomendados baseados no segmento
+- **Resultado:** Lista de produtos recomendados com justificativas
+
+### ABA 9: OPORTUNIDADES 🎯 (NOVA!)
+- **Localização:** Nona aba (bloqueada até salvar TOTVS)
+- **Função:** Análise de oportunidades de cross-sell/upsell
+- **Importância:** ALTA - oportunidades de receita
+- **Como usar:**
+  1. Veja produtos em uso (confirmados)
+  2. Analise oportunidades primárias (produtos não detectados)
+  3. Revise oportunidades relevantes (complementares)
+  4. Verifique potencial estimado (ARR)
+  5. Copie scripts de email ou ligação
+- **Resultado:**
+  - Produtos em uso com contagem de evidências
+  - Oportunidades primárias com ARR e ROI
+  - Oportunidades relevantes com ARR e ROI
+  - Potencial total estimado
+  - Scripts de abordagem prontos
+
+### ABA 10: EXECUTIVE 📈
+- **Localização:** Décima aba (bloqueada até salvar TOTVS)
+- **Função:** Sumário executivo completo
+- **Importância:** Muito Alta - visão geral para gestores
+- **Como usar:** Visualize resumo executivo de toda análise
+- **Resultado:** Sumário executivo com métricas e insights
+
+### FLUXO RECOMENDADO:
+1. **TOTVS** → Define GO/NO-GO
+2. Se **GO:** → **Decisores** (Apollo)
+3. → **Oportunidades** (análise de cross-sell/upsell)
+4. → **Products** (produtos recomendados)
+5. → **Executive** (sumário final)
+
+### BLOQUEIO SEQUENCIAL:
+- Abas 2-10 ficam **bloqueadas** até salvar aba TOTVS
+- Após salvar TOTVS, todas as abas ficam disponíveis
+- Isso garante que GO/NO-GO seja definido primeiro
+
+---
+
+## 📦 MATRIZ COMPLETA DE PRODUTOS TOTVS POR SETOR
+
+### SETORES COBERTOS (12 VERTICAIS):
+1. **Agronegócio** - TOTVS Agro, Protheus, Datasul, Logix
+2. **Construção Civil** - RM Obras, Protheus, Datasul, Logix
+3. **Distribuição** - Winthor (líder), Protheus, Datasul, Logix, TOTVS Supply
+4. **Educação** - RM Educacional (líder), Protheus
+5. **Hotelaria** - TOTVS Hotelaria, Protheus, RM
+6. **Jurídico** - RM Jurídico (líder), Protheus
+7. **Logística** - Logix (líder), Protheus, Datasul, TOTVS Supply
+8. **Manufatura/Indústria** - Protheus (líder), Datasul, Logix, TOTVS Manufatura
+9. **Saúde** - RM Saúde (líder), Protheus, Winthor
+10. **Serviços** - Protheus (líder), RM, Datasul, Logix
+11. **Serviços Financeiros** - Logix (líder), Protheus, RM, TOTVS Banking, TOTVS Techfin
+12. **Varejo** - Winthor (líder), Protheus, Logix, RM, Datasul
+
+### PRODUTOS TOTVS (5 ERPs + 270+ SOLUÇÕES):
+
+**ERPs (5):**
+- Protheus (mais usado, todos os setores)
+- Datasul (grande porte, indústrias pesadas)
+- RM (serviços profissionais, educação, saúde, jurídico)
+- Logix (bancos, logística, distribuição complexa)
+- Winthor (varejo, distribuição - líder absoluto)
+
+**Soluções Transversais (15+):**
+- TOTVS Backoffice (todos os ERPs)
+- TOTVS Fluig (BPM/ECM)
+- TOTVS Inteligência Tributária
+- TOTVS Manutenção de Ativos
+- TOTVS Manufatura (MES, PCP)
+- TOTVS Supply (WMS/TMS)
+- TOTVS Techfin/Banking
+- TOTVS CRM
+- TOTVS RH
+- TOTVS Analytics/BI
+- Carol AI
+- RD Station
+- TOTVS Commerce
+- TOTVS Assinatura Eletrônica
+- TOTVS Service Desk
+
+**Total:** 270+ produtos/soluções/módulos TOTVS
+
+### DETALHAMENTO POR SETOR:
+
+**1. AGRONEGÓCIO:**
+- Produtos Primários: Protheus, RM, Datasul, Logix, TOTVS Agro, TOTVS Manutenção de Ativos, TOTVS BI
+- Oportunidades Relevantes: Carol AI, TOTVS Cloud, TOTVS Supply
+- Palavras-chave: "TOTVS Agro", "AgriManager", "Protheus Agro", "gestão agrícola TOTVS", "ERP agrícola"
+
+**2. CONSTRUÇÃO CIVIL:**
+- Produtos Primários: Protheus, RM Obras (líder vertical), Datasul, Logix, Fluig BPM
+- Oportunidades Relevantes: TOTVS BI, TOTVS Assinatura Eletrônica
+- Palavras-chave: "RM Obras", "RM Construção", "TOTVS Construção", "ERP construção civil", "gestão de obras"
+
+**3. DISTRIBUIÇÃO:**
+- Produtos Primários: Winthor (líder absoluto), Protheus, Datasul, Logix, TOTVS Supply (WMS/TMS)
+- Oportunidades Relevantes: TOTVS BI, TOTVS Commerce (B2B E-commerce), TOTVS CRM
+- Palavras-chave: "Winthor", "TOTVS Distribuição", "WMS TOTVS", "TMS TOTVS", "atacado distribuidor"
+
+**4. EDUCAÇÃO:**
+- Produtos Primários: RM Educacional (líder absoluto), Protheus, Fluig ECM, TOTVS CRM
+- Oportunidades Relevantes: RD Station, TOTVS Chatbot, TOTVS Pay
+- Palavras-chave: "RM Educacional", "TOTVS Educacional", "RM Totvs Educação", "sistema acadêmico", "gestão escolar TOTVS"
+
+**5. HOTELARIA:**
+- Produtos Primários: Protheus, RM, TOTVS Hotelaria (PMS, Reservas, Front Desk)
+- Oportunidades Relevantes: TOTVS CRM, TOTVS BI (Revenue Management)
+- Palavras-chave: "TOTVS Hotelaria", "Protheus Hotelaria", "PMS TOTVS", "gestão hoteleira"
+
+**6. JURÍDICO:**
+- Produtos Primários: RM Jurídico (líder), Protheus, Fluig BPM
+- Oportunidades Relevantes: TOTVS Assinatura Eletrônica, Fluig ECM
+- Palavras-chave: "RM Jurídico", "RM Legal", "TOTVS Jurídico", "gestão de processos jurídicos", "escritório advocacia"
+
+**7. LOGÍSTICA:**
+- Produtos Primários: Logix (líder), Protheus, Datasul, Winthor, TOTVS Supply (WMS/TMS/Roteirização/Frota)
+- Oportunidades Relevantes: TOTVS BI, TOTVS Cloud
+- Palavras-chave: "TOTVS Supply", "WMS TOTVS", "TMS TOTVS", "Logix", "gestão logística TOTVS"
+
+**8. MANUFATURA/INDÚSTRIA:**
+- Produtos Primários: Protheus (mais usado), Datasul, Logix, RM, TOTVS Manufatura (MES/PCP), Fluig BPM, TOTVS Manutenção de Ativos, TOTVS BI
+- Oportunidades Relevantes: Carol AI, TOTVS Cloud, TOTVS iPaaS, TOTVS Supply
+- Palavras-chave: "TOTVS Manufatura", "MES TOTVS", "Protheus Manufatura", "Datasul", "PCP TOTVS", "chão de fábrica"
+
+**9. SAÚDE:**
+- Produtos Primários: RM Saúde (líder), Protheus, Winthor, Fluig ECM, TOTVS Cloud
+- Oportunidades Relevantes: TOTVS BI, TOTVS Chatbot
+- Palavras-chave: "RM Saúde", "TOTVS Saúde", "gestão hospitalar TOTVS", "prontuário eletrônico", "TISS TOTVS"
+
+**10. SERVIÇOS:**
+- Produtos Primários: Protheus (líder), RM, Datasul, Logix, Fluig BPM, TOTVS CRM
+- Oportunidades Relevantes: RD Station, TOTVS Assinatura Eletrônica, TOTVS Chatbot, TOTVS Service Desk
+- Palavras-chave: "Protheus Serviços", "RM Serviços", "PSA TOTVS", "gestão de projetos TOTVS", "timesheet"
+
+**11. SERVIÇOS FINANCEIROS:**
+- Produtos Primários: Logix (líder), Protheus, RM, TOTVS Banking, TOTVS Techfin
+- Oportunidades Relevantes: TOTVS BI, TOTVS Cloud
+- Palavras-chave: "TOTVS Techfin", "TOTVS Banking", "Logix Banking", "gestão financeira TOTVS"
+
+**12. VAREJO:**
+- Produtos Primários: Winthor (líder), Protheus, Logix, RM, Datasul, TOTVS Pay, TOTVS SFA
+- Oportunidades Relevantes: TOTVS CRM, TOTVS BI, TOTVS Commerce (E-commerce/Omnichannel), Carol AI
+- Palavras-chave: "Winthor", "TOTVS Varejo", "PDV TOTVS", "Protheus Varejo", "omnichannel TOTVS"
 
 ---
 

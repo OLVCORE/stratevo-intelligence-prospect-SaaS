@@ -41,7 +41,13 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
           ? { directClients, wave7Results } 
           : { skipped: true, reason: 'Análise opcional não executada' };
         console.log('[CLIENTS] 📤 Registry: flushSave() chamado');
-        onDataChange?.(currentData);
+        console.log('[CLIENTS] 📦 Dados para salvar:', currentData);
+        if (onDataChange) {
+          onDataChange(currentData);
+          console.log('[CLIENTS] ✅ onDataChange chamado com sucesso');
+        } else {
+          console.error('[CLIENTS] ❌ onDataChange NÃO EXISTE!');
+        }
         sonnerToast.success('✅ Client Discovery Salvo!');
       },
       getStatus: () => 'completed', // ✅ SEMPRE completed (aba opcional)

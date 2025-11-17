@@ -116,19 +116,63 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    );
+    // ✅ Criar cliente Supabase com SERVICE_ROLE_KEY (mesmo padrão de enrich-apollo-decisores)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!serviceRoleKey) {
+      console.error('[PRODUCT-GAPS] ❌ SERVICE_ROLE_KEY não configurada!');
+      return new Response(
+        JSON.stringify({ error: 'Server misconfiguration', details: 'SERVICE_ROLE_KEY missing' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const body: ProductGapRequest = await req.json();
+    // ✅ VALIDAÇÃO: Tentar parsear o body com tratamento de erro robusto
+    let body: ProductGapRequest;
+    try {
+      body = await req.json();
+      console.log('[PRODUCT-GAPS] ✅ Body recebido:', {
+        companyName: body.companyName,
+        cnpj: body.cnpj || '(não fornecido)',
+        sector: body.sector,
+        hasCompanyName: !!body.companyName
+      });
+    } catch (parseError) {
+      console.error('[PRODUCT-GAPS] ❌ Erro ao parsear body:', parseError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Erro ao parsear body da requisição',
+          details: parseError instanceof Error ? parseError.message : String(parseError)
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
+
+    // ✅ VALIDAÇÃO: Garantir que companyName existe
+    if (!body.companyName) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'companyName é obrigatório',
+          received: Object.keys(body)
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
+
     const {
       companyName,
+      cnpj, // ✅ CRÍTICO: Extrair cnpj do body (estava faltando!)
       sector,
       cnae,
       size,
@@ -144,7 +188,9 @@ serve(async (req) => {
 
     console.log('[PRODUCT-GAPS] ✨ EVOLUÇÃO v2.0: Análise Holística + Recomendações');
     console.log('[PRODUCT-GAPS] 📊 Empresa:', companyName);
+    console.log('[PRODUCT-GAPS] 🆔 CNPJ:', cnpj || '(não fornecido)'); // ✅ Log para debug
     console.log('[PRODUCT-GAPS] 🏢 Setor:', sector, '| CNAE:', cnae, '| Funcionários:', employees);
+    console.log('[PRODUCT-GAPS] ✅ Dados extraídos com sucesso. cnpj está definido:', typeof cnpj !== 'undefined');
     console.log('[PRODUCT-GAPS] 📦 Produtos detectados:', detectedProducts.length);
     console.log('[PRODUCT-GAPS] 🔍 Evidências:', detectedEvidences.length);
     console.log('[PRODUCT-GAPS] 👥 Decisores:', decisorsData?.total || 0);
@@ -172,6 +218,77 @@ serve(async (req) => {
     }));
 
     console.log('[PRODUCT-GAPS] ✅ Produtos em uso:', productsInUse.length);
+
+    // 🔥 CRÍTICO: VALIDAÇÃO - NÃO RECOMENDAR SE EMPRESA JÁ É CLIENTE TOTVS
+    // Verificar se há evidências TOTVS (triple/double matches indicam cliente)
+    const hasTOTVSEvidence = detectedProducts.length > 0 || detectedEvidences.length > 0;
+    const hasTripleMatches = detectedEvidences.some((e: any) => 
+      e.sources?.some((s: any) => s.matchType === 'triple' || s.matchType === 'triple_match')
+    );
+    const hasDoubleMatches = detectedEvidences.some((e: any) => 
+      e.sources?.some((s: any) => s.matchType === 'double' || s.matchType === 'double_match')
+    );
+    
+    const isTOTVSCustomer = hasTripleMatches || (hasDoubleMatches && detectedProducts.length > 0);
+    
+    if (isTOTVSCustomer) {
+      console.log('[PRODUCT-GAPS] ⚠️ EMPRESA JÁ É CLIENTE TOTVS - NÃO RECOMENDAR PRODUTOS');
+      console.log('[PRODUCT-GAPS] 📊 Evidências:', {
+        hasTripleMatches,
+        hasDoubleMatches,
+        detectedProducts: detectedProducts.length,
+        detectedEvidences: detectedEvidences.length
+      });
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          strategy: 'customer_retention',
+          segment: sector || 'Serviços',
+          products_in_use: productsInUse,
+          primary_opportunities: [], // ✅ NÃO RECOMENDAR PARA CLIENTE
+          relevant_opportunities: [], // ✅ NÃO RECOMENDAR PARA CLIENTE
+          estimated_potential: null,
+          executive_summary: {
+            company_analysis: `${companyName} já é cliente TOTVS (evidências de uso detectadas).`,
+            moment_analysis: 'Cliente ativo - foco em retenção e expansão',
+            sales_type: 'customer_retention',
+            methodology: 'Detecção automática de evidências TOTVS',
+            recommendations_rationale: 'Não recomendar novos produtos - empresa já é cliente TOTVS',
+            key_findings: [
+              `Detectados ${detectedProducts.length} produto(s) TOTVS em uso`,
+              hasTripleMatches ? 'Triple matches confirmam uso de produtos TOTVS' : '',
+              hasDoubleMatches ? 'Double matches indicam relação com TOTVS' : ''
+            ].filter(Boolean)
+          },
+          sales_approach: {
+            type: 'customer_retention',
+            recommendation: 'Focar em retenção e expansão do contrato atual',
+            call_script: {
+              opening: `Olá, vimos que ${companyName} já utiliza soluções TOTVS. Como está a experiência com nossos produtos?`,
+              objections: [],
+              closing: 'Gostaríamos de entender melhor suas necessidades para potencial expansão.'
+            },
+            talking_points: [
+              'Foco em retenção e satisfação',
+              'Identificação de oportunidades de expansão',
+              'Suporte e relacionamento próximo'
+            ]
+          },
+          stack_suggestion: [],
+          total_estimated_value: 0,
+          insights: [
+            'Empresa já é cliente TOTVS - não recomendar novos produtos',
+            hasTripleMatches ? 'Triple matches confirmam uso ativo' : '',
+            hasDoubleMatches ? 'Double matches indicam relação estabelecida' : ''
+          ].filter(Boolean)
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
 
     // ==================================================================
     // ETAPA 2: IDENTIFICAR SEGMENTO E BUSCAR MATRIZ (INTELIGENTE)
@@ -240,15 +357,60 @@ serve(async (req) => {
     let companyMoment: 'expansion' | 'stable' | 'crisis' | 'unknown' = 'unknown';
     let momentReason = '';
     
-    if (isInCrisis || hasHighDebts) {
-      companyMoment = 'crisis';
-      momentReason = `Empresa em momento delicado (${hasHighDebts ? 'dívidas altas' : 'saúde financeira baixa'})`;
-    } else if (isGrowing && isHiring && hasRecentActivity) {
-      companyMoment = 'expansion';
-      momentReason = `Empresa em crescimento (${analysis360Data?.growthRate}% ao ano, contratando)`;
-    } else if (isHealthy && !hasHighDebts) {
-      companyMoment = 'stable';
-      momentReason = `Empresa estável e saudável financeiramente`;
+    // 🔥 PONTO 1: Integrar deepAnalysis na lógica determinística
+    // Se há análise profunda de URLs, usar o momento detectado lá primeiro
+    const deepMoment = digitalData?.deepAnalysis?.company_moment;
+    if (deepMoment) {
+      // Mapear termos da deepAnalysis para momentos padronizados
+      if (deepMoment.toLowerCase().includes('cris') || deepMoment.toLowerCase().includes('delicad') || deepMoment.toLowerCase().includes('problem')) {
+        companyMoment = 'crisis';
+        momentReason = `Momento detectado via análise profunda de URLs: ${deepMoment}`;
+      } else if (deepMoment.toLowerCase().includes('cresc') || deepMoment.toLowerCase().includes('expans') || deepMoment.toLowerCase().includes('expandi')) {
+        companyMoment = 'expansion';
+        momentReason = `Momento detectado via análise profunda de URLs: ${deepMoment}`;
+      } else if (deepMoment.toLowerCase().includes('estável') || deepMoment.toLowerCase().includes('estavel') || deepMoment.toLowerCase().includes('establ')) {
+        companyMoment = 'stable';
+        momentReason = `Momento detectado via análise profunda de URLs: ${deepMoment}`;
+      }
+    }
+    
+    // Se não foi determinado via deepAnalysis, usar lógica determinística tradicional
+    if (companyMoment === 'unknown') {
+      if (isInCrisis || hasHighDebts) {
+        companyMoment = 'crisis';
+        momentReason = `Empresa em momento delicado (${hasHighDebts ? 'dívidas altas' : 'saúde financeira baixa'})`;
+      } else if (isGrowing && isHiring && hasRecentActivity) {
+        companyMoment = 'expansion';
+        momentReason = `Empresa em crescimento (${analysis360Data?.growthRate}% ao ano, contratando)`;
+      } else if (isHealthy && !hasHighDebts) {
+        companyMoment = 'stable';
+        momentReason = `Empresa estável e saudável financeiramente`;
+      }
+    }
+    
+    // 🔥 PONTO 2: Fallback inteligente usando sinais de URLs
+    // Se ainda for 'unknown', usar sinais de mercado das URLs como fallback
+    if (companyMoment === 'unknown' && digitalData?.signalsSummary) {
+      const signals = digitalData.signalsSummary;
+      const positiveSignals = (signals.expansions || 0) + (signals.hiring || 0) + (signals.productLaunches || 0) + (signals.partnerships || 0);
+      const totalSignals = positiveSignals + (signals.events || 0) + (signals.awards || 0);
+      
+      if (positiveSignals >= 3) {
+        companyMoment = 'expansion';
+        momentReason = `Sinais de mercado detectados via URLs (${positiveSignals} sinais positivos: expansões, contratações, lançamentos)`;
+      } else if (totalSignals >= 2) {
+        companyMoment = 'stable';
+        momentReason = `Atividade detectada via URLs (${totalSignals} sinais de mercado)`;
+      }
+    }
+    
+    // Se ainda for 'unknown', usar sinais de buying_signals como último recurso
+    if (companyMoment === 'unknown' && digitalData?.deepAnalysis?.buying_signals?.length) {
+      const buyingSignals = digitalData.deepAnalysis.buying_signals;
+      if (buyingSignals.length >= 2) {
+        companyMoment = 'expansion';
+        momentReason = `Sinais de compra detectados via URLs (${buyingSignals.length} sinais)`;
+      }
     }
     
     console.log('[PRODUCT-GAPS] 🧠 Momento da empresa:', companyMoment, '-', momentReason);
@@ -292,19 +454,118 @@ serve(async (req) => {
     const competitorInfo = competitors.length > 0 ? 
       `\nCONCORRENTES DETECTADOS: ${competitors.map((c: any) => c.name).join(', ')}` : '';
 
-    // 🎯 PROMPT HOLÍSTICO: Análise completa de TODAS as 9 abas
+    // 🔥 Preparar produtos detectados como string JSON (para evitar problema de template string aninhado)
+    const detectedProductsJson = JSON.stringify(detectedProducts);
+
+    // 🔧 Função auxiliar para construir orientação de momento da empresa
+    function buildMomentGuidance(moment: string): string {
+      if (moment === 'crisis') {
+        return `⚠️ ATENÇÃO - EMPRESA EM MOMENTO DELICADO:
+→ NÃO recomendar investimentos altos (Datasul, RM enterprise)
+→ FOCAR em: economia de custos, eficiência, ROI rápido (<12m)
+→ Produtos: TOTVS Cloud (reduz infra), Fluig (automatiza), Techfin (capital de giro)
+→ Abordagem: Consultiva, mostrar economia, POC grátis`;
+      } else if (moment === 'expansion') {
+        return `🔥 MOMENTO QUENTE - EMPRESA EM CRESCIMENTO:
+→ RECOMENDAR stack robusto para escalar operação
+→ FOCAR em: automação, escalabilidade, analytics, competitividade
+→ Produtos: ERP completo, BI/Analytics, Carol AI, CRM, Cloud
+→ Abordagem: Agressiva, mostrar cases de crescimento, implementação rápida`;
+      } else {
+        return `💡 EMPRESA ESTÁVEL:
+→ RECOMENDAR otimização e transformação digital gradual
+→ FOCAR em: processos, compliance, inovação incremental
+→ Produtos: Fluig BPM, TOTVS BI, Assinatura Eletrônica, Cloud
+→ Abordagem: Educativa, mostrar benchmarks, implementação gradual`;
+      }
+    }
+
+    // 🔧 Função auxiliar para construir seção de análise de URLs (evita template strings aninhados complexos)
+    function buildUrlAnalysisSection(digitalData: any): string {
+      if (!digitalData?.allUrls || digitalData.allUrls.length === 0) {
+        return '   ⚠️ Nenhuma URL disponível para análise';
+      }
+
+      const urlCount = digitalData.allUrls.length;
+      const urlList = digitalData.allUrls.slice(0, 20).join(', ') || 'N/A';
+      const moreUrlsText = urlCount > 20 ? `\n   ... e mais ${urlCount - 20} URLs` : '';
+      
+      let section = `   📊 TOTAL DE URLs: ${urlCount} URLs\n   🌐 URLs ANALISADAS: ${urlList}${moreUrlsText}\n`;
+      
+      if (digitalData?.signalsSummary) {
+        section += `   \n   📈 SINAIS DE MERCADO:\n` +
+          `   - Lançamentos de Produtos: ${digitalData.signalsSummary.productLaunches}\n` +
+          `   - Expansões: ${digitalData.signalsSummary.expansions}\n` +
+          `   - Contratações: ${digitalData.signalsSummary.hiring}\n` +
+          `   - Parcerias: ${digitalData.signalsSummary.partnerships}\n` +
+          `   - Prêmios/Certificações: ${digitalData.signalsSummary.awards}\n` +
+          `   - Eventos/Feiras: ${digitalData.signalsSummary.events}\n` +
+          `   - Atividade Internacional: ${digitalData.signalsSummary.international}\n`;
+      }
+      
+      if (digitalData?.deepAnalysis) {
+        section += `   \n   🧠 ANÁLISE PROFUNDA (100% DO CONTEÚDO ANALISADO):\n` +
+          `   - Momento da Empresa: ${digitalData.deepAnalysis.company_moment || 'N/A'}\n` +
+          `   - Maturidade Digital: ${digitalData.deepAnalysis.digital_maturity || 'N/A'}\n`;
+        
+        if (digitalData.deepAnalysis.key_insights?.length) {
+          section += `   \n   🔍 INSIGHTS PRINCIPAIS (LENDO TODO O CONTEÚDO):\n` +
+            digitalData.deepAnalysis.key_insights.map((insight: string) => `   • ${insight}`).join('\n') + '\n';
+        }
+        
+        if (digitalData.deepAnalysis.recent_activities?.length) {
+          section += `   \n   🎯 ATIVIDADES RECENTES (ANÁLISE INTEGRAL):\n` +
+            digitalData.deepAnalysis.recent_activities.map((activity: string) => `   • ${activity}`).join('\n') + '\n';
+        }
+        
+        if (digitalData.deepAnalysis.buying_signals?.length) {
+          section += `   \n   🔥 SINAIS DE COMPRA (DETECTADOS EM 100% DAS URLs):\n` +
+            digitalData.deepAnalysis.buying_signals.map((signal: string) => `   ✅ ${signal}`).join('\n') + '\n';
+        }
+        
+        if (digitalData.deepAnalysis.red_flags?.length) {
+          section += `   \n   ⚠️ ALERTAS (ANÁLISE COMPLETA):\n` +
+            digitalData.deepAnalysis.red_flags.map((flag: string) => `   ⚠️ ${flag}`).join('\n') + '\n';
+        }
+        
+        if (digitalData.deepAnalysis.green_flags?.length) {
+          section += `   \n   ✅ SINAIS POSITIVOS (ANÁLISE COMPLETA):\n` +
+            digitalData.deepAnalysis.green_flags.map((flag: string) => `   ✅ ${flag}`).join('\n') + '\n';
+        }
+        
+        section += `   \n   💡 ABORDAGEM RECOMENDADA (BASEADA EM 100% DA ANÁLISE):\n   ${digitalData.deepAnalysis.recommended_approach || 'N/A'}\n`;
+        section += `   \n   ⏰ TIMING IDEAL (BASEADO EM TODOS OS SINAIS):\n   ${digitalData.deepAnalysis.best_timing || 'N/A'}\n`;
+      } else {
+        section += `   \n   ⚠️ Análise profunda em processamento (analisando 100% do conteúdo das URLs)\n`;
+      }
+      
+      if (digitalData?.websiteContent) {
+        const contentPreview = digitalData.websiteContent.substring(0, 1000);
+        const contentMore = digitalData.websiteContent.length > 1000 ? '...' : '';
+        section += `   \n   📄 CONTEÚDO DO WEBSITE (ANÁLISE INTEGRAL):\n   ${contentPreview}${contentMore}\n`;
+      }
+      
+      return section;
+    }
+
+    // 🎯 PROMPT HOLÍSTICO: Análise 100% INTEGRAL de conteúdo, URLs, resultados
+    // 🔥 CRÍTICO: Analisar 100% do conteúdo fornecido, sem pular informações
     const aiPrompt = `Você é consultor sênior de vendas TOTVS com expertise em análise de fit e timing de vendas B2B.
+
+⚠️ INSTRUÇÃO CRÍTICA: Você DEVE analisar 100% do conteúdo fornecido abaixo. 
+Leia TODAS as informações, TODAS as URLs analisadas, TODOS os sinais, TODOS os dados contextuais.
+Não pule nenhuma informação. Use TUDO para gerar recomendações precisas e assertivas.
 
 ═══════════════════════════════════════════════════════════════════
 EMPRESA: ${companyName}
 ═══════════════════════════════════════════════════════════════════
-CNPJ: ${cnpj}
+CNPJ: ${cnpj || 'não fornecido'}
 CNAE: ${cnae || 'não especificado'} → Segmento: ${segmentKey}
 SETOR: ${sector || segmentKey}
 PORTE: ${size || 'médio'} (${employees || '100'} funcionários)
 
 ═══════════════════════════════════════════════════════════════════
-ANÁLISE CONTEXTUAL COMPLETA (TODAS AS ABAS):
+ANÁLISE CONTEXTUAL 100% COMPLETA (TODAS AS 9 ABAS + URLs PROFUNDAS):
 ═══════════════════════════════════════════════════════════════════
 
 📊 1. STATUS TOTVS:
@@ -321,25 +582,8 @@ ANÁLISE CONTEXTUAL COMPLETA (TODAS AS ABAS):
    Tecnologias: ${digitalData?.technologies?.join(', ') || 'N/A'}
    Insight: ${isDigitalMature ? '✅ Madura digitalmente' : '⚠️ Baixa maturidade'}
 
-🔍 3.1. ANÁLISE PROFUNDA DE URLs (${digitalData?.signalsSummary ? digitalData.allUrls?.length || 0 : 0} URLs analisadas):
-   ${digitalData?.signalsSummary ? `
-   Lançamentos de Produtos: ${digitalData.signalsSummary.productLaunches}
-   Expansões: ${digitalData.signalsSummary.expansions}
-   Contratações: ${digitalData.signalsSummary.hiring}
-   Parcerias: ${digitalData.signalsSummary.partnerships}
-   Prêmios/Certificações: ${digitalData.signalsSummary.awards}
-   Eventos/Feiras: ${digitalData.signalsSummary.events}
-   Atividade Internacional: ${digitalData.signalsSummary.international}
-   
-   🧠 INSIGHTS PROFUNDOS:
-   ${digitalData.deepAnalysis?.key_insights?.join('\n   ') || 'N/A'}
-   
-   🎯 ATIVIDADES RECENTES:
-   ${digitalData.deepAnalysis?.recent_activities?.join('\n   ') || 'N/A'}
-   
-   🔥 SINAIS DE COMPRA:
-   ${digitalData.deepAnalysis?.buying_signals?.join('\n   ') || 'N/A'}
-   ` : 'Análise profunda não disponível (será executada em background)'}
+🔍 3.1. ANÁLISE 100% PROFUNDA DE URLs (${digitalData?.allUrls?.length || 0} URLs analisadas integralmente):
+   ${buildUrlAnalysisSection(digitalData)}
 
 💰 4. SAÚDE FINANCEIRA:
    Receita: R$ ${(analysis360Data?.revenue || 0) / 1000}K/ano
@@ -400,37 +644,79 @@ Gere recomendações SENSATAS e CONTEXTUALIZADAS que:
 6. PRIORIZEM ROI e viabilidade
 7. CITEM cases de sucesso REAIS do segmento
 
-Responda APENAS JSON válido (sem comentários, sem markdown):
-{
-  "company_moment": "${companyMoment}",
-  "moment_analysis": "Análise detalhada em 2-3 frases",
-  "primary_opportunities": [
-    {
-      "name": "Nome Produto",
-      "category": "Categoria",
-      "fit_score": 75-95,
-      "value": "R$ XXK-XXXK ARR",
-      "reason": "POR QUE FAZ SENTIDO NO MOMENTO ATUAL da empresa",
-      "use_case": "Caso de uso ESPECÍFICO para ${sector} considerando CNAE ${cnae}",
-      "roi_months": 9-24,
-      "priority": "high",
-      "timing": "immediate|short_term|medium_term",
-      "benefits": ["Benefício 1", "Benefício 2", "Benefício 3"],
-      "case_study": "Case REAL de empresa similar",
-      "contextual_fit": "Por que é adequado ao momento ${companyMoment}"
-    }
-  ],
-  "relevant_opportunities": [/* mesmo formato, 2-3 produtos */],
-  "estimated_potential": {
-    "min_revenue": "R$ XXXK",
-    "max_revenue": "R$ XXXK",
-    "close_probability": "60-85%",
-    "timeline_months": "X-XX meses",
-    "timing_recommendation": "Quando abordar"
-  },
-  "red_flags": ["Alerta 1 se houver"],
-  "green_flags": ["Sinal positivo 1"]
-}`;
+═══════════════════════════════════════════════════════════════════
+🎯 EXECUTIVO SUMMARY (RESUMO HOLÍSTICO) - REQUERIDO:
+═══════════════════════════════════════════════════════════════════
+
+Você DEVE gerar um RESUMO EXECUTIVO HOLÍSTICO que analise:
+1. TODAS as 9 abas do relatório (TOTVS Check, Decisores, Digital, 360°, Competitors, Similar, Clients, Products, Opportunities)
+2. TODAS as ${digitalData?.allUrls?.length || 0} URLs analisadas (conteúdo integral)
+3. MOMENTO da empresa (crescimento/estável/crise) baseado em 100% dos dados
+4. TIPO DE VENDA (New Sale/Cross-Sell/Upsell) baseado em produtos detectados
+5. METODOLOGIA completa explicando como chegamos às recomendações
+6. RAZÃO de cada produto recomendado (baseado em análise integral)
+
+O resumo executivo deve explicar:
+- Como a empresa chegou neste momento (análise de todas as URLs e dados)
+- Por que recomendamos cada produto (baseado em TODAS as informações)
+- Metodologia completa da análise (9 abas + URLs + sinais)
+- Nível de assertividade (baseado em quantidade e qualidade dos dados)`;
+
+    // Construir o JSON de exemplo completo usando concatenação de strings (evita problemas de template string aninhado)
+    const urlCount = digitalData?.allUrls?.length || 0;
+    const sectorName = sector || segmentKey;
+    const cnaeValue = cnae || 'não especificado';
+    
+    const jsonExample = '{\n' +
+      '  "executive_summary": {\n' +
+      '    "company_analysis": "Análise completa da empresa baseada em 100% das informações (9 abas + ' + urlCount + ' URLs). Descreva o momento atual, saúde financeira, maturidade digital, decisores, etc.",\n' +
+      '    "moment_analysis": "Análise detalhada do momento da empresa (crescimento/estável/crise) baseada em TODOS os sinais detectados nas URLs e dados 360°",\n' +
+      '    "sales_type": "' + strategy + '",\n' +
+      '    "sales_type_explanation": "Explicação detalhada do tipo de venda (New Sale/Cross-Sell/Upsell) baseado em produtos detectados",\n' +
+      '    "sector_identified": "' + sectorName + '",\n' +
+      '    "sector_source": "Fonte do setor identificado (CNAE/Apollo/STC)",\n' +
+      '    "products_detected_count": ' + detectedProducts.length + ',\n' +
+      '    "products_detected": ' + detectedProductsJson + ',\n' +
+      '    "gap_analysis": "Análise de gaps: produtos essenciais para o setor que NÃO foram detectados",\n' +
+      '    "recommendations_rationale": "Explicação completa de POR QUE recomendamos estes produtos específicos, baseado em TODAS as informações analisadas",\n' +
+      '    "methodology": "Metodologia completa: explicar COMO chegamos às recomendações. Mencionar análise de 9 abas + ' + urlCount + ' URLs + sinais de mercado + saúde financeira + maturidade digital",\n' +
+      '    "url_analysis_count": ' + urlCount + ',\n' +
+      '    "url_analysis_summary": "Resumo da análise das URLs: principais sinais detectados, atividades recentes, indicadores de compra",\n' +
+      '    "confidence_level": "Nível de confiança na análise (alta/média/baixa) baseado em quantidade e qualidade dos dados",\n' +
+      '    "key_findings": ["Achado principal 1 baseado em análise 100%", "Achado principal 2", "Achado principal 3"]\n' +
+      '  },\n' +
+      '  "company_moment": "' + companyMoment + '",\n' +
+      '  "moment_analysis": "Análise detalhada em 2-3 frases baseada em 100% dos dados",\n' +
+      '  "primary_opportunities": [\n' +
+      '    {\n' +
+      '      "name": "Nome Produto",\n' +
+      '      "category": "Categoria",\n' +
+      '      "fit_score": 75,\n' +
+      '      "value": "R$ XXK-XXXK ARR",\n' +
+      '      "reason": "POR QUE FAZ SENTIDO NO MOMENTO ATUAL da empresa",\n' +
+      '      "use_case": "Caso de uso ESPECÍFICO para ' + sectorName + ' considerando CNAE ' + cnaeValue + '",\n' +
+      '      "roi_months": 12,\n' +
+      '      "priority": "high",\n' +
+      '      "timing": "immediate",\n' +
+      '      "benefits": ["Benefício 1", "Benefício 2", "Benefício 3"],\n' +
+      '      "case_study": "Case REAL de empresa similar",\n' +
+      '      "contextual_fit": "Por que é adequado ao momento ' + companyMoment + '"\n' +
+      '    }\n' +
+      '  ],\n' +
+      '  "relevant_opportunities": [],\n' +
+      '  "estimated_potential": {\n' +
+      '    "min_revenue": "R$ XXXK",\n' +
+      '    "max_revenue": "R$ XXXK",\n' +
+      '    "close_probability": "60-85%",\n' +
+      '    "timeline_months": "X-XX meses",\n' +
+      '    "timing_recommendation": "Quando abordar"\n' +
+      '  },\n' +
+      '  "red_flags": [],\n' +
+      '  "green_flags": []\n' +
+      '}';
+    
+    // Combinar prompt principal com exemplo JSON
+    const fullPrompt = aiPrompt + '\n\nResponda APENAS JSON válido (sem comentários, sem markdown):\n\n' + jsonExample;
 
     let aiRecommendations: any = null;
 
@@ -443,9 +729,9 @@ Responda APENAS JSON válido (sem comentários, sem markdown):
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: aiPrompt }],
+          messages: [{ role: 'user', content: fullPrompt }],
           temperature: 0.7,
-          max_tokens: 2500
+          max_tokens: 4000 // 🔥 AUMENTADO para suportar análise 100% + resumo executivo holístico
         })
       });
 
@@ -659,6 +945,45 @@ Responda APENAS JSON:
       close_probability: '70-80%',
       timeline_months: '12-18 meses'
     };
+    
+    // 🔥 NOVO: Resumo Executivo Holístico (extrair da IA ou gerar fallback)
+    const executiveSummary = aiRecommendations?.executive_summary || {
+      company_analysis: `${companyName} é uma empresa de ${sector || segmentKey} com ${employees || 100} funcionários. ` +
+        `Análise baseada em ${digitalData?.allUrls?.length || 0} URLs e dados de 9 abas do relatório. ` +
+        `Momento atual: ${companyMoment} (${momentReason}).`,
+      moment_analysis: momentReason || `Empresa em momento ${companyMoment}.`,
+      sales_type: strategy,
+      sales_type_explanation: strategy === 'cross-sell' 
+        ? `Cliente TOTVS com ${detectedProducts.length} produtos em uso. Oportunidade de expansão do stack.`
+        : `Prospect novo. Oportunidade de stack inicial.`,
+      sector_identified: sector || segmentKey,
+      sector_source: cnae ? 'CNAE' : 'Apollo/STC',
+      products_detected_count: detectedProducts.length,
+      products_detected: detectedProducts,
+      gap_analysis: `Produtos essenciais para ${segmentKey} não detectados: ${primaryGaps.slice(0, 3).join(', ')}`,
+      recommendations_rationale: `Recomendamos estes produtos baseado em análise de ${digitalData?.allUrls?.length || 0} URLs, ` +
+        `saúde financeira ${analysis360Data?.healthScore || 'desconhecida'}, ` +
+        `maturidade digital ${digitalData?.maturityScore || 0}/100, ` +
+        `momento da empresa ${companyMoment}, e produtos detectados ${detectedProducts.length}.`,
+      methodology: `Metodologia: Análise holística de 9 abas (TOTVS Check, Decisores, Digital, 360°, Competitors, Similar, Clients, Products, Opportunities) ` +
+        `+ análise profunda de ${digitalData?.allUrls?.length || 0} URLs descobertas + sinais de mercado + saúde financeira + maturidade digital. ` +
+        `Cada recomendação foi validada contra matriz de produtos por segmento e contexto da empresa.`,
+      url_analysis_count: digitalData?.allUrls?.length || 0,
+      url_analysis_summary: digitalData?.signalsSummary 
+        ? `Análise de ${digitalData.allUrls?.length || 0} URLs detectou: ${digitalData.signalsSummary.expansions} expansões, ` +
+          `${digitalData.signalsSummary.hiring} contratações, ${digitalData.signalsSummary.partnerships} parcerias. ` +
+          `Sinais de compra: ${digitalData.deepAnalysis?.buying_signals?.length || 0}.`
+        : 'Análise de URLs em processamento.',
+      confidence_level: (digitalData?.allUrls?.length || 0) > 50 && detectedProducts.length > 0 ? 'alta' : 
+                        (digitalData?.allUrls?.length || 0) > 20 ? 'média' : 'baixa',
+      key_findings: [
+        `Momento da empresa: ${companyMoment} (${momentReason})`,
+        `Maturidade digital: ${digitalData?.maturityScore || 0}/100`,
+        `Saúde financeira: ${analysis360Data?.healthScore || 'desconhecida'}`,
+        `Tipo de venda: ${strategy === 'cross-sell' ? 'Cross-Sell (cliente existente)' : 'New Sale (prospect)'}`,
+        `Oportunidades primárias: ${primaryGaps.length} produtos essenciais não detectados`
+      ]
+    };
 
     // Calcular valor total
     const allOpportunities = [...primaryOpportunities, ...relevantOpportunities];
@@ -677,6 +1002,9 @@ Responda APENAS JSON:
       success: true,
       strategy,
       segment: segmentKey,
+      
+      // 0️⃣ RESUMO EXECUTIVO HOLÍSTICO (ANÁLISE 100%)
+      executive_summary: executiveSummary,
       
       // 1️⃣ PRODUTOS EM USO
       products_in_use: productsInUse,

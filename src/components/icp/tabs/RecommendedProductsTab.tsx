@@ -4,17 +4,29 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { 
   Package, Sparkles, TrendingUp, CheckCircle, ArrowRight, Loader2, AlertCircle,
   ExternalLink, Target, Flame, Mail, Phone, MessageSquare, Copy, Check,
-  DollarSign, Clock, Award, Lightbulb
+  DollarSign, Clock, Award, Lightbulb, RefreshCw, Info, FileText, Plus
 } from 'lucide-react';
 import { useProductGaps } from '@/hooks/useProductGaps';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { registerTab, unregisterTab } from './tabsRegistry';
+import { ARREditor } from './components/ARREditor';
+import { useProductCatalog } from '@/hooks/useProductCatalog';
+import { useCreateQuote, QuoteProduct } from '@/hooks/useQuotes';
+import { Label } from '@/components/ui/label';
+import type { EditedARR, PotentialEstimate, ContractPeriod } from '@/types/productOpportunities';
+import { 
+  formatCurrency, formatARR, ARR_TOOLTIP, PROBABILITY_TOOLTIP, TIMELINE_TOOLTIP,
+  calculateProbability, calculateTimeline, calculatePotentialEstimate, parseARRFromString
+} from '@/lib/utils/productOpportunities';
 
 interface RecommendedProductsTabProps {
   companyId?: string;
@@ -49,6 +61,18 @@ export function RecommendedProductsTab({
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false); // 🔥 NOVO: Controle manual
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const navigate = useNavigate();
+  
+  // 🔥 NOVO: Estado para valores ARR editados por produto
+  const [editedARR, setEditedARR] = useState<Record<string, EditedARR>>({});
+  
+  // 🔥 NOVO: Hooks para integração com CPQ/Strategy
+  const { data: productCatalog } = useProductCatalog();
+  const createQuote = useCreateQuote();
+  
+  // 🔥 NOVO: Estado para diálogos
+  const [fichaTecnicaOpen, setFichaTecnicaOpen] = useState<string | null>(null);
+  const [selectedProductForFicha, setSelectedProductForFicha] = useState<any>(null);
 
   // 🔍 BUSCAR DADOS DA EMPRESA (se companyId fornecido)
   const { data: companyData } = useQuery({
@@ -97,15 +121,246 @@ export function RecommendedProductsTab({
     staleTime: 1000 * 60 * 5
   });
 
+  // 🔥 HELPER: Extrair raw_data (TypeScript fix)
+  const rawData = (companyData as any)?.raw_data || {};
+  
+  // 🔥 EXTRAIR DADOS DO APOLLO COM VALIDAÇÃO DE MATCH
+  // O Apollo armazena em: apollo_organization, enriched_apollo, ou apollo
+  const apolloDataRaw = rawData.apollo_organization || rawData.enriched_apollo || rawData.apollo || {};
+  
+  // 🔍 VALIDAÇÃO SIMPLIFICADA: Apenas critérios especificados (FLEXÍVEL PARA QUALQUER INDÚSTRIA)
+  // ✅ CRITÉRIOS CONFIRMADOS (SEM PESOS - APENAS VERIFICAR):
+  // 1. Primeiro nome OU primeiro nome + segundo nome
+  // 2. Nome fantasia
+  // 3. CEP + raio de 80km (se cidade/estado batem = dentro do raio)
+  // 4. CEP
+  // 5. Cidade
+  // 6. País = Brasil (OBRIGATÓRIO)
+  const validateApolloMatch = (
+    apolloData: any, 
+    companyName: string, 
+    cnpj?: string,
+    fantasyName?: string,
+    companyDomain?: string,
+    companyCep?: string,
+    companyCity?: string,
+    companyState?: string
+  ): boolean => {
+    if (!apolloData || Object.keys(apolloData).length === 0) return false;
+    
+    const criteria: string[] = []; // Lista de critérios atendidos (para debug)
+    let matchCount = 0; // Contador simples (precisa de pelo menos 3 critérios)
+    
+    // 🔥 HELPER: Normalizar strings para comparação
+    const normalize = (str: string) => str.toLowerCase().trim().replace(/[^\w\s]/g, '');
+    
+    // 🔥 HELPER: Extrair primeiro nome (ex: "OLV" de "OLV INTERNACIONAL")
+    const getFirstName = (name: string): string => {
+      const words = normalize(name).split(/\s+/);
+      return words[0] || '';
+    };
+    
+    // 🔥 HELPER: Extrair primeiro e segundo nome (ex: "OLV Internacional")
+    const getFirstTwoNames = (name: string): string => {
+      const words = normalize(name).split(/\s+/);
+      return words.slice(0, 2).join(' ').trim();
+    };
+    
+    // ✅ 1️⃣ PAÍS: OBRIGATÓRIO - Empresas brasileiras devem ter country = "Brazil" ou "Brasil"
+    const apolloCountry = normalize(apolloData.country || apolloData.country_code || '');
+    const apolloState = normalize(apolloData.state || apolloData.state_code || '');
+    const apolloCity = normalize(apolloData.city || '');
+    
+    // 🔥 LISTA EXPANDIDA: Cidades e estados brasileiros comuns
+    const brazilianCities = [
+      'são paulo', 'rio de janeiro', 'belo horizonte', 'curitiba', 'porto alegre',
+      'uberlandia', 'uberlândia', 'brasilia', 'brasília', 'salvador', 'fortaleza',
+      'recife', 'porto alegre', 'manaus', 'belém', 'goiânia', 'guarulhos', 'campinas',
+      'são luís', 'são gonçalo', 'maceió', 'duque de caxias', 'natal', 'teresina',
+      'campo grande', 'nova iguaçu', 'são bernardo', 'joão pessoa', 'santo andré',
+      'osasco', 'jaboatão', 'são josé dos campos', 'ribeirão preto', 'uberaba',
+      'contagem', 'aracaju', 'feira de santana', 'cuiabá', 'joinville', 'apucarana',
+      'londrina', 'juiz de fora', 'anápolis', 'santos', 'niterói', 'campos dos goytacazes'
+    ];
+    
+    const brazilianStates = [
+      'sp', 'rj', 'mg', 'rs', 'pr', 'sc', 'ba', 'go', 'pe', 'ce', 'df', 'es',
+      'am', 'pa', 'ma', 'ms', 'mt', 'pb', 'al', 'se', 'rn', 'pi', 'to', 'ac',
+      'ap', 'ro', 'rr', 'são paulo', 'rio de janeiro', 'minas gerais', 'rio grande do sul',
+      'paraná', 'santa catarina', 'bahia', 'goiás', 'pernambuco', 'ceará', 'distrito federal',
+      'espírito santo', 'amazonas', 'pará', 'maranhão', 'mato grosso do sul', 'mato grosso',
+      'paraíba', 'alagoas', 'sergipe', 'rio grande do norte', 'piauí', 'tocantins',
+      'acre', 'amapá', 'rondônia', 'roraima'
+    ];
+    
+    // ✅ Verificar se é brasileira de múltiplas formas
+    const isBrazilian = 
+      apolloCountry.includes('brazil') || 
+      apolloCountry.includes('brasil') ||
+      apolloCountry === 'br' ||
+      brazilianCities.some(city => apolloCity.includes(city)) ||
+      brazilianStates.some(state => apolloState.includes(state)) ||
+      // Se tem CNPJ, é brasileira
+      (cnpj && cnpj.length === 14) ||
+      // Se tem CEP brasileiro (8 dígitos), é brasileira
+      (companyCep && companyCep.length === 8);
+    
+    if (!isBrazilian) {
+      console.log('[PRODUCTS-TAB] ❌ Validação Apollo: Empresa não é brasileira (país obrigatório)', {
+        apolloCountry,
+        apolloState,
+        apolloCity,
+        hasCnpj: !!(cnpj && cnpj.length === 14),
+        hasCep: !!(companyCep && companyCep.length === 8)
+      });
+      return false; // ❌ REJEITA IMEDIATAMENTE se não for brasileira
+    }
+    criteria.push('✅ País: Brasil');
+    matchCount++;
+    
+    // ✅ 2️⃣ PRIMEIRO NOME OU PRIMEIRO + SEGUNDO NOME
+    const companyFirstName = getFirstName(companyName);
+    const apolloFirstName = getFirstName(apolloData.name || '');
+    const companyFirstTwo = getFirstTwoNames(companyName);
+    const apolloFirstTwo = getFirstTwoNames(apolloData.name || '');
+    
+    if (companyFirstName && apolloFirstName && companyFirstName === apolloFirstName) {
+      criteria.push(`✅ 1º Nome: "${companyFirstName}"`);
+      matchCount++;
+    } else if (companyFirstTwo && apolloFirstTwo && companyFirstTwo === apolloFirstTwo) {
+      criteria.push(`✅ 1º+2º Nome: "${companyFirstTwo}"`);
+      matchCount++;
+    }
+    
+    // ✅ 3️⃣ NOME FANTASIA
+    if (fantasyName) {
+      const fantasyNormalized = normalize(fantasyName);
+      const apolloNameNormalized = normalize(apolloData.name || '');
+      if (fantasyNormalized && apolloNameNormalized && 
+          (apolloNameNormalized.includes(fantasyNormalized) || fantasyNormalized.includes(apolloNameNormalized))) {
+        criteria.push(`✅ Nome Fantasia: "${fantasyName}"`);
+        matchCount++;
+      }
+    }
+    
+    // ✅ 4️⃣ CEP
+    if (companyCep && companyCep.length >= 8) {
+      criteria.push(`✅ CEP presente`);
+      matchCount++;
+    }
+    
+    // ✅ 5️⃣ CIDADE
+    if (companyCity) {
+      const normalizedCompanyCity = normalize(companyCity);
+      const normalizedApolloCity = normalize(apolloData.city || '');
+      if (normalizedCompanyCity && normalizedApolloCity && 
+          (normalizedCompanyCity === normalizedApolloCity ||
+           normalizedApolloCity.includes(normalizedCompanyCity) ||
+           normalizedCompanyCity.includes(normalizedApolloCity))) {
+        criteria.push(`✅ Cidade: "${companyCity}"`);
+        matchCount++;
+      }
+    }
+    
+    // ✅ 6️⃣ ESTADO (considera como dentro do raio de 80km se cidade/estado batem)
+    if (companyState) {
+      const normalizedCompanyState = normalize(companyState);
+      const normalizedApolloState = normalize(apolloData.state || '');
+      if (normalizedCompanyState && normalizedApolloState && 
+          (normalizedCompanyState === normalizedApolloState ||
+           normalizedApolloState.includes(normalizedCompanyState) ||
+           normalizedCompanyState.includes(normalizedApolloState))) {
+        criteria.push(`✅ Estado: "${companyState}" (dentro raio 80km)`);
+        matchCount++;
+      }
+    }
+    
+    // ✅ REGRA FINAL: País Brasil (obrigatório) + pelo menos 2 outros critérios = VÁLIDO
+    // Flexível para QUALQUER indústria!
+    const isValid = isBrazilian && matchCount >= 3;
+    
+    console.log('[PRODUCTS-TAB] 🔍 Validação Apollo Match (Simplificada):', {
+      apolloName: apolloData.name,
+      apolloCountry: apolloData.country,
+      apolloCity: apolloData.city,
+      apolloState: apolloData.state,
+      companyName,
+      companyFirstName,
+      companyFirstTwo,
+      fantasyName,
+      companyCep,
+      companyCity,
+      companyState,
+      isBrazilian,
+      matchCount,
+      criteria,
+      isValid: isValid ? '✅ VÁLIDO' : `❌ INVÁLIDO (matchCount: ${matchCount} < 3)`
+    });
+    
+    return isValid;
+  };
+  
+  // 🔥 EXTRAIR DADOS DA RECEITA FEDERAL para validação Apollo
+  const receitaFederalForValidation = rawData.receita_federal || {};
+  const fantasyName = receitaFederalForValidation.fantasia || receitaFederalForValidation.nome_fantasia || '';
+  const companyDomain = companyData?.domain || companyData?.website || '';
+  const companyCep = receitaFederalForValidation.cep || companyData?.zip_code || '';
+  const companyCity = receitaFederalForValidation.municipio || companyData?.city || '';
+  const companyState = receitaFederalForValidation.uf || companyData?.state || '';
+  
+  // 🔒 APLICAR VALIDAÇÃO: Só usar dados do Apollo se corresponder à empresa correta
+  const apolloData = validateApolloMatch(
+    apolloDataRaw, 
+    companyName || '', 
+    cnpj,
+    fantasyName,
+    companyDomain,
+    companyCep,
+    companyCity,
+    companyState
+  ) ? apolloDataRaw : {};
+  const apolloIsValid = Object.keys(apolloData).length > 0;
+  
+  // 🔍 MÚLTIPLAS FORMAS: O Apollo pode usar diferentes nomes de campo (só se válido!)
+  const apolloEmployees = apolloIsValid ? (
+    apolloData.estimated_num_employees || // ✅ Campo padrão do Apollo
+    apolloData.num_employees || 
+    apolloData.employee_count || 
+    (apolloData.employee_range ? 
+      parseInt(apolloData.employee_range.replace(/\D/g, '').split('-')[1] || apolloData.employee_range.replace(/\D/g, '')) : null) || // Ex: "51-200" -> 200 (média)
+    apolloData.num_employees_estimate ||
+    null
+  ) : null; // ❌ Se dados do Apollo não correspondem, não usar!
+  
+  // 🔥 EXTRAIR INDUSTRY DO APOLLO (se válido) - PRIORIDADE 1!
+  const apolloIndustry = apolloIsValid ? (
+    apolloData.industry ||
+    apolloData.primary_industry ||
+    (Array.isArray(apolloData.industries) && apolloData.industries.length > 0 ? apolloData.industries[0] : null) ||
+    null
+  ) : null;
+  
+  console.log('[PRODUCTS-TAB] 🔍 Apollo Data (validado):', {
+    hasApolloDataRaw: !!apolloDataRaw && Object.keys(apolloDataRaw).length > 0,
+    apolloIsValid,
+    apolloName: apolloDataRaw.name,
+    apolloCountry: apolloDataRaw.country,
+    apolloCity: apolloDataRaw.city,
+    estimated_num_employees: apolloData.estimated_num_employees,
+    extractedEmployees: apolloEmployees,
+    reason: apolloIsValid ? '✅ Dados válidos - corresponde à empresa' : '❌ Dados inválidos - empresa diferente (Berlin, etc)'
+  });
+  
   // Extrair dados 360° do raw_data
-  const analysis360Context = companyData?.raw_data?.enriched_360 ? {
-    revenue: companyData.raw_data.enriched_360.revenue || 0,
-    debts: companyData.raw_data.enriched_360.debts || 0,
-    debtsPercentage: companyData.raw_data.enriched_360.debtsPercentage || 0,
-    growthRate: companyData.raw_data.enriched_360.growthRate || 0,
-    hiringTrends: companyData.raw_data.enriched_360.hiringTrends || 0,
-    recentNews: companyData.raw_data.enriched_360.recentNews || 0,
-    healthScore: companyData.raw_data.enriched_360.healthScore || 'unknown'
+  const enriched360 = rawData.enriched_360;
+  const analysis360Context = enriched360 ? {
+    revenue: enriched360.revenue || 0,
+    debts: enriched360.debts || 0,
+    debtsPercentage: enriched360.debtsPercentage || 0,
+    growthRate: enriched360.growthRate || 0,
+    hiringTrends: enriched360.hiringTrends || 0,
+    recentNews: enriched360.recentNews || 0,
+    healthScore: enriched360.healthScore || 'unknown'
   } : undefined;
 
   // 🌐 BUSCAR ANÁLISE PROFUNDA DE URLs (50+) E REDES SOCIAIS
@@ -118,15 +373,16 @@ export function RecommendedProductsTab({
       setIsAnalyzing(true);
       
       // Extrair TODAS URLs da aba Digital (campo raw_data)
-      const allUrls = companyData.raw_data?.discovered_urls || [];
+      const rawDataLocal = (companyData as any).raw_data || {};
+      const allUrls = rawDataLocal.discovered_urls || [];
       
       // Extrair redes sociais
       const socialNetworks = {
-        linkedin: companyData.raw_data?.linkedin_url || companyData.linkedin_url,
-        facebook: companyData.raw_data?.facebook,
-        instagram: companyData.raw_data?.instagram,
-        twitter: companyData.raw_data?.twitter,
-        youtube: companyData.raw_data?.youtube
+        linkedin: rawDataLocal.linkedin_url || companyData.linkedin_url,
+        facebook: rawDataLocal.facebook,
+        instagram: rawDataLocal.instagram,
+        twitter: rawDataLocal.twitter,
+        youtube: rawDataLocal.youtube
       };
       
       console.log('[PRODUCTS-TAB] 🔍 Solicitando análise profunda de', allUrls.length, 'URLs');
@@ -159,19 +415,19 @@ export function RecommendedProductsTab({
 
   // Extrair dados digitais (EXPANDIDO com análise profunda)
   const digitalContext = {
-    maturityScore: companyData?.raw_data?.digital_maturity_score || 0,
+    maturityScore: rawData.digital_maturity_score || 0,
     hasWebsite: !!companyData?.website,
-    hasSocialMedia: !!(companyData?.raw_data?.social_media),
-    technologies: companyData?.raw_data?.technologies || [],
-    websiteTraffic: companyData?.raw_data?.website_traffic,
+    hasSocialMedia: !!rawData.social_media,
+    technologies: rawData.technologies || [],
+    websiteTraffic: rawData.website_traffic,
     // 🔥 NOVO: Análise profunda de URLs
-    allUrls: companyData?.raw_data?.discovered_urls || [],
+    allUrls: rawData.discovered_urls || [],
     socialNetworks: {
-      linkedin: companyData?.raw_data?.linkedin_url || companyData?.linkedin_url,
-      facebook: companyData?.raw_data?.facebook,
-      instagram: companyData?.raw_data?.instagram,
-      twitter: companyData?.raw_data?.twitter,
-      youtube: companyData?.raw_data?.youtube
+      linkedin: rawData.linkedin_url || companyData?.linkedin_url,
+      facebook: rawData.facebook,
+      instagram: rawData.instagram,
+      twitter: rawData.twitter,
+      youtube: rawData.youtube
     },
     // 🔥 NOVO: Insights da análise profunda
     deepAnalysis: urlsDeepAnalysis?.deep_analysis,
@@ -179,11 +435,209 @@ export function RecommendedProductsTab({
     relevantUrls: urlsDeepAnalysis?.relevant_urls
   };
 
-  // 📊 EXTRAIR DADOS (priorizar companyData, fallback props)
-  const enrichedSector = companyData?.industry || sector || stcResult?.sector || 'Serviços';
-  const enrichedCNAE = companyData?.raw_data?.cnae || cnae;
-  const enrichedSize = companyData?.raw_data?.porte || size || 'EPP';
-  const enrichedEmployees = companyData?.employees || employees || 100;
+  // 📊 EXTRAIR DADOS (priorizar Receita Federal/CNAE, depois STC, depois props)
+  // 🔥 CRÍTICO: Priorizar dados da Receita Federal para setor correto!
+  const receitaFederal = rawData.receita_federal;
+  
+  // 🔥 CRÍTICO: Garantir que cnpj seja sempre extraído corretamente
+  // Prioridade: 1) Prop cnpj, 2) companyData.cnpj, 3) receitaFederal.cnpj, 4) rawData.cnpj
+  const enrichedCnpj = cnpj || 
+                        companyData?.cnpj || 
+                        receitaFederal?.cnpj || 
+                        rawData.cnpj || 
+                        (companyData as any)?.cnpj || 
+                        '';
+  
+  const cnaePrincipal = receitaFederal?.atividade_principal?.[0]?.code || 
+                        receitaFederal?.cnae_fiscal_principal ||
+                        rawData.cnae || 
+                        cnae;
+  const setorFromReceita = receitaFederal?.natureza_juridica || 
+                           receitaFederal?.qualificacao_socio;
+  
+  // 🎯 MAPEAR APOLLO INDUSTRY PARA SETOR (prioridade 1)
+  const mapApolloIndustryToSector = (apolloIndustry: string | null): string | null => {
+    if (!apolloIndustry) return null;
+    
+    const industryLower = apolloIndustry.toLowerCase();
+    
+    // Saúde
+    if (industryLower.includes('health') || industryLower.includes('medical') || 
+        industryLower.includes('hospital') || industryLower.includes('healthcare') ||
+        industryLower.includes('pharmaceutical') || industryLower.includes('biotech')) {
+      return 'Saúde';
+    }
+    
+    // Educação
+    if (industryLower.includes('education') || industryLower.includes('edtech') ||
+        industryLower.includes('school') || industryLower.includes('university')) {
+      return 'Educação';
+    }
+    
+    // Logística
+    if (industryLower.includes('logistics') || industryLower.includes('supply chain') ||
+        industryLower.includes('transportation') || industryLower.includes('shipping') ||
+        industryLower.includes('import') || industryLower.includes('export') ||
+        industryLower.includes('trade')) {
+      return 'Logística';
+    }
+    
+    // Varejo
+    if (industryLower.includes('retail') || industryLower.includes('e-commerce') ||
+        industryLower.includes('commerce')) {
+      return 'Varejo';
+    }
+    
+    // Indústria
+    if (industryLower.includes('manufacturing') || industryLower.includes('industrial') ||
+        industryLower.includes('production') || industryLower.includes('factory')) {
+      return 'Indústria';
+    }
+    
+    // Construção
+    if (industryLower.includes('construction') || industryLower.includes('building') ||
+        industryLower.includes('real estate')) {
+      return 'Construção';
+    }
+    
+    // Tecnologia
+    if (industryLower.includes('technology') || industryLower.includes('software') ||
+        industryLower.includes('tech') || industryLower.includes('it services')) {
+      return 'Tecnologia';
+    }
+    
+    return null; // Não mapeado
+  };
+  
+  // 🎯 MAPEAR CNAE PARA SETOR (fallback quando Apollo não tem)
+  const mapCNAEToSector = (cnaeCode: string | undefined, companyName: string = ''): string => {
+    if (!cnaeCode) {
+      // Fallback: analisar nome da empresa
+      const nameLower = companyName.toLowerCase();
+      if (nameLower.includes('medic') || nameLower.includes('hospital') || nameLower.includes('ortoped')) {
+        return 'Saúde';
+      }
+      if (nameLower.includes('educa') || nameLower.includes('escola') || nameLower.includes('universidad')) {
+        return 'Educação';
+      }
+      if (nameLower.includes('varej') || nameLower.includes('comercio') || nameLower.includes('loja')) {
+        return 'Varejo';
+      }
+      if (nameLower.includes('transport') || nameLower.includes('guincho') || nameLower.includes('logística') || nameLower.includes('logistica')) {
+        return 'Logística';
+      }
+      if (nameLower.includes('industr') || nameLower.includes('fabrica') || nameLower.includes('manufatura')) {
+        return 'Indústria';
+      }
+      return 'Serviços';
+    }
+    
+    // Mapear CNAE principal para setor
+    const cnaeNum = parseInt(cnaeCode.substring(0, 2));
+    const cnae4Digits = parseInt(cnaeCode.substring(0, 4)); // Para casos específicos
+    const cnae7Digits = parseInt(cnaeCode.substring(0, 7)); // Para casos muito específicos
+    
+    // ✅ SAÚDE: CNAEs de produtos médico-hospitalares (32.50.07-04 = Fabricação de instrumentos médico-hospitalares)
+    if (cnae4Digits === 3250 || cnae7Digits === 3250704) return 'Saúde';
+    if (cnaeNum === 86 || cnaeNum === 87) return 'Saúde'; // Atividades de saúde
+    if (cnae4Digits >= 3250 && cnae4Digits <= 3259) {
+      // Fabricação de produtos médicos/hospitalares = Saúde (não Indústria!)
+      if (companyName.toLowerCase().includes('medic') || 
+          companyName.toLowerCase().includes('hospital') || 
+          companyName.toLowerCase().includes('ortoped')) {
+        return 'Saúde';
+      }
+    }
+    
+    // ✅ TRANSPORTE E LOGÍSTICA (CNAE 49)
+    if (cnaeNum === 49) return 'Logística';
+    // ✅ CNAEs específicos de transporte rodoviário (2945)
+    if (cnae4Digits >= 2941 && cnae4Digits <= 2949) return 'Logística';
+    // ✅ CNAEs de transporte em geral (49xx)
+    if (cnae4Digits >= 4900 && cnae4Digits <= 4999) return 'Logística';
+    
+    // Outros setores
+    if (cnaeNum === 47) return 'Varejo';
+    if (cnaeNum === 85) return 'Educação';
+    // ✅ CORRIGIDO: CNAE 29xx NÃO é Indústria, é Transporte (já coberto acima)
+    // Indústria: 25-33, mas excluir 29xx (Transporte) e 32xx médico-hospitalar (Saúde)
+    if (cnaeNum >= 25 && cnaeNum <= 33 && cnaeNum !== 29) {
+      // Verificar se não é produto médico-hospitalar (deve ser Saúde)
+      if (cnae4Digits >= 3250 && cnae4Digits <= 3259) {
+        return companyName.toLowerCase().includes('medic') || 
+               companyName.toLowerCase().includes('hospital') || 
+               companyName.toLowerCase().includes('ortoped') ? 'Saúde' : 'Indústria';
+      }
+      return 'Indústria';
+    }
+    if (cnaeNum >= 41 && cnaeNum <= 43) return 'Construção';
+    if (cnaeNum >= 1 && cnaeNum <= 3) return 'Agronegócio';
+    
+    return 'Serviços';
+  };
+  
+  // ✅ PRIORIDADE: 1) Apollo Industry, 2) CNAE, 3) STC Result, 4) Prop, 5) Default
+  const apolloSector = mapApolloIndustryToSector(apolloIndustry);
+  const enrichedSector = apolloSector || // 🔥 PRIORIDADE 1: Apollo Industry
+                          mapCNAEToSector(cnaePrincipal, companyName || (companyData as any)?.company_name || '') || // 🔥 PRIORIDADE 2: CNAE (fallback)
+                          stcResult?.sector || 
+                          sector || 
+                          'Serviços';
+  
+  console.log('[PRODUCTS-TAB] 📊 Setor determinado:', {
+    apolloIndustry,
+    apolloSector,
+    cnaePrincipal,
+    cnaeSector: mapCNAEToSector(cnaePrincipal, companyName || (companyData as any)?.company_name || ''),
+    finalSector: enrichedSector,
+    source: apolloSector ? 'Apollo' : 'CNAE (fallback)'
+  });
+  
+  const enrichedCNAE = cnaePrincipal || undefined; // Permitir undefined (não quebrar)
+  const enrichedSize = receitaFederal?.porte || 
+                       rawData.porte || 
+                       size || 
+                       'EPP';
+  
+  // 🔥 CORRIGIR: NÃO usar qsa?.length (número de sócios ≠ número de funcionários!)
+  // Usar uma estimativa melhor baseada no porte da empresa
+  const estimateEmployeesByPorte = (porte?: string): number => {
+    if (!porte) return 100;
+    const porteLower = porte.toLowerCase();
+    if (porteLower.includes('mei') || porteLower.includes('micro')) return 5;
+    if (porteLower.includes('pequena') || porteLower.includes('epp')) return 20;
+    if (porteLower.includes('média')) return 100;
+    if (porteLower.includes('grande')) return 500;
+    return 100; // Default
+  };
+  
+  // 🔥 PRIORIDADE CORRIGIDA: 
+  // 1. Apollo (só se válido - corresponde à empresa) 
+  // 2. companyData.employees (se existir)
+  // 3. prop employees
+  // 4. estimativa por porte (Receita Federal)
+  // 5. Default 100
+  const enrichedEmployees = apolloIsValid && apolloEmployees ? apolloEmployees : // ✅ Só usa Apollo se válido!
+                           companyData?.employees || 
+                           employees || 
+                           estimateEmployeesByPorte(enrichedSize) || 
+                           100; // ✅ NUNCA usar qsa?.length!
+  
+  // 🔍 DEBUG: Log para verificar de onde vem o número de funcionários
+  console.log('[PRODUCTS-TAB] 👥 Funcionários DEBUG (final):', {
+    apolloIsValid,
+    apolloEmployees: apolloIsValid ? apolloEmployees : '❌ Descarted (empresa diferente)',
+    companyDataEmployees: companyData?.employees,
+    propEmployees: employees,
+    estimatedByPorte: estimateEmployeesByPorte(enrichedSize),
+    final: enrichedEmployees,
+    porte: enrichedSize,
+    source: apolloIsValid && apolloEmployees ? 'Apollo (validado)' : 
+            companyData?.employees ? 'companyData.employees' :
+            employees ? 'prop employees' :
+            estimateEmployeesByPorte(enrichedSize) ? 'Estimativa por porte (Receita Federal)' :
+            'Default (100)'
+  });
   
   // 🔍 EXTRAIR PRODUTOS DETECTADOS + EVIDÊNCIAS do TOTVS Check
   const detectedProducts = stcResult?.detected_products || [];
@@ -211,12 +665,22 @@ export function RecommendedProductsTab({
     detectedEvidences: detectedEvidences.length
   });
 
+  // 🔥 LOG: Verificar cnpj antes de enviar
+  console.log('[PRODUCTS-TAB] 🔍 CNPJ Debug:', {
+    propCnpj: cnpj,
+    companyDataCnpj: companyData?.cnpj,
+    receitaFederalCnpj: receitaFederal?.cnpj,
+    rawDataCnpj: rawData.cnpj,
+    enrichedCnpj: enrichedCnpj,
+    final: enrichedCnpj || '(vazio)'
+  });
+  
   // Buscar produtos recomendados REAIS via Edge Function EVOLUÍDA
   // 🔒 SÓ EXECUTA SE enabled = true (usuário clicou "Analisar")
   const { data: productGapsData, isLoading, error, refetch: refetchProducts } = useProductGaps({
     companyId,
     companyName: companyName || '',
-    cnpj,
+    cnpj: enrichedCnpj, // ✅ SEMPRE usar enrichedCnpj (garantido)
     sector: enrichedSector,
     cnae: enrichedCNAE,
     size: enrichedSize,
@@ -231,6 +695,52 @@ export function RecommendedProductsTab({
     analysis360Data: analysis360Context,
     enabled: enabled // 🔒 CONTROLE MANUAL
   });
+
+  // 🔥 IMPORTANTE: Destructuring ANTES de qualquer retorno condicional (para garantir ordem de hooks)
+  const {
+    strategy,
+    segment,
+    products_in_use = [],
+    primary_opportunities = [],
+    relevant_opportunities = [],
+    estimated_potential,
+    executive_summary, // 🔥 NOVO: Resumo executivo holístico
+    sales_approach,
+    stack_suggestion,
+    total_estimated_value,
+    insights = []
+  } = productGapsData || {};
+
+  // 🔥 NOVO: Calcular potencial estimado agregado baseado em ARR editados
+  // IMPORTANTE: Este useMemo DEVE estar ANTES de todos os retornos condicionais
+  const calculatedPotential: PotentialEstimate | null = useMemo(() => {
+    if (!primary_opportunities && !relevant_opportunities) return null;
+    const allProducts = [...(primary_opportunities || []), ...(relevant_opportunities || [])];
+    if (allProducts.length === 0) return null;
+    
+    const productsWithARR = allProducts.map(product => {
+      const edited = editedARR[product.name];
+      if (edited) {
+        return {
+          arrMin: edited.arrMin || 0,
+          arrMax: edited.arrMax || 0,
+          contractPeriod: edited.contractPeriod || 3,
+        };
+      }
+      // Tentar extrair ARR do valor estimado do produto
+      const arrValues = parseARRFromString(product.value || '');
+      return {
+        arrMin: arrValues?.min || 30000,
+        arrMax: arrValues?.max || 50000,
+        contractPeriod: 3 as ContractPeriod,
+      };
+    });
+    
+    return calculatePotentialEstimate(productsWithARR);
+  }, [primary_opportunities, relevant_opportunities, editedARR]);
+  
+  // 🔥 NOVO: Potencial a exibir (calculado ou do backend)
+  const displayPotential = calculatedPotential || estimated_potential;
 
   // 🔗 REGISTRY: Registrar aba para SaveBar global
   useEffect(() => {
@@ -271,13 +781,112 @@ export function RecommendedProductsTab({
       toast.error('Erro ao copiar');
     }
   };
+  
+  // 🔥 NOVO: Handler para salvar valores ARR editados
+  const handleSaveARR = (productName: string, arr: EditedARR) => {
+    setEditedARR(prev => ({
+      ...prev,
+      [productName]: arr,
+    }));
+    // Recalcular potencial automaticamente
+    recalculatePotential();
+  };
+  
+  // 🔥 NOVO: Recalcular potencial estimado quando ARR é editado
+  const recalculatePotential = () => {
+    // Esta função será chamada automaticamente quando ARR for editado
+    // O potencial será recalculado usando useMemo abaixo
+  };
+  
+  // 🔥 NOVO: Handler para adicionar produto à proposta (CPQ)
+  const handleAddToProposal = async (product: any) => {
+    if (!companyId) {
+      toast.error('ID da empresa não encontrado');
+      return;
+    }
+    
+    try {
+      // Buscar produto no catálogo
+      const catalogProduct = productCatalog?.find(p => 
+        p.name.toLowerCase() === product.name.toLowerCase() ||
+        p.sku.toLowerCase() === product.name.toLowerCase().replace(/\s+/g, '_')
+      );
+      
+      if (!catalogProduct) {
+        // Se não encontrou no catálogo, criar produto temporário
+        const edited = editedARR[product.name];
+        // Tentar extrair ARR do valor estimado do produto
+        let arrValues = { min: 30000, max: 50000 };
+        if (edited) {
+          arrValues = { min: edited.arrMin, max: edited.arrMax };
+        } else if (product.value) {
+          const parsed = parseARRFromString(product.value);
+          if (parsed) {
+            arrValues = parsed;
+          }
+        }
+        
+        // Criar cotação diretamente com o produto
+        const quoteProduct: QuoteProduct = {
+          id: `temp-${product.name}`,
+          sku: product.name.toLowerCase().replace(/\s+/g, '_'),
+          name: product.name,
+          quantity: 1,
+          base_price: arrValues.min, // Usar ARR mínimo como base
+          discount: 0,
+          final_price: arrValues.min,
+        };
+        
+        await createQuote.mutateAsync({
+          company_id: companyId,
+          products: [quoteProduct],
+        });
+        
+        toast.success(`✅ ${product.name} adicionado à proposta!`);
+        
+        // Navegar para Strategy tab CPQ
+        navigate(`/account-strategy?company=${companyId}&tab=cpq`);
+      } else {
+        // Se encontrou no catálogo, adicionar normalmente
+        const edited = editedARR[product.name];
+        const quoteProduct: QuoteProduct = {
+          id: catalogProduct.id,
+          sku: catalogProduct.sku,
+          name: catalogProduct.name,
+          quantity: catalogProduct.min_quantity,
+          base_price: edited ? edited.arrMin : catalogProduct.base_price,
+          discount: 0,
+          final_price: (edited ? edited.arrMin : catalogProduct.base_price) * catalogProduct.min_quantity,
+        };
+        
+        await createQuote.mutateAsync({
+          company_id: companyId,
+          products: [quoteProduct],
+        });
+        
+        toast.success(`✅ ${product.name} adicionado à proposta!`);
+        
+        // Navegar para Strategy tab CPQ
+        navigate(`/account-strategy?company=${companyId}&tab=cpq`);
+      }
+    } catch (error: any) {
+      console.error('[PRODUCTS-TAB] Erro ao adicionar produto à proposta:', error);
+      toast.error(`Erro ao adicionar produto: ${error.message || 'Erro desconhecido'}`);
+    }
+  };
+  
+  // 🔥 NOVO: Handler para ver ficha técnica
+  const handleViewFichaTecnica = (product: any) => {
+    setSelectedProductForFicha(product);
+    setFichaTecnicaOpen(product.name);
+  };
 
   // Função para iniciar análise
   const handleStartAnalysis = async () => {
     setEnabled(true);
     
     // Primeiro: Análise profunda de URLs (se houver)
-    const allUrls = companyData?.raw_data?.discovered_urls || [];
+    const allUrls = rawData.discovered_urls || [];
     if (allUrls.length > 0) {
       await refetchUrlsAnalysis();
     }
@@ -296,10 +905,16 @@ export function RecommendedProductsTab({
     );
   }
 
-  // 🔒 TELA INICIAL: Botão "Analisar Agora" (igual outras abas)
+  // 🔒 TELA INICIAL: Botão "Analisar Agora" (mostrar ANTES de qualquer erro se não iniciado)
+  // IMPORTANTE: Esta verificação deve vir ANTES do tratamento de erro e loading
   if (!enabled && !productGapsData) {
-    const allUrls = companyData?.raw_data?.discovered_urls || [];
-    const estimatedCost = Math.ceil((allUrls.length * 0.001) + 0.03); // ~R$ 0.001 por URL + R$ 0.03 IA
+    const allUrls = rawData.discovered_urls || [];
+    const estimatedCost = Math.ceil((allUrls.length * 0.001) + 0.03);
+    
+    // 🔥 Se houver erro mas análise não foi iniciada, logar silenciosamente e continuar
+    if (error) {
+      console.warn('[PRODUCTS-TAB] ⚠️ Erro detectado mas análise não iniciada (mostrando tela inicial):', error);
+    }
     
     return (
       <Card className="p-12 text-center">
@@ -361,10 +976,10 @@ export function RecommendedProductsTab({
         <Button 
           onClick={handleStartAnalysis} 
           size="lg" 
-          disabled={isAnalyzing}
+          disabled={isAnalyzing || isLoading}
           className="gap-2"
         >
-          {isAnalyzing ? (
+          {isAnalyzing || isLoading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
               Analisando...
@@ -377,17 +992,21 @@ export function RecommendedProductsTab({
           )}
         </Button>
         
-        {isAnalyzing && (
-          <p className="text-xs text-muted-foreground mt-4">
-            Analisando {allUrls.length} URLs + dados de todas as abas... Aguarde.
-          </p>
+        {/* 🔥 Mostrar aviso se houver erro prévio */}
+        {error && (
+          <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm">
+            <p className="text-destructive font-semibold mb-1">⚠️ Erro detectado anteriormente</p>
+            <p className="text-muted-foreground text-xs">
+              Houve um problema na última tentativa. Tente novamente clicando em "Analisar Agora".
+            </p>
+          </div>
         )}
       </Card>
     );
   }
 
-  // Loading state
-  if (isLoading) {
+  // Loading state (só mostrar se análise foi iniciada)
+  if (isLoading && enabled) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center gap-2 text-muted-foreground">
@@ -398,30 +1017,90 @@ export function RecommendedProductsTab({
     );
   }
 
-  // Error state
-  if (error) {
+  // 🔥 ERROR STATE: Só mostrar se análise foi iniciada E houve erro E não está carregando
+  if (error && !isLoading && enabled) {
+    const errorAny = error as any;
+    const backendError = errorAny?.backendError || null;
+    const errorMessage = error.message || 'Erro desconhecido';
+    
     return (
       <Card className="p-6">
-        <div className="flex items-center justify-center gap-2 text-destructive">
-          <AlertCircle className="w-4 h-4" />
-          <span>Erro ao carregar análise de produtos</span>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="w-5 h-5" />
+            <span className="font-semibold">Erro ao carregar análise de produtos</span>
+          </div>
+          
+          <div className="text-sm text-muted-foreground space-y-3">
+            <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
+              <p className="font-semibold text-destructive mb-2">⚠️ Erro 500 - Edge Function (Backend)</p>
+              <p className="text-xs whitespace-pre-wrap">{errorMessage}</p>
+            </div>
+            
+            {backendError && (
+              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3">
+                <p className="font-semibold text-yellow-900 dark:text-yellow-200 mb-1 text-xs">
+                  🔍 Detalhes do Backend:
+                </p>
+                <pre className="text-xs overflow-auto max-h-32">
+                  {JSON.stringify(backendError, null, 2)}
+                </pre>
+              </div>
+            )}
+            
+            <div>
+              <p className="font-semibold mb-2">Possíveis causas:</p>
+              <ul className="list-disc list-inside ml-2 space-y-1">
+                <li>Erro na Edge Function do backend (verificar logs do Supabase)</li>
+                <li>Setor ou CNAE não reconhecido pela função</li>
+                <li>Problema temporário no servidor</li>
+                <li>Dados inválidos processados pela função</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => {
+                setEnabled(false); // Resetar para tela inicial
+                setTimeout(() => {
+                  setEnabled(true);
+                  refetchProducts();
+                }, 100);
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Tentar Novamente
+            </Button>
+            <Button 
+              onClick={() => {
+                setEnabled(false); // Voltar para tela inicial
+              }}
+              variant="ghost"
+              size="sm"
+            >
+              Voltar
+            </Button>
+          </div>
+          
+          <div className="text-xs text-muted-foreground mt-4 p-3 bg-muted rounded-md">
+            <p className="font-semibold mb-1">📊 Payload Enviado (Frontend OK):</p>
+            <p>Setor: {enrichedSector}</p>
+            <p>CNAE: {enrichedCNAE || 'N/A'}</p>
+            <p>Funcionários: {enrichedEmployees}</p>
+            <p>Tamanho: {enrichedSize || 'N/A'}</p>
+            <p>Produtos detectados: {detectedProducts.length}</p>
+            <p className="mt-2 text-yellow-600 dark:text-yellow-400">
+              ✅ O frontend está enviando dados válidos. O problema está no backend (Edge Function).
+            </p>
+          </div>
         </div>
       </Card>
     );
   }
 
-  const {
-    strategy,
-    segment,
-    products_in_use = [],
-    primary_opportunities = [],
-    relevant_opportunities = [],
-    estimated_potential,
-    sales_approach,
-    stack_suggestion,
-    total_estimated_value,
-    insights = []
-  } = productGapsData || {};
 
   return (
     <ScrollArea className="h-[calc(100vh-250px)]">
@@ -438,6 +1117,128 @@ export function RecommendedProductsTab({
           />
         )}
         
+        {/* ========================================
+            0️⃣ RESUMO EXECUTIVO HOLÍSTICO (ANÁLISE 100%)
+        ======================================== */}
+        {executive_summary && (
+          <>
+            <Card className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-2 border-purple-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-purple-600" />
+                  📊 Resumo Executivo - Análise Holística 100%
+                </h3>
+                {executive_summary.confidence_level && (
+                  <Badge 
+                    variant={executive_summary.confidence_level === 'alta' ? 'default' : 
+                             executive_summary.confidence_level === 'média' ? 'secondary' : 'outline'}
+                    className="text-xs"
+                  >
+                    Confiança: {executive_summary.confidence_level.toUpperCase()}
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="space-y-4">
+                {/* Análise da Empresa */}
+                {executive_summary.company_analysis && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground mb-2 block">
+                      🏢 Análise da Empresa
+                    </Label>
+                    <p className="text-sm whitespace-pre-line">{executive_summary.company_analysis}</p>
+                  </div>
+                )}
+                
+                {/* Momento da Empresa */}
+                {executive_summary.moment_analysis && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground mb-2 block">
+                      📈 Momento da Empresa
+                    </Label>
+                    <p className="text-sm">{executive_summary.moment_analysis}</p>
+                  </div>
+                )}
+                
+                {/* Tipo de Venda */}
+                {executive_summary.sales_type && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-semibold text-muted-foreground mb-1 block">
+                        🎯 Tipo de Venda
+                      </Label>
+                      <Badge variant={executive_summary.sales_type === 'cross-sell' ? 'default' : 'secondary'}>
+                        {executive_summary.sales_type === 'cross-sell' ? 'Cross-Sell' : 'New Sale'}
+                      </Badge>
+                      {executive_summary.sales_type_explanation && (
+                        <p className="text-xs text-muted-foreground mt-1">{executive_summary.sales_type_explanation}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="text-sm font-semibold text-muted-foreground mb-1 block">
+                        🏭 Setor Identificado
+                      </Label>
+                      <p className="text-sm font-semibold">{executive_summary.sector_identified}</p>
+                      {executive_summary.sector_source && (
+                        <p className="text-xs text-muted-foreground">Fonte: {executive_summary.sector_source}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Metodologia */}
+                {executive_summary.methodology && (
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <Label className="text-sm font-semibold text-muted-foreground mb-2 block flex items-center gap-2">
+                      <Info className="h-4 w-4" />
+                      🔬 Metodologia Completa
+                    </Label>
+                    <p className="text-sm whitespace-pre-line">{executive_summary.methodology}</p>
+                    {executive_summary.url_analysis_count && (
+                      <div className="mt-2 pt-2 border-t">
+                        <p className="text-xs text-muted-foreground">
+                          📊 URLs Analisadas: <strong>{executive_summary.url_analysis_count}</strong> URLs profundas
+                        </p>
+                        {executive_summary.url_analysis_summary && (
+                          <p className="text-xs text-muted-foreground mt-1">{executive_summary.url_analysis_summary}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Racional de Recomendações */}
+                {executive_summary.recommendations_rationale && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground mb-2 block">
+                      💡 Por que Recomendamos Estes Produtos
+                    </Label>
+                    <p className="text-sm whitespace-pre-line">{executive_summary.recommendations_rationale}</p>
+                  </div>
+                )}
+                
+                {/* Key Findings */}
+                {executive_summary.key_findings && executive_summary.key_findings.length > 0 && (
+                  <div className="p-3 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border border-blue-200">
+                    <Label className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-2 block">
+                      🔍 Principais Achados
+                    </Label>
+                    <ul className="space-y-1">
+                      {executive_summary.key_findings.map((finding: string, idx: number) => (
+                        <li key={idx} className="text-sm flex items-start gap-2">
+                          <CheckCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                          <span>{finding}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </Card>
+            <Separator className="my-6" />
+          </>
+        )}
+
         {/* ========================================
             HEADER
         ======================================== */}
@@ -629,20 +1430,84 @@ export function RecommendedProductsTab({
                       </div>
                     )}
 
-                    {/* Informações adicionais */}
+                    {/* Informações adicionais com ARR Editor */}
                     <div className="mb-4 p-3 bg-muted/30 rounded-lg">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-2 gap-3 text-sm mb-3">
                         <div>
-                          <span className="text-muted-foreground">Valor estimado:</span>
-                          <p className="font-semibold">{product.value}</p>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-muted-foreground">ARR Estimado:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md whitespace-pre-line">
+                                  {ARR_TOOLTIP}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold">
+                              {(() => {
+                                const edited = editedARR[product.name];
+                                if (edited) {
+                                  return `${formatARR(edited.arrMin)} - ${formatARR(edited.arrMax)}`;
+                                }
+                                return product.value || 'N/A';
+                              })()}
+                            </p>
+                            <ARREditor
+                              productName={product.name}
+                              initialARR={editedARR[product.name]}
+                              onSave={(arr) => handleSaveARR(product.name, arr)}
+                              probability={product.probability}
+                              timeline={product.timeline}
+                              size={enrichedSize as any}
+                              productCount={primary_opportunities.length + relevant_opportunities.length}
+                              digitalMaturity={digitalContext?.maturityScore || 50}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-muted-foreground">Probabilidade:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md whitespace-pre-line">
+                                  {PROBABILITY_TOOLTIP}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <p className="font-semibold">
+                            {editedARR[product.name]?.probability || product.probability || estimated_potential?.close_probability || 'N/A'}%
+                          </p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">ROI esperado:</span>
-                          <p className="font-semibold">{product.roi_months} meses</p>
+                          <p className="font-semibold">{product.roi_months || editedARR[product.name]?.roiMonths || 12} meses</p>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Timing:</span>
-                          <p className="font-semibold capitalize">{product.timing?.replace('_', ' ')}</p>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-muted-foreground">Timeline:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md whitespace-pre-line">
+                                  {TIMELINE_TOOLTIP}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <p className="font-semibold capitalize">
+                            {editedARR[product.name]?.timeline || product.timeline?.replace('_', ' ') || estimated_potential?.timeline_months || '3-6 meses'}
+                          </p>
                         </div>
                         {product.competitor_displacement && (
                           <div className="col-span-2">
@@ -655,11 +1520,21 @@ export function RecommendedProductsTab({
 
                     {/* Ações */}
                     <div className="flex gap-2 pt-4 border-t">
-                      <Button size="sm" className="flex-1">
+                      <Button 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleAddToProposal(product)}
+                      >
                         <ArrowRight className="w-4 h-4 mr-2" />
                         Adicionar à Proposta
                       </Button>
-                      <Button size="sm" variant="outline" className="flex-1">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={() => handleViewFichaTecnica(product)}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
                         Ver Ficha Técnica
                       </Button>
                     </div>
@@ -720,15 +1595,107 @@ export function RecommendedProductsTab({
                       </div>
                     )}
 
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <DollarSign className="w-3 h-3" />
-                        {product.value}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        ROI {product.roi_months}m
-                      </span>
+                    {/* Informações adicionais com ARR Editor */}
+                    <div className="mb-3 p-3 bg-muted/30 rounded-lg">
+                      <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-muted-foreground">ARR Estimado:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md whitespace-pre-line">
+                                  {ARR_TOOLTIP}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-xs">
+                              {(() => {
+                                const edited = editedARR[product.name];
+                                if (edited) {
+                                  return `${formatARR(edited.arrMin)} - ${formatARR(edited.arrMax)}`;
+                                }
+                                return product.value || 'N/A';
+                              })()}
+                            </p>
+                            <ARREditor
+                              productName={product.name}
+                              initialARR={editedARR[product.name]}
+                              onSave={(arr) => handleSaveARR(product.name, arr)}
+                              probability={product.probability}
+                              timeline={product.timeline}
+                              size={enrichedSize as any}
+                              productCount={primary_opportunities.length + relevant_opportunities.length}
+                              digitalMaturity={digitalContext?.maturityScore || 50}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-muted-foreground">Probabilidade:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md whitespace-pre-line">
+                                  {PROBABILITY_TOOLTIP}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <p className="font-semibold text-xs">
+                            {editedARR[product.name]?.probability || product.probability || estimated_potential?.close_probability || 'N/A'}%
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">ROI esperado:</span>
+                          <p className="font-semibold text-xs">{product.roi_months || editedARR[product.name]?.roiMonths || 12} meses</p>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-muted-foreground">Timeline:</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md whitespace-pre-line">
+                                  {TIMELINE_TOOLTIP}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <p className="font-semibold text-xs capitalize">
+                            {editedARR[product.name]?.timeline || product.timeline?.replace('_', ' ') || estimated_potential?.timeline_months || '3-6 meses'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ações */}
+                    <div className="flex gap-2 pt-3 border-t">
+                      <Button 
+                        size="sm" 
+                        className="flex-1 text-xs"
+                        onClick={() => handleAddToProposal(product)}
+                      >
+                        <ArrowRight className="w-3 h-3 mr-1" />
+                        Adicionar à Proposta
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-xs"
+                        onClick={() => handleViewFichaTecnica(product)}
+                      >
+                        <FileText className="w-3 h-3 mr-1" />
+                        Ver Ficha Técnica
+                      </Button>
                     </div>
                   </Card>
                 ))}
@@ -738,34 +1705,132 @@ export function RecommendedProductsTab({
         )}
 
         {/* ========================================
-            4️⃣ POTENCIAL ESTIMADO
+            4️⃣ POTENCIAL ESTIMADO (COM TOOLTIPS E RECÁLCULO AUTOMÁTICO)
         ======================================== */}
-        {estimated_potential && (
+        {displayPotential && (
           <>
             <Separator className="my-6" />
             <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-200">
-              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-green-600" />
-                4️⃣ Potencial Estimado
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground uppercase block mb-1">Receita Mín.</span>
-                  <p className="text-2xl font-bold text-green-600">{estimated_potential.min_revenue}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground uppercase block mb-1">Receita Máx.</span>
-                  <p className="text-2xl font-bold text-green-600">{estimated_potential.max_revenue}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground uppercase block mb-1">Probabilidade</span>
-                  <p className="text-2xl font-bold text-blue-600">{estimated_potential.close_probability}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground uppercase block mb-1">Timeline</span>
-                  <p className="text-2xl font-bold text-purple-600">{estimated_potential.timeline_months}</p>
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                  4️⃣ Potencial Estimado
+                </h3>
+                {calculatedPotential && (
+                  <Badge variant="outline" className="text-xs">
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    Recalculado automaticamente
+                  </Badge>
+                )}
               </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="cursor-help">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs font-medium text-muted-foreground uppercase">ARR Total Mín.</span>
+                          <Info className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                        <p className="text-2xl font-bold text-green-600">
+                          {calculatedPotential 
+                            ? formatARR(calculatedPotential.arrTotalMin)
+                            : (typeof displayPotential.min_revenue === 'string' 
+                                ? displayPotential.min_revenue 
+                                : formatARR(displayPotential.min_revenue || 0))}
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md whitespace-pre-line">
+                      {ARR_TOOLTIP}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="cursor-help">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs font-medium text-muted-foreground uppercase">ARR Total Máx.</span>
+                          <Info className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                        <p className="text-2xl font-bold text-green-600">
+                          {calculatedPotential 
+                            ? formatARR(calculatedPotential.arrTotalMax)
+                            : (typeof displayPotential.max_revenue === 'string' 
+                                ? displayPotential.max_revenue 
+                                : formatARR(displayPotential.max_revenue || 0))}
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md whitespace-pre-line">
+                      {ARR_TOOLTIP}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="cursor-help">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs font-medium text-muted-foreground uppercase">Probabilidade</span>
+                          <Info className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {calculatedPotential?.probability || displayPotential.close_probability || 'N/A'}
+                          {calculatedPotential?.probability || displayPotential.close_probability ? '%' : ''}
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md whitespace-pre-line">
+                      {PROBABILITY_TOOLTIP}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="cursor-help">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs font-medium text-muted-foreground uppercase">Timeline</span>
+                          <Info className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                        <p className="text-2xl font-bold text-purple-600">
+                          {calculatedPotential?.timeline || displayPotential.timeline_months || 'N/A'}
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md whitespace-pre-line">
+                      {TIMELINE_TOOLTIP}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              
+              {/* Contratos Multi-ano (se calculado) */}
+              {calculatedPotential && (
+                <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase block mb-1">
+                      Contrato 3 Anos
+                    </span>
+                    <p className="text-lg font-semibold text-green-700">
+                      {formatCurrency(calculatedPotential.contract3Years.min)} - {formatCurrency(calculatedPotential.contract3Years.max)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase block mb-1">
+                      Contrato 5 Anos
+                    </span>
+                    <p className="text-lg font-semibold text-green-700">
+                      {formatCurrency(calculatedPotential.contract5Years.min)} - {formatCurrency(calculatedPotential.contract5Years.max)}
+                    </p>
+                  </div>
+                </div>
+              )}
             </Card>
           </>
         )}
@@ -967,6 +2032,155 @@ export function RecommendedProductsTab({
               </div>
             </Card>
           </>
+        )}
+
+        {/* ========================================
+            DIALOGO FICHA TÉCNICA
+        ======================================== */}
+        {selectedProductForFicha && (
+          <Dialog open={fichaTecnicaOpen === selectedProductForFicha.name} onOpenChange={(open) => !open && setFichaTecnicaOpen(null)}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-600" />
+                  Ficha Técnica - {selectedProductForFicha.name}
+                </DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                {/* Informações do Produto */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Categoria</Label>
+                    <p className="text-base font-semibold">{selectedProductForFicha.category}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Prioridade</Label>
+                    <Badge variant={selectedProductForFicha.priority === 'primary' ? 'destructive' : 'secondary'}>
+                      {selectedProductForFicha.priority === 'primary' ? 'ALTA PRIORIDADE' : 'MÉDIA PRIORIDADE'}
+                    </Badge>
+                  </div>
+                </div>
+                
+                {/* Caso de Uso */}
+                {selectedProductForFicha.use_case && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Caso de Uso</Label>
+                    <p className="text-sm mt-1">{selectedProductForFicha.use_case}</p>
+                  </div>
+                )}
+                
+                {/* Razão */}
+                {selectedProductForFicha.reason && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Por que recomendamos</Label>
+                    <p className="text-sm mt-1">{selectedProductForFicha.reason}</p>
+                  </div>
+                )}
+                
+                {/* Benefícios */}
+                {selectedProductForFicha.benefits && selectedProductForFicha.benefits.length > 0 && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Benefícios Principais</Label>
+                    <ul className="list-disc list-inside space-y-1 mt-1">
+                      {selectedProductForFicha.benefits.map((benefit: string, idx: number) => (
+                        <li key={idx} className="text-sm">{benefit}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {/* Case Study */}
+                {selectedProductForFicha.case_study && (
+                  <div className="p-3 bg-blue-50/50 dark:bg-blue-950/20 rounded-md border border-blue-200">
+                    <Label className="text-sm font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1 mb-1">
+                      <Award className="h-4 w-4" />
+                      Case de Sucesso
+                    </Label>
+                    <p className="text-sm">{selectedProductForFicha.case_study}</p>
+                  </div>
+                )}
+                
+                {/* Valores */}
+                <div className="grid grid-cols-3 gap-4 p-3 bg-muted/30 rounded-lg">
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">ARR Estimado</Label>
+                    <p className="text-base font-semibold">
+                      {(() => {
+                        const edited = editedARR[selectedProductForFicha.name];
+                        if (edited) {
+                          return `${formatARR(edited.arrMin)} - ${formatARR(edited.arrMax)}`;
+                        }
+                        return selectedProductForFicha.value || 'N/A';
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">ROI Esperado</Label>
+                    <p className="text-base font-semibold">
+                      {selectedProductForFicha.roi_months || editedARR[selectedProductForFicha.name]?.roiMonths || 12} meses
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Timeline</Label>
+                    <p className="text-base font-semibold">
+                      {editedARR[selectedProductForFicha.name]?.timeline || selectedProductForFicha.timeline?.replace('_', ' ') || '3-6 meses'}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Buscar no Catálogo */}
+                {(() => {
+                  const catalogProduct = productCatalog?.find(p => 
+                    p.name.toLowerCase() === selectedProductForFicha.name.toLowerCase()
+                  );
+                  
+                  if (catalogProduct) {
+                    return (
+                      <div className="p-3 bg-green-50/50 dark:bg-green-950/20 rounded-md border border-green-200">
+                        <Label className="text-sm font-semibold text-green-700 dark:text-green-300 mb-2 block">
+                          <CheckCircle className="h-4 w-4 inline mr-1" />
+                          Produto encontrado no Catálogo CPQ
+                        </Label>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">SKU:</span>
+                            <p className="font-semibold">{catalogProduct.sku}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Preço Base:</span>
+                            <p className="font-semibold">{formatCurrency(catalogProduct.base_price)}</p>
+                          </div>
+                          {catalogProduct.description && (
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground">Descrição:</span>
+                              <p className="text-sm mt-1">{catalogProduct.description}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setFichaTecnicaOpen(null)}>
+                  Fechar
+                </Button>
+                {selectedProductForFicha && (
+                  <Button onClick={() => {
+                    handleAddToProposal(selectedProductForFicha);
+                    setFichaTecnicaOpen(null);
+                  }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar à Proposta
+                  </Button>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
     </ScrollArea>

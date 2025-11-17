@@ -17,6 +17,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SearchResult {
   id: string;
@@ -52,9 +53,16 @@ export function GlobalSearch() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { session } = useAuth();
 
   useEffect(() => {
     const searchGlobal = async () => {
+      // ✅ Só busca se houver sessão ativa
+      if (!session?.user) {
+        setResults([]);
+        return;
+      }
+
       if (query.length < 2) {
         setResults([]);
         return;
@@ -66,12 +74,22 @@ export function GlobalSearch() {
           body: { query }
         });
 
-        if (error) throw error;
+        if (error) {
+          // ✅ Silenciar erros de sessão/auth (evita notificações confusas)
+          if (error.message?.includes('JWT') || error.message?.includes('session') || error.message?.includes('auth')) {
+            setResults([]);
+            return;
+          }
+          throw error;
+        }
 
         setResults(data.results || []);
-      } catch (error) {
+      } catch (error: any) {
         console.error('[GlobalSearch] Error:', error);
-        toast.error("Erro ao buscar");
+        // ✅ Só mostrar erro se não for relacionado a sessão/auth
+        if (!error?.message?.includes('JWT') && !error?.message?.includes('session') && !error?.message?.includes('auth')) {
+          toast.error("Erro ao buscar");
+        }
       } finally {
         setLoading(false);
       }
@@ -79,7 +97,7 @@ export function GlobalSearch() {
 
     const debounce = setTimeout(searchGlobal, 300);
     return () => clearTimeout(debounce);
-  }, [query]);
+  }, [query, session]);
 
   const handleSelect = (result: SearchResult) => {
     navigate(result.url);

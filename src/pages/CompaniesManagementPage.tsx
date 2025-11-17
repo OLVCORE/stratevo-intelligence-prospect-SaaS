@@ -58,6 +58,7 @@ import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnri
 import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/companies/EnrichmentProgressModal';
 import { PartnerSearchModal } from '@/components/companies/PartnerSearchModal';
 import { ExpandedCompanyCard } from '@/components/companies/ExpandedCompanyCard';
+import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
 
 
 export default function CompaniesManagementPage() {
@@ -1188,6 +1189,50 @@ export default function CompaniesManagementPage() {
           </div>
           
           <div className="flex items-center gap-2">
+            {/* UnifiedEnrichButton - Visível para enriquecimento */}
+            {selectedCompanies.length === 1 && (() => {
+              const selectedCompany = companies.find(c => c.id === selectedCompanies[0]);
+              if (!selectedCompany) return null;
+              
+              const totvsStatus = (selectedCompany as any)?.totvs_status;
+              const isGO = totvsStatus === 'go' || totvsStatus === 'GO';
+              
+              return (
+                <UnifiedEnrichButton
+                  onQuickRefresh={async () => {
+                    const companyId = selectedCompanies[0];
+                    await handleEnrichReceita(companyId);
+                  }}
+                  onFullEnrich={async () => {
+                    const companyId = selectedCompanies[0];
+                    // ✅ FLUXO CORRETO: Sempre enriquecer Receita primeiro (sem verificar GO/NO-GO)
+                    // Depois o usuário vai para Relatório STC → Aba TOTVS → Define GO/NO-GO
+                    // Só então pode enriquecer Apollo se for GO
+                    await handleEnrichReceita(companyId);
+                    toast.info('✅ Receita Federal atualizada! Agora abra o Relatório STC → Aba TOTVS para verificar GO/NO-GO. Se GO, você poderá enriquecer Apollo.');
+                  }}
+                  onReceita={async () => {
+                    const companyId = selectedCompanies[0];
+                    await handleEnrichReceita(companyId);
+                  }}
+                  onApollo={isGO ? async () => {
+                    // Apollo enriquecimento individual (só se GO)
+                    // handleBatchEnrichApollo já usa selectedCompanies, que tem apenas 1 empresa aqui
+                    await handleBatchEnrichApollo();
+                  } : undefined}
+                  on360={async () => {
+                    const companyId = selectedCompanies[0];
+                    await handleEnrich(companyId);
+                  }}
+                  isProcessing={isBatchEnriching || isBatchEnriching360 || !!enrichingReceitaId}
+                  hasCNPJ={!!selectedCompany?.cnpj}
+                  hasApolloId={!!(selectedCompany as any)?.apollo_organization_id}
+                  variant="default"
+                  size="sm"
+                />
+              );
+            })()}
+            
             <HeaderActionsMenu
               onUploadClick={() => {
                 const uploadBtn = document.getElementById('hidden-bulk-upload-trigger');
@@ -1590,16 +1635,18 @@ export default function CompaniesManagementPage() {
                     </Button>
                   )}
 
-                  {/* Dropdown de Ações em Massa */}
-                  <CompaniesActionsMenu
-                    selectedCount={selectedCompanies.length}
-                    onBulkDelete={handleBulkDelete}
-                    onExport={handleExportCSV}
-                    onBulkEnrichReceita={handleBatchEnrichReceitaWS}
-                    onBulkEnrichApollo={handleBatchEnrichApollo}
-                    onBulkEnrich360={handleBatchEnrich360}
-                    isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
-                  />
+                  {/* Dropdown de Ações em Massa - SÓ APARECE COM SELEÇÃO */}
+                  {selectedCompanies.length > 0 && (
+                    <CompaniesActionsMenu
+                      selectedCount={selectedCompanies.length}
+                      onBulkDelete={handleBulkDelete}
+                      onExport={handleExportCSV}
+                      onBulkEnrichReceita={handleBatchEnrichReceitaWS}
+                      onBulkEnrichApollo={handleBatchEnrichApollo}
+                      onBulkEnrich360={handleBatchEnrich360}
+                      isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
+                    />
+                  )}
 
                   {/* Paginação */}
                   <Select
@@ -2015,41 +2062,11 @@ export default function CompaniesManagementPage() {
                               setCompanyToDelete(company);
                               setDeleteDialogOpen(true);
                             }}
-                          onEnrichReceita={() => handleEnrichReceita(company.id)}
-                          onEnrich360={() => handleEnrich(company.id)}
-                          onEnrichApollo={async () => {
-                            try {
-                              if (!company.name && !company.domain && !company.website) {
-                                toast.error('Apollo requer nome ou domínio da empresa');
-                                return;
-                              }
-                              
-                              toast.info('Buscando decisores com Apollo...');
-                              const { data, error } = await supabase.functions.invoke('enrich-apollo-decisores', {
-                                body: { 
-                                  company_id: company.id,
-                                  company_name: company.name,
-                                  domain: company.website || company.domain,
-                                  modes: ['people', 'company'], // 🔥 PESSOAS + ORGANIZAÇÃO
-                                  city: (company as any).raw_data?.receita_federal?.municipio || (company as any).city,
-                                  state: (company as any).raw_data?.receita_federal?.uf || (company as any).state,
-                                  cep: (company as any).raw_data?.receita_federal?.cep || (company as any).raw_data?.cep,
-                                  fantasia: (company as any).raw_data?.receita_federal?.fantasia || (company as any).raw_data?.nome_fantasia
-                                }
-                              });
-                              if (error) throw error;
-                              toast.success('Decisores Apollo encontrados!');
-                              refetch();
-                            } catch (error) {
-                              console.error('Error enriching Apollo:', error);
-                              toast.error('Erro ao buscar decisores Apollo');
-                            }
-                          }}
-                          onDiscoverCNPJ={!company.cnpj ? () => { 
-                            setCnpjCompany(company); 
-                            setCnpjDialogOpen(true); 
-                          } : undefined}
-                        />
+                            onDiscoverCNPJ={!company.cnpj ? () => { 
+                              setCnpjCompany(company); 
+                              setCnpjDialogOpen(true); 
+                            } : undefined}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -2181,8 +2198,12 @@ export default function CompaniesManagementPage() {
           open={partnerSearchOpen}
           onOpenChange={setPartnerSearchOpen}
           onImportCompanies={(companies) => {
-            toast.success(`${companies.length} empresas importadas!`);
-            refetch();
+            if (companies && companies.length > 0) {
+              toast.success(`✅ ${companies.length} empresa(s) importada(s)!`, {
+                description: 'Empresas adicionadas à base com sucesso'
+              });
+              refetch();
+            }
           }}
         />
       </AppLayout>

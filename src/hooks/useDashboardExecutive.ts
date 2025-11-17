@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface DashboardExecutiveData {
   // Core metrics
@@ -53,9 +54,38 @@ export interface DashboardExecutiveData {
 }
 
 export function useDashboardExecutive() {
+  const { session } = useAuth();
+  
   return useQuery({
-    queryKey: ['dashboard-executive'],
+    queryKey: ['dashboard-executive', session?.user?.id],
     queryFn: async (): Promise<DashboardExecutiveData> => {
+      // ✅ Verificar sessão antes de buscar dados
+      if (!session?.user) {
+        // Retornar dados vazios se não houver sessão (evita erros)
+        return {
+          totalCompanies: 0,
+          totalDecisors: 0,
+          totalConversations: 0,
+          pipelineValue: 0,
+          companiesByRegion: [],
+          companiesByState: [],
+          companiesByIndustry: [],
+          fitByProduct: [],
+          topFitCompanies: [],
+          topTechnologies: [],
+          techStackByIndustry: {},
+          maturityDistribution: [],
+          maturityByIndustry: {},
+          avgDigitalHealth: 0,
+          healthDistribution: [],
+          companiesAtRisk: 0,
+          emergingOpportunities: [],
+          marketTrends: [],
+          conversionRate: 0,
+          avgDealSize: 0,
+          topPerformingChannels: []
+        };
+      }
       // Fetch only NEW architecture data
       const [
         companiesRes,
@@ -350,6 +380,7 @@ export function useDashboardExecutive() {
         topPerformingChannels
       };
     },
+    enabled: !!session?.user, // ✅ Só busca quando há sessão ativa
     refetchInterval: false, // Desabilitado - use manual refetch quando necessário
     staleTime: 300000 // Dados válidos por 5 minutos
   });

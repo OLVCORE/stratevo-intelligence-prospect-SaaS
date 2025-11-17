@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Notification {
   id: string;
@@ -26,19 +27,34 @@ interface Notification {
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { session } = useAuth();
 
+  // ✅ CRÍTICO: Só buscar notificações se houver sessão ativa
   const { data: notifications = [], isLoading } = useQuery({
-    queryKey: ["notifications"],
+    queryKey: ["notifications", session?.user?.id],
     queryFn: async () => {
+      // Verificar sessão antes de buscar
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession) {
+        return [];
+      }
+
       const { data, error } = await supabase
         .from("sdr_notifications")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(20);
       
-      if (error) throw error;
+      if (error) {
+        // ✅ Silenciar erros quando não há sessão (evita notificações confusas)
+        if (error.message?.includes('JWT') || error.message?.includes('session')) {
+          return [];
+        }
+        throw error;
+      }
       return data as Notification[];
     },
+    enabled: !!session?.user, // ✅ Só busca quando há sessão ativa
     refetchInterval: 30000,
   });
 
@@ -53,7 +69,7 @@ export function NotificationBell() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", session?.user?.id] });
     },
   });
 
@@ -66,11 +82,14 @@ export function NotificationBell() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", session?.user?.id] });
     },
   });
 
   useEffect(() => {
+    // ✅ Só inscrever em notificações se houver sessão ativa
+    if (!session?.user) return;
+
     const channel = supabase
       .channel("notifications")
       .on(
@@ -81,7 +100,7 @@ export function NotificationBell() {
           table: "sdr_notifications",
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          queryClient.invalidateQueries({ queryKey: ["notifications", session.user.id] });
           
           if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
@@ -93,7 +112,7 @@ export function NotificationBell() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, session]);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -119,6 +138,11 @@ export function NotificationBell() {
         return "🔔";
     }
   };
+
+  // ✅ Ocultar NotificationBell quando não há sessão (evita erros visíveis)
+  if (!session?.user) {
+    return null;
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

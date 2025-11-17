@@ -108,16 +108,18 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
   }
 
   const getCardClasses = () => {
-    const baseClasses = "fixed shadow-2xl border-2 border-primary/20 z-50";
+    const baseClasses = "fixed shadow-2xl border-2 border-primary/20 z-[50]"; // z-50 para ficar abaixo do TREVO (z-60) e ScrollToTop (z-55)
     
     if (viewMode === 'fullscreen') {
       return `${baseClasses} inset-4`;
     } else if (viewMode === 'minimized') {
-      // Quando minimizado, ficar à direita mas acima do TREVO
-      return `${baseClasses} bottom-24 right-6 w-[350px] h-[100px]`;
+      // Quando minimizado, ficar à esquerda (bottom-left) para não sobrepor TREVO (top-right)
+      // Responsivo: ajusta para mobile
+      return `${baseClasses} bottom-6 left-2 sm:left-6 w-[calc(100vw-1rem)] sm:w-[350px] h-[100px]`;
     } else {
-      // Quando aberto, ficar à esquerda para não sobrepor TREVO (bottom-right)
-      return `${baseClasses} bottom-6 left-6 w-[450px]`;
+      // Quando aberto, ficar à esquerda (bottom-left) para não sobrepor TREVO (top-right)
+      // Responsivo: ajusta para mobile
+      return `${baseClasses} bottom-6 left-2 sm:left-6 w-[calc(100vw-1rem)] sm:w-[450px]`;
     }
   };
 

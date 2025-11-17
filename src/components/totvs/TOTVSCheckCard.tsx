@@ -27,6 +27,7 @@ import { RecommendedProductsTab } from '@/components/icp/tabs/RecommendedProduct
 import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
 import DigitalIntelligenceTab from '@/components/intelligence/DigitalIntelligenceTab';
 import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
+import { OpportunitiesTab } from '@/components/icp/tabs/OpportunitiesTab';
 import { TabSaveWrapper } from './TabSaveWrapper';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { UniversalTabWrapper } from './UniversalTabWrapper';
@@ -114,7 +115,8 @@ export default function TOTVSCheckCard({
     clients: false,     // 6. Cliente Discovery (manual)
     similar: false,     // 7. Empresas Similares (manual)
     analysis: false,    // 8. Analysis 360 (manual)
-    executive: false,   // 9. Sumário Executivo (manual)
+    opportunities: false, // 9. Oportunidades (manual)
+    executive: false,   // 10. Sumário Executivo (manual)
   });
   
   // Track de dados por aba (para salvar)
@@ -146,6 +148,7 @@ export default function TOTVSCheckCard({
     decisors: 'idle',
     analysis: 'idle',
     products: 'idle',
+    opportunities: 'idle',
     executive: 'idle',
   });
 
@@ -446,27 +449,107 @@ export default function TOTVSCheckCard({
     }
   }, [latestReport]);
 
-  // 🔐 REGISTRAR ABA TOTVS no tabsRegistry para SaveBar funcionar
+  // 🔐 REGISTRAR TODAS AS ABAS no tabsRegistry assim que TOTVSCheckCard monta
+  // Isso garante que todas as abas estejam no registry mesmo antes de serem visitadas
   useEffect(() => {
-    if (!data) return; // Só registra quando tem dados
+    console.log('[TOTVS-REG] 🚀 Registrando TODAS as abas no tabsRegistry...');
     
-    console.log('[TOTVS-REG] 📝 Registrando aba TOTVS no tabsRegistry');
-    
+    // 1️⃣ ABA TOTVS (detection)
     registerTabInGlobal('detection', {
       flushSave: async () => {
         console.log('[TOTVS-SAVE] 💾 Salvando aba TOTVS...');
-        // Os dados já foram salvos pelo useSimpleTOTVSCheck, só confirmar
-        setTotvsSaved(true);
-        toast.success('✅ TOTVS Check salvo!', {
-          description: `Status: ${data.status?.toUpperCase()} | ${data.evidences?.length || 0} evidências`,
-          duration: 3000,
-        });
+        if (data) {
+          setTotvsSaved(true);
+          toast.success('✅ TOTVS Check salvo!', {
+            description: `Status: ${data.status?.toUpperCase()} | ${data.evidences?.length || 0} evidências`,
+            duration: 3000,
+          });
+        }
       },
       getStatus: () => totvsSaved ? 'completed' : 'draft',
     });
     
+    // 2️⃣ ABA DECISORES (decisors) - Registro antecipado
+    // Os componentes filhos vão sobrescrever este registro quando montarem
+    registerTabInGlobal('decisors', {
+      flushSave: async () => {
+        // Os componentes filhos chamam onDataChange que já atualiza tabDataRef
+        // Aqui só garantimos que não vai falhar se a aba ainda não foi visitada
+        console.log('[DECISORES-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.decisors ? 'completed' : 'draft',
+    });
+    
+    // 3️⃣ ABA DIGITAL (digital) - Registro antecipado
+    registerTabInGlobal('digital', {
+      flushSave: async () => {
+        console.log('[DIGITAL-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.digital ? 'completed' : 'draft',
+    });
+    
+    // 4️⃣ ABA COMPETITORS (competitors) - Registro antecipado
+    registerTabInGlobal('competitors', {
+      flushSave: async () => {
+        console.log('[COMPETITORS-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.competitors ? 'completed' : 'draft',
+    });
+    
+    // 5️⃣ ABA SIMILAR (similar) - Registro antecipado
+    registerTabInGlobal('similar', {
+      flushSave: async () => {
+        console.log('[SIMILAR-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.similar ? 'completed' : 'draft',
+    });
+    
+    // 6️⃣ ABA CLIENTS (clients) - Registro antecipado
+    registerTabInGlobal('clients', {
+      flushSave: async () => {
+        console.log('[CLIENTS-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.clients ? 'completed' : 'draft',
+    });
+    
+    // 7️⃣ ABA ANALYSIS 360° (analysis) - Registro antecipado
+    registerTabInGlobal('360', {
+      flushSave: async () => {
+        console.log('[360-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.analysis ? 'completed' : 'draft',
+    });
+    
+    // 8️⃣ ABA PRODUCTS (products) - Registro antecipado
+    registerTabInGlobal('products', {
+      flushSave: async () => {
+        console.log('[PRODUCTS-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.products ? 'completed' : 'draft',
+    });
+    
+    // 9️⃣ ABA OPPORTUNITIES (opportunities) - Registro antecipado
+    registerTabInGlobal('opportunities', {
+      flushSave: async () => {
+        console.log('[OPPORTUNITIES-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.opportunities ? 'completed' : 'draft',
+    });
+    
+    // 🔟 ABA EXECUTIVE (executive) - Registro antecipado
+    registerTabInGlobal('executive', {
+      flushSave: async () => {
+        console.log('[EXECUTIVE-REG] 💾 flushSave chamado (registro antecipado)');
+      },
+      getStatus: () => tabDataRef.current.executive ? 'completed' : 'draft',
+    });
+    
+    console.log('[TOTVS-REG] ✅ Todas as 10 abas registradas no tabsRegistry!');
+    
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis
-    // Cleanup removido para manter estado persistente entre trocas de aba
+    // Os componentes filhos vão SOBRESCREVER estes registros quando montarem,
+    // mas estes registros antecipados garantem que todas as abas estejam no registry
+    // desde o início, mesmo antes de serem visitadas
   }, [data, totvsSaved]);
 
   // 🔒 SNAPSHOT: Carregar snapshot para verificar modo read-only
@@ -610,11 +693,12 @@ export default function TOTVSCheckCard({
             detection_report: data, // Dados do TOTVS Check (auto)
             decisors_report: tabDataRef.current.decisors,
             digital_report: tabDataRef.current.digital, // 🔥 Digital Intelligence (substitui keywords)
-            products_report: tabDataRef.current.products,
             competitors_report: tabDataRef.current.competitors,
-            clients_report: tabDataRef.current.clients,
             similar_companies_report: tabDataRef.current.similar,
+            clients_report: tabDataRef.current.clients,
             analysis_report: tabDataRef.current.analysis,
+            products_report: tabDataRef.current.products,
+            opportunities_report: tabDataRef.current.opportunities, // 🔥 NOVO: Oportunidades
             executive_report: tabDataRef.current.executive,
             __status: getStatuses(), // Salvar status de cada aba
             __meta: {
@@ -622,7 +706,7 @@ export default function TOTVSCheckCard({
               saved_by: 'user',
               version: '2.0',
               tabs_completed: Object.values(getStatuses()).filter(s => s === 'completed').length,
-              total_tabs: 9,
+              total_tabs: 10, // 🔥 ATUALIZADO: 10 abas (TOTVS, Decisores, Digital, Competitors, Similar, Clients, 360°, Products, Opportunities, Executive)
             },
           };
           
@@ -912,7 +996,7 @@ export default function TOTVSCheckCard({
       />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full flex flex-col h-[calc(100vh-300px)]">
-        <TabsList className="sticky top-0 z-50 grid w-full grid-cols-9 mb-6 h-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-1 rounded-lg shadow-lg border-b-2 border-primary/20">
+        <TabsList className="sticky top-0 z-50 grid w-full grid-cols-10 mb-6 h-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-1 rounded-lg shadow-lg border-b-2 border-primary/20">
           {/* 🔄 NOVA ORDEM: TOTVS → Decisores → Digital → ... → Executive */}
           <TabsTrigger value="detection" className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-primary/10 font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg">
             <Search className="w-4 h-4" />
@@ -990,6 +1074,18 @@ export default function TOTVSCheckCard({
             {!totvsSaved && <span className="text-sm">🔒</span>}
             <Package className="w-4 h-4" />
             <span>Products</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="opportunities" 
+            disabled={!totvsSaved}
+            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold bg-orange-500/10 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-900"
+          >
+            {!totvsSaved && <span className="text-sm">🔒</span>}
+            <Target className="w-4 h-4" />
+            <span>Oportunidades</span>
+            {getStatuses().opportunities === 'completed' && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-lg animate-pulse" />
+            )}
           </TabsTrigger>
           <TabsTrigger 
             value="executive" 
@@ -1292,6 +1388,8 @@ export default function TOTVSCheckCard({
             domain={discoveredWebsite || domain}
             sector={latestReport?.full_report?.icp_score?.sector}
             stcStatus={data?.status}
+            savedData={latestReport?.full_report?.digital_report} // 🔥 PASSAR DADOS SALVOS!
+            stcHistoryId={stcHistoryId || undefined}
             onDataChange={(dataChange) => {
               tabDataRef.current.digital = dataChange;
               setUnsavedChanges(prev => ({ ...prev, digital: true }));
@@ -1336,7 +1434,14 @@ export default function TOTVSCheckCard({
             companyName={companyName}
             cnpj={cnpj}
             domain={domain}
+            savedData={latestReport?.full_report?.competitors_report}
+            stcHistoryId={stcHistoryId || undefined}
             similarCompanies={sharedSimilarCompanies}
+            onDataChange={(competitorsData) => {
+              tabDataRef.current.competitors = competitorsData;
+              setUnsavedChanges(prev => ({ ...prev, competitors: true }));
+              setTabsStatus(prev => ({ ...prev, competitors: 'success' }));
+            }}
           />
           </UniversalTabWrapper>
         </TabsContent>
@@ -1350,6 +1455,12 @@ export default function TOTVSCheckCard({
               companyName={companyName}
               cnpj={cnpj}
               savedData={latestReport?.full_report?.similar_companies_report}
+              stcHistoryId={stcHistoryId || undefined}
+              onDataChange={(similarData) => {
+                tabDataRef.current.similar = similarData;
+                setUnsavedChanges(prev => ({ ...prev, similar: true }));
+                setTabsStatus(prev => ({ ...prev, similar: 'success' }));
+              }}
             />
           ) : (
             <Card className="p-6">
@@ -1368,7 +1479,13 @@ export default function TOTVSCheckCard({
             companyId={companyId}
             companyName={companyName}
             cnpj={cnpj}
-            savedData={latestReport?.full_report?.similar_companies_report}
+            savedData={latestReport?.full_report?.clients_report}
+            stcHistoryId={stcHistoryId || undefined}
+            onDataChange={(clientsData) => {
+              tabDataRef.current.clients = clientsData;
+              setUnsavedChanges(prev => ({ ...prev, clients: true }));
+              setTabsStatus(prev => ({ ...prev, clients: 'success' }));
+            }}
           />
           </UniversalTabWrapper>
         </TabsContent>
@@ -1382,6 +1499,13 @@ export default function TOTVSCheckCard({
               companyName={companyName}
               stcResult={data}
               similarCompanies={similarCompaniesData}
+              savedData={latestReport?.full_report?.analysis_report}
+              stcHistoryId={stcHistoryId || undefined}
+              onDataChange={(analysisData) => {
+                tabDataRef.current.analysis = analysisData;
+                setUnsavedChanges(prev => ({ ...prev, analysis: true }));
+                setTabsStatus(prev => ({ ...prev, analysis: 'success' }));
+              }}
             />
           ) : (
             <Card className="p-6">
@@ -1402,17 +1526,37 @@ export default function TOTVSCheckCard({
             cnpj={cnpj}
             stcResult={data}
             similarCompanies={similarCompaniesData}
+            savedData={latestReport?.full_report?.products_report}
             stcHistoryId={stcHistoryId}
             onDataChange={(productsData) => {
-              if (stcHistoryId) {
-                tabDataRef.current['products'] = productsData;
-              }
+              tabDataRef.current.products = productsData;
+              setUnsavedChanges(prev => ({ ...prev, products: true }));
+              setTabsStatus(prev => ({ ...prev, products: 'success' }));
             }}
           />
           </UniversalTabWrapper>
         </TabsContent>
 
-        {/* ABA 9: EXECUTIVE SUMMARY (ÚLTIMA) */}
+        {/* ABA 9: OPORTUNIDADES */}
+        <TabsContent value="opportunities" className="mt-0 flex-1 overflow-hidden">
+          <UniversalTabWrapper tabName="Oportunidades">
+          <OpportunitiesTab
+            companyId={companyId}
+            companyName={companyName}
+            sector={data?.company_info?.segment || data?.company_info?.industry || 'Outros'}
+            stcResult={data}
+            savedData={latestReport?.full_report?.opportunities_report}
+            stcHistoryId={stcHistoryId}
+            onDataChange={(opportunitiesData) => {
+              tabDataRef.current.opportunities = opportunitiesData;
+              setUnsavedChanges(prev => ({ ...prev, opportunities: true }));
+              setTabsStatus(prev => ({ ...prev, opportunities: 'success' }));
+            }}
+          />
+          </UniversalTabWrapper>
+        </TabsContent>
+
+        {/* ABA 10: EXECUTIVE SUMMARY (ÚLTIMA) */}
         <TabsContent value="executive" className="mt-0 flex-1 overflow-hidden">
           <UniversalTabWrapper tabName="Executive Summary">
           <ExecutiveSummaryTab
@@ -1422,6 +1566,13 @@ export default function TOTVSCheckCard({
             competitorsCount={data?.evidences?.filter((e: any) => e.detected_products?.length > 0).length || 0}
             clientsCount={Math.floor((similarCompaniesData?.length || 0) * 2.5)}
             maturityScore={data?.digital_maturity_score || 0}
+            savedData={latestReport?.full_report?.executive_report}
+            stcHistoryId={stcHistoryId || undefined}
+            onDataChange={(executiveData) => {
+              tabDataRef.current.executive = executiveData;
+              setUnsavedChanges(prev => ({ ...prev, executive: true }));
+              setTabsStatus(prev => ({ ...prev, executive: 'success' }));
+            }}
           />
           </UniversalTabWrapper>
         </TabsContent>

@@ -34,12 +34,12 @@ import { toast } from 'sonner';
 import * as Papa from 'papaparse';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ScrollControls } from '@/components/common/ScrollControls';
 import { ExecutiveReportModal } from '@/components/reports/ExecutiveReportModal';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 import { searchApolloOrganizations, searchApolloPeople } from '@/services/apolloDirect';
 import { enrichment360Simplificado } from '@/services/enrichment360';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
+import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
 
 export default function ICPQuarantine() {
   const navigate = useNavigate();
@@ -1442,25 +1442,69 @@ export default function ICPQuarantine() {
 
             {/* RIGHT: Ações Principais */}
             <div className="flex items-center gap-2">
-              {/* Aprovar (apenas se tiver seleção) */}
-              {selectedIds.length > 0 && (
-                <Button
-                  onClick={handleBulkApprove}
-                  disabled={isApproving}
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  {isApproving ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  ) : (
-                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Aprovar ({selectedIds.length})
-                </Button>
-              )}
+              {/* UnifiedEnrichButton - Visível quando 1 empresa selecionada */}
+              {selectedIds.length === 1 && (() => {
+                const selectedCompany = filteredCompanies.find(c => selectedIds.includes(c.id));
+                if (!selectedCompany) return null;
+                
+                const totvsStatus = (selectedCompany as any)?.totvs_status;
+                const isGO = totvsStatus === 'go' || totvsStatus === 'GO';
+                
+                return (
+                  <UnifiedEnrichButton
+                    onQuickRefresh={async () => {
+                      const id = selectedIds[0];
+                      await handleEnrichReceita(id);
+                    }}
+                    onFullEnrich={async () => {
+                      const id = selectedIds[0];
+                      // ✅ FLUXO CORRETO: Sempre enriquecer Receita primeiro (sem verificar GO/NO-GO)
+                      // Depois o usuário vai para Relatório STC → Aba TOTVS → Define GO/NO-GO
+                      // Só então pode enriquecer Apollo se for GO
+                      await handleEnrichReceita(id);
+                      toast.info('✅ Receita Federal atualizada! Agora abra o Relatório STC → Aba TOTVS para verificar GO/NO-GO. Se GO, você poderá enriquecer Apollo.');
+                    }}
+                    onReceita={async () => {
+                      const id = selectedIds[0];
+                      await handleEnrichReceita(id).catch(() => {});
+                    }}
+                    onApollo={isGO ? async () => {
+                      const id = selectedIds[0];
+                      await handleEnrichApollo(id).catch(() => {});
+                    } : undefined}
+                    on360={async () => {
+                      const id = selectedIds[0];
+                      const result = await handleEnrich360(id);
+                      // Ignorar retorno
+                    }}
+                    isProcessing={enrichReceitaMutation.isPending || enrichApolloMutation.isPending || enrich360Mutation.isPending || enrichCompletoMutation.isPending}
+                    hasCNPJ={!!selectedCompany?.cnpj}
+                    hasApolloId={!!(selectedCompany as any)?.apollo_organization_id}
+                    variant="default"
+                    size="sm"
+                  />
+                );
+              })()}
               
-              {/* Menu de Ações (dropdown) */}
-              <QuarantineActionsMenu
+              {/* Aprovar (apenas se tiver seleção) - BOTÃO PRINCIPAL DESTACADO */}
+              {selectedIds.length > 0 && (
+                <>
+                  <Button
+                    onClick={handleBulkApprove}
+                    disabled={isApproving}
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+                  >
+                    {isApproving ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Aprovar ({selectedIds.length})
+                  </Button>
+                  
+                  {/* Menu de Ações em Massa (dropdown) - SÓ APARECE COM SELEÇÃO */}
+                  <QuarantineActionsMenu
                 selectedCount={selectedIds.length}
                 onDeleteSelected={handleDeleteSelected}
                 onExportSelected={handleExportSelected}
@@ -1484,8 +1528,10 @@ export default function ICPQuarantine() {
                 selectedItems={companies.filter(c => selectedIds.includes(c.id))}
                 totalCompanies={filteredCompanies}
               />
+                </>
+              )}
               
-              {/* Descartadas */}
+              {/* Descartadas - SEMPRE VISÍVEL */}
               <Button
                 onClick={() => setShowDiscardedModal(true)}
                 variant="ghost"
@@ -2503,7 +2549,6 @@ export default function ICPQuarantine() {
         isCancelling={cancelEnrichment}
       />
       
-      <ScrollControls />
     </div>
   );
 }
