@@ -508,23 +508,121 @@ function getCompanyVariations(companyName: string): string[] {
   return [...new Set(variations)]; // Remove duplicatas
 }
 
+/**
+ * 🔥 NOVA FUNÇÃO: Ler contexto completo da URL para validação precisa
+ * Faz fetch da URL, extrai texto completo e usa IA para entender contexto
+ */
+async function fetchAndAnalyzeUrlContext(
+  url: string,
+  companyName: string
+): Promise<{ fullText: string; hasBusinessContext: boolean }> {
+  try {
+    console.log('[URL-CONTEXT] 🔍 Fazendo fetch de:', url);
+    
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(8000) // 8s timeout
+    });
+    
+    if (!response.ok) {
+      console.log('[URL-CONTEXT] ⚠️ Erro ao fetch:', response.status);
+      return { fullText: '', hasBusinessContext: false };
+    }
+    
+    const html = await response.text();
+    
+    // Extrair título e meta description
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+    
+    const title = titleMatch ? titleMatch[1] : '';
+    const description = descMatch ? descMatch[1] : '';
+    
+    // Extrair texto principal (remover scripts, styles, tags)
+    const textContent = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .substring(0, 2000); // Primeiros 2000 caracteres
+    
+    const fullText = `${title} ${description} ${textContent}`;
+    
+    // Usar IA para verificar se há correlação de negócios real
+    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    if (openaiKey) {
+      try {
+        const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [{
+              role: 'user',
+              content: `Analise este texto e determine se há CORRELAÇÃO DE NEGÓCIOS entre "${companyName}" e TOTVS (empresa de software ERP/gestão).
+
+TEXTO:
+${fullText.substring(0, 1500)}
+
+Responda APENAS JSON:
+{
+  "hasBusinessContext": true/false,
+  "reason": "explicação breve"
+}`
+            }],
+            max_tokens: 150,
+            temperature: 0.3
+          }),
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json();
+          const content = aiData.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            console.log('[URL-CONTEXT] 🤖 IA analisou:', parsed);
+            return { fullText, hasBusinessContext: parsed.hasBusinessContext || false };
+          }
+        }
+      } catch (aiError) {
+        console.log('[URL-CONTEXT] ⚠️ Erro na análise IA, usando validação básica');
+      }
+    }
+    
+    // Fallback: validação básica se IA falhar
+    return { fullText, hasBusinessContext: true };
+    
+  } catch (error) {
+    console.log('[URL-CONTEXT] ❌ Erro ao fetch URL:', error);
+    return { fullText: '', hasBusinessContext: false };
+  }
+}
+
 // VALIDAÇÃO ULTRA-RESTRITA: Empresa + TOTVS + Produto no MESMO TEXTO
 // ACEITA VARIAÇÕES DO NOME (ex: "Golden Cargo" em vez de "Golden Cargo Transportes Ltda")
-function isValidTOTVSEvidence(
+// 🔥 AGORA COM LEITURA DE CONTEXTO COMPLETO DA URL
+async function isValidTOTVSEvidence(
   snippet: string, 
   title: string, 
-  companyName: string
-): { valid: boolean; matchType: string; produtos: string[] } {
+  companyName: string,
+  url?: string // 🔥 NOVO: URL para leitura de contexto completo
+): Promise<{ valid: boolean; matchType: string; produtos: string[] }> {
   
-  // COMBINAR título + snippet (isso é O ANÚNCIO COMPLETO)
+  // 🔥 CRÍTICO: COMBINAR título + snippet (isso é A MATÉRIA/NEWS COMPLETA)
+  // Cada resultado do Serper já representa UMA matéria específica
   const fullText = `${title} ${snippet}`;
   const textLower = fullText.toLowerCase();
   
   // LOG DETALHADO - Debug completo
-  console.log('[SIMPLE-TOTVS] 🔍 === VALIDANDO EVIDÊNCIA ===');
+  console.log('[SIMPLE-TOTVS] 🔍 === VALIDANDO EVIDÊNCIA (MESMA MATÉRIA) ===');
   console.log('[SIMPLE-TOTVS] 📄 Título:', title.substring(0, 100));
   console.log('[SIMPLE-TOTVS] 📄 Snippet:', snippet.substring(0, 150));
   console.log('[SIMPLE-TOTVS] 🏢 Empresa:', companyName);
+  console.log('[SIMPLE-TOTVS] 📏 Tamanho total da matéria:', fullText.length, 'caracteres');
   
   // 1. REJEITAR: Vagas NA TOTVS (não cliente)
   const totvsJobPatterns = [
@@ -544,45 +642,86 @@ function isValidTOTVSEvidence(
     }
   }
   
-  // 2. VERIFICAR: "TOTVS" está no texto?
+  // 2. VERIFICAR: "TOTVS" está na MESMA MATÉRIA?
   if (!textLower.includes('totvs')) {
-    console.log('[SIMPLE-TOTVS] ❌ Rejeitado: TOTVS não mencionada no texto');
+    console.log('[SIMPLE-TOTVS] ❌ Rejeitado: TOTVS não mencionada na matéria');
     return { valid: false, matchType: 'rejected', produtos: [] };
   }
   
-  // 3. VERIFICAR: Empresa está no texto? (ACEITA VARIAÇÕES)
-  // 🔥 MUDANÇA: Não exigir empresa no texto para site-specific searches
-  // (LinkedIn Jobs, Vagas.com, etc já filtram por empresa via site:)
+  // 3. VERIFICAR: Empresa está na MESMA MATÉRIA? (ACEITA VARIAÇÕES)
   const companyVariations = getCompanyVariations(companyName);
   console.log('[SIMPLE-TOTVS] 🔍 Variações do nome:', companyVariations);
   
   let companyFound = false;
   let matchedVariation = '';
+  let companyPosition = -1;
   
   for (const variation of companyVariations) {
-    if (textLower.includes(variation.toLowerCase())) {
+    const pos = textLower.indexOf(variation.toLowerCase());
+    if (pos !== -1) {
       companyFound = true;
       matchedVariation = variation;
+      companyPosition = pos;
       break;
     }
   }
   
   if (!companyFound) {
-    console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Nome da empresa NÃO encontrado no texto');
+    console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Nome da empresa NÃO encontrado na matéria');
     console.log('[SIMPLE-TOTVS] 📋 Tentou buscar:', companyVariations.join(' | '));
     return { valid: false, matchType: 'rejected', produtos: [] };
   }
   
-  console.log('[SIMPLE-TOTVS] ✅ Empresa encontrada (variação):', matchedVariation);
+  console.log('[SIMPLE-TOTVS] ✅ Empresa encontrada (variação):', matchedVariation, 'na posição', companyPosition);
   
-  // 4. DETECTAR: Produtos TOTVS mencionados (usando função inteligente)
-  const produtosDetectados = detectTotvsProducts(fullText);
+  // 🔥 CRÍTICO: Verificar se TOTVS aparece JUNTO com a empresa na MESMA MATÉRIA
+  // Janela de contexto: 150 caracteres antes e depois da empresa
+  const WINDOW_SIZE = 150; // Caracteres ao redor da empresa (ajustado para matéria)
+  const startWindow = Math.max(0, companyPosition - WINDOW_SIZE);
+  const endWindow = Math.min(fullText.length, companyPosition + matchedVariation.length + WINDOW_SIZE);
+  const contextWindow = fullText.substring(startWindow, endWindow).toLowerCase();
   
-  // 5. CLASSIFICAR: Triple ou Double Match
+  console.log('[SIMPLE-TOTVS] 🔍 Janela de contexto (150 chars):', contextWindow.substring(0, 300));
   
-  // TRIPLE MATCH: Empresa + TOTVS + Produto (TUDO NO MESMO TEXTO)
-  if (produtosDetectados.length > 0) {
-    console.log('[SIMPLE-TOTVS] ✅ ✅ ✅ TRIPLE MATCH DETECTADO!');
+  // Verificar se TOTVS está no contexto próximo à empresa (MESMA MATÉRIA)
+  const hasTotvsInContext = contextWindow.includes('totvs');
+  
+  if (!hasTotvsInContext) {
+    console.log('[SIMPLE-TOTVS] ❌ Rejeitado: TOTVS não aparece próximo à empresa na MESMA MATÉRIA (falso positivo)');
+    console.log('[SIMPLE-TOTVS] 💡 Isso significa que empresa e TOTVS aparecem em matérias diferentes da mesma página');
+    return { valid: false, matchType: 'rejected', produtos: [] };
+  }
+  
+  // 4. DETECTAR: Produtos TOTVS mencionados NO CONTEXTO (MESMA MATÉRIA)
+  const produtosDetectados = detectTotvsProducts(contextWindow);
+  
+  // 🔥 NOVO: Se temos URL, fazer leitura de contexto completo para validação precisa
+  let hasBusinessContext = true; // Default: aceitar se não tiver URL
+  if (url) {
+    console.log('[SIMPLE-TOTVS] 🔍 Lendo contexto completo da URL para validação precisa...');
+    const urlContext = await fetchAndAnalyzeUrlContext(url, companyName);
+    hasBusinessContext = urlContext.hasBusinessContext;
+    
+    if (!hasBusinessContext) {
+      console.log('[SIMPLE-TOTVS] ❌ Rejeitado: IA não detectou correlação de negócios real no contexto completo da URL');
+      return { valid: false, matchType: 'rejected', produtos: [] };
+    }
+    
+    // Se passou na validação IA, usar texto completo da URL para detecção de produtos
+    if (urlContext.fullText) {
+      const fullContextWindow = urlContext.fullText.toLowerCase();
+      const produtosDetectadosFull = detectTotvsProducts(fullContextWindow);
+      if (produtosDetectadosFull.length > produtosDetectados.length) {
+        produtosDetectados.push(...produtosDetectadosFull.filter(p => !produtosDetectados.includes(p)));
+      }
+    }
+  }
+  
+  // 5. CLASSIFICAR: Triple, Double ou Single Match (TUDO NA MESMA MATÉRIA)
+  
+  // 🔥 TRIPLE MATCH: Empresa + TOTVS + Produto (TUDO NA MESMA MATÉRIA, MESMO CONTEXTO)
+  if (produtosDetectados.length > 0 && hasTotvsInContext) {
+    console.log('[SIMPLE-TOTVS] ✅ ✅ ✅ TRIPLE MATCH DETECTADO! (Empresa + TOTVS + Produto na mesma matéria)');
     console.log('[SIMPLE-TOTVS] 🎯 Produtos:', produtosDetectados.join(', '));
     return { 
       valid: true, 
@@ -591,13 +730,30 @@ function isValidTOTVSEvidence(
     };
   }
   
-  // DOUBLE MATCH: Empresa + TOTVS (sem produto específico)
-  console.log('[SIMPLE-TOTVS] ✅ ✅ DOUBLE MATCH DETECTADO!');
-  return { 
-    valid: true, 
-    matchType: 'double', 
-    produtos: [] 
-  };
+  // 🔥 DOUBLE MATCH - VARIAÇÃO 1: Empresa + TOTVS (na mesma matéria, mesmo contexto)
+  if (hasTotvsInContext) {
+    console.log('[SIMPLE-TOTVS] ✅ ✅ DOUBLE MATCH DETECTADO! (Empresa + TOTVS na mesma matéria)');
+    return { 
+      valid: true, 
+      matchType: 'double', 
+      produtos: [] 
+    };
+  }
+  
+  // 🔥 DOUBLE MATCH - VARIAÇÃO 2: Empresa + Produto TOTVS (sem mencionar TOTVS explicitamente)
+  if (produtosDetectados.length > 0) {
+    console.log('[SIMPLE-TOTVS] ✅ ✅ DOUBLE MATCH DETECTADO! (Empresa + Produto TOTVS na mesma matéria, sem mencionar TOTVS)');
+    console.log('[SIMPLE-TOTVS] 🎯 Produtos:', produtosDetectados.join(', '));
+    return { 
+      valid: true, 
+      matchType: 'double', 
+      produtos: produtosDetectados 
+    };
+  }
+  
+  // ❌ REJEITAR: Se não há TOTVS nem produto no contexto, é falso positivo
+  console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Nenhuma correlação de negócios encontrada na mesma matéria');
+  return { valid: false, matchType: 'rejected', produtos: [] };
 }
 
 function isValidLinkedInJobPosting(text: string): boolean {
@@ -710,9 +866,10 @@ async function searchMultiplePortals(params: {
         for (const result of results) {
           const title = result.title || '';
           const snippet = result.snippet || '';
+          const url = result.link || result.url || '';
           
-          // Validação rigorosa
-          const validation = isValidTOTVSEvidence(snippet, title, companyName);
+          // 🔥 Validação rigorosa COM leitura de contexto completo da URL
+          const validation = await isValidTOTVSEvidence(snippet, title, companyName, url);
           
           if (!validation.valid) {
             rejectedCount++;
@@ -1041,9 +1198,10 @@ serve(async (req) => {
           for (const item of news) {
             const title = item.title || '';
             const snippet = item.snippet || '';
+            const url = item.link || item.url || '';
             
-            // VALIDAÇÃO ULTRA-RESTRITA
-            const validation = isValidTOTVSEvidence(snippet, title, shortSearchTerm);
+            // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
+            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
             
             if (!validation.valid) {
               continue;
@@ -1101,9 +1259,10 @@ serve(async (req) => {
             for (const result of results) {
               const title = result.title || '';
               const snippet = result.snippet || '';
+              const url = result.link || result.url || '';
               
-              // VALIDAÇÃO ULTRA-RESTRITA
-              const validation = isValidTOTVSEvidence(snippet, title, shortSearchTerm);
+              // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
+              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
               
               if (!validation.valid) {
                 continue;
@@ -1159,9 +1318,10 @@ serve(async (req) => {
             for (const result of results) {
               const title = result.title || '';
               const snippet = result.snippet || '';
+              const url = result.link || result.url || '';
               
-              // VALIDAÇÃO ULTRA-RESTRITA
-              const validation = isValidTOTVSEvidence(snippet, title, shortSearchTerm);
+              // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
+              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
               
               if (!validation.valid) {
                 continue;
@@ -1218,8 +1378,10 @@ serve(async (req) => {
           for (const result of results) {
             const snippet = result.snippet || '';
             const title = result.title || '';
+            const url = result.link || result.url || '';
             
-            const validation = isValidTOTVSEvidence(snippet, title, shortSearchTerm);
+            // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
+            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
             
             if (!validation.valid) {
               continue;
@@ -1291,8 +1453,10 @@ serve(async (req) => {
             for (const result of results) {
               const snippet = result.snippet || '';
               const title = result.title || '';
+              const url = result.link || result.url || '';
               
-              const validation = isValidTOTVSEvidence(snippet, title, shortSearchTerm);
+              // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
+              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
               
               if (!validation.valid) {
                 continue;
@@ -1354,8 +1518,10 @@ serve(async (req) => {
           for (const result of results) {
             const snippet = result.snippet || '';
             const title = result.title || '';
+            const url = result.link || result.url || '';
             
-            const validation = isValidTOTVSEvidence(snippet, title, shortSearchTerm);
+            // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
+            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
             
             if (!validation.valid) {
               continue;
@@ -1416,9 +1582,10 @@ serve(async (req) => {
             for (const result of results) {
               const snippet = result.snippet || '';
               const title = result.title || '';
+              const url = result.link || result.url || '';
               
-              // Para busca por CNPJ, validamos com nome da empresa se disponível
-              const validation = isValidTOTVSEvidence(snippet, title, company_name || cnpj);
+              // 🔥 Para busca por CNPJ, validamos com nome da empresa se disponível + leitura de contexto
+              const validation = await isValidTOTVSEvidence(snippet, title, company_name || cnpj, url);
               
               if (!validation.valid) {
                 continue;
