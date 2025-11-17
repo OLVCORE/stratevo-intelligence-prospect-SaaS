@@ -562,19 +562,36 @@ async function fetchAndAnalyzeUrlContext(
             model: 'gpt-4o-mini',
             messages: [{
               role: 'user',
-              content: `Analise este texto e determine se há CORRELAÇÃO DE NEGÓCIOS entre "${companyName}" e TOTVS (empresa de software ERP/gestão).
+              content: `Analise este texto e determine se há CORRELAÇÃO DE NEGÓCIOS REAL entre "${companyName}" (a empresa investigada) e TOTVS (empresa de software ERP/gestão).
+
+⚠️ CRITÉRIOS OBRIGATÓRIOS (TODOS devem ser verdadeiros):
+1. A empresa mencionada é REALMENTE "${companyName}" (não outra empresa do mesmo setor ou grupo)
+2. Há um RELACIONAMENTO DE NEGÓCIOS DIRETO (cliente-fornecedor, parceria, contrato)
+3. NÃO é apenas menção conjunta em listas, rankings ou comparações de mercado
+4. NÃO é menção a holdings, grupos empresariais ou acionistas sem relação direta com "${companyName}"
+
+❌ REJEITAR SE:
+- Empresas do mesmo setor aparecem juntas mas sem relação direta (ex: "Klabin e Ibema são do setor de papel" = REJEITAR)
+- Menções a grupos/holdings onde "${companyName}" não é a controlada mencionada
+- Apenas menções em contexto de mercado, concorrência ou comparação setorial
+- Empresa mencionada é outra do mesmo setor (ex: investigando Klabin mas texto fala de Ibema)
+
+✅ ACEITAR APENAS SE:
+- "${companyName}" é explicitamente identificada como cliente, parceira ou contratante de TOTVS
+- Há evidência clara de relacionamento comercial (implementou, contratou, usa, migrou, etc.)
+- Contexto indica que "${companyName}" tem relacionamento DIRETO com TOTVS
 
 TEXTO:
-${fullText.substring(0, 1500)}
+${fullText.substring(0, 2000)}
 
 Responda APENAS JSON:
 {
   "hasBusinessContext": true/false,
-  "reason": "explicação breve"
+  "reason": "explicação breve do motivo (especialmente se false)"
 }`
             }],
-            max_tokens: 150,
-            temperature: 0.3
+            max_tokens: 200,
+            temperature: 0.2
           }),
           signal: AbortSignal.timeout(5000)
         });
@@ -639,6 +656,69 @@ async function isValidTOTVSEvidence(
   for (const pattern of totvsJobPatterns) {
     if (textLower.includes(pattern)) {
       console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Vaga NA TOTVS (não cliente)');
+      return { valid: false, matchType: 'rejected', produtos: [] };
+    }
+  }
+  
+  // 🔥 CRÍTICO: Rejeitar se título menciona OUTRA empresa do mesmo setor sem mencionar a investigada
+  // Exemplo: "Ibema vai implementar S/4 Hana" quando investigando Klabin = REJEITAR
+  const sameSectorCompanies = ['ibema', 'suzano', 'klabin', 'eldorado', 'fibria', 'eucatex', 'duratex', 'riocell', 'cemig'];
+  const titleLower = title.toLowerCase();
+  const companyVariationsLower = getCompanyVariations(companyName).map(v => v.toLowerCase());
+  
+  // Verificar se título menciona empresa do mesmo setor
+  let mentionsSameSectorCompany = false;
+  let mentionedCompany = '';
+  
+  for (const sectorCompany of sameSectorCompanies) {
+    if (titleLower.includes(sectorCompany) && !companyVariationsLower.includes(sectorCompany)) {
+      mentionsSameSectorCompany = true;
+      mentionedCompany = sectorCompany;
+      break;
+    }
+  }
+  
+  // Se título menciona outra empresa do mesmo setor, verificar se também menciona a investigada
+  if (mentionsSameSectorCompany) {
+    let mentionsInvestigatedCompany = false;
+    for (const variation of companyVariationsLower) {
+      if (titleLower.includes(variation)) {
+        mentionsInvestigatedCompany = true;
+        break;
+      }
+    }
+    
+    // Se título menciona outra empresa mas NÃO menciona a investigada = REJEITAR
+    if (!mentionsInvestigatedCompany) {
+      console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Título menciona outra empresa do mesmo setor sem mencionar a investigada');
+      console.log('[SIMPLE-TOTVS] 🏢 Empresa investigada:', companyName);
+      console.log('[SIMPLE-TOTVS] 🏢 Empresa mencionada no título:', mentionedCompany);
+      console.log('[SIMPLE-TOTVS] 📄 Título:', title);
+      return { valid: false, matchType: 'rejected', produtos: [] };
+    }
+  }
+  
+  // 🔥 NOVO: REJEITAR padrões de menções conjuntas sem relação direta
+  // Exemplo: "Klabin, Ibema e Suzano são líderes do setor de papel" = REJEITAR se investigando Klabin
+  const falsePositivePatterns = [
+    // Menções a holdings/grupos onde empresa investigada não é a controlada mencionada
+    new RegExp(`grupo (\\w+),? (?:e|e\\s+)?${companyName.toLowerCase()}`, 'i'),
+    new RegExp(`${companyName.toLowerCase()},? (?:e|e\\s+)?grupo (\\w+)`, 'i'),
+    
+    // Menções a concorrência ou mercado sem relação direta
+    new RegExp(`(?:concorrência|concorrentes|mercado).*${companyName.toLowerCase()}.*(?:e|e\\s+)(\\w+)`, 'i'),
+    
+    // Listas de empresas do setor sem relação direta
+    new RegExp(`${companyName.toLowerCase()},? (?:e|e\\s+)?(?:ibema|suzano|klabin|eldorado|fibria).*setor`, 'i'),
+    
+    // Menções a acionistas/holdings sem relação direta
+    new RegExp(`(?:acionista|holding|participações).*${companyName.toLowerCase()}.*(?:e|e\\s+)?(\\w+)`, 'i')
+  ];
+  
+  for (const pattern of falsePositivePatterns) {
+    if (pattern.test(fullText)) {
+      console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Padrão de menção conjunta sem relação direta detectado');
+      console.log('[SIMPLE-TOTVS] 📋 Padrão:', pattern.toString());
       return { valid: false, matchType: 'rejected', produtos: [] };
     }
   }

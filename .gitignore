@@ -33,3 +33,9 @@ supabase/.branches
 *.njsproj
 *.sln
 *.sw?
+
+# Arquivos críticos protegidos - NUNCA deletar ou ignorar
+# Estes arquivos contêm conhecimento validado em 20+ iterações
+!CRITICAL_VALIDATED_RULES.md
+!KNOWLEDGE_BASE_RAG.md
+!CHECKPOINT_CODE_PROTECTION.md

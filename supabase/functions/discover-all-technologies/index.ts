@@ -224,21 +224,37 @@ async function fetchAndAnalyzeUrlContextCompetitor(
             model: 'gpt-4o-mini',
             messages: [{
               role: 'user',
-              content: `Analise este texto e determine se há CORRELAÇÃO DE NEGÓCIOS entre "${companyName}" e "${competitorName}" (concorrente de software ERP/gestão).
+              content: `Analise este texto e determine se há CORRELAÇÃO DE NEGÓCIOS REAL entre "${companyName}" (a empresa investigada) e "${competitorName}" (concorrente de software ERP/gestão).
+
+⚠️ CRITÉRIOS OBRIGATÓRIOS (TODOS devem ser verdadeiros):
+1. A empresa mencionada é REALMENTE "${companyName}" (não outra empresa do mesmo setor ou grupo)
+2. Há um RELACIONAMENTO DE NEGÓCIOS DIRETO (cliente-fornecedor, parceria, contrato)
+3. NÃO é apenas menção conjunta em listas, rankings ou comparações de mercado
+4. NÃO é menção a holdings, grupos empresariais ou acionistas sem relação direta com "${companyName}"
+
+❌ REJEITAR SE:
+- Empresas do mesmo setor aparecem juntas mas sem relação direta (ex: "Klabin e Ibema são do setor de papel" = REJEITAR)
+- Menções a grupos/holdings onde "${companyName}" não é a controlada mencionada
+- Apenas menções em contexto de mercado, concorrência ou comparação setorial
+- Empresa mencionada é outra do mesmo setor (ex: investigando Klabin mas texto fala de Ibema)
+- "${competitorName}" aparecer em contexto de editora/publicações (ex: "Londres: Sage, 1994" = editora, não concorrente)
+
+✅ ACEITAR APENAS SE:
+- "${companyName}" é explicitamente identificada como cliente, parceira ou contratante de "${competitorName}"
+- Há evidência clara de relacionamento comercial (implementou, contratou, usa, migrou, etc.)
+- Contexto indica que "${companyName}" tem relacionamento DIRETO com "${competitorName}"
 
 TEXTO:
-${fullText.substring(0, 1500)}
-
-IMPORTANTE: Rejeite se "${competitorName}" aparecer em contexto de editora/publicações (ex: "Londres: Sage, 1994" = editora, não concorrente).
+${fullText.substring(0, 2000)}
 
 Responda APENAS JSON:
 {
   "hasBusinessContext": true/false,
-  "reason": "explicação breve"
+  "reason": "explicação breve do motivo (especialmente se false)"
 }`
             }],
-            max_tokens: 150,
-            temperature: 0.3
+            max_tokens: 200,
+            temperature: 0.2
           }),
           signal: AbortSignal.timeout(5000)
         });
@@ -289,11 +305,50 @@ async function isValidCompetitorEvidence(
   console.log('[DISCOVER-TECH] 🏆 Concorrente:', competitorName);
   console.log('[DISCOVER-TECH] 📦 Produto:', productName);
   
+  // 🔥 CRÍTICO: Rejeitar se título menciona OUTRA empresa do mesmo setor sem mencionar a investigada
+  // Exemplo: "Ibema vai implementar S/4 Hana" quando investigando Klabin = REJEITAR
+  const sameSectorCompanies = ['ibema', 'suzano', 'klabin', 'eldorado', 'fibria', 'eucatex', 'duratex', 'riocell', 'cemig'];
+  const titleLower = title.toLowerCase();
+  const companyVariations = getCompanyVariations(companyName);
+  const companyVariationsLower = companyVariations.map(v => v.toLowerCase());
+  
+  // Verificar se título menciona empresa do mesmo setor
+  let mentionsSameSectorCompany = false;
+  let mentionedCompany = '';
+  
+  for (const sectorCompany of sameSectorCompanies) {
+    if (titleLower.includes(sectorCompany) && !companyVariationsLower.includes(sectorCompany)) {
+      mentionsSameSectorCompany = true;
+      mentionedCompany = sectorCompany;
+      break;
+    }
+  }
+  
+  // Se título menciona outra empresa do mesmo setor, verificar se também menciona a investigada
+  if (mentionsSameSectorCompany) {
+    let mentionsInvestigatedCompany = false;
+    for (const variation of companyVariationsLower) {
+      if (titleLower.includes(variation)) {
+        mentionsInvestigatedCompany = true;
+        break;
+      }
+    }
+    
+    // Se título menciona outra empresa mas NÃO menciona a investigada = REJEITAR
+    if (!mentionsInvestigatedCompany) {
+      console.log('[DISCOVER-TECH] ❌ Rejeitado: Título menciona outra empresa do mesmo setor sem mencionar a investigada');
+      console.log('[DISCOVER-TECH] 🏢 Empresa investigada:', companyName);
+      console.log('[DISCOVER-TECH] 🏢 Empresa mencionada no título:', mentionedCompany);
+      console.log('[DISCOVER-TECH] 📄 Título:', title);
+      return { valid: false, matchType: 'rejected', detectedProducts: [] };
+    }
+  }
+  
   // 🔥 VALIDAÇÃO ANTI-FALSO POSITIVO: Rejeitar contextos onde "Sage" é editora, não ERP
   // Ex: "Londres: Sage, 1994" = editora de livros, NÃO concorrente
   // Ex: "Case Study Research: design and methods, Londres: Sage, 1994" = editora
   const falsePositivePatterns = [
-    // Padrões de editora/publicações
+    // Padrões de editora/publicações (para Sage)
     /londres\s*:\s*sage|sage\s*,\s*199\d|sage\s*,\s*20\d{2}/i, // "Londres: Sage" ou "Sage, 1994" ou "Sage, 2000"
     /sage\s*publications|editora\s*sage|publicações\s*sage/i,
     /sage\s*press|sage\s*publishing|editor\s*sage|publisher.*sage/i,
@@ -303,10 +358,23 @@ async function isValidCompetitorEvidence(
     /(londres|new\s*york|california|thousand\s*oaks).*sage.*\d{4}|sage.*(londres|new\s*york|california|thousand\s*oaks).*\d{4}/i,
     // Rejeitar se aparece em contexto de referência bibliográfica
     /(references?|bibliography|bibliografia|cited|citado).*sage|sage.*(references?|bibliography|bibliografia)/i,
+    
+    // 🔥 NOVO: REJEITAR padrões de menções conjuntas sem relação direta
+    // Exemplo: "Klabin, Ibema e Suzano são líderes do setor de papel" = REJEITAR se investigando Klabin
+    // Menções a holdings/grupos onde empresa investigada não é a controlada mencionada
+    new RegExp(`grupo (\\w+),? (?:e|e\\s+)?${companyName.toLowerCase()}`, 'i'),
+    new RegExp(`${companyName.toLowerCase()},? (?:e|e\\s+)?grupo (\\w+)`, 'i'),
+    // Menções a concorrência ou mercado sem relação direta
+    new RegExp(`(?:concorrência|concorrentes|mercado).*${companyName.toLowerCase()}.*(?:e|e\\s+)(\\w+)`, 'i'),
+    // Listas de empresas do setor sem relação direta (exemplos comuns do setor de papel)
+    new RegExp(`${companyName.toLowerCase()},? (?:e|e\\s+)?(?:ibema|suzano|klabin|eldorado|fibria).*setor`, 'i'),
+    // Menções a acionistas/holdings sem relação direta
+    new RegExp(`(?:acionista|holding|participações).*${companyName.toLowerCase()}.*(?:e|e\\s+)?(\\w+)`, 'i')
   ];
   
+  // Aplicar padrões de rejeição para Sage
   if (competitorName.toLowerCase().includes('sage')) {
-    for (const pattern of falsePositivePatterns) {
+    for (const pattern of falsePositivePatterns.slice(0, 7)) { // Primeiros 7 são para Sage
       if (pattern.test(fullText)) {
         console.log('[DISCOVER-TECH] ❌ Rejeitado: "Sage" detectado mas é editora/publicações (falso positivo)');
         console.log('[DISCOVER-TECH] 📄 Texto que causou rejeição:', fullText.substring(0, 200));
@@ -315,7 +383,15 @@ async function isValidCompetitorEvidence(
     }
   }
   
-  const companyVariations = getCompanyVariations(companyName);
+  // Aplicar padrões de rejeição para empresas do mesmo setor sem relação direta (para TODOS os concorrentes)
+  for (const pattern of falsePositivePatterns.slice(7)) { // Últimos padrões são para empresas do mesmo setor
+    if (pattern.test(fullText)) {
+      console.log('[DISCOVER-TECH] ❌ Rejeitado: Padrão de menção conjunta sem relação direta detectado');
+      console.log('[DISCOVER-TECH] 📋 Padrão:', pattern.toString());
+      return { valid: false, matchType: 'rejected', detectedProducts: [] };
+    }
+  }
+  
   console.log('[DISCOVER-TECH] 🔍 Variações do nome:', companyVariations);
   
   // 🔥 CRÍTICO: Encontrar posição da empresa no texto

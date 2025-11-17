@@ -49,6 +49,7 @@ export function OpportunitiesTab({
 }: OpportunitiesTabProps) {
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [showCriteria, setShowCriteria] = useState(false);
+  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   
   // 💰 ESTADO: ARR editável por produto (vendedor pode ajustar valores reais TOTVS)
   const [editedARR, setEditedARR] = useState<Record<string, string>>(
@@ -67,6 +68,7 @@ export function OpportunitiesTab({
   // Extrair produtos detectados das evidências
   const detectedProducts: string[] = [];
   const evidenceCounts: Record<string, number> = {};
+  const productEvidences: Record<string, Array<{url: string, title: string}>> = {};
 
   if (stcResult?.evidences) {
     stcResult.evidences.forEach((evidence: any) => {
@@ -76,6 +78,17 @@ export function OpportunitiesTab({
             detectedProducts.push(product);
           }
           evidenceCounts[product] = (evidenceCounts[product] || 0) + 1;
+          
+          // Agrupar evidências por produto (com URLs)
+          if (!productEvidences[product]) {
+            productEvidences[product] = [];
+          }
+          if (evidence.url) {
+            productEvidences[product].push({
+              url: evidence.url,
+              title: evidence.title || 'Sem título'
+            });
+          }
         });
       }
     });
@@ -620,21 +633,79 @@ PRÓXIMOS PASSOS:
             </CardHeader>
             <CardContent>
               {detectedProducts.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {detectedProducts.map((product) => (
-                    <div
-                      key={product}
-                      className="flex items-center justify-between p-3 border rounded-lg bg-green-50 dark:bg-green-950/20"
-                    >
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                        <span className="font-medium">{product}</span>
+                <div className="space-y-3">
+                  {detectedProducts.map((product) => {
+                    const evidences = productEvidences[product] || [];
+                    const isExpanded = expandedProducts[product] || false;
+                    return (
+                      <div key={product} className="space-y-2">
+                        <Collapsible
+                          open={isExpanded}
+                          onOpenChange={(open) => setExpandedProducts(prev => ({ ...prev, [product]: open }))}
+                        >
+                          <CollapsibleTrigger asChild>
+                            <div className="flex items-center justify-between p-3 border rounded-lg bg-green-50 dark:bg-green-950/20 cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/40 transition-colors">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <span className="font-medium">{product}</span>
+                              </div>
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                {evidences.length > 0 && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge 
+                                          variant="secondary" 
+                                          className="cursor-pointer hover:bg-secondary/80 flex items-center gap-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setExpandedProducts(prev => ({ ...prev, [product]: !prev[product] }));
+                                          }}
+                                        >
+                                          {evidenceCounts[product] || 0} evidência{evidenceCounts[product] !== 1 ? 's' : ''}
+                                          <ExternalLink className="h-3 w-3" />
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Clique para ver URLs das evidências</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                                {evidences.length === 0 && (
+                                  <Badge variant="secondary">
+                                    {evidenceCounts[product] || 0} evidência{evidenceCounts[product] !== 1 ? 's' : ''}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="mt-2 space-y-2 max-h-64 overflow-y-auto p-3 bg-background/50 rounded-md border">
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">
+                                URLs encontradas ({evidences.length}):
+                              </div>
+                              {evidences.map((evidence, idx) => (
+                                <a
+                                  key={idx}
+                                  href={evidence.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-start gap-2 p-2 text-xs hover:bg-accent rounded-md transition-colors border border-transparent hover:border-primary/20"
+                                >
+                                  <ExternalLink className="h-3 w-3 mt-0.5 text-primary flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-foreground mb-0.5">{evidence.title}</p>
+                                    <p className="truncate text-muted-foreground text-[10px]">{evidence.url}</p>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
                       </div>
-                      <Badge variant="secondary">
-                        {evidenceCounts[product] || 0} evidência{evidenceCounts[product] !== 1 ? 's' : ''}
-                      </Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
