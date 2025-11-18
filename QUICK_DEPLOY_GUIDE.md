@@ -19,13 +19,23 @@ https://supabase.com/dashboard/project/qtcwetabhhkhvomcrqgm/functions
 
 ### 2. Deploy `simple-totvs-check`
 
-1. Procure por `simple-totvs-check` na lista de funções
-2. Clique no nome → "Edit" ou "Update"
-3. Abra o arquivo local: `supabase/functions/simple-totvs-check/index.ts`
-4. Copie TODO o conteúdo (Ctrl+A, Ctrl+C)
-5. Cole no editor do Dashboard (Ctrl+V)
-6. Clique "DEPLOY" ou "UPDATE"
-7. Aguarde ~30 segundos
+**IMPORTANTE:** No Dashboard, você pode editar diretamente no editor!
+
+1. Você já está na página: `simple-totvs-check/code`
+2. **Clique dentro do editor de código** (qualquer lugar do código)
+3. Selecione TUDO: `Ctrl + A`
+4. Delete tudo: `Delete` ou `Backspace`
+5. Abra o arquivo local: `supabase/functions/simple-totvs-check/index.ts`
+6. Copie TODO o conteúdo: `Ctrl + A` → `Ctrl + C`
+7. Volte para o Dashboard e cole: `Ctrl + V`
+8. Procure pelo botão **"Deploy updates"** (verde, canto inferior direito)
+9. Clique em "Deploy updates"
+10. Aguarde ~30 segundos
+
+**Se o editor não ficar editável:**
+- Tente clicar várias vezes dentro do código
+- Ou procure por botão "Replace" ou "Upload" no topo
+- Veja `DASHBOARD_EDIT_INSTRUCTIONS.md` para mais opções
 
 ### 3. Deploy `discover-all-technologies`
 

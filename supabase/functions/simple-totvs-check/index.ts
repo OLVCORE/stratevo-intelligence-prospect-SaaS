@@ -698,6 +698,50 @@ async function isValidTOTVSEvidence(
     }
   }
   
+  // 🔥 CRÍTICO: REJEITAR listas de ações/cotações genéricas (não é sobre a empresa)
+  // Exemplo: "Vale, Suzano, Jalles Machado, Totvs, B3 e mais ações" = REJEITAR
+  const genericStockPatterns = [
+    /vale,?\s+suzano,?\s+.*totvs,?\s+.*a[cç][iõ]o|a[cç][õo]es/i, // Listas de ações
+    /totvs,?\s+.*vale,?\s+suzano/i, // TOTVS em listas genéricas
+    /cota[çc][õo]es?\s+e\s+pre[cç]os?\s+de\s+a[cç][õo]es/i, // "Cotações e Preços de Ações"
+    /.*a[cç][õo]es?\s+para\s+acompanhar/i, // "ações para acompanhar"
+    /.*mercados?.*vale.*suzano.*totvs/i // Mercado de ações genérico
+  ];
+  
+  for (const pattern of genericStockPatterns) {
+    if (pattern.test(fullText)) {
+      console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Lista genérica de ações/cotações (não é sobre a empresa)');
+      console.log('[SIMPLE-TOTVS] 📋 Padrão:', pattern.toString());
+      return { valid: false, matchType: 'rejected', produtos: [] };
+    }
+  }
+  
+  // 🔥 CRÍTICO: REJEITAR se título/snippet mencionam outras empresas famosas mas não a investigada
+  // Exemplo: "Vale, Suzano, Jalles Machado, Totvs" quando investigando Klabin = REJEITAR
+  const otherFamousCompanies = ['vale', 'suzano', 'jalles machado', 'petrobras', 'itau', 'bradesco', 'ambev', 'jbs'];
+  const mentionsOtherCompanies = otherFamousCompanies.some(company => 
+    textLower.includes(company) && !companyVariationsLower.includes(company)
+  );
+  
+  if (mentionsOtherCompanies) {
+    // Verificar se título menciona a empresa investigada
+    let mentionsInvestigatedCompany = false;
+    for (const variation of companyVariationsLower) {
+      if (titleLower.includes(variation) || textLower.includes(variation)) {
+        mentionsInvestigatedCompany = true;
+        break;
+      }
+    }
+    
+    // Se menciona outras empresas mas NÃO menciona a investigada = REJEITAR
+    if (!mentionsInvestigatedCompany) {
+      console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Título menciona outras empresas famosas mas não a investigada');
+      console.log('[SIMPLE-TOTVS] 🏢 Empresa investigada:', companyName);
+      console.log('[SIMPLE-TOTVS] 📄 Título:', title);
+      return { valid: false, matchType: 'rejected', produtos: [] };
+    }
+  }
+  
   // 🔥 NOVO: REJEITAR padrões de menções conjuntas sem relação direta
   // Exemplo: "Klabin, Ibema e Suzano são líderes do setor de papel" = REJEITAR se investigando Klabin
   const falsePositivePatterns = [
@@ -814,11 +858,11 @@ async function isValidTOTVSEvidence(
   // 🔥 DOUBLE MATCH - VARIAÇÃO 1: Empresa + TOTVS (na mesma matéria, mesmo contexto)
   if (hasTotvsInContext) {
     console.log('[SIMPLE-TOTVS] ✅ ✅ DOUBLE MATCH DETECTADO! (Empresa + TOTVS na mesma matéria)');
-    return { 
-      valid: true, 
-      matchType: 'double', 
-      produtos: [] 
-    };
+  return { 
+    valid: true, 
+    matchType: 'double', 
+    produtos: [] 
+  };
   }
   
   // 🔥 DOUBLE MATCH - VARIAÇÃO 2: Empresa + Produto TOTVS (sem mencionar TOTVS explicitamente)
@@ -854,6 +898,32 @@ function isValidLinkedInJobPosting(text: string): boolean {
 // 🎯 DETECÇÃO INTELIGENTE de Produtos TOTVS (com regex especial para palavras curtas)
 function detectTotvsProducts(text: string): string[] {
   const detected: string[] = [];
+  const textLower = text.toLowerCase();
+  
+  // 🔥 CRÍTICO: REJEITAR produtos genéricos em contextos não-TOTVS
+  // "Caixa" em contexto de finanças/estabilizar estoque = REJEITAR (não é produto TOTVS)
+  if (textLower.includes('caixa') && (
+    textLower.includes('estabilizar estoque') || 
+    textLower.includes('recuperar caixa') ||
+    textLower.includes('fluxo de caixa') ||
+    textLower.includes('caixa e bancos') ||
+    /caixa.*[0-9]/.test(textLower) // Números após "caixa" geralmente é dinheiro
+  )) {
+    // Não adicionar "Caixa" como produto
+  }
+  
+  // "Cotações" em contexto de ações/bolsa = REJEITAR (não é produto TOTVS)
+  if (textLower.includes('cotações') && (
+    textLower.includes('ações') ||
+    textLower.includes('preços de ações') ||
+    textLower.includes('bolsa') ||
+    textLower.includes('investir')
+  )) {
+    // Não adicionar "Cotações" como produto
+  }
+  
+  // "Sistema TOTVS" genérico sem contexto específico = REJEITAR se não há relação direta
+  // (Só aceitar se houver contexto claro de implementação/uso)
   
   // 1. VERIFICAR produtos CURTOS com regex especial (RM, RH, IA, SFA, CRM)
   for (const [productShort, pattern] of Object.entries(SHORT_PRODUCT_PATTERNS)) {
@@ -878,6 +948,35 @@ function detectTotvsProducts(text: string): string[] {
     // Pular produtos curtos que já foram verificados com regex acima
     if (skipForRegex.includes(productLower)) {
       continue;
+    }
+    
+    // 🔥 CRÍTICO: Filtrar produtos genéricos em contextos não-TOTVS
+    if (productLower === 'caixa') {
+      // "Caixa" só é produto TOTVS se mencionar "TOTVS Caixa" ou "Caixa TOTVS"
+      if (!textLower.includes('totvs caixa') && !textLower.includes('caixa totvs') && !textLower.includes('caixa e bancos totvs')) {
+        continue; // Não é produto TOTVS, é dinheiro/financeiro genérico
+      }
+    }
+    
+    if (productLower === 'cotações') {
+      // "Cotações" só é produto TOTVS se mencionar "TOTVS Cotações" ou "Cotações TOTVS"
+      if (!textLower.includes('totvs cotações') && !textLower.includes('cotações totvs')) {
+        continue; // Não é produto TOTVS, é cotações de ações genérico
+      }
+    }
+    
+    if (productLower === 'sistema totvs' || productLower === 'software totvs' || productLower === 'solução totvs') {
+      // Produtos genéricos só aceitar se houver contexto claro de implementação/uso
+      const hasImplementationContext = textLower.includes('implementou') || 
+                                       textLower.includes('implantou') || 
+                                       textLower.includes('contratou') ||
+                                       textLower.includes('usa') ||
+                                       textLower.includes('utiliza') ||
+                                       textLower.includes('migrou');
+      
+      if (!hasImplementationContext) {
+        continue; // Não há contexto claro de uso, pode ser genérico
+      }
     }
     
     if (textLower.includes(productLower)) {
