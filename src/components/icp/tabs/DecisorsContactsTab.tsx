@@ -18,6 +18,7 @@ import { corporateTheme } from '@/lib/theme/corporateTheme';
 import type { LinkedInProfileData } from '@/services/phantomBusterEnhanced';
 import { registerTab, unregisterTab } from './tabsRegistry';
 import { ApolloOrgIdDialog } from '@/components/companies/ApolloOrgIdDialog';
+import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
 
 interface DecisorsContactsTabProps {
   companyId?: string;
@@ -54,6 +55,12 @@ export function DecisorsContactsTab({
   const [filterDepartment, setFilterDepartment] = useState<string[]>([]);
   const [filterLocation, setFilterLocation] = useState<string[]>([]);
   const [filterSeniority, setFilterSeniority] = useState<string[]>([]);
+  
+  // 🎯 ESTADOS DE PROGRESSO
+  const [progressStartTime, setProgressStartTime] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
+  const [currentDecisorIndex, setCurrentDecisorIndex] = useState<number>(0);
+  const [totalDecisors, setTotalDecisors] = useState<number>(0);
   
   // 🔥 BUSCAR DECISORES JÁ SALVOS (de enrichment em massa)
   useEffect(() => {
@@ -651,6 +658,10 @@ export function DecisorsContactsTab({
         description: apolloOrgId ? 'Usando Organization ID manual' : 'Usando filtros inteligentes (CEP + Fantasia)'
       });
       
+      // 🎯 INICIAR PROGRESSO
+      setProgressStartTime(Date.now());
+      setCurrentPhase('apollo_search');
+      
       // Usar função enrich-apollo-decisores COM FILTROS INTELIGENTES
       const { data, error } = await supabase.functions.invoke('enrich-apollo-decisores', {
         body: {
@@ -674,11 +685,28 @@ export function DecisorsContactsTab({
 
       console.log('[DECISORES-TAB] ✅ Apollo retornou:', data);
       
+      const decisoresEncontrados = (data as any)?.decisores_salvos || (data as any)?.decisores?.length || 0;
+      setTotalDecisors(decisoresEncontrados);
+      
+      // 🎯 ATUALIZAR PROGRESSO
+      setCurrentPhase('linkedin_analysis');
+      setTimeout(() => setCurrentPhase('enrichment'), 10000);
+      setTimeout(() => setCurrentPhase('classification'), 25000);
+      
       // Recarregar dados após enrichment
       await handleRefreshData();
       
+      // 🎯 FINALIZAR PROGRESSO
+      setTimeout(() => {
+        setCurrentPhase('completed');
+        setTimeout(() => {
+          setProgressStartTime(null);
+          setCurrentPhase(null);
+        }, 1000);
+      }, 30000);
+      
       sonnerToast.success('Decisores encontrados!', {
-        description: `${(data as any)?.decisores_salvos || 0} decisores salvos no banco`
+        description: `${decisoresEncontrados} decisores salvos no banco`
       });
     } catch (e: any) {
       console.error('[DECISORES-TAB] ❌ Erro completo:', e);
@@ -1013,6 +1041,31 @@ export function DecisorsContactsTab({
       </Card>
 
       {/* Loading */}
+      {/* 🎯 BARRA DE PROGRESSO */}
+      {(progressStartTime || linkedinMutation.isPending || apolloMutation.isPending) && (
+        <Card className="p-4 mt-4">
+          <GenericProgressBar
+            phases={[
+              { id: 'apollo_search', name: 'Busca Apollo', status: 'pending' as const, estimatedTime: 10 },
+              { id: 'linkedin_analysis', name: 'Análise LinkedIn', status: 'pending' as const, estimatedTime: 30 },
+              { id: 'enrichment', name: 'Enriquecimento', status: 'pending' as const, estimatedTime: 15 },
+              { id: 'classification', name: 'Classificação', status: 'pending' as const, estimatedTime: 5 },
+            ]}
+            currentPhase={currentPhase || undefined}
+            elapsedTime={progressStartTime ? Math.floor((Date.now() - progressStartTime) / 1000) : 0}
+            title="Progresso da Busca de Decisores"
+          />
+          {/* 🎯 CONTADOR DE DECISORES */}
+          {currentDecisorIndex > 0 && totalDecisors > 0 && (
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                🔄 Processando: Decisor {currentDecisorIndex}/{totalDecisors}
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+      
       {linkedinMutation.isPending && (
         <Card className="p-12 text-center">
           <Loader2 className="w-16 h-16 mx-auto mb-4 animate-spin text-muted-foreground" />

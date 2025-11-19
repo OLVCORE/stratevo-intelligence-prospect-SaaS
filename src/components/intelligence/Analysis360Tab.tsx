@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
 import { Loader2, Target, TrendingUp, Lightbulb, Package, AlertTriangle, Clock } from 'lucide-react';
+import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
 import { toast } from '@/hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { useEffect } from 'react';
@@ -62,6 +63,10 @@ export function Analysis360Tab({
   stcHistoryId,
   onDataChange
 }: Analysis360TabProps) {
+  
+  // 🎯 ESTADOS DE PROGRESSO
+  const [progressStartTime, setProgressStartTime] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
   
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['360-analysis', companyId],
@@ -307,18 +312,44 @@ export function Analysis360Tab({
   };
 
   if (isLoading) {
+    const analysis360Phases = [
+      { id: 'data_collection', name: 'Coleta de Dados', status: 'pending' as const, estimatedTime: 5 },
+      { id: 'score_calculation', name: 'Cálculo de Score', status: 'pending' as const, estimatedTime: 4 },
+      { id: 'product_recommendations', name: 'Recomendações', status: 'pending' as const, estimatedTime: 5 },
+      { id: 'insights_generation', name: 'Geração de Insights', status: 'pending' as const, estimatedTime: 3 },
+    ];
+    
+    // Iniciar progresso se ainda não iniciado
+    if (!progressStartTime) {
+      setProgressStartTime(Date.now());
+      setCurrentPhase('data_collection');
+      setTimeout(() => setCurrentPhase('score_calculation'), 5000);
+      setTimeout(() => setCurrentPhase('product_recommendations'), 9000);
+      setTimeout(() => setCurrentPhase('insights_generation'), 14000);
+    }
+    
     return (
-      <Card className="border-muted/50 bg-card/50 backdrop-blur-sm">
-        <CardContent className="flex items-center justify-center py-16">
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <div className="absolute inset-0 blur-xl opacity-30 bg-primary -z-10" />
+      <div className="space-y-4">
+        <Card className="border-muted/50 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex items-center justify-center py-16">
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <div className="absolute inset-0 blur-xl opacity-30 bg-primary -z-10" />
+              </div>
+              <p className="text-sm text-muted-foreground font-medium">Gerando análise 360°...</p>
             </div>
-            <p className="text-sm text-muted-foreground font-medium">Gerando análise 360°...</p>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        {progressStartTime && (
+          <GenericProgressBar
+            phases={analysis360Phases}
+            currentPhase={currentPhase || undefined}
+            elapsedTime={Math.floor((Date.now() - progressStartTime) / 1000)}
+            title="Progresso da Análise 360°"
+          />
+        )}
+      </div>
     );
   }
 

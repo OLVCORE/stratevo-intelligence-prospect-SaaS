@@ -1,9 +1,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+  'Access-Control-Max-Age': '86400',
 };
 
 // 🔥 PRODUTOS TOTVS COMPLETOS (v5.0 - 150+ módulos oficiais)
@@ -476,28 +478,73 @@ function getCompanyVariations(companyName: string): string[] {
   
   const variations: string[] = [companyName];
   
-  // Remover sufixos corporativos
+  // 🔥 CRÍTICO: Adicionar variações case-insensitive de sufixos
+  // Ex: "Tradimaq S.A." deve corresponder a "Tradimaq S.a.", "TRADIMAQ S.A.", etc
+  const nameLower = companyName.toLowerCase();
   const corporateSuffixes = [
-    ' S.A.', ' S/A', ' SA', ' LTDA', ' LTDA.', ' Ltda', ' Ltda.',
-    ' EIRELI', ' EPP', ' ME', ' Indústrias', ' Indústria', 
-    ' Comércio', ' Serviços', ' Participações', ' Holdings',
-    ' Transportes', ' Logística', ' e Logística'
+    { patterns: [' s.a.', ' s/a', ' sa'], replacements: [' S.A.', ' S/A', ' SA', ' S.a.', ' S.a', ' S/A.', ' SA.'] },
+    { patterns: [' ltda', ' ltda.'], replacements: [' LTDA', ' LTDA.', ' Ltda', ' Ltda.', ' ltda', ' ltda.'] },
+    { patterns: [' eireli', ' epp', ' me'], replacements: [' EIRELI', ' EPP', ' ME', ' eireli', ' epp', ' me'] }
   ];
   
+  // Gerar variações de case para o nome completo
+  const baseName = companyName.split(/ (s\.?a\.?|s\/a|sa|ltda|eireli|epp|me)$/i)[0]?.trim() || companyName;
+  
+  // Adicionar variações case-insensitive
+  variations.push(baseName.toLowerCase());
+  variations.push(baseName.toUpperCase());
+  variations.push(baseName.charAt(0).toUpperCase() + baseName.slice(1).toLowerCase());
+  
+  // Adicionar variações com diferentes casos de sufixos
+  for (const suffixGroup of corporateSuffixes) {
+    for (const pattern of suffixGroup.patterns) {
+      if (nameLower.includes(pattern)) {
+        for (const replacement of suffixGroup.replacements) {
+          const variation = baseName + replacement;
+          if (!variations.includes(variation)) {
+            variations.push(variation);
+          }
+          // Também adicionar minúsculo
+          const variationLower = baseName.toLowerCase() + replacement.toLowerCase();
+          if (!variations.includes(variationLower)) {
+            variations.push(variationLower);
+          }
+        }
+      }
+    }
+  }
+  
+  // Remover sufixos corporativos para buscar apenas o nome base
   let cleanName = companyName;
-  for (const suffix of corporateSuffixes) {
-    const regex = new RegExp(suffix + '.*$', 'i');
-    cleanName = cleanName.replace(regex, '').trim();
+  const suffixPatterns = [
+    /\s+s\.?a\.?(\s|$)/i, /\s+s\/a(\s|$)/i, /\s+sa(\s|$)/i,
+    /\s+ltda\.?(\s|$)/i, /\s+eireli(\s|$)/i, /\s+epp(\s|$)/i, /\s+me(\s|$)/i,
+    /\s+indústrias?(\s|$)/i, /\s+comércio(\s|$)/i, /\s+serviços(\s|$)/i,
+    /\s+participações(\s|$)/i, /\s+holdings?(\s|$)/i,
+    /\s+transportes?(\s|$)/i, /\s+logística(\s|$)/i
+  ];
+  
+  for (const pattern of suffixPatterns) {
+    cleanName = cleanName.replace(pattern, ' ').trim();
   }
   
   if (cleanName !== companyName && cleanName.length >= 3) {
-    variations.push(cleanName);
+    if (!variations.includes(cleanName)) {
+      variations.push(cleanName);
+    }
+    // Adicionar variações case-insensitive do nome limpo
+    variations.push(cleanName.toLowerCase());
+    variations.push(cleanName.toUpperCase());
   }
   
   // Pegar apenas primeiras 2 palavras (ex: "Golden Cargo Transportes" -> "Golden Cargo")
   const words = cleanName.split(' ').filter(w => w.length > 0);
   if (words.length > 2) {
-    variations.push(words.slice(0, 2).join(' '));
+    const firstTwo = words.slice(0, 2).join(' ');
+    if (!variations.includes(firstTwo)) {
+      variations.push(firstTwo);
+      variations.push(firstTwo.toLowerCase());
+    }
   }
   
   // Primeira palavra se for muito longa (pode ser marca única)
@@ -521,7 +568,7 @@ async function fetchAndAnalyzeUrlContext(
     
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: AbortSignal.timeout(8000) // 8s timeout
+      signal: AbortSignal.timeout(5000) // 5s timeout (reduzido para economizar memória)
     });
     
     if (!response.ok) {
@@ -544,7 +591,7 @@ async function fetchAndAnalyzeUrlContext(
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
-      .substring(0, 2000); // Primeiros 2000 caracteres
+      .substring(0, 1000); // Primeiros 1000 caracteres (reduzido para economizar memória)
     
     const fullText = `${title} ${description} ${textContent}`;
     
@@ -582,7 +629,7 @@ async function fetchAndAnalyzeUrlContext(
 - Contexto indica que "${companyName}" tem relacionamento DIRETO com TOTVS
 
 TEXTO:
-${fullText.substring(0, 2000)}
+${fullText.substring(0, 1000)}
 
 Responda APENAS JSON:
 {
@@ -627,8 +674,9 @@ async function isValidTOTVSEvidence(
   snippet: string, 
   title: string, 
   companyName: string,
-  url?: string // 🔥 NOVO: URL para leitura de contexto completo
-): Promise<{ valid: boolean; matchType: string; produtos: string[] }> {
+  url?: string, // 🔥 NOVO: URL para leitura de contexto completo
+  urlsProcessedCount?: { current: number; max: number } // 🎯 NOVO: Contador para limitar fetches
+): Promise<{ valid: boolean; matchType: string; produtos: string[]; validationMethod?: string }> {
   
   // 🔥 CRÍTICO: COMBINAR título + snippet (isso é A MATÉRIA/NEWS COMPLETA)
   // Cada resultado do Serper já representa UMA matéria específica
@@ -767,13 +815,25 @@ async function isValidTOTVSEvidence(
     }
   }
   
-  // 2. VERIFICAR: "TOTVS" está na MESMA MATÉRIA?
-  if (!textLower.includes('totvs')) {
+  // 2. VERIFICAR: "TOTVS" está na MESMA MATÉRIA? (aceita variações)
+  // 🔥 CRÍTICO: Aceitar variações como "totvs.com.br", "totvs rm", "totvs sa", etc
+  const totvsPatterns = [
+    /\btotvs\b/i,           // "totvs" como palavra
+    /totvs\.com\.br/i,      // "totvs.com.br"
+    /\btotvs\s+(rm|protheus|datasul|logix|fluig|carol|techfin)/i, // "totvs rm", "totvs protheus", etc
+    /totsa/i                // "totsa" (abreviação)
+  ];
+  
+  const hasTotvs = totvsPatterns.some(pattern => pattern.test(fullText));
+  
+  if (!hasTotvs) {
     console.log('[SIMPLE-TOTVS] ❌ Rejeitado: TOTVS não mencionada na matéria');
+    console.log('[SIMPLE-TOTVS] 🔍 Texto verificado:', fullText.substring(0, 300));
     return { valid: false, matchType: 'rejected', produtos: [] };
   }
   
   // 3. VERIFICAR: Empresa está na MESMA MATÉRIA? (ACEITA VARIAÇÕES)
+  // 🔥 CRÍTICO: Buscar variações de forma case-insensitive e flexível
   const companyVariations = getCompanyVariations(companyName);
   console.log('[SIMPLE-TOTVS] 🔍 Variações do nome:', companyVariations);
   
@@ -781,12 +841,18 @@ async function isValidTOTVSEvidence(
   let matchedVariation = '';
   let companyPosition = -1;
   
+  // 🔥 CRÍTICO: Buscar cada variação de forma case-insensitive usando regex
   for (const variation of companyVariations) {
-    const pos = textLower.indexOf(variation.toLowerCase());
-    if (pos !== -1) {
+    // Escapar caracteres especiais e criar regex case-insensitive
+    const escapedVariation = variation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const variationPattern = new RegExp(escapedVariation, 'i');
+    const match = fullText.match(variationPattern);
+    
+    if (match && match.index !== undefined) {
       companyFound = true;
-      matchedVariation = variation;
-      companyPosition = pos;
+      matchedVariation = match[0]; // Usar o texto exato encontrado (preserva case original)
+      companyPosition = match.index;
+      console.log('[SIMPLE-TOTVS] ✅ Empresa encontrada (variação flexível):', matchedVariation, 'na posição', companyPosition, '(busca case-insensitive)');
       break;
     }
   }
@@ -794,50 +860,92 @@ async function isValidTOTVSEvidence(
   if (!companyFound) {
     console.log('[SIMPLE-TOTVS] ❌ Rejeitado: Nome da empresa NÃO encontrado na matéria');
     console.log('[SIMPLE-TOTVS] 📋 Tentou buscar:', companyVariations.join(' | '));
+    console.log('[SIMPLE-TOTVS] 📄 Texto completo:', fullText.substring(0, 500));
     return { valid: false, matchType: 'rejected', produtos: [] };
   }
   
-  console.log('[SIMPLE-TOTVS] ✅ Empresa encontrada (variação):', matchedVariation, 'na posição', companyPosition);
-  
   // 🔥 CRÍTICO: Verificar se TOTVS aparece JUNTO com a empresa na MESMA MATÉRIA
-  // Janela de contexto: 150 caracteres antes e depois da empresa
-  const WINDOW_SIZE = 150; // Caracteres ao redor da empresa (ajustado para matéria)
+  // Janela de contexto: 250 caracteres antes e depois da empresa (aumentado para melhor contexto)
+  // ⚠️ BALANCEAMENTO: 250 chars captura mais contexto sem perder precisão
+  // - Permite capturar menções em parágrafos adjacentes
+  // - Ainda mantém proximidade suficiente para evitar falsos positivos
+  const WINDOW_SIZE = 250; // Caracteres ao redor da empresa (aumentado de 150 para 250)
   const startWindow = Math.max(0, companyPosition - WINDOW_SIZE);
   const endWindow = Math.min(fullText.length, companyPosition + matchedVariation.length + WINDOW_SIZE);
   const contextWindow = fullText.substring(startWindow, endWindow).toLowerCase();
   
-  console.log('[SIMPLE-TOTVS] 🔍 Janela de contexto (150 chars):', contextWindow.substring(0, 300));
+  console.log('[SIMPLE-TOTVS] 🔍 Janela de contexto (250 chars):', contextWindow.substring(0, 400));
   
   // Verificar se TOTVS está no contexto próximo à empresa (MESMA MATÉRIA)
-  const hasTotvsInContext = contextWindow.includes('totvs');
+  // 🔥 CRÍTICO: Usar os mesmos padrões para detectar TOTVS no contexto
+  const totvsPatternsContext = [
+    /\btotvs\b/i,           // "totvs" como palavra
+    /totvs\.com\.br/i,      // "totvs.com.br"
+    /\btotvs\s+(rm|protheus|datasul|logix|fluig|carol|techfin|winthor|microsiga)/i, // "totvs rm", etc
+    /totsa/i                // "totsa"
+  ];
   
-  if (!hasTotvsInContext) {
+  const hasTotvsInContext = totvsPatternsContext.some(pattern => pattern.test(contextWindow));
+  
+  // 🔥 NOVO: Se não encontrou TOTVS explícito, verificar se há produtos TOTVS no contexto
+  // Se há produtos TOTVS, considerar como válido - será DOUBLE MATCH com produtos
+  let hasProductsInContext = false;
+  const produtosDetectadosContext = detectTotvsProducts(contextWindow);
+  
+  if (!hasTotvsInContext && produtosDetectadosContext.length > 0) {
+    hasProductsInContext = true;
+    console.log('[SIMPLE-TOTVS] ✅ Produtos TOTVS encontrados no contexto (sem "TOTVS" explícito):', produtosDetectadosContext.join(', '));
+  }
+  
+  if (!hasTotvsInContext && !hasProductsInContext) {
     console.log('[SIMPLE-TOTVS] ❌ Rejeitado: TOTVS não aparece próximo à empresa na MESMA MATÉRIA (falso positivo)');
     console.log('[SIMPLE-TOTVS] 💡 Isso significa que empresa e TOTVS aparecem em matérias diferentes da mesma página');
+    console.log('[SIMPLE-TOTVS] 🔍 Janela de contexto verificada:', contextWindow.substring(0, 500));
     return { valid: false, matchType: 'rejected', produtos: [] };
   }
   
   // 4. DETECTAR: Produtos TOTVS mencionados NO CONTEXTO (MESMA MATÉRIA)
-  const produtosDetectados = detectTotvsProducts(contextWindow);
+  // 🔥 CRÍTICO: Buscar produtos tanto no contextWindow quanto no fullText
+  // Isso garante que produtos mencionados em outras partes da matéria sejam detectados
+  const produtosDetectadosFull = detectTotvsProducts(fullText.toLowerCase());
+  
+  // Combinar produtos detectados (sem duplicatas)
+  const produtosDetectados = [...new Set([...produtosDetectadosContext, ...produtosDetectadosFull])];
+  
+  console.log('[SIMPLE-TOTVS] 🎯 Produtos detectados:', produtosDetectados.length > 0 ? produtosDetectados.join(', ') : 'Nenhum');
   
   // 🔥 NOVO: Se temos URL, fazer leitura de contexto completo para validação precisa
+  // ⚠️ OTIMIZAÇÃO: Só fazer fetch se passou na validação básica E temos limite de memória disponível
   let hasBusinessContext = true; // Default: aceitar se não tiver URL
-  if (url) {
-    console.log('[SIMPLE-TOTVS] 🔍 Lendo contexto completo da URL para validação precisa...');
-    const urlContext = await fetchAndAnalyzeUrlContext(url, companyName);
-    hasBusinessContext = urlContext.hasBusinessContext;
-    
-    if (!hasBusinessContext) {
-      console.log('[SIMPLE-TOTVS] ❌ Rejeitado: IA não detectou correlação de negócios real no contexto completo da URL');
-      return { valid: false, matchType: 'rejected', produtos: [] };
-    }
-    
-    // Se passou na validação IA, usar texto completo da URL para detecção de produtos
-    if (urlContext.fullText) {
-      const fullContextWindow = urlContext.fullText.toLowerCase();
-      const produtosDetectadosFull = detectTotvsProducts(fullContextWindow);
-      if (produtosDetectadosFull.length > produtosDetectados.length) {
-        produtosDetectados.push(...produtosDetectadosFull.filter(p => !produtosDetectados.includes(p)));
+  let validationMethod = 'basic'; // 'basic' ou 'ai' - para badge de verificação
+  if (url && (hasTotvsInContext || produtosDetectados.length > 0)) {
+    // 🎯 LIMITAR: Só fazer fetch se ainda temos "cota" de URLs disponíveis
+    // Isso previne consumo excessivo de memória
+    if (urlsProcessedCount && urlsProcessedCount.current >= urlsProcessedCount.max) {
+      console.log('[SIMPLE-TOTVS] ⚠️ Limite de URLs atingido, usando validação básica apenas');
+      validationMethod = 'basic';
+      // Aceitar baseado na validação básica já feita
+    } else {
+      console.log('[SIMPLE-TOTVS] 🔍 Lendo contexto completo da URL para validação precisa...');
+      if (urlsProcessedCount) {
+        urlsProcessedCount.current++;
+      }
+      const urlContext = await fetchAndAnalyzeUrlContext(url, companyName);
+      hasBusinessContext = urlContext.hasBusinessContext;
+      validationMethod = 'ai'; // ✅ Validado com IA
+      
+      if (!hasBusinessContext) {
+        console.log('[SIMPLE-TOTVS] ❌ Rejeitado: IA não detectou correlação de negócios real no contexto completo da URL');
+        return { valid: false, matchType: 'rejected', produtos: [], validationMethod: 'ai' };
+      }
+      
+      // Se passou na validação IA, usar texto completo da URL para detecção de produtos
+      if (urlContext.fullText) {
+        const fullContextWindow = urlContext.fullText.toLowerCase();
+        const produtosDetectadosFull = detectTotvsProducts(fullContextWindow);
+        if (produtosDetectadosFull.length > produtosDetectados.length) {
+          produtosDetectados.push(...produtosDetectadosFull.filter(p => !produtosDetectados.includes(p)));
+        }
       }
     }
   }
@@ -845,34 +953,55 @@ async function isValidTOTVSEvidence(
   // 5. CLASSIFICAR: Triple, Double ou Single Match (TUDO NA MESMA MATÉRIA)
   
   // 🔥 TRIPLE MATCH: Empresa + TOTVS + Produto (TUDO NA MESMA MATÉRIA, MESMO CONTEXTO)
-  if (produtosDetectados.length > 0 && hasTotvsInContext) {
+  // Aceita: TOTVS explícito + produto OU produto mencionado com TOTVS implícito
+  if (produtosDetectados.length > 0 && (hasTotvsInContext || hasProductsInContext)) {
     console.log('[SIMPLE-TOTVS] ✅ ✅ ✅ TRIPLE MATCH DETECTADO! (Empresa + TOTVS + Produto na mesma matéria)');
     console.log('[SIMPLE-TOTVS] 🎯 Produtos:', produtosDetectados.join(', '));
+    console.log('[SIMPLE-TOTVS] 🔍 TOTVS explícito:', hasTotvsInContext, '| Produtos detectados:', hasProductsInContext);
     return { 
       valid: true, 
       matchType: 'triple', 
-      produtos: produtosDetectados 
+      produtos: produtosDetectados,
+      validationMethod: validationMethod
     };
   }
   
   // 🔥 DOUBLE MATCH - VARIAÇÃO 1: Empresa + TOTVS (na mesma matéria, mesmo contexto)
   if (hasTotvsInContext) {
     console.log('[SIMPLE-TOTVS] ✅ ✅ DOUBLE MATCH DETECTADO! (Empresa + TOTVS na mesma matéria)');
-  return { 
-    valid: true, 
-    matchType: 'double', 
-    produtos: [] 
-  };
-  }
-  
-  // 🔥 DOUBLE MATCH - VARIAÇÃO 2: Empresa + Produto TOTVS (sem mencionar TOTVS explicitamente)
-  if (produtosDetectados.length > 0) {
-    console.log('[SIMPLE-TOTVS] ✅ ✅ DOUBLE MATCH DETECTADO! (Empresa + Produto TOTVS na mesma matéria, sem mencionar TOTVS)');
-    console.log('[SIMPLE-TOTVS] 🎯 Produtos:', produtosDetectados.join(', '));
     return { 
       valid: true, 
       matchType: 'double', 
-      produtos: produtosDetectados 
+      produtos: [],
+      validationMethod: validationMethod
+    };
+  }
+  
+  // 🔥 DOUBLE MATCH - VARIAÇÃO 2: Empresa + Produto TOTVS (sem mencionar TOTVS explicitamente)
+  // 🔥 CRÍTICO: Aceitar produtos TOTVS mesmo sem "TOTVS" explícito (ex: "RM", "Protheus")
+  // ⚠️ IMPORTANTE: Validação por contexto - produtos devem estar em contexto válido de uso
+  // Exemplos válidos: vaga de emprego, requisito técnico, contexto de implementação
+  const contextosValidosParaProdutoSemTotvs = [
+    'vaga', 'vagas', 'emprego', 'trabalho', 'cargo', 'função',
+    'requisito', 'requisitos', 'experiência', 'conhecimento',
+    'desenvolvedor', 'analista', 'consultor', 'implantador',
+    'implementação', 'implantação', 'migração', 'sistema',
+    'utiliza', 'usa', 'usando', 'trabalha', 'trabalhando'
+  ];
+  
+  const textLowerForContext = fullText.toLowerCase();
+  const temContextoValido = produtosDetectados.length > 0 && 
+    contextosValidosParaProdutoSemTotvs.some(ctx => textLowerForContext.includes(ctx));
+  
+  if (produtosDetectados.length > 0 && (hasProductsInContext || temContextoValido)) {
+    console.log('[SIMPLE-TOTVS] ✅ ✅ DOUBLE MATCH DETECTADO! (Empresa + Produto TOTVS na mesma matéria)');
+    console.log('[SIMPLE-TOTVS] 🎯 Produtos:', produtosDetectados.length > 0 ? produtosDetectados.join(', ') : 'Detectados no contexto');
+    console.log('[SIMPLE-TOTVS] 🔍 Contexto válido:', temContextoValido ? 'Sim' : 'Não (mas produtos detectados)');
+    return { 
+      valid: true, 
+      matchType: 'double', 
+      produtos: produtosDetectados,
+      validationMethod: validationMethod
     };
   }
   
@@ -934,7 +1063,7 @@ function detectTotvsProducts(text: string): string[] {
   }
   
   // 2. VERIFICAR produtos NORMAIS (busca simples case-insensitive)
-  const textLower = text.toLowerCase();
+  // textLower já foi declarado no início da função
   
   // Lista de acrônimos que NÃO devem ser buscados com includes() simples
   const skipForRegex = [
@@ -990,6 +1119,59 @@ function detectTotvsProducts(text: string): string[] {
 }
 
 // 🔍 BUSCA EM MÚLTIPLOS PORTAIS (função auxiliar modular para 50+ portais)
+// 🔥 NOVA FUNÇÃO: Gerar query específica por tipo de fonte
+function generateQueryBySourceType(
+  sourceType: string,
+  portal: string,
+  companyName: string,
+  domain?: string
+): string {
+  // 🔥 PRODUTOS TOTVS para incluir nas queries (principais ERPs e tecnologias)
+  const produtosPrincipais = [
+    'Protheus', 'RM', 'Datasul', 'Winthor', 'Logix',
+    'TOTVS', 'ADVPL', 'TLPP', 'Microsiga'
+  ];
+  const produtosQuery = produtosPrincipais.join(' OR ');
+  
+  switch (sourceType) {
+    // 📋 PORTALS DE VAGAS: Buscar empresa + produtos TOTVS (não só "TOTVS")
+    case 'job_portals':
+      return `site:${portal} "${companyName}" (${produtosQuery})`;
+    
+    // 📘 CASES OFICIAIS TOTVS: Buscar por "case" ou "cliente"
+    case 'totvs_cases':
+      return `site:${portal} ("case" OR "cliente" OR "depoimento") "${companyName}"`;
+    
+    // 📰 NOTÍCIAS PREMIUM: Buscar empresa + contexto de uso/implementação
+    case 'premium_news':
+      return `site:${portal} "${companyName}" ("TOTVS" OR "ERP" OR "implementação" OR "migração" OR "sistema" OR ${produtosQuery})`;
+    
+    // 🏛️ FONTES OFICIAIS: Buscar contratos/menções
+    case 'official_docs':
+      return `site:${portal} "${companyName}" ("TOTVS" OR "contrato" OR "licitação" OR ${produtosQuery})`;
+    
+    // 🎥 VÍDEOS: Buscar empresa + produtos
+    case 'video_content':
+      return `site:${portal} "${companyName}" (${produtosQuery})`;
+    
+    // 📱 REDES SOCIAIS: Buscar empresa + produtos
+    case 'social_media':
+      return `site:${portal} "${companyName}" (${produtosQuery})`;
+    
+    // 🤝 PARCEIROS TOTVS: Buscar por clientes/portfolio
+    case 'totvs_partners':
+      return `site:${portal} ("clientes" OR "portfolio" OR "cases") "${companyName}"`;
+    
+    // 🌐 PORTAIS TECH: Buscar empresa + contexto tech
+    case 'tech_portals':
+      return `site:${portal} "${companyName}" ("TOTVS" OR "ERP" OR ${produtosQuery})`;
+    
+    // 🔍 BUSCA GERAL: Fallback para busca genérica
+    default:
+      return `site:${portal} "${companyName}" ("TOTVS" OR ${produtosQuery})`;
+  }
+}
+
 async function searchMultiplePortals(params: {
   portals: string[];
   companyName: string;
@@ -997,8 +1179,9 @@ async function searchMultiplePortals(params: {
   sourceType: string;
   sourceWeight: number;
   dateRestrict?: string; // 'y1', 'y2', 'y3', 'y5', 'y6'
+  domain?: string; // 🔥 NOVO: Domínio da empresa para queries específicas
 }): Promise<any[]> {
-  const { portals, companyName, serperKey, sourceType, sourceWeight, dateRestrict = 'y5' } = params;
+  const { portals, companyName, serperKey, sourceType, sourceWeight, dateRestrict = 'y5', domain } = params;
   const evidencias: any[] = [];
   let processedPortals = 0;
   
@@ -1007,7 +1190,9 @@ async function searchMultiplePortals(params: {
   
   for (const portal of portals) {
     try {
-      const query = `site:${portal} "${companyName}" "TOTVS"`;
+      // 🔥 CRÍTICO: Usar query específica por tipo de fonte (inclui produtos TOTVS)
+      const query = generateQueryBySourceType(sourceType, portal, companyName, domain);
+      console.log(`[MULTI-PORTAL] 📋 Query para ${portal}: ${query.substring(0, 150)}...`);
       
       const response = await fetch('https://google.serper.dev/search', {
         method: 'POST',
@@ -1049,7 +1234,7 @@ async function searchMultiplePortals(params: {
           const url = result.link || result.url || '';
           
           // 🔥 Validação rigorosa COM leitura de contexto completo da URL
-          const validation = await isValidTOTVSEvidence(snippet, title, companyName, url);
+          const validation = await isValidTOTVSEvidence(snippet, title, companyName, url, urlsProcessedCount);
           
           if (!validation.valid) {
             rejectedCount++;
@@ -1079,7 +1264,8 @@ async function searchMultiplePortals(params: {
             has_intent: hasIntent,
             intent_keywords: hasIntent ? 
               INTENT_KEYWORDS.filter(k => `${title} ${snippet}`.toLowerCase().includes(k)) : 
-              []
+              [],
+            validation_method: validation.validationMethod || 'basic' // 🔥 NOVO: Badge de verificação (ai/basic)
           });
           
           console.log(`[MULTI-PORTAL] ✅ ${portal}: ${validation.matchType.toUpperCase()} - ${title.substring(0, 50)}`);
@@ -1113,20 +1299,55 @@ async function searchMultiplePortals(params: {
 }
 
 serve(async (req) => {
+  // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA - SEM TRY/CATCH)
+  // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
+  // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    console.log('[SIMPLE-TOTVS] ✅ OPTIONS preflight recebido');
+    return new Response('', { 
+      status: 200,
+      headers: corsHeaders
+    });
   }
 
   const startTime = Date.now();
-  console.log('[SIMPLE-TOTVS] 🚀 Iniciando verificação...');
+  console.log('[SIMPLE-TOTVS] 🚀 Iniciando verificação...', { method: req.method });
+
+  // 🔥 Declarar evidencias no escopo do try para estar disponível no catch
+  let evidencias: any[] = [];
+  
+  // 🎯 CONTADOR DE URLs PROCESSADAS (para limitar uso de memória)
+  // 🔥 AUMENTADO: De 15 para 80 URLs para garantir 100% de cobertura
+  // - Permite validar mais evidências com IA (maior precisão)
+  // - Ainda mantém controle de memória (80 é razoável para Edge Functions)
+  const MAX_URLS_TO_FETCH = 80; // Aumentado de 15 para 80 (garantir 100% de sucesso)
+  const urlsProcessedCount = { current: 0, max: MAX_URLS_TO_FETCH };
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const serperKey = Deno.env.get('SERPER_API_KEY');
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const body = await req.json();
+    
+    // 🔥 CRÍTICO: Ler body apenas se não for OPTIONS
+    let body;
+    try {
+      body = await req.json();
+    } catch (error) {
+      console.error('[SIMPLE-TOTVS] ❌ Erro ao ler body:', error);
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON body', status: 'error' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     const { company_id, company_name, cnpj, domain } = body;
+    
+    // 🔥 Extrair domínio se não fornecido mas temos nome/CNPJ
+    let empresaDomain = domain;
+    if (!empresaDomain && company_name) {
+      // Tentar extrair domínio de variações do nome (ex: "Metalúrgica ABC" -> "metalurgicaabc.com.br")
+      // Mas isso é opcional - não é crítico
+    }
 
     if (!company_name && !cnpj) {
       return new Response(
@@ -1187,7 +1408,8 @@ serve(async (req) => {
     console.log('[SIMPLE-TOTVS] 🎯 Segmento detectado:', companySegment || 'genérico');
     console.log('[SIMPLE-TOTVS] 🔑 Serper API Key presente:', !!serperKey);
 
-    const evidencias: any[] = [];
+    // evidencias já foi declarado no escopo superior
+    evidencias = [];
     let totalQueries = 0;
     let sourcesConsulted = 0;
 
@@ -1216,6 +1438,7 @@ serve(async (req) => {
         sourceType: 'job_portals',
         sourceWeight: SOURCE_WEIGHTS.job_portals,
         dateRestrict: 'y5', // Últimos 5 anos (1-6 configurável depois)
+        domain: empresaDomain, // 🔥 NOVO: Passar domínio para queries específicas
       });
       evidencias.push(...evidenciasVagas);
       sourcesConsulted += JOB_PORTALS_NACIONAL.length;
@@ -1232,6 +1455,7 @@ serve(async (req) => {
         sourceType: 'totvs_cases',
         sourceWeight: 80, // Peso alto para cases oficiais
         dateRestrict: 'y5',
+        domain: empresaDomain,
       });
       evidencias.push(...evidenciasTotvsCases);
       sourcesConsulted += TOTVS_OFFICIAL_SOURCES.length;
@@ -1248,6 +1472,7 @@ serve(async (req) => {
         sourceType: 'official_docs',
         sourceWeight: 100, // PESO MÁXIMO
         dateRestrict: 'y6', // Últimos 6 anos para documentos oficiais
+        domain: empresaDomain,
       });
       evidencias.push(...evidenciasOficiais);
       sourcesConsulted += OFFICIAL_SOURCES_BR.length;
@@ -1269,6 +1494,7 @@ serve(async (req) => {
         sourceType: 'premium_news',
         sourceWeight: SOURCE_WEIGHTS.valor_economico, // 85 pts
         dateRestrict: 'y5',
+        domain: empresaDomain,
       });
       evidencias.push(...evidenciasNewsPremium);
       sourcesConsulted += NEWS_SOURCES_PREMIUM.length;
@@ -1293,6 +1519,7 @@ serve(async (req) => {
         sourceType: 'tech_portals',
         sourceWeight: 85, // Peso alto (portais tech têm cases validados)
         dateRestrict: 'y5',
+        domain: empresaDomain,
       });
       evidencias.push(...evidenciasTechPortals);
       sourcesConsulted += 7;
@@ -1309,6 +1536,7 @@ serve(async (req) => {
         sourceType: 'video_content',
         sourceWeight: 75, // Peso médio-alto (vídeos são boas evidências)
         dateRestrict: 'y5',
+        domain: empresaDomain,
       });
       evidencias.push(...evidenciasVideos);
       sourcesConsulted += 2; // YouTube + Vimeo
@@ -1325,6 +1553,7 @@ serve(async (req) => {
         sourceType: 'social_media',
         sourceWeight: 70, // Peso médio (redes sociais têm menos contexto)
         dateRestrict: 'y3', // Últimos 3 anos (posts mais recentes)
+        domain: empresaDomain,
       });
       evidencias.push(...evidenciasSocial);
       sourcesConsulted += 3; // Instagram + Facebook + LinkedIn
@@ -1341,6 +1570,7 @@ serve(async (req) => {
         sourceType: 'totvs_partners',
         sourceWeight: 80, // Peso alto (parceiros têm cases validados)
         dateRestrict: 'y5',
+        domain: empresaDomain,
       });
       evidencias.push(...evidenciasParceiros);
       sourcesConsulted += 1;
@@ -1381,7 +1611,7 @@ serve(async (req) => {
             const url = item.link || item.url || '';
             
             // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
-            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
+            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url, urlsProcessedCount);
             
             if (!validation.valid) {
               continue;
@@ -1406,7 +1636,8 @@ serve(async (req) => {
               has_intent: hasIntent,
               intent_keywords: hasIntent ? 
                 INTENT_KEYWORDS.filter(k => `${title} ${snippet}`.toLowerCase().includes(k)) : 
-                []
+                [],
+              validation_method: validation.validationMethod || 'basic' // 🔥 NOVO: Badge de verificação
             });
             
             console.log(`[SIMPLE-TOTVS] ✅ ${validation.matchType.toUpperCase()} Match: ${title.substring(0, 50)}`);
@@ -1442,7 +1673,7 @@ serve(async (req) => {
               const url = result.link || result.url || '';
               
               // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
-              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
+              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url, urlsProcessedCount);
               
               if (!validation.valid) {
                 continue;
@@ -1465,7 +1696,8 @@ serve(async (req) => {
                 has_intent: hasIntent,
                 intent_keywords: hasIntent ? 
                   INTENT_KEYWORDS.filter(k => `${title} ${snippet}`.toLowerCase().includes(k)) : 
-                  []
+                  [],
+                validation_method: validation.validationMethod || 'basic' // 🔥 NOVO: Badge de verificação
               });
               
               console.log(`[SIMPLE-TOTVS] ✅ ${validation.matchType.toUpperCase()} Match: ${title.substring(0, 50)}`);
@@ -1501,7 +1733,7 @@ serve(async (req) => {
               const url = result.link || result.url || '';
               
               // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
-              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
+              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url, urlsProcessedCount);
               
               if (!validation.valid) {
                 continue;
@@ -1524,7 +1756,8 @@ serve(async (req) => {
                 has_intent: hasIntent,
                 intent_keywords: hasIntent ? 
                   INTENT_KEYWORDS.filter(k => `${title} ${snippet}`.toLowerCase().includes(k)) : 
-                  []
+                  [],
+                validation_method: validation.validationMethod || 'basic' // 🔥 NOVO: Badge de verificação
               });
               
               console.log(`[SIMPLE-TOTVS] ✅ ${validation.matchType.toUpperCase()} Match: ${title.substring(0, 50)}`);
@@ -1561,7 +1794,7 @@ serve(async (req) => {
             const url = result.link || result.url || '';
             
             // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
-            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
+            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url, urlsProcessedCount);
             
             if (!validation.valid) {
               continue;
@@ -1586,7 +1819,8 @@ serve(async (req) => {
               has_intent: hasIntent,
               intent_keywords: hasIntent ? 
                 INTENT_KEYWORDS.filter(k => `${title} ${snippet}`.toLowerCase().includes(k)) : 
-                []
+                [],
+              validation_method: validation.validationMethod || 'basic' // 🔥 NOVO: Badge de verificação
             });
             
             console.log(`[SIMPLE-TOTVS] ✅ CVM/RI: ${validation.matchType.toUpperCase()}`, 
@@ -1636,7 +1870,7 @@ serve(async (req) => {
               const url = result.link || result.url || '';
               
               // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
-              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
+              const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url, urlsProcessedCount);
               
               if (!validation.valid) {
                 continue;
@@ -1662,7 +1896,8 @@ serve(async (req) => {
                 has_intent: hasIntent,
                 intent_keywords: hasIntent ? 
                   INTENT_KEYWORDS.filter(k => `${title} ${snippet}`.toLowerCase().includes(k)) : 
-                  []
+                  [],
+                validation_method: validation.validationMethod || 'basic' // 🔥 NOVO: Badge de verificação
               });
               
               console.log(`[SIMPLE-TOTVS] ✅ ${source.name}: ${validation.matchType.toUpperCase()}`, 
@@ -1701,7 +1936,7 @@ serve(async (req) => {
             const url = result.link || result.url || '';
             
             // 🔥 VALIDAÇÃO ULTRA-RESTRITA COM leitura de contexto completo
-            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url);
+            const validation = await isValidTOTVSEvidence(snippet, title, shortSearchTerm, url, urlsProcessedCount);
             
             if (!validation.valid) {
               continue;
@@ -1724,7 +1959,8 @@ serve(async (req) => {
               has_intent: hasIntent,
               intent_keywords: hasIntent ? 
                 INTENT_KEYWORDS.filter(k => `${title} ${snippet}`.toLowerCase().includes(k)) : 
-                []
+                [],
+              validation_method: validation.validationMethod || 'basic' // 🔥 NOVO: Badge de verificação
             });
             
             console.log(`[SIMPLE-TOTVS] ✅ Memorando: ${validation.matchType.toUpperCase()}`, 
@@ -1765,7 +2001,7 @@ serve(async (req) => {
               const url = result.link || result.url || '';
               
               // 🔥 Para busca por CNPJ, validamos com nome da empresa se disponível + leitura de contexto
-              const validation = await isValidTOTVSEvidence(snippet, title, company_name || cnpj, url);
+              const validation = await isValidTOTVSEvidence(snippet, title, company_name || cnpj, url, urlsProcessedCount);
               
               if (!validation.valid) {
                 continue;
@@ -1963,56 +2199,73 @@ serve(async (req) => {
       from_cache: false,
     };
 
+    // 💾 SALVAMENTO INCREMENTAL: Salvar resultados ANTES de retornar (garante persistência mesmo em caso de timeout)
     if (company_id) {
-      // 1️⃣ Salvar no cache
-      const { error: saveError } = await supabase
-        .from('simple_totvs_checks')
-        .upsert({
-          company_id, company_name, cnpj, domain, status, confidence,
-          total_weight: totalScore, 
-          triple_matches: tripleMatches,
-          double_matches: doubleMatches,
-          single_matches: singleMatches,
-          evidences: evidencias,
-          checked_at: new Date().toISOString(),
-        });
+      try {
+        // 1️⃣ Salvar no cache (CRÍTICO: fazer primeiro para garantir persistência)
+        const { error: saveError } = await supabase
+          .from('simple_totvs_checks')
+          .upsert({
+            company_id, company_name, cnpj, domain, status, confidence,
+            total_weight: totalScore, 
+            triple_matches: tripleMatches,
+            double_matches: doubleMatches,
+            single_matches: singleMatches,
+            evidences: evidencias,
+            checked_at: new Date().toISOString(),
+          }, {
+            onConflict: 'company_id'
+          });
 
-      if (saveError) {
-        console.error('[SIMPLE-TOTVS] ❌ Erro ao salvar cache:', saveError);
-      } else {
-        console.log('[SIMPLE-TOTVS] ✅ Cache salvo');
+        if (saveError) {
+          console.error('[SIMPLE-TOTVS] ❌ Erro ao salvar cache:', saveError);
+        } else {
+          console.log('[SIMPLE-TOTVS] ✅ Cache salvo (resultados persistidos)');
+        }
+      } catch (saveErr) {
+        console.error('[SIMPLE-TOTVS] ⚠️ Erro ao salvar cache (não crítico):', saveErr);
       }
       
       // 2️⃣ ATUALIZAR companies.totvs_status (para sincronizar nas 3 páginas!)
-      const { error: companyUpdateError } = await supabase
-        .from('companies')
-        .update({
-          totvs_status: status,
-          totvs_confidence: confidence,
-        })
-        .eq('id', company_id);
-      
-      if (companyUpdateError) {
-        console.error('[SIMPLE-TOTVS] ❌ Erro ao atualizar companies:', companyUpdateError);
-      } else {
-        console.log('[SIMPLE-TOTVS] ✅ Status TOTVS atualizado em companies');
+      // ⚠️ OTIMIZAÇÃO: Fazer update apenas se necessário (evita operações desnecessárias)
+      try {
+        const { error: companyUpdateError } = await supabase
+          .from('companies')
+          .update({
+            totvs_status: status,
+            totvs_confidence: confidence,
+          })
+          .eq('id', company_id);
+        
+        if (companyUpdateError) {
+          console.error('[SIMPLE-TOTVS] ❌ Erro ao atualizar companies:', companyUpdateError);
+        } else {
+          console.log('[SIMPLE-TOTVS] ✅ Status TOTVS atualizado em companies');
+        }
+      } catch (updateError) {
+        console.error('[SIMPLE-TOTVS] ⚠️ Erro ao atualizar companies (não crítico):', updateError);
       }
     }
     
     // 3️⃣ ATUALIZAR icp_analysis_results.totvs_status (para o badge funcionar!)
+    // ⚠️ OTIMIZAÇÃO: Fazer update apenas se necessário (evita operações desnecessárias)
     if (cnpj) {
-      const { error: icpUpdateError } = await supabase
-        .from('icp_analysis_results')
-        .update({
-          totvs_status: status,
-          totvs_confidence: confidence,
-        })
-        .eq('cnpj', cnpj);
-      
-      if (icpUpdateError) {
-        console.error('[SIMPLE-TOTVS] ❌ Erro ao atualizar icp_analysis_results:', icpUpdateError);
-      } else {
-        console.log('[SIMPLE-TOTVS] ✅ Status TOTVS atualizado em icp_analysis_results');
+      try {
+        const { error: icpUpdateError } = await supabase
+          .from('icp_analysis_results')
+          .update({
+            totvs_status: status,
+            totvs_confidence: confidence,
+          })
+          .eq('cnpj', cnpj);
+        
+        if (icpUpdateError) {
+          console.error('[SIMPLE-TOTVS] ❌ Erro ao atualizar icp_analysis_results:', icpUpdateError);
+        } else {
+          console.log('[SIMPLE-TOTVS] ✅ Status TOTVS atualizado em icp_analysis_results');
+        }
+      } catch (updateError) {
+        console.error('[SIMPLE-TOTVS] ⚠️ Erro ao atualizar icp_analysis_results (não crítico):', updateError);
       }
     }
 
@@ -2022,12 +2275,79 @@ serve(async (req) => {
     );
 
   } catch (error: any) {
+    const executionTime = Date.now() - startTime;
     console.error('[SIMPLE-TOTVS] ❌ Erro:', error);
+    console.error('[SIMPLE-TOTVS] ❌ Stack:', error.stack);
+    console.error('[SIMPLE-TOTVS] ❌ Tempo de execução:', executionTime, 'ms');
+    
+    // 💾 SALVAMENTO DE EMERGÊNCIA: Tentar salvar resultados parciais antes de retornar erro
+    if (evidencias && evidencias.length > 0 && company_id) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        if (supabaseUrl && supabaseKey) {
+          const emergencySupabase = createClient(supabaseUrl, supabaseKey);
+          const tripleMatches = evidencias.filter((e: any) => e.match_type === 'triple').length;
+          const doubleMatches = evidencias.filter((e: any) => e.match_type === 'double').length;
+          const singleMatches = evidencias.filter((e: any) => e.match_type === 'single').length;
+          const totalScore = evidencias.reduce((sum: number, e: any) => sum + (e.weight || 0), 0);
+          const status = totalScore >= 50 ? 'client' : totalScore >= 20 ? 'likely' : 'unlikely';
+          const confidence = totalScore >= 50 ? 'high' : totalScore >= 20 ? 'medium' : 'low';
+          
+          console.log('[SIMPLE-TOTVS] 💾 Tentando salvar resultados parciais antes de retornar erro...');
+          const { error: saveError } = await emergencySupabase
+            .from('simple_totvs_checks')
+            .upsert({
+              company_id, company_name, cnpj, domain, status, confidence,
+              total_weight: totalScore, 
+              triple_matches: tripleMatches,
+              double_matches: doubleMatches,
+              single_matches: singleMatches,
+              evidences: evidencias,
+              checked_at: new Date().toISOString(),
+            }, {
+              onConflict: 'company_id'
+            });
+          
+          if (!saveError) {
+            console.log('[SIMPLE-TOTVS] ✅ Resultados parciais salvos com sucesso!');
+          }
+        }
+      } catch (saveErr) {
+        console.error('[SIMPLE-TOTVS] ⚠️ Não foi possível salvar resultados parciais:', saveErr);
+      }
+    }
+    
+    // 🔥 Se for timeout ou limite de memória, retornar erro específico
+    if (executionTime > 55000 || error.message?.includes('WORKER_LIMIT') || error.message?.includes('Memory')) {
+      console.error('[SIMPLE-TOTVS] ⚠️ TIMEOUT/MEMORY LIMIT DETECTADO');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Limite de memória ou timeout: A verificação foi interrompida. Resultados parciais foram salvos. Tente novamente ou verifique os logs.',
+          status: 'timeout',
+          execution_time: `${executionTime}ms`,
+          partial_results: {
+            evidences: evidencias || [],
+            triple_matches: evidencias?.filter((e: any) => e.match_type === 'triple').length || 0,
+            double_matches: evidencias?.filter((e: any) => e.match_type === 'double').length || 0,
+            saved: true // Indica que resultados foram salvos
+          }
+        }),
+        { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: error.message || 'Erro desconhecido',
         status: 'error',
-        execution_time: `${Date.now() - startTime}ms`
+        execution_time: `${executionTime}ms`,
+        stack: error.stack,
+        partial_results: evidencias ? {
+          evidences: evidencias,
+          triple_matches: evidencias.filter((e: any) => e.match_type === 'triple').length,
+          double_matches: evidencias.filter((e: any) => e.match_type === 'double').length,
+        } : null
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

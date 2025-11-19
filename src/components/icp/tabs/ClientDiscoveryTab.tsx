@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
 import { Users, Building2, MapPin, TrendingUp, ExternalLink, Search, Loader2 } from 'lucide-react';
+import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
 import { useCompanySimilar } from '@/hooks/useCompanySimilar';
 import { useClientDiscoveryWave7 } from '@/hooks/useClientDiscoveryWave7';
 import { useToast } from '@/hooks/use-toast';
@@ -26,6 +27,10 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
   const { mutate: executeWave7, isPending: isExecutingWave7 } = useClientDiscoveryWave7();
   const [expandedLevel, setExpandedLevel] = useState<'direct' | 'indirect'>('direct');
   const [wave7Results, setWave7Results] = useState<any>(null);
+  
+  // 🎯 ESTADOS DE PROGRESSO
+  const [progressStartTime, setProgressStartTime] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
 
   // Usar dados salvos se disponíveis
   const loadedFromHistory = !!savedData;
@@ -122,15 +127,39 @@ export function ClientDiscoveryTab({ companyId, companyName, cnpj, domain, saved
   }
 
   if (isLoading && !loadedFromHistory) {
+    const clientPhases = [
+      { id: 'similar_companies', name: 'Empresas Similares', status: 'pending' as const, estimatedTime: 5 },
+      { id: 'client_analysis', name: 'Análise de Clientes', status: 'pending' as const, estimatedTime: 8 },
+      { id: 'relationship_mapping', name: 'Mapeamento de Relações', status: 'pending' as const, estimatedTime: 5 },
+    ];
+    
+    // Iniciar progresso se ainda não iniciado
+    if (!progressStartTime) {
+      setProgressStartTime(Date.now());
+      setCurrentPhase('similar_companies');
+      setTimeout(() => setCurrentPhase('client_analysis'), 5000);
+      setTimeout(() => setCurrentPhase('relationship_mapping'), 13000);
+    }
+    
     return (
-      <Card className="p-6">
-        <div className="text-center">
-          <Users className="w-8 h-8 animate-pulse text-primary mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">
-            Descobrindo clientes em múltiplos níveis...
-          </p>
-        </div>
-      </Card>
+      <div className="space-y-4">
+        <Card className="p-6">
+          <div className="text-center">
+            <Users className="w-8 h-8 animate-pulse text-primary mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground">
+              Descobrindo clientes em múltiplos níveis...
+            </p>
+          </div>
+        </Card>
+        {progressStartTime && (
+          <GenericProgressBar
+            phases={clientPhases}
+            currentPhase={currentPhase || undefined}
+            elapsedTime={Math.floor((Date.now() - progressStartTime) / 1000)}
+            title="Progresso da Descoberta de Clientes"
+          />
+        )}
+      </div>
     );
   }
 

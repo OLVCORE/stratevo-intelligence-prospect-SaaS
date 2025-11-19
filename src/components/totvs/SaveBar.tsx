@@ -74,12 +74,13 @@ export default function SaveBar({
   return (
     <div className={wrapperClass}>
       <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-4 px-6 py-3">
-        {/* 📊 PROGRESS BAR REAL (Heat Map: Frio → Quente) */}
-        <div className="flex-1 max-w-md">
+        {/* 📊 PROGRESS BAR REAL (Heat Map: Frio → Quente) + STATUS INDIVIDUAL DAS ABAS */}
+        <div className="flex-1 max-w-2xl">
           {(() => {
-            const totalTabs = 10; // FIXO: 10 abas no relatório TOTVS completo (incluindo Oportunidades)
+            const totalTabs = 10; // FIXO: 10 abas no relatório TOTVS completo
             const registeredTabs = Object.keys(statuses).length;
             const completedTabs = Object.values(statuses).filter(s => s === 'completed').length;
+            const draftTabs = Object.values(statuses).filter(s => s === 'draft').length;
             const progressPercent = Math.round((completedTabs / totalTabs) * 100);
             
             // 🔍 DEBUG: Log detalhado do estado
@@ -87,34 +88,44 @@ export default function SaveBar({
               totalTabs,
               registeredTabs,
               completedTabs,
+              draftTabs,
               progressPercent,
               statuses,
               statusKeys: Object.keys(statuses),
             });
             
             // 🎨 GRADIENTE PROGRESSIVO INTELIGENTE
-            // 0-33%: Azul claríssimo → Azul médio (início da jornada)
-            // 34-55%: Azul → Verde transição (metade do caminho)
-            // 56-88%: Verde médio → Verde forte (quase lá)
-            // 89-100%: Verde limão brilhante (COMPLETO!)
-            
-            let gradient = 'from-blue-300 via-blue-400 to-blue-500'; // 0-33%
+            let gradient = 'from-blue-300 via-blue-400 to-blue-500';
             let textColor = 'text-blue-600';
             let emoji = '🔵';
             
             if (progressPercent >= 34 && progressPercent <= 55) {
-              gradient = 'from-blue-500 via-cyan-500 to-green-400'; // 34-55% (transição)
+              gradient = 'from-blue-500 via-cyan-500 to-green-400';
               textColor = 'text-cyan-600';
               emoji = '🔄';
             } else if (progressPercent >= 56 && progressPercent <= 88) {
-              gradient = 'from-green-400 via-green-500 to-green-600'; // 56-88% (avançando)
+              gradient = 'from-green-400 via-green-500 to-green-600';
               textColor = 'text-green-600';
               emoji = '📈';
             } else if (progressPercent >= 89) {
-              gradient = 'from-green-400 via-lime-400 to-lime-500'; // 89-100% (COMPLETO!)
+              gradient = 'from-green-400 via-lime-400 to-lime-500';
               textColor = 'text-lime-500';
               emoji = '✅';
             }
+            
+            // 🎯 MAPA DE NOMES DAS ABAS
+            const tabNames: Record<string, string> = {
+              'detection': 'TOTVS',
+              'decisors': 'Decisores',
+              'digital': 'Digital',
+              'competitors': 'Competitors',
+              'similar': 'Similar',
+              'clients': 'Clients',
+              '360': '360°',
+              'products': 'Products',
+              'opportunities': 'Oportunidades',
+              'executive': 'Executive',
+            };
             
             return (
               <div className="space-y-2">
@@ -133,6 +144,70 @@ export default function SaveBar({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
+                
+                {/* 🎯 STATUS INDIVIDUAL DAS ABAS (Tooltip com detalhes) */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex flex-wrap gap-1 text-xs cursor-help">
+                        {Object.entries(statuses).map(([tabKey, status]) => {
+                          const tabName = tabNames[tabKey] || tabKey;
+                          const isCompleted = status === 'completed';
+                          const isDraft = status === 'draft';
+                          const isProcessing = status === 'processing';
+                          const isError = status === 'error';
+                          
+                          return (
+                            <span
+                              key={tabKey}
+                              className={`px-2 py-0.5 rounded border ${
+                                isCompleted 
+                                  ? 'bg-green-500/20 text-green-400 border-green-500/50' 
+                                  : isDraft
+                                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/50'
+                                  : isProcessing
+                                  ? 'bg-blue-500/20 text-blue-400 border-blue-500/50 animate-pulse'
+                                  : isError
+                                  ? 'bg-red-500/20 text-red-400 border-red-500/50'
+                                  : 'bg-gray-500/20 text-gray-400 border-gray-500/50'
+                              }`}
+                              title={`${tabName}: ${isCompleted ? 'Salvo' : isDraft ? 'Não salvo' : isProcessing ? 'Processando' : isError ? 'Erro' : 'Pendente'}`}
+                            >
+                              {isCompleted ? '✓' : isDraft ? '○' : isProcessing ? '⟳' : isError ? '✗' : '○'} {tabName}
+                            </span>
+                          );
+                        })}
+                        {/* Mostrar abas não registradas como pendentes */}
+                        {registeredTabs < totalTabs && (
+                          <span className="px-2 py-0.5 rounded border bg-gray-500/10 text-gray-500 border-gray-500/30 text-xs">
+                            +{totalTabs - registeredTabs} pendente(s)
+                          </span>
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md">
+                      <div className="space-y-1 text-xs">
+                        <p className="font-semibold mb-2">Status das Abas:</p>
+                        {Object.entries(statuses).map(([tabKey, status]) => {
+                          const tabName = tabNames[tabKey] || tabKey;
+                          const isCompleted = status === 'completed';
+                          return (
+                            <div key={tabKey} className="flex items-center gap-2">
+                              <span className={isCompleted ? 'text-green-400' : 'text-amber-400'}>
+                                {isCompleted ? '✓' : '○'}
+                              </span>
+                              <span>{tabName}:</span>
+                              <span className={isCompleted ? 'text-green-400 font-semibold' : 'text-amber-400'}>
+                                {isCompleted ? 'Salvo' : 'Não salvo'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
                 {progressPercent === 100 && (
                   <p className="text-xs text-lime-500 font-semibold text-center animate-pulse">
                     🎉 Análise 100% completa!

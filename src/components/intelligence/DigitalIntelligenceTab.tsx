@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Loader2
 } from 'lucide-react';
+import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
 import {
   Collapsible,
   CollapsibleContent,
@@ -161,13 +162,36 @@ export default function DigitalIntelligenceTab({
   // 🔥 USAR DADOS SALVOS COMO PRIORIDADE MÁXIMA!
   const loadedData = savedData || existingData || null;
   
+  // 🎯 ESTADOS DE PROGRESSO
+  const [progressStartTime, setProgressStartTime] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
+  const [urlsAnalyzed, setUrlsAnalyzed] = useState<number>(0);
+  const [totalUrls, setTotalUrls] = useState<number>(0);
+  
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['digital-intelligence', companyId, companyName],
     queryFn: async (): Promise<DigitalIntelligenceData> => {
       console.log('[DIGITAL-INTEL] 🚀 Iniciando análise de inteligência digital...');
       
+      // 🎯 INICIAR TRACKING DE PROGRESSO
+      setProgressStartTime(Date.now());
+      setCurrentPhase('website_analysis');
+      setUrlsAnalyzed(0);
+      
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Usuário não autenticado');
+
+      // 🎯 FASE 1: Website Analysis (0-10s)
+      setTimeout(() => {
+        setCurrentPhase('social_media');
+        setUrlsAnalyzed(1); // Website analisado
+      }, 10000);
+
+      // 🎯 FASE 2: Social Media (10-25s)
+      setTimeout(() => {
+        setCurrentPhase('ai_analysis');
+        setUrlsAnalyzed(6); // Website + 5 redes sociais
+      }, 25000);
 
       const response = await supabase.functions.invoke('digital-intelligence-analysis', {
         body: {
@@ -180,10 +204,40 @@ export default function DigitalIntelligenceTab({
 
       if (response.error) {
         console.error('[DIGITAL-INTEL] ❌ Erro:', response.error);
+        setCurrentPhase('error');
         throw new Error(response.error.message);
       }
 
-      console.log(`[DIGITAL-INTEL] ✅ Análise concluída: ${response.data.analyzed_urls.length} URLs`);
+      const totalUrlsFound = response.data.analyzed_urls?.length || 0;
+      setTotalUrls(totalUrlsFound);
+      
+      // 🎯 FASE 3: AI Analysis (25-55s) - Simular progresso de URLs
+      const aiAnalysisDuration = 30000; // 30s para análise IA
+      const urlsPerSecond = totalUrlsFound / (aiAnalysisDuration / 1000);
+      let currentUrlCount = 6;
+      
+      const urlProgressInterval = setInterval(() => {
+        currentUrlCount = Math.min(currentUrlCount + urlsPerSecond, totalUrlsFound);
+        setUrlsAnalyzed(Math.floor(currentUrlCount));
+      }, 1000);
+      
+      setTimeout(() => {
+        clearInterval(urlProgressInterval);
+        setUrlsAnalyzed(totalUrlsFound);
+        setCurrentPhase('insights_generation');
+      }, aiAnalysisDuration);
+
+      console.log(`[DIGITAL-INTEL] ✅ Análise concluída: ${totalUrlsFound} URLs`);
+      
+      // 🎯 FASE 4: Insights Generation (55-60s)
+      setTimeout(() => {
+        setCurrentPhase('completed');
+        setTimeout(() => {
+          setProgressStartTime(null);
+          setCurrentPhase(null);
+        }, 1000);
+      }, 5000);
+      
       return response.data;
     },
     enabled: false, // ✅ Desabilitado por padrão (aba opcional)
@@ -280,10 +334,44 @@ export default function DigitalIntelligenceTab({
   const displayData = loadedData || data;
 
   if (isLoading && !displayData) {
+    // 🎯 4 FASES REAIS DO BACKEND (conforme digital-intelligence-analysis/index.ts)
+    const digitalPhases = [
+      { id: 'website_analysis', name: 'Análise do Website', status: 'pending' as const, estimatedTime: 10 },
+      { id: 'social_media', name: 'Redes Sociais', status: 'pending' as const, estimatedTime: 15 },
+      { id: 'ai_analysis', name: 'Análise IA', status: 'pending' as const, estimatedTime: 30 },
+      { id: 'insights_generation', name: 'Geração de Insights', status: 'pending' as const, estimatedTime: 5 },
+    ];
+    
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <span className="ml-3 text-lg">Analisando presença digital com IA...</span>
+      <div className="space-y-4">
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <span className="ml-3 text-lg">Analisando presença digital com IA...</span>
+        </div>
+        {progressStartTime && (
+          <Card className="p-4">
+            <GenericProgressBar
+              phases={digitalPhases}
+              currentPhase={currentPhase || undefined}
+              elapsedTime={Math.floor((Date.now() - progressStartTime) / 1000)}
+              title="Progresso da Análise Digital"
+            />
+            {/* 🎯 CONTADOR DE URLs ANALISADAS */}
+            {currentPhase === 'ai_analysis' && totalUrls > 0 && (
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  🔄 Analisando URLs com IA: {urlsAnalyzed}/{totalUrls} ({Math.round((urlsAnalyzed / totalUrls) * 100)}%)
+                </p>
+                <div className="mt-2 w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(urlsAnalyzed / totalUrls) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
     );
   }

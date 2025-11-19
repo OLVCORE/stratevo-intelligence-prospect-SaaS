@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
+import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
@@ -62,6 +63,10 @@ export function RecommendedProductsTab({
   const [enabled, setEnabled] = useState(false); // 🔥 NOVO: Controle manual
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const navigate = useNavigate();
+  
+  // 🎯 ESTADOS DE PROGRESSO
+  const [progressStartTime, setProgressStartTime] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
   
   // 🔥 NOVO: Estado para valores ARR editados por produto
   const [editedARR, setEditedARR] = useState<Record<string, EditedARR>>({});
@@ -1006,14 +1011,60 @@ export function RecommendedProductsTab({
   }
 
   // Loading state (só mostrar se análise foi iniciada)
+  // 🎯 ATUALIZAR PROGRESSO DURANTE CARREGAMENTO
+  useEffect(() => {
+    if (isLoading && enabled && !progressStartTime) {
+      setProgressStartTime(Date.now());
+      setCurrentPhase('gap_analysis');
+      
+      // Simular progresso das 4 fases
+      setTimeout(() => setCurrentPhase('product_matching'), 6000);
+      setTimeout(() => setCurrentPhase('roi_calculation'), 11000);
+      setTimeout(() => setCurrentPhase('recommendations'), 16000);
+    } else if (!isLoading && progressStartTime) {
+      setCurrentPhase('completed');
+      setTimeout(() => {
+        setProgressStartTime(null);
+        setCurrentPhase(null);
+      }, 1000);
+    }
+  }, [isLoading, enabled, progressStartTime]);
+  
   if (isLoading && enabled) {
+    // 🎯 4 FASES REAIS DO BACKEND (conforme generate-product-gaps/index.ts)
+    const productsPhases = [
+      { id: 'gap_analysis', name: 'Análise de Gaps', status: 'pending' as const, estimatedTime: 6 },
+      { id: 'product_matching', name: 'Matching de Produtos', status: 'pending' as const, estimatedTime: 5 },
+      { id: 'roi_calculation', name: 'Cálculo de ROI', status: 'pending' as const, estimatedTime: 5 },
+      { id: 'recommendations', name: 'Recomendações', status: 'pending' as const, estimatedTime: 4 },
+    ];
+    
+    // Iniciar progresso se ainda não iniciado
+    if (!progressStartTime) {
+      setProgressStartTime(Date.now());
+      setCurrentPhase('gap_analysis');
+      setTimeout(() => setCurrentPhase('product_matching'), 6000);
+      setTimeout(() => setCurrentPhase('roi_calculation'), 11000);
+      setTimeout(() => setCurrentPhase('recommendations'), 15000);
+    }
+    
     return (
-      <Card className="p-6">
-        <div className="flex items-center justify-center gap-2 text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Analisando produtos e oportunidades...</span>
-        </div>
-      </Card>
+      <div className="space-y-4">
+        <Card className="p-6">
+          <div className="flex items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Analisando produtos e oportunidades...</span>
+          </div>
+        </Card>
+        {progressStartTime && (
+          <GenericProgressBar
+            phases={productsPhases}
+            currentPhase={currentPhase || undefined}
+            elapsedTime={Math.floor((Date.now() - progressStartTime) / 1000)}
+            title="Progresso da Análise de Produtos"
+          />
+        )}
+      </div>
     );
   }
 

@@ -3,6 +3,8 @@ import { useBeforeUnload } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
@@ -36,9 +38,18 @@ import { saveAllTabs, hasNonCompleted, getStatuses, getStatusCounts } from '@/co
 import { createSnapshotFromFullReport, loadSnapshot, isReportClosed, generatePdfFromSnapshot, type Snapshot } from '@/components/icp/tabs/snapshotReport';
 import { ReportHistoryModal } from '@/components/icp/ReportHistoryModal';
 import SaveBar from './SaveBar';
+import { saveTabToDatabase, saveTabWithDebounce, saveAllTabsToDatabase } from '@/services/tabSaveService';
 import { toast } from 'sonner';
 import { isDiagEnabled, dlog, dgroup, dgroupEnd, dtable } from '@/lib/diag';
 import { HeroStatusCard } from './HeroStatusCard';
+import { VerificationProgressBar } from './VerificationProgressBar';
+import { EvidencesVirtualList } from './EvidencesVirtualList';
+import { MetricsDashboard } from './MetricsDashboard';
+import { ReportComparison } from './ReportComparison';
+import { IntentDashboard } from './IntentDashboard';
+import { AdvancedFilters } from './AdvancedFilters';
+import { exportEvidencesToCSV, exportEvidencesToExcel, exportEvidencesToJSON } from '@/services/exportService';
+import { supabase } from '@/integrations/supabase/client';
 import {
   RefreshCw,
   CheckCircle,
@@ -47,6 +58,7 @@ import {
   ExternalLink,
   Filter,
   Clock,
+  Sparkles,
   Copy,
   Check,
   Building2,
@@ -55,7 +67,6 @@ import {
   Target,
   Flame,
   Package,
-  Sparkles,
   Circle,
   LayoutDashboard,
   Users,
@@ -99,6 +110,21 @@ export default function TOTVSCheckCard({
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [copiedTerms, setCopiedTerms] = useState<string | null>(null);
   
+  // 🎯 FILTROS AVANÇADOS
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [searchText, setSearchText] = useState<string>('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
+  const [sortBy, setSortBy] = useState<'date' | 'relevance' | 'score' | 'source'>('relevance');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [favoriteEvidences, setFavoriteEvidences] = useState<Set<string>>(new Set());
+  
+  // 🎯 PROGRESSO DA VERIFICAÇÃO
+  const [verificationStartTime, setVerificationStartTime] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
+  
   // 🚨 SISTEMA DE SALVAMENTO POR ABA
   const [activeTab, setActiveTab] = useState('detection'); // 🔄 NOVA ORDEM: Começa em TOTVS Check!
   const [pendingTab, setPendingTab] = useState<string | null>(null);
@@ -130,11 +156,18 @@ export default function TOTVSCheckCard({
   
   // 🛡️ HF-STACK-1.B: Bloqueio de navegação com alterações não salvas
   const hasDirty = Object.values(unsavedChanges).some(v => v === true);
+  // 🚨 ALERTA ANTES DE SAIR: Verificar se há alterações não salvas
   useBeforeUnload(
     useCallback((e) => {
-      if (!hasDirty) return;
+      const statuses = getStatuses();
+      const draftCount = Object.values(statuses).filter(s => s === 'draft').length;
+      const hasUnsaved = draftCount > 0 || hasDirty;
+      
+      if (!hasUnsaved) return;
+      
       e.preventDefault();
-      e.returnValue = ''; // Padrão para mostrar prompt nativo
+      e.returnValue = `Você tem ${draftCount} aba(s) não salva(s). Deseja realmente sair?`;
+      return e.returnValue;
     }, [hasDirty])
   );
   
@@ -158,11 +191,14 @@ export default function TOTVSCheckCard({
   // 🚨 INTERCEPTAR FECHAMENTO/NAVEGAÇÃO COM DADOS NÃO SALVOS
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasUnsaved = Object.values(unsavedChanges).some(v => v === true);
+      const statuses = getStatuses();
+      const draftCount = Object.values(statuses).filter(s => s === 'draft').length;
+      const hasUnsaved = draftCount > 0 || Object.values(unsavedChanges).some(v => v);
+      
       if (hasUnsaved) {
         e.preventDefault();
-        e.returnValue = ''; // Chrome requires returnValue to be set
-        return '🚨 ATENÇÃO: Você tem alterações não salvas! Sair agora resultará em PERDA DE DADOS E CRÉDITOS JÁ CONSUMIDOS.';
+        e.returnValue = `Você tem ${draftCount} aba(s) não salva(s). Deseja realmente sair?`;
+        return e.returnValue;
       }
     };
     
@@ -328,14 +364,15 @@ export default function TOTVSCheckCard({
   };
 
   // 🔥 CRITICAL: Desabilitar consulta se já tem relatório salvo (evita consumo de créditos)
-  const shouldFetchLive = enabled && !latestReport?.full_report;
+  // ⚠️ MAS: Se enabled=true (usuário clicou em verificar), forçar busca mesmo com relatório salvo
+  const shouldFetchLive = enabled; // 🔥 SEMPRE respeitar enabled quando usuário clica
 
-  const { data: liveData, isLoading: isLoadingLive, refetch } = useSimpleTOTVSCheck({
+  const { data: liveData, isLoading: isLoadingLive, refetch, isFetching } = useSimpleTOTVSCheck({
     companyId,
     companyName,
     cnpj,
     domain,
-    enabled: shouldFetchLive,
+    enabled: shouldFetchLive && (!!companyName || !!cnpj), // 🔥 Garantir que tem dados necessários
   });
 
   // Usar relatório salvo como fonte principal se existir
@@ -350,10 +387,12 @@ export default function TOTVSCheckCard({
     ? latestReport.full_report 
     : null;
   
-  // Priorizar dados SALVOS (evita desperdício de créditos)
-  // Ordem: savedDetectionReport → fallbackData → freshData
-  const data = savedDetectionReport || fallbackData || freshData;
-  const isLoading = isLoadingLive && !savedDetectionReport && !fallbackData;
+  // 🔥 CRÍTICO: Priorização de dados (CORRIGIDO - não esconder dados válidos)
+  // Se enabled=true E tem freshData, usar freshData (dados novos)
+  // Se enabled=false OU não tem freshData, usar dados salvos
+  // ⚠️ IMPORTANTE: Não esconder dados durante loading se já existirem
+  const data = (enabled && freshData) ? freshData : (savedDetectionReport || fallbackData || freshData);
+  const isLoading = (isLoadingLive || isFetching) && enabled; // 🔥 Mostrar loading apenas quando enabled=true
   
   console.log('[TOTVS] 🔍 Data source resolution:', {
     hasSavedDetection: !!savedDetectionReport,
@@ -424,12 +463,14 @@ export default function TOTVSCheckCard({
       if (report.keywords_report) tabDataRef.current.keywords = report.keywords_report;
       if (report.keywords_seo_report) tabDataRef.current.keywords = report.keywords_seo_report;
       if (report.detection_report) tabDataRef.current.detection = report.detection_report;
+      if (report.digital_report) tabDataRef.current.digital = report.digital_report; // 🔥 Digital Intelligence
       if (report.competitors_report) tabDataRef.current.competitors = report.competitors_report;
       if (report.similar_companies_report) tabDataRef.current.similar = report.similar_companies_report;
       if (report.clients_report) tabDataRef.current.clients = report.clients_report;
       if (report.decisors_report) tabDataRef.current.decisors = report.decisors_report;
       if (report.analysis_report) tabDataRef.current.analysis = report.analysis_report;
       if (report.products_report) tabDataRef.current.products = report.products_report;
+      if (report.opportunities_report) tabDataRef.current.opportunities = report.opportunities_report; // 🔥 Oportunidades
       if (report.executive_report) tabDataRef.current.executive = report.executive_report;
       
       // 🔥 NOVO: Propagar website descoberto pelos decisores
@@ -441,11 +482,53 @@ export default function TOTVSCheckCard({
       // 🔥 CRITICAL: Se tem detection_report, marcar TOTVS como salvo
       if (report.detection_report) {
         setTotvsSaved(true);
-        setEnabled(true); // Marca como habilitado para mostrar dados
+        // ⚠️ NÃO ativar enabled automaticamente - só mostrar dados salvos
+        // setEnabled(true); // REMOVIDO: estava ativando verificação automaticamente
         console.log('[TOTVS] ✅ TOTVS marcado como salvo (dados do histórico)');
       }
       
+      // 🔥 CRITICAL: Marcar outras abas como salvas se tiverem dados (atualizar unsavedChanges)
+      if (report.decisors_report) {
+        setUnsavedChanges(prev => ({ ...prev, decisors: false }));
+      }
+      if (report.digital_report) {
+        setUnsavedChanges(prev => ({ ...prev, digital: false }));
+      }
+      if (report.competitors_report) {
+        setUnsavedChanges(prev => ({ ...prev, competitors: false }));
+      }
+      if (report.similar_companies_report) {
+        setUnsavedChanges(prev => ({ ...prev, similar: false }));
+      }
+      if (report.clients_report) {
+        setUnsavedChanges(prev => ({ ...prev, clients: false }));
+      }
+      if (report.analysis_report) {
+        setUnsavedChanges(prev => ({ ...prev, analysis: false }));
+      }
+      if (report.products_report) {
+        setUnsavedChanges(prev => ({ ...prev, products: false }));
+      }
+      if (report.opportunities_report) {
+        setUnsavedChanges(prev => ({ ...prev, opportunities: false }));
+      }
+      if (report.executive_report) {
+        setUnsavedChanges(prev => ({ ...prev, executive: false }));
+      }
+      
       console.log('[TOTVS] ✅ Dados salvos carregados em tabDataRef');
+      console.log('[TOTVS] 📊 Status das abas após carregar:', {
+        detection: !!report.detection_report,
+        decisors: !!report.decisors_report,
+        digital: !!report.digital_report,
+        competitors: !!report.competitors_report,
+        similar: !!report.similar_companies_report,
+        clients: !!report.clients_report,
+        analysis: !!report.analysis_report,
+        products: !!report.products_report,
+        opportunities: !!report.opportunities_report,
+        executive: !!report.executive_report,
+      });
     }
   }, [latestReport]);
 
@@ -458,88 +541,172 @@ export default function TOTVSCheckCard({
     registerTabInGlobal('detection', {
       flushSave: async () => {
         console.log('[TOTVS-SAVE] 💾 Salvando aba TOTVS...');
-        if (data) {
-          setTotvsSaved(true);
-          toast.success('✅ TOTVS Check salvo!', {
-            description: `Status: ${data.status?.toUpperCase()} | ${data.evidences?.length || 0} evidências`,
-            duration: 3000,
+        if (data && companyId) {
+          const success = await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'detection',
+            tabData: data,
           });
+          if (success) {
+            setTotvsSaved(true);
+            setUnsavedChanges(prev => ({ ...prev, detection: false }));
+          }
         }
       },
       getStatus: () => totvsSaved ? 'completed' : 'draft',
     });
     
-    // 2️⃣ ABA DECISORES (decisors) - Registro antecipado
-    // Os componentes filhos vão sobrescrever este registro quando montarem
+    // 2️⃣ ABA DECISORES (decisors)
     registerTabInGlobal('decisors', {
       flushSave: async () => {
-        // Os componentes filhos chamam onDataChange que já atualiza tabDataRef
-        // Aqui só garantimos que não vai falhar se a aba ainda não foi visitada
-        console.log('[DECISORES-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.decisors && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'decisors',
+            tabData: tabDataRef.current.decisors,
+          });
+          setUnsavedChanges(prev => ({ ...prev, decisors: false }));
+        }
       },
       getStatus: () => tabDataRef.current.decisors ? 'completed' : 'draft',
     });
     
-    // 3️⃣ ABA DIGITAL (digital) - Registro antecipado
+    // 3️⃣ ABA DIGITAL (digital)
     registerTabInGlobal('digital', {
       flushSave: async () => {
-        console.log('[DIGITAL-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.digital && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'digital',
+            tabData: tabDataRef.current.digital,
+          });
+          setUnsavedChanges(prev => ({ ...prev, digital: false }));
+        }
       },
       getStatus: () => tabDataRef.current.digital ? 'completed' : 'draft',
     });
     
-    // 4️⃣ ABA COMPETITORS (competitors) - Registro antecipado
+    // 4️⃣ ABA COMPETITORS (competitors)
     registerTabInGlobal('competitors', {
       flushSave: async () => {
-        console.log('[COMPETITORS-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.competitors && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'competitors',
+            tabData: tabDataRef.current.competitors,
+          });
+          setUnsavedChanges(prev => ({ ...prev, competitors: false }));
+        }
       },
       getStatus: () => tabDataRef.current.competitors ? 'completed' : 'draft',
     });
     
-    // 5️⃣ ABA SIMILAR (similar) - Registro antecipado
+    // 5️⃣ ABA SIMILAR (similar)
     registerTabInGlobal('similar', {
       flushSave: async () => {
-        console.log('[SIMILAR-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.similar && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'similar',
+            tabData: tabDataRef.current.similar,
+          });
+          setUnsavedChanges(prev => ({ ...prev, similar: false }));
+        }
       },
       getStatus: () => tabDataRef.current.similar ? 'completed' : 'draft',
     });
     
-    // 6️⃣ ABA CLIENTS (clients) - Registro antecipado
+    // 6️⃣ ABA CLIENTS (clients)
     registerTabInGlobal('clients', {
       flushSave: async () => {
-        console.log('[CLIENTS-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.clients && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'clients',
+            tabData: tabDataRef.current.clients,
+          });
+          setUnsavedChanges(prev => ({ ...prev, clients: false }));
+        }
       },
       getStatus: () => tabDataRef.current.clients ? 'completed' : 'draft',
     });
     
-    // 7️⃣ ABA ANALYSIS 360° (analysis) - Registro antecipado
-    registerTabInGlobal('360', {
+    // 7️⃣ ABA ANALYSIS 360° (analysis)
+    registerTabInGlobal('analysis', {
       flushSave: async () => {
-        console.log('[360-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.analysis && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'analysis',
+            tabData: tabDataRef.current.analysis,
+          });
+          setUnsavedChanges(prev => ({ ...prev, analysis: false }));
+        }
       },
       getStatus: () => tabDataRef.current.analysis ? 'completed' : 'draft',
     });
     
-    // 8️⃣ ABA PRODUCTS (products) - Registro antecipado
+    // 8️⃣ ABA PRODUCTS (products)
     registerTabInGlobal('products', {
       flushSave: async () => {
-        console.log('[PRODUCTS-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.products && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'products',
+            tabData: tabDataRef.current.products,
+          });
+          setUnsavedChanges(prev => ({ ...prev, products: false }));
+        }
       },
       getStatus: () => tabDataRef.current.products ? 'completed' : 'draft',
     });
     
-    // 9️⃣ ABA OPPORTUNITIES (opportunities) - Registro antecipado
+    // 9️⃣ ABA OPPORTUNITIES (opportunities)
     registerTabInGlobal('opportunities', {
       flushSave: async () => {
-        console.log('[OPPORTUNITIES-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.opportunities && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'opportunities',
+            tabData: tabDataRef.current.opportunities,
+          });
+          setUnsavedChanges(prev => ({ ...prev, opportunities: false }));
+        }
       },
       getStatus: () => tabDataRef.current.opportunities ? 'completed' : 'draft',
     });
     
-    // 🔟 ABA EXECUTIVE (executive) - Registro antecipado
+    // 🔟 ABA EXECUTIVE (executive)
     registerTabInGlobal('executive', {
       flushSave: async () => {
-        console.log('[EXECUTIVE-REG] 💾 flushSave chamado (registro antecipado)');
+        if (tabDataRef.current.executive && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'executive',
+            tabData: tabDataRef.current.executive,
+          });
+          setUnsavedChanges(prev => ({ ...prev, executive: false }));
+        }
       },
       getStatus: () => tabDataRef.current.executive ? 'completed' : 'draft',
     });
@@ -550,7 +717,7 @@ export default function TOTVSCheckCard({
     // Os componentes filhos vão SOBRESCREVER estes registros quando montarem,
     // mas estes registros antecipados garantem que todas as abas estejam no registry
     // desde o início, mesmo antes de serem visitadas
-  }, [data, totvsSaved]);
+  }, [data, totvsSaved, companyId, companyName, stcHistoryId]);
 
   // 🔒 SNAPSHOT: Carregar snapshot para verificar modo read-only
   useEffect(() => {
@@ -609,6 +776,13 @@ export default function TOTVSCheckCard({
   }, [data, onResult]);
 
   const handleVerify = async () => {
+    console.log('[TOTVS] 🔍 handleVerify chamado', { hasSaved, companyId, companyName, cnpj });
+    
+    // 🎯 INICIAR TRACKING DE PROGRESSO (CRÍTICO: Deve ser ANTES de qualquer await)
+    setVerificationStartTime(Date.now());
+    setCurrentPhase('job_portals');
+    console.log('[TOTVS] 🎯 Progresso iniciado:', { startTime: Date.now(), phase: 'job_portals' });
+    
     // 🚨 SE JÁ TEM RELATÓRIO SALVO, PERGUNTAR SE QUER REPROCESSAR
     if (hasSaved) {
       const confirmar = window.confirm(
@@ -616,29 +790,186 @@ export default function TOTVSCheckCard({
         'Ao verificar novamente, você consumirá créditos.\n\n' +
         'Deseja realmente reprocessar a análise?'
       );
-      if (!confirmar) return;
+      if (!confirmar) {
+        console.log('[TOTVS] ❌ Usuário cancelou reprocessamento');
+        return;
+      }
       
       // 🔥 DELETAR CACHE ANTIGO PARA FORÇAR NOVA BUSCA
       if (companyId) {
         try {
-          await supabase
+          // 1. Deletar de simple_totvs_checks
+          const { error: deleteError } = await supabase
             .from('simple_totvs_checks')
             .delete()
             .eq('company_id', companyId);
-          console.log('[TOTVS] 🗑️ Cache deletado do Supabase');
+          
+          if (deleteError) {
+            console.error('[TOTVS] ❌ Erro ao deletar simple_totvs_checks:', deleteError);
+          } else {
+            console.log('[TOTVS] 🗑️ Cache deletado de simple_totvs_checks');
+          }
+          
+          // 2. 🔥 CRÍTICO: Deletar também o registro mais recente do stc_verification_history
+          // Isso força uma nova verificação completa
+          const { data: latestHistory } = await supabase
+            .from('stc_verification_history')
+            .select('id')
+            .eq('company_id', companyId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (latestHistory?.id) {
+            const { error: deleteHistoryError } = await supabase
+              .from('stc_verification_history')
+              .delete()
+              .eq('id', latestHistory.id);
+            
+            if (deleteHistoryError) {
+              console.error('[TOTVS] ❌ Erro ao deletar stc_verification_history:', deleteHistoryError);
+            } else {
+              console.log('[TOTVS] 🗑️ Registro deletado de stc_verification_history');
+            }
+          }
         } catch (error) {
           console.error('[TOTVS] ❌ Erro ao deletar cache:', error);
         }
       }
       
-      // 🔥 INVALIDAR CACHE DO REACT QUERY
-      await queryClient.invalidateQueries({ queryKey: ['simple-totvs-check', companyName] });
-      console.log('[TOTVS] 🗑️ Cache do React Query invalidado');
+      // 🔥 REMOVER COMPLETAMENTE O CACHE DO REACT QUERY (não só invalidar)
+      queryClient.removeQueries({ queryKey: ['simple-totvs-check', companyId, companyName, cnpj] });
+      queryClient.removeQueries({ queryKey: ['latest-stc-report', companyId] });
+      console.log('[TOTVS] 🗑️ Cache do React Query REMOVIDO completamente');
+      
+      // 🔥 INVALIDAR QUERIES ANTES de habilitar (garante que refetch não use cache)
+      queryClient.invalidateQueries({ queryKey: ['simple-totvs-check', companyId, companyName, cnpj] });
+      queryClient.invalidateQueries({ queryKey: ['latest-stc-report', companyId] });
+      console.log('[TOTVS] 🔄 Queries INVALIDADAS');
+      
+      // Aguardar um pouco para garantir que o cache foi limpo
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
     
+    // 🔥 CRÍTICO: Habilitar ANTES de qualquer await
+    console.log('[TOTVS] 🔄 Habilitando verificação...');
     setEnabled(true);
-    refetch();
+    
+    // 🔥 Mostrar toast de feedback para o usuário
+    toast.info('🔄 Reiniciando verificação... Buscando dados atualizados.');
+    
+    // 🔥 Aguardar para garantir que o estado foi atualizado e cache foi limpo
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 🔥 Forçar refetch - agora com cache limpo, vai buscar dados novos
+    try {
+      console.log('[TOTVS] 🔄 Executando refetch (cache limpo)...');
+      console.log('[TOTVS] 🔍 Estado atual: enabled=', true, 'companyName=', companyName, 'cnpj=', cnpj);
+      
+      // 🔥 CRÍTICO: Remover query novamente antes de refetch para garantir
+      queryClient.removeQueries({ queryKey: ['simple-totvs-check', companyId, companyName, cnpj] });
+      
+      const result = await refetch({ cancelRefetch: true }); // cancelRefetch força nova busca
+      console.log('[TOTVS] ✅ Refetch executado:', result);
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
+      if (result.data) {
+        // 🔥 CRÍTICO: Invalidar latestReport para forçar recarregar com novos dados
+        queryClient.invalidateQueries({ queryKey: ['latest-stc-report', companyId] });
+        
+        toast.success('Verificação concluída!', {
+          description: 'Os dados foram atualizados com sucesso. Recarregando relatório...',
+        });
+        
+        // Aguardar um pouco e recarregar latestReport
+        setTimeout(async () => {
+          await queryClient.refetchQueries({ queryKey: ['latest-stc-report', companyId] });
+        }, 1000);
+      }
+    } catch (error: any) {
+      console.error('[TOTVS] ❌ Erro no refetch:', error);
+      
+      // 🔥 Mensagem de erro mais específica
+      let errorMessage = 'Não foi possível conectar ao servidor.';
+      if (error?.message?.includes('CORS')) {
+        errorMessage = 'Erro de CORS: Limpe o cache do navegador (Ctrl+Shift+Delete) e tente novamente.';
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error('Erro ao verificar', {
+        description: errorMessage,
+        duration: 5000,
+      });
+      
+      // 🎯 RESETAR PROGRESSO EM CASO DE ERRO
+      setVerificationStartTime(null);
+      setCurrentPhase(null);
+    }
   };
+  
+  // 🎯 ATUALIZAR PROGRESSO BASEADO NO TEMPO DECORRIDO
+  useEffect(() => {
+    if (!isLoading || !verificationStartTime) {
+      // Resetar quando não está mais carregando
+      if (!isLoading && verificationStartTime) {
+        setVerificationStartTime(null);
+        setCurrentPhase(null);
+      }
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - verificationStartTime) / 1000);
+      
+      // 🎯 Atualizar fase baseado no tempo decorrido (9 FASES REAIS)
+      // FASE 1: job_portals (0-15s)
+      if (elapsed < 15) {
+        setCurrentPhase('job_portals');
+      } 
+      // FASE 2: totvs_cases (15-23s)
+      else if (elapsed < 23) {
+        setCurrentPhase('totvs_cases');
+      } 
+      // FASE 3: official_sources (23-33s)
+      else if (elapsed < 33) {
+        setCurrentPhase('official_sources');
+      } 
+      // FASE 4: premium_news (33-45s)
+      else if (elapsed < 45) {
+        setCurrentPhase('premium_news');
+      } 
+      // FASE 5: tech_portals (45-53s)
+      else if (elapsed < 53) {
+        setCurrentPhase('tech_portals');
+      } 
+      // FASE 6: video_content (53-58s)
+      else if (elapsed < 58) {
+        setCurrentPhase('video_content');
+      } 
+      // FASE 7: social_media (58-63s)
+      else if (elapsed < 63) {
+        setCurrentPhase('social_media');
+      } 
+      // FASE 8: totvs_partners (63-66s)
+      else if (elapsed < 66) {
+        setCurrentPhase('totvs_partners');
+      } 
+      // FASE 9: google_news (66-71s)
+      else if (elapsed < 71) {
+        setCurrentPhase('google_news');
+      } 
+      // Concluído
+      else {
+        setCurrentPhase(null);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [isLoading, verificationStartTime]);
 
   // 🔗 REGISTRY: Handler para salvar todas as abas em lote
   const handleSalvarNoSistema = async () => {
@@ -676,7 +1007,9 @@ export default function TOTVSCheckCard({
         console.error('[REGISTRY] ❌ Falhas ao salvar algumas abas:', failures);
         toast.error('Algumas abas falharam ao salvar', {
           description: `${successes.length} salva(s) com sucesso, ${failures.length} com erro. Verifique o console.`,
+          duration: 5000,
         });
+        setIsSaving(false);
         return; // Não salvar no banco se houver falhas
       }
       
@@ -737,14 +1070,21 @@ export default function TOTVSCheckCard({
         console.error('[SAVE] ❌ stcHistoryId NÃO EXISTE! Não pode salvar.');
       }
       
+      // 🔥 CRITICAL: Aguardar um pouco para garantir que o banco processou
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 🔥 CRITICAL: Recarregar latestReport imediatamente após salvar
+      await queryClient.invalidateQueries({ queryKey: ['stc-history'] });
+      await queryClient.invalidateQueries({ queryKey: ['latest-stc-report', companyId] });
+      await queryClient.invalidateQueries({ queryKey: ['latest-stc-report'] }); // Fallback geral
+      
+      // 🔥 CRITICAL: Refetch do latestReport para atualizar o componente
+      await queryClient.refetchQueries({ queryKey: ['latest-stc-report', companyId] });
+      
       toast.success('✅ Relatório salvo no sistema!', {
-        description: `${successes.length} aba(s) salva(s) com sucesso.`,
+        description: `${successes.length} aba(s) salva(s) com sucesso. Os dados serão carregados automaticamente ao reabrir.`,
         duration: 5000,
       });
-      
-      // Invalidar cache para recarregar dados
-      queryClient.invalidateQueries({ queryKey: ['stc-history'] });
-      queryClient.invalidateQueries({ queryKey: ['latest-stc-report'] });
       
     } catch (error) {
       console.error('[REGISTRY] ❌ Erro crítico ao salvar:', error);
@@ -834,7 +1174,94 @@ export default function TOTVSCheckCard({
   const tripleMatches = evidences.filter((e: any) => e.match_type === 'triple');
   const doubleMatches = evidences.filter((e: any) => e.match_type === 'double');
   
-  const filteredEvidences = filterMode === 'triple' ? tripleMatches : evidences;
+  // 🎯 FILTROS AVANÇADOS
+  let filteredEvidences = filterMode === 'triple' ? tripleMatches : evidences;
+  
+  // Filtro por fonte
+  if (selectedSources.length > 0) {
+    filteredEvidences = filteredEvidences.filter((e: any) => 
+      selectedSources.includes(e.source) || selectedSources.includes(e.source_name)
+    );
+  }
+  
+  // Filtro por produto detectado
+  if (selectedProducts.length > 0) {
+    filteredEvidences = filteredEvidences.filter((e: any) => {
+      const detectedProducts = e.detected_products || [];
+      return selectedProducts.some(product => 
+        detectedProducts.some((dp: string) => 
+          dp.toLowerCase().includes(product.toLowerCase()) || 
+          product.toLowerCase().includes(dp.toLowerCase())
+        )
+      );
+    });
+  }
+  
+  // Busca textual
+  if (searchText.trim()) {
+    const searchLower = searchText.toLowerCase();
+    filteredEvidences = filteredEvidences.filter((e: any) => {
+      const title = (e.title || '').toLowerCase();
+      const content = (e.content || e.snippet || '').toLowerCase();
+      const url = (e.url || '').toLowerCase();
+      const products = (e.detected_products || []).join(' ').toLowerCase();
+      return title.includes(searchLower) || 
+             content.includes(searchLower) || 
+             url.includes(searchLower) ||
+             products.includes(searchLower);
+    });
+  }
+
+  // Filtro por data
+  if (dateFrom || dateTo) {
+    filteredEvidences = filteredEvidences.filter((e: any) => {
+      const evidenceDate = e.date_found ? new Date(e.date_found) : null;
+      if (!evidenceDate) return false;
+      
+      if (dateFrom && evidenceDate < dateFrom) return false;
+      if (dateTo && evidenceDate > dateTo) return false;
+      return true;
+    });
+  }
+
+  // Ordenação
+  filteredEvidences = [...filteredEvidences].sort((a: any, b: any) => {
+    let comparison = 0;
+    
+    switch (sortBy) {
+      case 'date':
+        const dateA = a.date_found ? new Date(a.date_found).getTime() : 0;
+        const dateB = b.date_found ? new Date(b.date_found).getTime() : 0;
+        comparison = dateA - dateB;
+        break;
+      case 'score':
+        comparison = (a.weight || 0) - (b.weight || 0);
+        break;
+      case 'source':
+        const sourceA = (a.source_name || a.source || '').toLowerCase();
+        const sourceB = (b.source_name || b.source || '').toLowerCase();
+        comparison = sourceA.localeCompare(sourceB);
+        break;
+      case 'relevance':
+      default:
+        // Relevância baseada em match_type e weight
+        const relevanceA = (a.match_type === 'triple' ? 3 : a.match_type === 'double' ? 2 : 1) * (a.weight || 1);
+        const relevanceB = (b.match_type === 'triple' ? 3 : b.match_type === 'double' ? 2 : 1) * (b.weight || 1);
+        comparison = relevanceA - relevanceB;
+        break;
+    }
+    
+    return sortOrder === 'asc' ? comparison : -comparison;
+  });
+  
+  // 🎯 COLETAR FONTES E PRODUTOS ÚNICOS PARA FILTROS
+  const availableSources = Array.from(new Set(
+    evidences.map((e: any) => e.source_name || e.source).filter(Boolean)
+  )).sort();
+  
+  const availableProducts = Array.from(new Set(
+    evidences.flatMap((e: any) => e.detected_products || []).filter(Boolean)
+  )).sort();
   
   // 🐛 DEBUG: Log evidências (EXPANDIDO)
   console.log('[TOTVS-CARD] 📊 Evidences debug:', {
@@ -988,8 +1415,40 @@ export default function TOTVSCheckCard({
         statuses={getStatuses()}
         onSaveAll={handleSalvarNoSistema}
         onApprove={handleApproveAndMoveToPool}
-        onExportPdf={() => {
-          toast.info('Exportação PDF em desenvolvimento');
+        onExportPdf={async () => {
+          try {
+            toast.loading('Gerando PDF...', { id: 'pdf-export' });
+            
+            // Buscar dados completos do relatório
+            const { data: currentReport } = await supabase
+              .from('stc_verification_history')
+              .select('full_report, company_id')
+              .eq('id', stcHistoryId)
+              .single();
+            
+            if (!currentReport?.full_report) {
+              toast.error('Nenhum relatório salvo encontrado. Salve o relatório antes de exportar.', { id: 'pdf-export' });
+              return;
+            }
+            
+            // Criar snapshot temporário para PDF
+            const snapshot: Snapshot = {
+              version: Date.now(),
+              closed_at: new Date().toISOString(),
+              tabs: currentReport.full_report,
+            };
+            
+            // Gerar PDF
+            await generatePdfFromSnapshot(snapshot, {
+              companyName: companyName || 'Empresa',
+              cnpj: cnpj,
+            });
+            
+            toast.success('PDF gerado com sucesso!', { id: 'pdf-export' });
+          } catch (error: any) {
+            console.error('[TOTVS-CARD] ❌ Erro ao gerar PDF:', error);
+            toast.error(`Erro ao gerar PDF: ${error.message || 'Erro desconhecido'}`, { id: 'pdf-export' });
+          }
         }}
         onShowHistory={() => setShowHistoryModal(true)}
         onRefresh={handleVerify}
@@ -1141,10 +1600,20 @@ export default function TOTVSCheckCard({
                   </>
                 )}
               </Button>
+              {/* 🔥 BARRA DE PROGRESSO: Sempre mostrar quando isLoading=true */}
               {isLoading && (
-                <p className="text-xs text-muted-foreground mt-4">
-                  Buscando evidências em múltiplas fontes... (20-30s)
-                </p>
+                <VerificationProgressBar 
+                  currentPhase={currentPhase || 'job_portals'}
+                  elapsedTime={verificationStartTime ? Math.floor((Date.now() - verificationStartTime) / 1000) : 0}
+                  evidences={evidences.map((e: any) => ({
+                    url: e.url || '',
+                    title: e.title || '',
+                    snippet: e.snippet || e.content || '',
+                    match_type: e.match_type || 'single',
+                    source: e.source || '',
+                    validation_method: e.validation_method
+                  }))}
+                />
               )}
             </div>
           ) : (
@@ -1162,10 +1631,75 @@ export default function TOTVSCheckCard({
                 />
               </div>
 
+              {/* 📊 DASHBOARD DE MÉTRICAS EXPANDIDO - SEMPRE VISÍVEL */}
+              <div className="mb-6">
+                <MetricsDashboard
+                  evidences={evidences || []}
+                  tripleMatches={tripleMatches.length}
+                  doubleMatches={doubleMatches.length}
+                  singleMatches={evidences.length - tripleMatches.length - doubleMatches.length}
+                  totalScore={data?.total_weight || data?.total_score || data?.data?.totalScore || 0}
+                  sources={data?.methodology?.searched_sources || data?.sources_consulted || data?.data?.sourcesConsulted || 0}
+                  confidence={data?.confidence || 'medium'}
+                />
+              </div>
+
+              {/* 🔥 DASHBOARD DE INTENÇÃO DE COMPRA */}
+              {evidences.filter((e: any) => e.has_intent || (e.intent_keywords && e.intent_keywords.length > 0)).length > 0 && (
+                <div className="mb-6">
+                  <IntentDashboard
+                    evidences={evidences}
+                    companyName={companyName}
+                  />
+                </div>
+              )}
+
+              {/* 📊 COMPARAÇÃO COM RELATÓRIOS ANTERIORES */}
+              {companyId && stcHistoryId && (
+                <div className="mb-6">
+                  <ReportComparison
+                    companyId={companyId}
+                    currentReportId={stcHistoryId}
+                    currentData={data}
+                  />
+                </div>
+              )}
+
+              {/* 📥 BOTÕES DE EXPORTAÇÃO */}
+              {evidences.length > 0 && (
+                <div className="mb-4 flex gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportEvidencesToCSV(evidences, `${companyName || 'empresa'}-evidencias`)}
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Exportar CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportEvidencesToExcel(evidences, `${companyName || 'empresa'}-evidencias`)}
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Exportar Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportEvidencesToJSON(evidences, `${companyName || 'empresa'}-evidencias`)}
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Exportar JSON
+                  </Button>
+                </div>
+              )}
+
           {/* FILTROS */}
           {evidences.length > 0 && (
-            <div className="mb-4 space-y-2">
-              <div className="flex gap-2">
+            <div className="mb-4 space-y-3">
+              {/* FILTROS BÁSICOS */}
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   variant={filterMode === 'all' ? 'default' : 'outline'}
                   size="sm"
@@ -1179,11 +1713,65 @@ export default function TOTVSCheckCard({
                   size="sm"
                   onClick={() => setFilterMode('triple')}
                 >
-                  <Target className="w-4 h-4 mr-2" />
+                  <Target className="w-3 h-3 mr-2" />
                   Apenas Triple
                 </Button>
+                <Button
+                  variant={showAdvancedFilters ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                >
+                  <Search className="w-4 h-4 mr-2" />
+                  Filtros Avançados
+                  {(selectedSources.length > 0 || selectedProducts.length > 0 || searchText) && (
+                    <Badge variant="secondary" className="ml-2">
+                      {selectedSources.length + selectedProducts.length + (searchText ? 1 : 0)}
+                    </Badge>
+                  )}
+                </Button>
+                {(selectedSources.length > 0 || selectedProducts.length > 0 || searchText) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedSources([]);
+                      setSelectedProducts([]);
+                      setSearchText('');
+                    }}
+                  >
+                    Limpar Filtros
+                  </Button>
+                )}
               </div>
-              <div className="text-sm text-muted-foreground flex items-center gap-3">
+              
+              {/* FILTROS AVANÇADOS */}
+              {showAdvancedFilters && (
+                <AdvancedFilters
+                  evidences={evidences}
+                  selectedSources={selectedSources}
+                  selectedProducts={selectedProducts}
+                  searchText={searchText}
+                  onSourcesChange={setSelectedSources}
+                  onProductsChange={setSelectedProducts}
+                  onSearchChange={setSearchText}
+                  onDateRangeChange={(from, to) => {
+                    setDateFrom(from);
+                    setDateTo(to);
+                  }}
+                  onSortChange={(by, order) => {
+                    setSortBy(by as any);
+                    setSortOrder(order);
+                  }}
+                  currentSortBy={sortBy}
+                  currentSortOrder={sortOrder}
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  userId={undefined} // TODO: Obter userId do contexto de autenticação
+                />
+              )}
+              
+              {/* CONTADORES */}
+              <div className="text-sm text-muted-foreground flex items-center gap-3 flex-wrap">
                 <span className="flex items-center gap-1">
                   <Circle className="w-3 h-3 fill-green-600 text-green-600" />
                   {tripleMatches.length} Triple
@@ -1192,144 +1780,43 @@ export default function TOTVSCheckCard({
                   <Circle className="w-3 h-3 fill-blue-600 text-blue-600" />
                   {doubleMatches.length} Double
                 </span>
+                <span className="flex items-center gap-1">
+                  <Filter className="w-3 h-3" />
+                  {filteredEvidences.length} de {evidences.length} evidências
+                </span>
               </div>
             </div>
           )}
 
-          {/* EVIDÊNCIAS */}
+          {/* EVIDÊNCIAS - LISTA VIRTUALIZADA PARA PERFORMANCE */}
           {filteredEvidences.length > 0 ? (
-            <div className="space-y-3">
-              {filteredEvidences.map((evidence: any, index: number) => {
-                const evidenceId = `${evidence.source}-${index}`;
-                const allTerms = [
-                  companyName || '',
-                  'TOTVS',
-                  ...(evidence.detected_products || []),
-                  ...(evidence.intent_keywords || [])
-                ].filter(Boolean).join(' | ');
-                
-                return (
-                  <div key={index} className="border rounded-lg p-4 hover:bg-accent/50 transition-colors">
-                    <div className="flex justify-between items-start mb-3">
-                      <Badge variant={evidence.match_type === 'triple' ? 'default' : 'secondary'} className="text-sm flex items-center gap-1">
-                        {evidence.match_type === 'triple' ? (
-                          <>
-                            <Target className="w-3 h-3" />
-                            TRIPLE MATCH
-                          </>
-                        ) : (
-                          <>
-                            <Search className="w-3 h-3" />
-                            DOUBLE MATCH
-                          </>
-                        )}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {evidence.source_name || evidence.source} ({evidence.weight} pts)
-                      </Badge>
-                    </div>
-                    
-                    {/* INTENÇÃO DE COMPRA */}
-                    {evidence.has_intent && evidence.intent_keywords?.length > 0 && (
-                      <div className="mb-3 p-2 bg-destructive/10 rounded-md border border-destructive/20">
-                        <Badge variant="destructive" className="text-xs mb-1 flex items-center gap-1 w-fit">
-                          <Flame className="w-3 h-3" />
-                          INTENÇÃO DE COMPRA DETECTADA
-                        </Badge>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          <strong>Keywords:</strong> {evidence.intent_keywords.join(', ')}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* TÍTULO COM HIGHLIGHT */}
-                    <h4 
-                      className="text-sm font-semibold mb-2" 
-                      dangerouslySetInnerHTML={{ 
-                        __html: highlightTerms(evidence.title, evidence.detected_products) 
-                      }}
-                    />
-                    
-                    {/* CONTEÚDO COM HIGHLIGHT */}
-                    <p 
-                      className="text-sm text-muted-foreground mb-3"
-                      dangerouslySetInnerHTML={{ 
-                        __html: highlightTerms(evidence.content, evidence.detected_products) 
-                      }}
-                    />
-                    
-                    {/* PRODUTOS DETECTADOS */}
-                    {evidence.detected_products?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-3 items-center">
-                        <span className="text-xs font-medium mr-2">Produtos:</span>
-                        {evidence.detected_products.map((product: string) => (
-                          <Badge key={product} variant="outline" className="text-xs flex items-center gap-1">
-                            <Package className="w-3 h-3" />
-                            {product}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* BOTÕES DE AÇÃO */}
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs h-7"
-                        onClick={() => copyToClipboard(evidence.url, evidenceId, 'url')}
-                      >
-                        {copiedUrl === evidenceId ? (
-                          <>
-                            <Check className="w-3 h-3 mr-1" />
-                            Copiado!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 mr-1" />
-                            Copiar URL
-                          </>
-                        )}
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs h-7"
-                        onClick={() => copyToClipboard(allTerms, evidenceId, 'terms')}
-                      >
-                        {copiedTerms === evidenceId ? (
-                          <>
-                            <Check className="w-3 h-3 mr-1" />
-                            Copiado!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 mr-1" />
-                            Copiar Termos
-                          </>
-                        )}
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="text-xs h-7"
-                        asChild
-                      >
-                        <a
-                          href={evidence.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          Ver Fonte
-                        </a>
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
+            <EvidencesVirtualList
+              evidences={filteredEvidences}
+              companyName={companyName}
+              onCopyUrl={(url, id) => copyToClipboard(url, id, 'url')}
+              onCopyTerms={(terms, id) => copyToClipboard(terms, id, 'terms')}
+              copiedUrl={copiedUrl}
+              copiedTerms={copiedTerms}
+            />
+          ) : filteredEvidences.length === 0 && evidences.length > 0 ? (
+            <div className="text-center py-6">
+              <Filter className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Nenhuma evidência corresponde aos filtros aplicados
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setSelectedSources([]);
+                  setSelectedProducts([]);
+                  setSearchText('');
+                  setFilterMode('all');
+                }}
+              >
+                Limpar Filtros
+              </Button>
             </div>
           ) : (
             <div className="text-center py-6">
@@ -1369,6 +1856,16 @@ export default function TOTVSCheckCard({
               tabDataRef.current.decisors = decisorsData;
               setUnsavedChanges(prev => ({ ...prev, decisors: true }));
               setTabsStatus(prev => ({ ...prev, decisors: 'success' }));
+              // 🔥 AUTO-SAVE com debounce
+              if (companyId) {
+                saveTabWithDebounce({
+                  companyId,
+                  companyName,
+                  stcHistoryId,
+                  tabId: 'decisors',
+                  tabData: decisorsData,
+                });
+              }
             }}
             onWebsiteDiscovered={(website) => {
               console.log('[TOTVS] 🌐 Website descoberto pelos decisores:', website);
@@ -1394,6 +1891,16 @@ export default function TOTVSCheckCard({
               tabDataRef.current.digital = dataChange;
               setUnsavedChanges(prev => ({ ...prev, digital: true }));
               setTabsStatus(prev => ({ ...prev, digital: 'success' }));
+              // 🔥 AUTO-SAVE com debounce
+              if (companyId) {
+                saveTabWithDebounce({
+                  companyId,
+                  companyName,
+                  stcHistoryId,
+                  tabId: 'digital',
+                  tabData: dataChange,
+                });
+              }
             }}
           />
           {/* 
@@ -1441,6 +1948,16 @@ export default function TOTVSCheckCard({
               tabDataRef.current.competitors = competitorsData;
               setUnsavedChanges(prev => ({ ...prev, competitors: true }));
               setTabsStatus(prev => ({ ...prev, competitors: 'success' }));
+              // 🔥 AUTO-SAVE com debounce
+              if (companyId) {
+                saveTabWithDebounce({
+                  companyId,
+                  companyName,
+                  stcHistoryId,
+                  tabId: 'competitors',
+                  tabData: competitorsData,
+                });
+              }
             }}
           />
           </UniversalTabWrapper>
@@ -1460,6 +1977,16 @@ export default function TOTVSCheckCard({
                 tabDataRef.current.similar = similarData;
                 setUnsavedChanges(prev => ({ ...prev, similar: true }));
                 setTabsStatus(prev => ({ ...prev, similar: 'success' }));
+                // 🔥 AUTO-SAVE com debounce
+                if (companyId) {
+                  saveTabWithDebounce({
+                    companyId,
+                    companyName,
+                    stcHistoryId,
+                    tabId: 'similar',
+                    tabData: similarData,
+                  });
+                }
               }}
             />
           ) : (
@@ -1485,6 +2012,16 @@ export default function TOTVSCheckCard({
               tabDataRef.current.clients = clientsData;
               setUnsavedChanges(prev => ({ ...prev, clients: true }));
               setTabsStatus(prev => ({ ...prev, clients: 'success' }));
+              // 🔥 AUTO-SAVE com debounce
+              if (companyId) {
+                saveTabWithDebounce({
+                  companyId,
+                  companyName,
+                  stcHistoryId,
+                  tabId: 'clients',
+                  tabData: clientsData,
+                });
+              }
             }}
           />
           </UniversalTabWrapper>
@@ -1505,6 +2042,16 @@ export default function TOTVSCheckCard({
                 tabDataRef.current.analysis = analysisData;
                 setUnsavedChanges(prev => ({ ...prev, analysis: true }));
                 setTabsStatus(prev => ({ ...prev, analysis: 'success' }));
+                // 🔥 AUTO-SAVE com debounce
+                if (companyId) {
+                  saveTabWithDebounce({
+                    companyId,
+                    companyName,
+                    stcHistoryId,
+                    tabId: 'analysis',
+                    tabData: analysisData,
+                  });
+                }
               }}
             />
           ) : (
@@ -1532,6 +2079,16 @@ export default function TOTVSCheckCard({
               tabDataRef.current.products = productsData;
               setUnsavedChanges(prev => ({ ...prev, products: true }));
               setTabsStatus(prev => ({ ...prev, products: 'success' }));
+              // 🔥 AUTO-SAVE com debounce
+              if (companyId) {
+                saveTabWithDebounce({
+                  companyId,
+                  companyName,
+                  stcHistoryId,
+                  tabId: 'products',
+                  tabData: productsData,
+                });
+              }
             }}
           />
           </UniversalTabWrapper>
@@ -1551,6 +2108,16 @@ export default function TOTVSCheckCard({
               tabDataRef.current.opportunities = opportunitiesData;
               setUnsavedChanges(prev => ({ ...prev, opportunities: true }));
               setTabsStatus(prev => ({ ...prev, opportunities: 'success' }));
+              // 🔥 AUTO-SAVE com debounce
+              if (companyId) {
+                saveTabWithDebounce({
+                  companyId,
+                  companyName,
+                  stcHistoryId,
+                  tabId: 'opportunities',
+                  tabData: opportunitiesData,
+                });
+              }
             }}
           />
           </UniversalTabWrapper>
@@ -1572,6 +2139,16 @@ export default function TOTVSCheckCard({
               tabDataRef.current.executive = executiveData;
               setUnsavedChanges(prev => ({ ...prev, executive: true }));
               setTabsStatus(prev => ({ ...prev, executive: 'success' }));
+              // 🔥 AUTO-SAVE com debounce
+              if (companyId) {
+                saveTabWithDebounce({
+                  companyId,
+                  companyName,
+                  stcHistoryId,
+                  tabId: 'executive',
+                  tabData: executiveData,
+                });
+              }
             }}
           />
           </UniversalTabWrapper>

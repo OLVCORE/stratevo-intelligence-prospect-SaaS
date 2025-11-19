@@ -6,11 +6,13 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+  'Access-Control-Max-Age': '86400',
 };
 
 interface DiscoverAllTechnologiesRequest {
@@ -558,33 +560,114 @@ async function isValidCompetitorEvidence(
 }
 
 /**
+ * 🔥 GERAR QUERY ESPECÍFICA POR TIPO DE FONTE PARA COMPETIDORES
+ * Inclui TODOS os produtos e aliases do concorrente
+ */
+function generateQueryBySourceTypeForCompetitor(
+  sourceType: string,
+  portal: string,
+  companyName: string,
+  competitorName: string,
+  competitorProducts: string[], // TODOS os produtos e aliases
+  competitorAliases?: string[] // Aliases do concorrente (ex: "Omie ERP", "Omie Flow")
+): string {
+  // Unir TODOS os produtos e aliases em uma query OR
+  const produtosQuery = competitorProducts.map(p => `"${p}"`).join(' OR ');
+  const aliasesQuery = competitorAliases && competitorAliases.length > 0 
+    ? competitorAliases.map(a => `"${a}"`).join(' OR ')
+    : '';
+  
+  // Combinar nome do concorrente + aliases + produtos
+  const competitorQuery = aliasesQuery 
+    ? `("${competitorName}" OR ${aliasesQuery})`
+    : `"${competitorName}"`;
+  
+  switch (sourceType) {
+    // 📋 PORTALS DE VAGAS: Buscar empresa + concorrente OU empresa + produtos do concorrente
+    case 'job_portals':
+      return `site:${portal} "${companyName}" (${competitorQuery} OR ${produtosQuery})`;
+    
+    // 📘 CASES OFICIAIS DO CONCORRENTE: Buscar por "case" ou "cliente" no site do concorrente
+    case 'competitor_cases':
+      return `site:${portal} ("case" OR "cliente" OR "depoimento" OR "testemunho") "${companyName}"`;
+    
+    // 📰 NOTÍCIAS PREMIUM: Buscar empresa + concorrente OU produtos OU contexto de implementação
+    case 'premium_news':
+      return `site:${portal} "${companyName}" (${competitorQuery} OR ${produtosQuery} OR "implementação" OR "migração" OR "contrato")`;
+    
+    // 🏛️ FONTES OFICIAIS: Buscar contratos/menções
+    case 'official_docs':
+      return `site:${portal} "${companyName}" (${competitorQuery} OR ${produtosQuery} OR "contrato" OR "licitação")`;
+    
+    // 🎥 VÍDEOS: Buscar empresa + concorrente OU produtos
+    case 'video_content':
+      return `site:${portal} "${companyName}" (${competitorQuery} OR ${produtosQuery})`;
+    
+    // 📱 REDES SOCIAIS: Buscar empresa + concorrente OU produtos
+    case 'social_media':
+      return `site:${portal} "${companyName}" (${competitorQuery} OR ${produtosQuery})`;
+    
+    // 🌐 PORTAIS TECH: Buscar empresa + contexto tech
+    case 'tech_portals':
+      return `site:${portal} "${companyName}" (${competitorQuery} OR ${produtosQuery} OR "ERP" OR "sistema")`;
+    
+    // 🔍 BUSCA GERAL: Fallback
+    default:
+      return `site:${portal} "${companyName}" (${competitorQuery} OR ${produtosQuery})`;
+  }
+}
+
+/**
  * BUSCA EM MÚLTIPLOS PORTAIS (MESMA LÓGICA DO TOTVS CHECK)
+ * 🔥 ATUALIZADO: Usa queries melhoradas com TODOS os produtos e aliases
  */
 async function searchMultiplePortalsForCompetitor(params: {
   portals: string[];
   companyName: string;
   competitorName: string;
   productName: string;
+  competitorProducts?: string[]; // 🔥 NOVO: Todos os produtos e aliases
+  competitorAliases?: string[]; // 🔥 NOVO: Aliases do concorrente
   serperKey: string;
   sourceType: string;
   sourceWeight: number;
   dateRestrict?: string;
 }): Promise<Evidence[]> {
-  const { portals, companyName, competitorName, productName, serperKey, sourceType, sourceWeight, dateRestrict = 'y5' } = params;
+  const { 
+    portals, 
+    companyName, 
+    competitorName, 
+    productName, 
+    competitorProducts = [productName], // Fallback: usar apenas productName se não fornecido
+    competitorAliases = [],
+    serperKey, 
+    sourceType, 
+    sourceWeight, 
+    dateRestrict = 'y5' 
+  } = params;
   const evidencias: Evidence[] = [];
   let processedPortals = 0;
   
   console.log(`[DISCOVER-TECH] 🔍 Iniciando busca em ${portals.length} portais (${sourceType})...`);
   console.log(`[DISCOVER-TECH] 📅 Filtro de data: últimos ${dateRestrict.replace('y', '')} anos`);
+  console.log(`[DISCOVER-TECH] 🎯 Produtos incluídos: ${competitorProducts.join(', ')}`);
   
   const companyVariations = getCompanyVariations(companyName);
   const shortCompanyName = companyVariations[companyVariations.length - 1] || companyName;
   
   for (const portal of portals) {
     try {
-      const query = `site:${portal} "${shortCompanyName}" "${competitorName}"`;
+      // 🔥 USAR QUERY MELHORADA COM TODOS OS PRODUTOS E ALIASES
+      const query = generateQueryBySourceTypeForCompetitor(
+        sourceType,
+        portal,
+        shortCompanyName,
+        competitorName,
+        competitorProducts,
+        competitorAliases
+      );
       
-      console.log(`[DISCOVER-TECH] 🔍 Buscando: ${query}`);
+      console.log(`[DISCOVER-TECH] 🔍 Buscando: ${query.substring(0, 150)}...`);
       
       const response = await fetch('https://google.serper.dev/search', {
         method: 'POST',
@@ -844,6 +927,29 @@ async function discoverAllTechnologies(
   
   // Para cada concorrente e produto, executar as 8 FASES
   for (const competitor of knownCompetitors) {
+    // 🔥 COLETAR TODOS OS PRODUTOS E ALIASES DO CONCORRENTE
+    const allCompetitorProducts: string[] = [];
+    const allCompetitorAliases: string[] = [];
+    
+    // Adicionar aliases do concorrente (se houver)
+    if ((competitor as any).aliases && Array.isArray((competitor as any).aliases)) {
+      allCompetitorAliases.push(...(competitor as any).aliases);
+    }
+    
+    // Para cada produto, coletar nome + aliases
+    for (const product of competitor.products) {
+      allCompetitorProducts.push(product.name);
+      if (product.aliases && Array.isArray(product.aliases)) {
+        allCompetitorProducts.push(...product.aliases);
+      }
+    }
+    
+    console.log(`[DISCOVER-TECH] 🎯 Concorrente: ${competitor.name}`);
+    console.log(`[DISCOVER-TECH] 📦 Produtos incluídos: ${allCompetitorProducts.join(', ')}`);
+    if (allCompetitorAliases.length > 0) {
+      console.log(`[DISCOVER-TECH] 🏷️ Aliases do concorrente: ${allCompetitorAliases.join(', ')}`);
+    }
+    
     for (const product of competitor.products) {
       console.log(`[DISCOVER-TECH] 🔍 [${competitor.name} - ${product.name}] Iniciando 8 FASES...`);
       
@@ -858,6 +964,8 @@ async function discoverAllTechnologies(
         companyName: shortCompanyName,
         competitorName: competitor.name,
         productName: product.name,
+        competitorProducts: allCompetitorProducts, // 🔥 TODOS os produtos e aliases
+        competitorAliases: allCompetitorAliases, // 🔥 Aliases do concorrente
         serperKey,
         sourceType: 'job_portals',
         sourceWeight: SOURCE_WEIGHTS.job_portals,
@@ -895,6 +1003,8 @@ async function discoverAllTechnologies(
         companyName: shortCompanyName,
         competitorName: competitor.name,
         productName: product.name,
+        competitorProducts: allCompetitorProducts,
+        competitorAliases: allCompetitorAliases,
         serperKey,
         sourceType: 'official_docs',
         sourceWeight: SOURCE_WEIGHTS.official_docs,
@@ -912,6 +1022,8 @@ async function discoverAllTechnologies(
         companyName: shortCompanyName,
         competitorName: competitor.name,
         productName: product.name,
+        competitorProducts: allCompetitorProducts,
+        competitorAliases: allCompetitorAliases,
         serperKey,
         sourceType: 'premium_news',
         sourceWeight: SOURCE_WEIGHTS.premium_news,
@@ -937,6 +1049,8 @@ async function discoverAllTechnologies(
         companyName: shortCompanyName,
         competitorName: competitor.name,
         productName: product.name,
+        competitorProducts: allCompetitorProducts,
+        competitorAliases: allCompetitorAliases,
         serperKey,
         sourceType: 'tech_portals',
         sourceWeight: SOURCE_WEIGHTS.tech_portals,
@@ -954,6 +1068,8 @@ async function discoverAllTechnologies(
         companyName: shortCompanyName,
         competitorName: competitor.name,
         productName: product.name,
+        competitorProducts: allCompetitorProducts,
+        competitorAliases: allCompetitorAliases,
         serperKey,
         sourceType: 'video_content',
         sourceWeight: SOURCE_WEIGHTS.video_content,
@@ -971,6 +1087,8 @@ async function discoverAllTechnologies(
         companyName: shortCompanyName,
         competitorName: competitor.name,
         productName: product.name,
+        competitorProducts: allCompetitorProducts,
+        competitorAliases: allCompetitorAliases,
         serperKey,
         sourceType: 'social_media',
         sourceWeight: SOURCE_WEIGHTS.social_media,
@@ -1068,8 +1186,15 @@ async function discoverAllTechnologies(
 }
 
 serve(async (req) => {
+  // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA - SEM TRY/CATCH)
+  // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
+  // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    console.log('[DISCOVER-TECH] ✅ OPTIONS preflight recebido');
+    return new Response('', { 
+      status: 200,
+      headers: corsHeaders
+    });
   }
 
   try {

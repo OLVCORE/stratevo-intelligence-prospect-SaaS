@@ -44,6 +44,7 @@ export function useEnsureSTCHistory(params: STCHistoryParams) {
           .insert({
             company_name: companyName,
             cnpj: cnpj || null,
+            status: 'draft', // 🔥 CRÍTICO: Campo obrigatório no banco
             full_report: {
               __meta: {
                 created_at: new Date().toISOString(),

@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
 import { toast } from 'sonner';
 import { Target, ExternalLink, TrendingUp, Building2, Search, Zap, AlertCircle, CheckCircle, Wrench, Code, Sparkles } from 'lucide-react';
+import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
+import { CompetitorProgressBar } from './CompetitorProgressBar';
 import { CompetitorDashboardCard } from './CompetitorDashboardCard';
 import { useCompetitorSearch } from '@/hooks/useCompetitorSearch';
 import { useCompetitorAnalysis } from '@/hooks/useCompetitorAnalysis';
@@ -32,6 +34,14 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
   const [hasSearched, setHasSearched] = useState(false);
   const [hasProductDiscoveryEnabled, setHasProductDiscoveryEnabled] = useState(false);
   const [externalData, setExternalData] = useState<any | null>(savedData || null);
+  
+  // 🎯 ESTADOS DE PROGRESSO
+  const [progressStartTime, setProgressStartTime] = useState<number | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | null>(null);
+  const [currentCompetitor, setCurrentCompetitor] = useState<string | null>(null);
+  const [competitorIndex, setCompetitorIndex] = useState<number>(0);
+  const [totalCompetitors] = useState<number>(COMPETITORS_MATRIX.length);
+  const [competitorEvidences, setCompetitorEvidences] = useState<number>(0);
   
   // 🔥 REF para garantir que flushSave sempre tenha os dados mais recentes
   const productDiscoveryRef = useRef<any>(null);
@@ -80,6 +90,55 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
     allUrls,
     enabled: hasProductDiscoveryEnabled && allUrls.length > 0,
   });
+  
+  // 🎯 ATUALIZAR PROGRESSO SEQUENCIAL: Simular progresso por concorrente
+  useEffect(() => {
+    if (isLoadingDiscovery && progressStartTime) {
+      const elapsed = Math.floor((Date.now() - progressStartTime) / 1000);
+      
+      // Estimar qual concorrente está sendo processado (baseado no tempo)
+      // Cada concorrente leva ~68s (8 fases × ~8.5s média)
+      const estimatedCompetitorIndex = Math.min(
+        Math.floor(elapsed / 68) + 1,
+        totalCompetitors
+      );
+      
+      if (estimatedCompetitorIndex !== competitorIndex && estimatedCompetitorIndex <= totalCompetitors) {
+        setCompetitorIndex(estimatedCompetitorIndex);
+        setCurrentCompetitor(COMPETITORS_MATRIX[estimatedCompetitorIndex - 1]?.name || null);
+        
+        // Atualizar evidências encontradas (simulado - será substituído por dados reais)
+        if (productDiscovery?.knownCompetitors) {
+          const currentCompetitorData = productDiscovery.knownCompetitors.find(
+            c => c.competitor_name === COMPETITORS_MATRIX[estimatedCompetitorIndex - 1]?.name
+          );
+          if (currentCompetitorData) {
+            setCompetitorEvidences(currentCompetitorData.evidences?.length || 0);
+          }
+        }
+      }
+      
+      // Atualizar fase baseado no tempo decorrido (ciclo de 68s por concorrente)
+      const phaseInCycle = elapsed % 68;
+      if (phaseInCycle < 15) {
+        setCurrentPhase('job_portals');
+      } else if (phaseInCycle < 23) {
+        setCurrentPhase('competitor_cases');
+      } else if (phaseInCycle < 33) {
+        setCurrentPhase('official_sources');
+      } else if (phaseInCycle < 45) {
+        setCurrentPhase('premium_news');
+      } else if (phaseInCycle < 53) {
+        setCurrentPhase('tech_portals');
+      } else if (phaseInCycle < 58) {
+        setCurrentPhase('video_content');
+      } else if (phaseInCycle < 63) {
+        setCurrentPhase('social_media');
+      } else {
+        setCurrentPhase('google_news');
+      }
+    }
+  }, [isLoadingDiscovery, progressStartTime, competitorIndex, totalCompetitors, productDiscovery]);
   
   // 🔗 REGISTRY: Registrar aba para SaveBar global
   useEffect(() => {
@@ -213,15 +272,64 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
   }
 
   if (isPending) {
+    // 🎯 8 FASES REAIS DO BACKEND
+    const competitorPhases = [
+      { id: 'job_portals', name: 'Portais de Vagas', status: 'pending' as const, estimatedTime: 15 },
+      { id: 'competitor_cases', name: 'Cases Concorrentes', status: 'pending' as const, estimatedTime: 8 },
+      { id: 'official_sources', name: 'Fontes Oficiais', status: 'pending' as const, estimatedTime: 10 },
+      { id: 'premium_news', name: 'Notícias Premium', status: 'pending' as const, estimatedTime: 12 },
+      { id: 'tech_portals', name: 'Portais Tech', status: 'pending' as const, estimatedTime: 8 },
+      { id: 'video_content', name: 'Vídeos', status: 'pending' as const, estimatedTime: 5 },
+      { id: 'social_media', name: 'Redes Sociais', status: 'pending' as const, estimatedTime: 5 },
+      { id: 'google_news', name: 'Google News', status: 'pending' as const, estimatedTime: 5 },
+    ];
+    
+    // Iniciar progresso se ainda não iniciado
+    if (!progressStartTime) {
+      setProgressStartTime(Date.now());
+      setCurrentPhase('job_portals');
+      setCurrentCompetitor(COMPETITORS_MATRIX[0]?.name || null);
+      setCompetitorIndex(1);
+      
+      // 🎯 Simular progresso sequencial das fases (baseado em estimativas reais)
+      const phaseTimings = [
+        { phase: 'job_portals', delay: 0 },
+        { phase: 'competitor_cases', delay: 15000 },
+        { phase: 'official_sources', delay: 23000 },
+        { phase: 'premium_news', delay: 33000 },
+        { phase: 'tech_portals', delay: 45000 },
+        { phase: 'video_content', delay: 53000 },
+        { phase: 'social_media', delay: 58000 },
+        { phase: 'google_news', delay: 63000 },
+      ];
+      
+      phaseTimings.forEach(({ phase, delay }) => {
+        setTimeout(() => setCurrentPhase(phase), delay);
+      });
+    }
+    
     return (
-      <Card className="p-6">
-        <div className="text-center">
-          <Target className="w-8 h-8 animate-pulse text-primary mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">
-            Buscando concorrentes em portais especializados...
-          </p>
-        </div>
-      </Card>
+      <div className="space-y-4">
+        <Card className="p-6">
+          <div className="text-center">
+            <Target className="w-8 h-8 animate-pulse text-primary mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground">
+              Buscando concorrentes em portais especializados...
+            </p>
+          </div>
+        </Card>
+        {progressStartTime && (
+          <CompetitorProgressBar
+            phases={competitorPhases}
+            currentPhase={currentPhase || undefined}
+            elapsedTime={Math.floor((Date.now() - progressStartTime) / 1000)}
+            currentCompetitor={currentCompetitor || undefined}
+            competitorIndex={competitorIndex}
+            totalCompetitors={totalCompetitors}
+            evidencesFound={competitorEvidences}
+          />
+        )}
+      </div>
     );
   }
 
@@ -491,11 +599,37 @@ export function CompetitorsTab({ companyId, companyName, cnpj, domain, savedData
               </div>
               
               {isLoadingDiscovery && (
-                <div className="text-center py-8">
-                  <Target className="w-8 h-8 animate-pulse text-primary mx-auto mb-4" />
-                  <p className="text-sm text-muted-foreground">
-                    Analisando {allUrls.length} URLs para detectar produtos de competidores...
-                  </p>
+                <div className="space-y-4">
+                  <div className="text-center py-8">
+                    <Target className="w-8 h-8 animate-pulse text-primary mx-auto mb-4" />
+                    <p className="text-sm text-muted-foreground">
+                      Analisando {allUrls.length} URLs para detectar produtos de competidores...
+                    </p>
+                  </div>
+                  {(() => {
+                    // Iniciar progresso se ainda não iniciado
+                    if (!progressStartTime) {
+                      setProgressStartTime(Date.now());
+                      setCurrentPhase('product_detection');
+                      setCurrentCompetitor(null); // Reset para descoberta de produtos
+                      setCompetitorIndex(0);
+                    }
+                    
+                    const discoveryPhases = [
+                      { id: 'product_detection', name: 'Detecção de Produtos', status: 'pending' as const, estimatedTime: 10 },
+                      { id: 'competitor_matching', name: 'Matching de Concorrentes', status: 'pending' as const, estimatedTime: 8 },
+                      { id: 'evidence_validation', name: 'Validação de Evidências', status: 'pending' as const, estimatedTime: 5 },
+                    ];
+                    
+                    return progressStartTime ? (
+                      <GenericProgressBar
+                        phases={discoveryPhases}
+                        currentPhase={currentPhase || undefined}
+                        elapsedTime={Math.floor((Date.now() - progressStartTime) / 1000)}
+                        title="Progresso da Descoberta de Produtos"
+                      />
+                    ) : null;
+                  })()}
                 </div>
               )}
               

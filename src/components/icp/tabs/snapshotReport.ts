@@ -118,26 +118,29 @@ export function isReportClosed(snapshot: Snapshot | null): boolean {
 }
 
 /**
- * Placeholder para geração de PDF
- * TODO: Implementar geração real do PDF executivo
+ * Gera PDF completo do relatório TOTVS
+ * ✅ IMPLEMENTADO: Usa jsPDF para gerar PDF profissional
  */
-export async function generatePdfFromSnapshot(snapshot: Snapshot): Promise<void> {
+export async function generatePdfFromSnapshot(
+  snapshot: Snapshot,
+  options?: { companyName?: string; cnpj?: string }
+): Promise<void> {
   console.log('[SNAPSHOT] 📄 Gerando PDF executivo do snapshot...');
-  console.log('[SNAPSHOT] ⚠️ Geração de PDF ainda não implementada (placeholder)');
   
-  // TODO: Implementar geração real do PDF
-  // Estrutura sugerida:
-  // 1. Consolidar dados das abas (snapshot.tabs)
-  // 2. Usar biblioteca de PDF (ex: jsPDF, pdfmake)
-  // 3. Gerar sumário executivo
-  // 4. Adicionar seções por aba
-  // 5. Salvar/download do PDF
-  
-  // Por enquanto, apenas log
-  console.log('[SNAPSHOT] 📊 Dados do snapshot prontos para PDF:', {
-    version: snapshot.version,
-    closed_at: snapshot.closed_at,
-    tabs_count: Object.keys(snapshot.tabs).length,
-  });
+  try {
+    // Importar gerador de PDF dinamicamente
+    const { generateTOTVSPDF } = await import('@/services/pdfGenerator');
+    
+    await generateTOTVSPDF(snapshot, {
+      companyName: options?.companyName,
+      cnpj: options?.cnpj,
+      generatedAt: new Date(snapshot.closed_at || Date.now()),
+    });
+    
+    console.log('[SNAPSHOT] ✅ PDF gerado com sucesso!');
+  } catch (error) {
+    console.error('[SNAPSHOT] ❌ Erro ao gerar PDF:', error);
+    throw error;
+  }
 }
 

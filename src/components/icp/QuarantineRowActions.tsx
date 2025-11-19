@@ -220,7 +220,7 @@ export function QuarantineRowActions({
                 onClick={() => {
                   setShowReport(true);
                   setIsOpen(false);
-                  toast.info('Use o botão "Reverificar" dentro do relatório para executar o check (com cooldown).');
+                  toast.info('Use o botão "Verificar Agora" ou "Atualizar" dentro do relatório para executar o check.');
                 }}
                 disabled={isEnriching}
                 className="relative animate-pulse bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 hover:from-primary/30 hover:via-primary/20 hover:to-primary/30 border-l-4 border-primary font-semibold cursor-pointer transition-all dark:from-primary/30 dark:via-primary/20 dark:to-primary/30 dark:hover:from-primary/40 dark:hover:via-primary/30 dark:hover:to-primary/40"

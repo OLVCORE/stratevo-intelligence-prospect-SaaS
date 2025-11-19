@@ -281,5 +281,42 @@
 
 ---
 
+## 🔧 DEPLOY E INFRAESTRUTURA (Validado - 17/11/2025)
+
+### Script PowerShell para Deploy
+
+**Arquivo:** `deploy-supabase.ps1`
+
+**Status:** ✅ FUNCIONANDO PERFEITAMENTE
+
+**Uso:**
+```powershell
+# Deploy de função específica
+.\deploy-supabase.ps1 -FunctionName simple-totvs-check
+
+# Deploy de todas as funções críticas
+.\deploy-supabase.ps1 -All
+
+# Menu interativo
+.\deploy-supabase.ps1
+```
+
+**Funções Críticas:**
+1. `simple-totvs-check` - Verificação TOTVS (core)
+2. `discover-all-technologies` - Descoberta de competidores
+
+**Observações Importantes:**
+- ⚠️ Docker não é obrigatório para deploy (apenas warning)
+- Deploy é instantâneo via CLI
+- Aguardar 30-60 segundos para propagação após deploy
+- Recarregar página: `Ctrl + Shift + R` (hard refresh)
+
+**Problema Resolvido:**
+- Dashboard Supabase não permitia edição confiável
+- CLI é método preferencial e validado
+- Script automatiza processo e previne erros manuais
+
+---
+
 **💡 Lembre-se:** O aprendizado RAG depende de preservar conhecimento validado. Este arquivo é a memória do sistema.
 

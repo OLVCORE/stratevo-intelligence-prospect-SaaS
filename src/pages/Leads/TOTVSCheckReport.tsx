@@ -7,6 +7,7 @@ import TOTVSCheckCard from "@/components/totvs/TOTVSCheckCard";
 import { supabase } from "@/integrations/supabase/client";
 import { DraggableDialog } from "@/components/ui/draggable-dialog";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 export default function TOTVSCheckReport() {
   const navigate = useNavigate();
@@ -17,6 +18,40 @@ export default function TOTVSCheckReport() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
+
+  // 🔥 CARREGAR latestReport do banco para persistir dados salvos
+  const { data: latestReport } = useQuery({
+    queryKey: ['latest-stc-report', resolvedCompanyId],
+    queryFn: async () => {
+      if (!resolvedCompanyId) return null;
+      
+      const { data, error } = await supabase
+        .from('stc_verification_history')
+        .select('*')
+        .eq('company_id', resolvedCompanyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (error) {
+        console.error('[TOTVS-REPORT] ❌ Erro ao carregar latestReport:', error);
+        return null;
+      }
+      
+      if (data) {
+        console.log('[TOTVS-REPORT] ✅ latestReport carregado:', {
+          id: data.id,
+          hasFullReport: !!data.full_report,
+          fullReportKeys: data.full_report ? Object.keys(data.full_report) : []
+        });
+      }
+      
+      return data || null;
+    },
+    enabled: !!resolvedCompanyId,
+    staleTime: 30000, // 30 segundos
+    gcTime: 300000, // 5 minutos
+  });
 
   const qpName = searchParams.get("name") || undefined;
   const qpCnpj = searchParams.get("cnpj") || undefined;
@@ -85,6 +120,7 @@ export default function TOTVSCheckReport() {
           cnpj={companyMeta?.cnpj}
           domain={companyMeta?.domain}
           autoVerify={false}
+          latestReport={latestReport || undefined}
         />
       )}
     </>
