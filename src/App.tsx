@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
 import { AuthProvider } from "./contexts/AuthContext";
+import { TenantProvider } from "./contexts/TenantContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import TOTVSCheckReport from "@/pages/Leads/TOTVSCheckReport";
 import { Loader2 } from "lucide-react";
@@ -18,6 +19,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
+const TenantOnboarding = lazy(() => import("./pages/TenantOnboarding"));
 
 // Lazy load auth pages
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -171,6 +173,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
           <AuthProvider>
+          <TenantProvider>
           <AuthTokenGuard />
           <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -178,6 +181,7 @@ const App = () => (
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/install" element={<PWAInstallPage />} />
+            <Route path="/tenant-onboarding" element={<TenantOnboarding />} />
               <Route path="/" element={<Index />} />
               <Route
                 path="/dashboard"
@@ -867,6 +871,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          </TenantProvider>
           </AuthProvider>
         </BrowserRouter>
         
