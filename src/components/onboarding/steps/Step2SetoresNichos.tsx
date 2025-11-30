@@ -130,33 +130,49 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
   }, [initialData]);
 
   // 🆕 SEPARADO: Garantir que setores customizados estejam na lista para exibição
+  // Executar SEMPRE que sectors mudar (especialmente após carregar do banco)
   useEffect(() => {
-    if (!selectedSectors.length || loading) return;
+    // Log detalhado para debug
+    console.log('[Step2] 🔍 Verificando setores customizados:', {
+      selectedSectors,
+      sectorsCount: sectors.length,
+      loading,
+      hasCustomCodes: selectedSectors.some(c => c.startsWith('CUSTOM_')),
+    });
+    
+    if (!selectedSectors.length) return;
     
     const customSectorCodes = selectedSectors.filter(code => code.startsWith('CUSTOM_'));
     if (customSectorCodes.length === 0) return;
+    
+    console.log('[Step2] 🎯 Setores customizados encontrados:', customSectorCodes);
     
     // Verificar se já estão na lista
     const missingCustomSectors = customSectorCodes.filter(
       code => !sectors.some(s => s.sector_code === code)
     );
     
+    console.log('[Step2] ❓ Setores customizados faltantes:', missingCustomSectors);
+    
     if (missingCustomSectors.length > 0) {
       const newCustomSectors = missingCustomSectors.map(code => {
         // Tentar obter nome de várias fontes
         let sectorName = initialData?.customSectorNames?.[code];
+        console.log(`[Step2] 📋 Buscando nome para ${code}: customSectorNames=${sectorName}`);
         
         // Fallback: buscar no initialData.setoresAlvo (array de nomes)
         if (!sectorName && initialData?.setoresAlvo && initialData?.setoresAlvoCodes) {
           const idx = initialData.setoresAlvoCodes.indexOf(code);
           if (idx !== -1 && initialData.setoresAlvo[idx]) {
             sectorName = initialData.setoresAlvo[idx];
+            console.log(`[Step2] 📋 Fallback setoresAlvo[${idx}]=${sectorName}`);
           }
         }
         
         // Último fallback: limpar o código
         if (!sectorName) {
           sectorName = code.replace('CUSTOM_', '').replace(/_\d+$/, '');
+          console.log(`[Step2] 📋 Último fallback: ${sectorName}`);
         }
         
         return {
@@ -167,9 +183,16 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
       });
       
       console.log('[Step2] 🔧 Adicionando setores customizados faltantes à lista:', newCustomSectors);
-      setSectors(prev => [...prev, ...newCustomSectors]);
+      setSectors(prev => {
+        // Evitar duplicatas
+        const existingCodes = new Set(prev.map(s => s.sector_code));
+        const toAdd = newCustomSectors.filter(s => !existingCodes.has(s.sector_code));
+        if (toAdd.length === 0) return prev;
+        console.log('[Step2] ✅ Adicionando ao state:', toAdd);
+        return [...prev, ...toAdd];
+      });
     }
-  }, [selectedSectors, sectors, loading, initialData]);
+  }, [selectedSectors, sectors, initialData]); // Removido 'loading' para executar sempre
   
   // Estados para dropdowns (um por setor)
   const [sectorsDropdownOpen, setSectorsDropdownOpen] = useState(false);
