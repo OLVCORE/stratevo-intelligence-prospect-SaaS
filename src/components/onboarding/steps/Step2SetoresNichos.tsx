@@ -80,17 +80,63 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
   useEffect(() => {
     if (initialData) {
       console.log('[Step2] 🔄 Atualizando dados do initialData:', initialData);
-      if (initialData.setoresAlvo) {
-        setSelectedSectors(initialData.setoresAlvo);
+      
+      // 🆕 Usar CÓDIGOS se disponíveis, senão tentar encontrar códigos pelos nomes
+      let sectorCodesToUse: string[] = [];
+      
+      if (initialData.setoresAlvoCodes && initialData.setoresAlvoCodes.length > 0) {
+        // Usar códigos diretamente (preferido)
+        sectorCodesToUse = initialData.setoresAlvoCodes;
+        console.log('[Step2] ✅ Usando códigos de setores salvos:', sectorCodesToUse);
+      } else if (initialData.setoresAlvo && initialData.setoresAlvo.length > 0) {
+        // Fallback: tentar encontrar códigos pelos nomes (compatibilidade)
+        sectorCodesToUse = initialData.setoresAlvo.map((name: string) => {
+          const found = [...FALLBACK_SECTORS, ...sectors].find(
+            s => s.sector_name === name || s.sector_code === name
+          );
+          return found?.sector_code || name;
+        });
+        console.log('[Step2] ⚠️ Convertendo nomes para códigos (fallback):', sectorCodesToUse);
       }
+      
+      if (sectorCodesToUse.length > 0) {
+        setSelectedSectors(sectorCodesToUse);
+        
+        // 🆕 CRÍTICO: Re-adicionar setores customizados à lista de setores
+        const customSectors = sectorCodesToUse
+          .filter((code: string) => code.startsWith('CUSTOM_'))
+          .map((code: string) => {
+            // Buscar o nome do setor nos dados salvos
+            const savedSectorName = initialData.customSectorNames?.[code] || 
+                                   code.replace('CUSTOM_', '').replace(/_\d+$/, '');
+            return {
+              sector_code: code,
+              sector_name: savedSectorName,
+              description: 'Setor customizado pelo usuário'
+            };
+          });
+        
+        if (customSectors.length > 0) {
+          console.log('[Step2] ➕ Re-adicionando setores customizados:', customSectors);
+          setSectors(prev => {
+            const existingCodes = prev.map(s => s.sector_code);
+            const newSectors = customSectors.filter((s: Sector) => !existingCodes.includes(s.sector_code));
+            return [...prev, ...newSectors];
+          });
+        }
+      }
+      
+      // Atualizar nichos por setor
       if (initialData.nichosBySector) {
         setSelectedNichesBySector(initialData.nichosBySector);
       }
+      
+      // Atualizar nichos customizados
       if (initialData.customNiches) {
         setCustomNiches(initialData.customNiches);
       }
     }
-  }, [initialData]);
+  }, [initialData, sectors]);
   
   // Estados para dropdowns (um por setor)
   const [sectorsDropdownOpen, setSectorsDropdownOpen] = useState(false);
@@ -726,8 +772,19 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
       return name;
     });
     
+    // 🆕 Criar mapeamento de código → nome para setores (especialmente customizados)
+    const customSectorNames: Record<string, string> = {};
+    selectedSectors.forEach(code => {
+      const sector = sectors.find(s => s.sector_code === code);
+      if (sector) {
+        customSectorNames[code] = sector.sector_name;
+      }
+    });
+
     console.log('[Step2] 📤 Passando dados para Step3 (APENAS selecionados):', {
       setoresAlvo: sectorNames,
+      setoresAlvoCodes: selectedSectors, // CÓDIGOS para restaurar
+      customSectorNames, // Mapeamento código → nome
       nichosAlvo: nicheNames, // NOMES legíveis
       nichosAlvoCodes: allSelectedNiches, // Códigos para salvar no banco
       totalSetores: sectorNames.length,
@@ -741,7 +798,9 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
     
     onNext({
       sectorAtual: selectedSectors[0], // Primeiro setor como principal (compatibilidade)
-      setoresAlvo: sectorNames, // TODOS os setores selecionados (NOMES)
+      setoresAlvo: sectorNames, // TODOS os setores selecionados (NOMES) - para exibição
+      setoresAlvoCodes: selectedSectors, // 🆕 CÓDIGOS para restaurar estado
+      customSectorNames, // 🆕 Mapeamento código → nome para setores customizados
       nichosAlvo: nicheNames, // TODOS os nichos selecionados (NOMES legíveis)
       nichosAlvoCodes: allSelectedNiches, // Códigos para salvar no banco
       nichosBySector: Object.fromEntries(

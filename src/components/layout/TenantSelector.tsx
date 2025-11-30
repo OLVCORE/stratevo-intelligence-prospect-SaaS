@@ -114,13 +114,22 @@ export function TenantSelector() {
         onValueChange={handleSwitchTenant}
         disabled={loading}
       >
-        <SelectTrigger className="w-[200px] h-9">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            <SelectValue placeholder="Selecionar empresa" />
+        <SelectTrigger className="min-w-[200px] max-w-[320px] h-auto min-h-9 py-1">
+          <div className="flex items-center gap-2 text-left">
+            <Building2 className="h-4 w-4 shrink-0" />
+            <div className="flex flex-col items-start min-w-0">
+              <span className="font-medium text-sm truncate max-w-[250px]">
+                {currentTenant?.nome || 'Selecionar empresa'}
+              </span>
+              {currentTenant?.cnpj && (
+                <span className="text-xs text-muted-foreground">
+                  {currentTenant.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}
+                </span>
+              )}
+            </div>
           </div>
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="min-w-[320px]">
           {tenants.map((t) => (
             <SelectItem key={t.id} value={t.id}>
               <div className="flex flex-col">
