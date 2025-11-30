@@ -65,7 +65,21 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
   const [loading, setLoading] = useState(true);
   
   // Estado do formulário - MÚLTIPLAS SELEÇÕES PARA AMBOS
-  const [selectedSectors, setSelectedSectors] = useState<string[]>(initialData?.setoresAlvo || initialData?.sectorAtual ? [initialData.sectorAtual] : []);
+  // 🔥 CRÍTICO: Usar CÓDIGOS (setoresAlvoCodes) preferencialmente, não NOMES (setoresAlvo)
+  const [selectedSectors, setSelectedSectors] = useState<string[]>(() => {
+    if (initialData?.setoresAlvoCodes && initialData.setoresAlvoCodes.length > 0) {
+      console.log('[Step2] 🎯 Inicializando com setoresAlvoCodes:', initialData.setoresAlvoCodes);
+      return initialData.setoresAlvoCodes;
+    }
+    if (initialData?.setoresAlvo && initialData.setoresAlvo.length > 0) {
+      console.log('[Step2] ⚠️ Fallback: Usando setoresAlvo (nomes):', initialData.setoresAlvo);
+      return initialData.setoresAlvo;
+    }
+    if (initialData?.sectorAtual) {
+      return [initialData.sectorAtual];
+    }
+    return [];
+  });
   // Nichos organizados por setor: { sectorCode: [nicheCodes] }
   const [selectedNichesBySector, setSelectedNichesBySector] = useState<Record<string, string[]>>(
     initialData?.nichosBySector || {}
@@ -117,7 +131,7 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
 
   // 🆕 SEPARADO: Garantir que setores customizados estejam na lista para exibição
   useEffect(() => {
-    if (!initialData?.customSectorNames || !selectedSectors.length) return;
+    if (!selectedSectors.length || loading) return;
     
     const customSectorCodes = selectedSectors.filter(code => code.startsWith('CUSTOM_'));
     if (customSectorCodes.length === 0) return;
@@ -128,16 +142,34 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
     );
     
     if (missingCustomSectors.length > 0) {
-      const newCustomSectors = missingCustomSectors.map(code => ({
-        sector_code: code,
-        sector_name: initialData.customSectorNames[code] || code.replace('CUSTOM_', '').replace(/_\d+$/, ''),
-        description: 'Setor customizado pelo usuário'
-      }));
+      const newCustomSectors = missingCustomSectors.map(code => {
+        // Tentar obter nome de várias fontes
+        let sectorName = initialData?.customSectorNames?.[code];
+        
+        // Fallback: buscar no initialData.setoresAlvo (array de nomes)
+        if (!sectorName && initialData?.setoresAlvo && initialData?.setoresAlvoCodes) {
+          const idx = initialData.setoresAlvoCodes.indexOf(code);
+          if (idx !== -1 && initialData.setoresAlvo[idx]) {
+            sectorName = initialData.setoresAlvo[idx];
+          }
+        }
+        
+        // Último fallback: limpar o código
+        if (!sectorName) {
+          sectorName = code.replace('CUSTOM_', '').replace(/_\d+$/, '');
+        }
+        
+        return {
+          sector_code: code,
+          sector_name: sectorName,
+          description: 'Setor customizado pelo usuário'
+        };
+      });
       
       console.log('[Step2] 🔧 Adicionando setores customizados faltantes à lista:', newCustomSectors);
       setSectors(prev => [...prev, ...newCustomSectors]);
     }
-  }, [selectedSectors, sectors, initialData?.customSectorNames]);
+  }, [selectedSectors, sectors, loading, initialData]);
   
   // Estados para dropdowns (um por setor)
   const [sectorsDropdownOpen, setSectorsDropdownOpen] = useState(false);
