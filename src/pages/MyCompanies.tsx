@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,10 +45,15 @@ import {
   Loader2,
   AlertTriangle,
   Lock,
+  Crown,
+  Target,
+  Users,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getPlanLimits, formatLimit, getUpgradePlan, isAdminEmail, type PlanType } from '@/config/planLimits';
 
 interface Tenant {
   id: string;
@@ -87,10 +93,72 @@ export default function MyCompanies() {
   const [adminPassword, setAdminPassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  
+  // Estados para limites de plano
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<PlanType>('FREE');
+  const [icpCount, setIcpCount] = useState(0);
+  const [userCount, setUserCount] = useState(0);
 
   useEffect(() => {
     loadTenants();
   }, [user]);
+
+  // Determinar plano atual baseado no primeiro tenant
+  useEffect(() => {
+    if (tenants.length > 0) {
+      const plan = (tenants[0]?.plano || 'FREE').toUpperCase() as PlanType;
+      setCurrentPlan(plan);
+    }
+  }, [tenants]);
+
+  // Carregar contadores de ICPs e usuários
+  useEffect(() => {
+    const loadCounts = async () => {
+      if (!user?.id || tenants.length === 0) return;
+      
+      try {
+        // Contar ICPs do primeiro tenant
+        const { count: icps } = await (supabase as any)
+          .from('icp_profiles_metadata')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenants[0]?.id);
+        
+        setIcpCount(icps || 0);
+        
+        // Contar usuários do primeiro tenant
+        const { count: users } = await (supabase as any)
+          .from('users')
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenants[0]?.id);
+        
+        setUserCount(users || 0);
+      } catch (error) {
+        console.error('[MyCompanies] Erro ao carregar contadores:', error);
+      }
+    };
+    
+    loadCounts();
+  }, [user?.id, tenants]);
+
+  // Verificar se é admin (bypass de limites)
+  const userEmail = user?.email;
+  const isAdmin = isAdminEmail(userEmail);
+  
+  // Verificar se pode adicionar mais empresas
+  const planLimits = getPlanLimits(currentPlan, userEmail);
+  const canAddTenant = isAdmin || tenants.length < planLimits.tenants;
+  const canAddICP = isAdmin || icpCount < planLimits.icps;
+  const canAddUser = isAdmin || userCount < planLimits.users;
+  const upgradePlan = getUpgradePlan(currentPlan);
+
+  const handleAddCompany = () => {
+    if (canAddTenant) {
+      navigate('/tenant-onboarding?new=true');
+    } else {
+      setUpgradeDialogOpen(true);
+    }
+  };
 
   const loadTenants = async () => {
     if (!user?.id) return;
@@ -458,12 +526,144 @@ export default function MyCompanies() {
             <Sparkles className="h-4 w-4" />
             Retomar onboarding / Gerar SP
           </Button>
-          <Button onClick={() => navigate('/tenant-onboarding?new=true')} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Adicionar Empresa
+          <Button 
+            onClick={handleAddCompany} 
+            className="flex items-center gap-2"
+            variant={canAddTenant ? "default" : "outline"}
+          >
+            {canAddTenant ? (
+              <>
+                <Plus className="h-4 w-4" />
+                Adicionar Empresa
+              </>
+            ) : (
+              <>
+                <ArrowUpCircle className="h-4 w-4" />
+                Fazer Upgrade
+              </>
+            )}
           </Button>
         </div>
       </div>
+
+      {/* Card de Status do Plano */}
+      <Card className={cn(
+        "border-2 bg-gradient-to-r",
+        isAdmin 
+          ? "border-purple-500/50 from-purple-500/10 to-transparent" 
+          : "border-primary/20 from-primary/5 to-transparent"
+      )}>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <Crown className={cn("h-5 w-5", isAdmin ? "text-purple-500" : "text-yellow-500")} />
+            {isAdmin ? (
+              <>
+                <span className="text-purple-500">Modo Administrador</span>
+                <Badge className="ml-2 bg-purple-500 text-white">
+                  🔓 Limites Desbloqueados
+                </Badge>
+              </>
+            ) : (
+              <>
+                Seu Plano: <span className="text-primary">{currentPlan}</span>
+                {planLimits.trialDays > 0 && planLimits.trialDays < 999 && (
+                  <Badge variant="secondary" className="ml-2">
+                    Trial {planLimits.trialDays} dias
+                  </Badge>
+                )}
+              </>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Empresas */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-1">
+                  <Building2 className="h-4 w-4 text-blue-500" />
+                  Empresas
+                </span>
+                <span className={cn(
+                  "font-semibold",
+                  !canAddTenant && "text-destructive"
+                )}>
+                  {tenants.length} / {formatLimit(planLimits.tenants)}
+                </span>
+              </div>
+              <Progress 
+                value={(tenants.length / planLimits.tenants) * 100} 
+                className={cn("h-2", !canAddTenant && "bg-destructive/20")}
+              />
+              {!canAddTenant && (
+                <p className="text-xs text-destructive">Limite atingido</p>
+              )}
+            </div>
+            
+            {/* ICPs */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-1">
+                  <Target className="h-4 w-4 text-green-500" />
+                  ICPs
+                </span>
+                <span className={cn(
+                  "font-semibold",
+                  !canAddICP && "text-destructive"
+                )}>
+                  {icpCount} / {formatLimit(planLimits.icps)}
+                </span>
+              </div>
+              <Progress 
+                value={planLimits.icps >= 999999 ? 10 : (icpCount / planLimits.icps) * 100} 
+                className="h-2"
+              />
+            </div>
+            
+            {/* Usuários */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-1">
+                  <Users className="h-4 w-4 text-purple-500" />
+                  Usuários
+                </span>
+                <span className={cn(
+                  "font-semibold",
+                  !canAddUser && "text-destructive"
+                )}>
+                  {userCount} / {formatLimit(planLimits.users)}
+                </span>
+              </div>
+              <Progress 
+                value={planLimits.users >= 999999 ? 10 : (userCount / planLimits.users) * 100} 
+                className="h-2"
+              />
+            </div>
+          </div>
+          
+          {(!canAddTenant || !canAddICP || !canAddUser) && (
+            <div className="mt-4 flex items-center justify-between p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <span className="text-sm text-amber-700 dark:text-amber-300">
+                  Você atingiu o limite do plano {currentPlan}
+                </span>
+              </div>
+              {upgradePlan && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate('/plans')}
+                  className="border-amber-500 text-amber-700 hover:bg-amber-500/20"
+                >
+                  <ArrowUpCircle className="h-4 w-4 mr-1" />
+                  Upgrade para {upgradePlan}
+                </Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Info Card */}
       <Card>
@@ -480,6 +680,51 @@ export default function MyCompanies() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Modal de Upgrade */}
+      <AlertDialog open={upgradeDialogOpen} onOpenChange={setUpgradeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-yellow-500" />
+              Limite de Empresas Atingido
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <p>
+                Seu plano <strong>{currentPlan}</strong> permite no máximo{' '}
+                <strong>{formatLimit(planLimits.tenants)} empresa(s)</strong>.
+              </p>
+              <p>
+                Para adicionar mais empresas, faça upgrade para o plano{' '}
+                <strong>{upgradePlan}</strong> que permite{' '}
+                <strong>{formatLimit(getPlanLimits(upgradePlan || 'STARTER').tenants)} empresas</strong>.
+              </p>
+              
+              <div className="bg-muted p-4 rounded-lg space-y-2">
+                <p className="font-semibold">Comparativo de Planos:</p>
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  <div className="font-semibold">Plano</div>
+                  <div className="font-semibold">Empresas</div>
+                  <div className="font-semibold">ICPs</div>
+                  <div className="font-semibold">Usuários</div>
+                  
+                  <div>FREE</div><div>1</div><div>1</div><div>1</div>
+                  <div>STARTER</div><div>2</div><div>3</div><div>2</div>
+                  <div>GROWTH</div><div>5</div><div>10</div><div>5</div>
+                  <div>ENTERPRISE</div><div>15</div><div>∞</div><div>Vendas</div>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => navigate('/plans')}>
+              <ArrowUpCircle className="h-4 w-4 mr-2" />
+              Ver Planos e Fazer Upgrade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Lista de Tenants */}
       {tenants.length === 0 ? (

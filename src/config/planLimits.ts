@@ -5,7 +5,21 @@
 // Este arquivo define os limites de recursos para cada plano da plataforma
 // ============================================================================
 
-export type PlanType = 'FREE' | 'STARTER' | 'GROWTH' | 'ENTERPRISE';
+export type PlanType = 'FREE' | 'STARTER' | 'GROWTH' | 'ENTERPRISE' | 'ADMIN';
+
+// 🔧 EMAILS DE ADMINISTRADORES (bypass de limites para desenvolvimento)
+export const ADMIN_EMAILS = [
+  'marcos.oliveira@olvinternacional.com.br',
+  // Adicione outros emails de admin aqui
+];
+
+/**
+ * Verifica se o email é de um administrador (bypass de limites)
+ */
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.toLowerCase());
+}
 
 export interface PlanLimits {
   tenants: number;      // Número máximo de empresas (tenants)
@@ -49,25 +63,51 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     credits: 10000,
     requiresSalesContact: true,
   },
+  // 🔧 PLANO ADMIN - Para desenvolvedores (bypass total de limites)
+  ADMIN: {
+    tenants: 999999,
+    icps: 999999,
+    users: 999999,
+    trialDays: 999999,
+    credits: 999999,
+    requiresSalesContact: false,
+  },
 };
 
 /**
  * Obtém os limites do plano
+ * @param plan - Nome do plano
+ * @param userEmail - Email do usuário (opcional) - se for admin, retorna limites ilimitados
  */
-export function getPlanLimits(plan: string): PlanLimits {
+export function getPlanLimits(plan: string, userEmail?: string | null): PlanLimits {
+  // 🔧 ADMIN BYPASS: Se o email é de admin, retorna limites ilimitados
+  if (userEmail && isAdminEmail(userEmail)) {
+    return PLAN_LIMITS.ADMIN;
+  }
+  
   const planKey = (plan?.toUpperCase() || 'FREE') as PlanType;
   return PLAN_LIMITS[planKey] || PLAN_LIMITS.FREE;
 }
 
 /**
  * Verifica se o plano permite mais recursos
+ * @param plan - Nome do plano
+ * @param resourceType - Tipo de recurso (tenants, icps, users)
+ * @param currentCount - Contagem atual do recurso
+ * @param userEmail - Email do usuário (opcional) - admins sempre podem adicionar
  */
 export function canAddMore(
   plan: string,
   resourceType: 'tenants' | 'icps' | 'users',
-  currentCount: number
+  currentCount: number,
+  userEmail?: string | null
 ): boolean {
-  const limits = getPlanLimits(plan);
+  // 🔧 ADMIN BYPASS: Admins sempre podem adicionar
+  if (userEmail && isAdminEmail(userEmail)) {
+    return true;
+  }
+  
+  const limits = getPlanLimits(plan, userEmail);
   const limit = limits[resourceType];
   return currentCount < limit;
 }

@@ -1585,13 +1585,20 @@ export function OnboardingWizard() {
         'STARTER': 2,
         'GROWTH': 5,
         'ENTERPRISE': 15,
+        'ADMIN': 999999,
       };
       const tenantLimit = planLimits[currentPlan.toUpperCase()] || 1;
       
-      console.log(`[OnboardingWizard] 📊 Plano: ${currentPlan}, Tenants: ${currentTenantCount || 0}/${tenantLimit}`);
+      // 🔧 ADMIN BYPASS: Lista de emails de administradores (podem criar ilimitado)
+      const ADMIN_EMAILS = [
+        'marcos.oliveira@olvinternacional.com.br',
+      ];
+      const isAdmin = ADMIN_EMAILS.includes(user.email?.toLowerCase() || '');
       
-      // 2.4: Verificar se pode criar mais tenants
-      if ((currentTenantCount || 0) >= tenantLimit) {
+      console.log(`[OnboardingWizard] 📊 Plano: ${currentPlan}, Tenants: ${currentTenantCount || 0}/${tenantLimit}, Admin: ${isAdmin}`);
+      
+      // 2.4: Verificar se pode criar mais tenants (admins podem sempre criar)
+      if (!isAdmin && (currentTenantCount || 0) >= tenantLimit) {
         console.warn('[OnboardingWizard] ⚠️ Limite de tenants atingido');
         toast.error(`Seu plano ${currentPlan} permite no máximo ${tenantLimit} empresa(s). Faça upgrade para adicionar mais.`);
         throw new Error(`Limite de empresas atingido. Plano ${currentPlan} permite ${tenantLimit} empresa(s).`);
