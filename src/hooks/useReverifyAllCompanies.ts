@@ -15,7 +15,7 @@ interface Company {
  * 🔄 Hook para RE-VERIFICAR TODAS as empresas com Lógica V2
  * 
  * AÇÕES:
- * 1. Deleta TODOS os registros de cache (simple_totvs_checks)
+ * 1. Deleta TODOS os registros de cache (simple_totvs_checks - legado)
  * 2. Limpa campos totvs_check_* de icp_analysis_results
  * 3. Dispara verificações em batch (10 por vez com delay)
  * 4. Mostra progress bar: "Re-verificando 45/130 empresas..."
@@ -73,7 +73,7 @@ export function useReverifyAllCompanies() {
         
         toast.dismiss('cleanup');
 
-        // PASSO 2: Limpar campos totvs_check_* da quarentena
+        // PASSO 2: Limpar campos de verificação da quarentena (legado)
         console.log('[REVERIFY] 🧹 Limpando campos de quarentena...');
         const { error: clearError } = await supabase
           .from('icp_analysis_results')
@@ -107,7 +107,7 @@ export function useReverifyAllCompanies() {
             try {
               await invokeEdgeFunctionWithRetry(
                 supabase,
-                'simple-totvs-check',
+                'usage-verification',
                 {
                   company_id: company.id,
                   company_name: company.razao_social || '',
@@ -155,8 +155,8 @@ export function useReverifyAllCompanies() {
     },
     onSuccess: ({ successCount, failCount }) => {
       // Invalidar TODAS as queries relacionadas
-      queryClient.invalidateQueries({ queryKey: ['simple-totvs-check'] });
-      queryClient.invalidateQueries({ queryKey: ['simple-totvs-checks-multiple'] });
+      queryClient.invalidateQueries({ queryKey: ['usage-verification'] });
+      queryClient.invalidateQueries({ queryKey: ['usage-verification-multiple'] });
       queryClient.invalidateQueries({ queryKey: ['icp-quarantine'] });
       queryClient.invalidateQueries({ queryKey: ['companies'] });
 

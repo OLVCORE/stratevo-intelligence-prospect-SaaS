@@ -1,5 +1,5 @@
 /**
- * ✅ ABA OPORTUNIDADES - RELATÓRIO TOTVS
+ * ✅ ABA OPORTUNIDADES - RELATÓRIO DE VERIFICAÇÃO
  * 
  * Mostra:
  * 1. Produtos em uso (confirmados por evidências)
@@ -51,7 +51,7 @@ export function OpportunitiesTab({
   const [showCriteria, setShowCriteria] = useState(false);
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   
-  // 💰 ESTADO: ARR editável por produto (vendedor pode ajustar valores reais TOTVS)
+  // 💰 ESTADO: ARR editável por produto (vendedor pode ajustar valores reais)
   const [editedARR, setEditedARR] = useState<Record<string, string>>(
     savedData?.editedARR || {}
   );
@@ -171,7 +171,7 @@ export function OpportunitiesTab({
     
     return `Olá,
 
-Identifiquei que ${companyName} opera no segmento ${segment} e tem potencial para acelerar sua transformação digital com soluções TOTVS.
+Identifiquei que ${companyName} opera no segmento ${segment} e tem potencial para acelerar sua transformação digital com nossas soluções.
 
 Com base na análise realizada, identificamos ${primaryCount} oportunidade${primaryCount > 1 ? 's' : ''} prioritária${primaryCount > 1 ? 's' : ''} que podem gerar um ROI estimado de ${formatCurrency(primaryPotential.min)} a ${formatCurrency(primaryPotential.max)}/ano.
 
@@ -180,7 +180,7 @@ Produtos recomendados: ${primaryNames}
 Gostaria de agendar uma conversa de 30 minutos para apresentar como essas soluções podem impactar positivamente seus resultados?
 
 Atenciosamente,
-Equipe TOTVS`;
+Equipe de Vendas`;
   };
 
   // Gerar script de ligação
@@ -190,10 +190,10 @@ Equipe TOTVS`;
     return `ROTEIRO DE LIGAÇÃO - ${companyName}
 
 ABERTURA:
-"Olá, meu nome é [SEU NOME], represento a TOTVS. Estou entrando em contato porque identifiquei que ${companyName} opera no segmento ${segment} e tem um potencial interessante para otimizar processos com nossas soluções."
+"Olá, meu nome é [SEU NOME], represento nossa empresa. Estou entrando em contato porque identifiquei que ${companyName} opera no segmento ${segment} e tem um potencial interessante para otimizar processos com nossas soluções."
 
 INSIGHT:
-"Com base na análise que realizamos, identificamos que vocês têm ${detectedProducts.length} produto${detectedProducts.length > 1 ? 's' : ''} TOTVS já em uso. Isso mostra que já conhecem a qualidade das nossas soluções."
+"Com base na análise que realizamos, identificamos que vocês têm ${detectedProducts.length} produto${detectedProducts.length > 1 ? 's' : ''} já em uso. Isso mostra que já conhecem a qualidade das nossas soluções."
 
 OPORTUNIDADE:
 "Identificamos ${opportunities.primaryOpportunities.length} oportunidade${opportunities.primaryOpportunities.length > 1 ? 's' : ''} prioritária${opportunities.primaryOpportunities.length > 1 ? 's' : ''}, especialmente ${primaryNames}, que podem gerar um retorno estimado de ${formatCurrency(primaryPotential.min)} a ${formatCurrency(primaryPotential.max)} por ano."
@@ -228,11 +228,11 @@ PRÓXIMOS PASSOS:
                     <TooltipContent className="max-w-md">
                       <p className="font-semibold mb-2">Como Funciona?</p>
                       <p className="text-xs mb-2">
-                        Esta análise identifica oportunidades de produtos TOTVS baseada em:
+                        Esta análise identifica oportunidades de produtos baseada em:
                       </p>
                       <ul className="text-xs space-y-1 ml-4 list-disc">
                         <li>Setor identificado da empresa ({segment})</li>
-                        <li>Produtos TOTVS já detectados em uso ({detectedProducts.length})</li>
+                        <li>Produtos já detectados em uso ({detectedProducts.length})</li>
                         <li>Matriz validada de produtos por setor (270+ produtos)</li>
                         <li>Análise de GAP: produtos recomendados - produtos detectados</li>
                       </ul>
@@ -254,7 +254,7 @@ PRÓXIMOS PASSOS:
                       <TooltipContent className="max-w-sm">
                         <p className="font-semibold mb-1">⚠️ Nenhum produto detectado</p>
                         <p className="text-xs">
-                          Para ver oportunidades, primeiro execute o <strong>check TOTVS</strong> na <strong>primeira aba</strong> (TOTVS).
+                          Para ver oportunidades, primeiro execute a <strong>verificação de uso</strong> na <strong>primeira aba</strong> (Verificação).
                           <br />
                           Os produtos detectados lá serão usados aqui para calcular as oportunidades.
                         </p>
@@ -451,14 +451,14 @@ PRÓXIMOS PASSOS:
                   </AlertTitle>
                   <AlertDescription className="mt-2">
                     <p className="text-sm mb-2">
-                      Identificamos <strong>{detectedProducts.length}</strong> produto(s) TOTVS já em uso através da <strong>aba TOTVS</strong> (1ª aba):
+                      Identificamos <strong>{detectedProducts.length}</strong> produto(s) já em uso através da <strong>aba Verificação</strong> (1ª aba):
                     </p>
                     <p className="text-xs mb-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded-md border border-blue-200 dark:border-blue-900">
-                      <strong>📌 Fonte dos Dados:</strong> Os produtos detectados vêm das <strong>evidências coletadas na aba TOTVS</strong> quando você clica em "Verificar" ou "Reverificar". 
-                      A Edge Function <code className="text-xs">simple-totvs-check</code> busca em tempo real em:
+                      <strong>📌 Fonte dos Dados:</strong> Os produtos detectados vêm das <strong>evidências coletadas na aba Verificação</strong> quando você clica em "Verificar" ou "Reverificar". 
+                      A Edge Function <code className="text-xs">usage-verification</code> busca em tempo real em:
                     </p>
                     <ul className="text-sm space-y-1 ml-4 list-disc">
-                      <li>Vagas de emprego (menções a produtos TOTVS)</li>
+                      <li>Vagas de emprego (menções a produtos)</li>
                       <li>Notícias e publicações</li>
                       <li>Site da empresa</li>
                       <li>LinkedIn e redes sociais</li>
@@ -500,7 +500,7 @@ PRÓXIMOS PASSOS:
                   </AlertTitle>
                   <AlertDescription className="mt-2">
                     <p className="text-sm mb-2">
-                      Usamos uma matriz validada que mapeia produtos TOTVS por setor de mercado:
+                      Usamos uma matriz validada que mapeia produtos por setor de mercado:
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
                       <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-md border border-orange-200 dark:border-orange-900">
@@ -628,7 +628,7 @@ PRÓXIMOS PASSOS:
                 </Badge>
               </CardTitle>
               <CardDescription>
-                Produtos TOTVS confirmados por evidências encontradas na análise
+                Produtos confirmados por evidências encontradas na análise
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -710,7 +710,7 @@ PRÓXIMOS PASSOS:
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhum produto TOTVS detectado nas evidências analisadas.</p>
+                  <p>Nenhum produto detectado nas evidências analisadas.</p>
                 </div>
               )}
             </CardContent>
@@ -814,7 +814,7 @@ PRÓXIMOS PASSOS:
                 </Badge>
               </CardTitle>
               <CardDescription>
-                Produtos complementares que agregam valor mas não são nucleares para o setor <strong>{segment}</strong> (ainda não detectados na <strong>aba TOTVS</strong>)
+                Produtos complementares que agregam valor mas não são nucleares para o setor <strong>{segment}</strong> (ainda não detectados na <strong>aba Verificação</strong>)
               </CardDescription>
             </CardHeader>
             <CardContent>

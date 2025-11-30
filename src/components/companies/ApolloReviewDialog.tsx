@@ -222,15 +222,25 @@ export function ApolloReviewDialog({ open, onOpenChange, organizations, onImport
         }
       }
 
+      // Obter tenant_id via RPC
+      const { data: tenantId } = await (supabase as any).rpc('get_user_tenant');
+      
+      if (!tenantId) {
+        throw new Error('Tenant ID não disponível');
+      }
+
       const { data: company, error } = await supabase
         .from('companies')
-        .insert(companyData)
+        .insert({
+          ...companyData,
+          tenant_id: tenantId,
+        })
         .select()
         .single();
 
       if (error) throw error;
 
-      console.log('[Apollo Review] ✅ Empresa importada:', company.name);
+      console.log('[Apollo Review] ✅ Empresa importada:', (company as any).company_name || (company as any).name);
 
       updated[currentIndex] = { ...currentItem, status: 'imported' };
       setReviewItems(updated);

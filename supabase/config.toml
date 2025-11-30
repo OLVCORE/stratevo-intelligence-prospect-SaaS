@@ -270,5 +270,32 @@ verify_jwt = false
   [functions.stc-agent]
   verify_jwt = false
 
-  [functions.generate-product-gaps]
-  verify_jwt = false
+ [functions.generate-product-gaps]
+ verify_jwt = false
+
+ [functions.capture-lead-api]
+ verify_jwt = false
+
+ [functions.recover-orphan-leads]
+ verify_jwt = false
+
+ [functions.chat-ai]
+ verify_jwt = false
+
+ [functions.elevenlabs-conversation]
+ verify_jwt = false
+
+[functions.elevenlabs-conversation-v2]
+verify_jwt = false
+
+[functions.generate-embeddings]
+verify_jwt = false
+
+[functions.semantic-search]
+verify_jwt = false
+
+[functions.update-knowledge]
+verify_jwt = false
+
+[functions.analyze-onboarding-icp]
+verify_jwt = false

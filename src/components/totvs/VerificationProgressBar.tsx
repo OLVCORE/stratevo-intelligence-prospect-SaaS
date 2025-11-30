@@ -36,29 +36,31 @@ interface VerificationProgressBarProps {
   }>;
 }
 
-// 🎯 9 FASES REAIS DO BACKEND (conforme simple-totvs-check/index.ts)
+// 🎯 9 FASES REAIS DO BACKEND (conforme usage-verification/index.ts)
 const PHASES: VerificationPhase[] = [
   { id: 'job_portals', name: 'Portais de Vagas', count: 4, status: 'pending', estimatedTime: 15 }, // LinkedIn, Indeed, Gupy, LinkedIn Posts
-  { id: 'totvs_cases', name: 'Cases Oficiais TOTVS', count: 3, status: 'pending', estimatedTime: 8 }, // totvs.com/blog, cases, noticias
+  { id: 'product_cases', name: 'Cases Oficiais', count: 3, status: 'pending', estimatedTime: 8 }, // Cases e notícias oficiais
   { id: 'official_sources', name: 'Fontes Oficiais', count: 10, status: 'pending', estimatedTime: 10 }, // CVM, B3, TJSP, etc.
   { id: 'premium_news', name: 'Notícias Premium', count: 29, status: 'pending', estimatedTime: 12 }, // Valor, Exame, InfoMoney, etc.
   { id: 'tech_portals', name: 'Portais Tech', count: 7, status: 'pending', estimatedTime: 8 }, // Baguete, CIO, TI Inside, etc.
   { id: 'video_content', name: 'Vídeos', count: 2, status: 'pending', estimatedTime: 5 }, // YouTube, Vimeo
   { id: 'social_media', name: 'Redes Sociais', count: 3, status: 'pending', estimatedTime: 5 }, // Instagram, Facebook, LinkedIn Posts
-  { id: 'totvs_partners', name: 'Parceiros TOTVS', count: 1, status: 'pending', estimatedTime: 3 }, // Fusion
+  { id: 'product_partners', name: 'Parceiros', count: 1, status: 'pending', estimatedTime: 3 }, // Parceiros oficiais
   { id: 'google_news', name: 'Google News', count: 1, status: 'pending', estimatedTime: 5 },
 ];
 
 // 🗺️ Mapear sourceType do backend para phaseId
 const SOURCE_TO_PHASE: Record<string, string> = {
   'job_portals': 'job_portals',
-  'totvs_cases': 'totvs_cases',
+  'product_cases': 'product_cases',
+  'totvs_cases': 'product_cases', // Compatibilidade com backend
   'official_docs': 'official_sources',
   'premium_news': 'premium_news',
   'tech_portals': 'tech_portals',
   'video_content': 'video_content',
   'social_media': 'social_media',
-  'totvs_partners': 'totvs_partners',
+  'product_partners': 'product_partners',
+  'totvs_partners': 'product_partners', // Compatibilidade com backend
   // Google News não tem sourceType específico, mas é identificado por URL
 };
 

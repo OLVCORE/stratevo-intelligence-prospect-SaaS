@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useTextLeadCapture } from '@/hooks/useTextLeadCapture';
 
 interface Message {
   id: string;
@@ -41,6 +42,16 @@ export function EnhancedWhatsAppInterface({
   const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  
+  // Sistema de captura redundante de leads
+  const sessionIdRef = useRef<string>(`whatsapp_${contactPhone}_${Date.now()}`);
+  const textCapture = useTextLeadCapture({
+    sessionId: sessionIdRef.current,
+    source: 'whatsapp',
+    onLeadSaved: (leadId) => {
+      console.log('[WhatsApp] Lead capturado:', leadId);
+    },
+  });
   
   const templates = [
     { 
@@ -124,6 +135,14 @@ export function EnhancedWhatsAppInterface({
           };
         });
         setMessages(formattedMessages);
+        
+        // Processar mensagens recebidas para captura de leads (sistema redundante)
+        formattedMessages
+          .filter(msg => msg.direction === 'in')
+          .forEach(msg => {
+            // Processar mensagem recebida para extrair dados do lead
+            textCapture.processMessage(msg.text);
+          });
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -150,6 +169,33 @@ export function EnhancedWhatsAppInterface({
     setMessage('');
 
     try {
+      // Chamar backend para extração (primário)
+      let backendLeadData: any = null;
+      try {
+        const { data: backendData } = await supabase.functions.invoke('sdr-send-message', {
+          body: {
+            channel: 'whatsapp',
+            to: contactPhone,
+            message: currentMessage,
+            companyId: companyId,
+            dealId: dealId,
+            extractLeadData: true, // Solicitar extração de dados
+          }
+        });
+        
+        // Backend pode retornar leadData extraído
+        if (backendData?.leadData) {
+          backendLeadData = backendData.leadData;
+        }
+      } catch (backendError) {
+        // Se backend falhar, continuar com extração local (backup)
+        console.warn('[WhatsApp] Backend extraction failed, using local backup:', backendError);
+      }
+
+      // Processar mensagem com sistema redundante (backend + local)
+      textCapture.processMessage(currentMessage, backendLeadData);
+
+      // Enviar mensagem normalmente
       const { data, error } = await supabase.functions.invoke('sdr-send-message', {
         body: {
           channel: 'whatsapp',

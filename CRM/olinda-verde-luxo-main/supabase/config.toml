@@ -1,0 +1,40 @@
+project_id = "xgzicdsdajdwazetiolm"
+
+[functions.send-contact-email]
+verify_jwt = false
+
+[functions.chatbot]
+verify_jwt = false
+
+[functions.generate-proposal-pdf]
+verify_jwt = true
+
+[functions.send-proposal-email]
+verify_jwt = true
+
+[functions.send-lead-email]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = false
+
+[functions.remove-logo-background]
+verify_jwt = true
+
+[functions.process-reminders]
+verify_jwt = false
+
+[functions.twilio-start-call]
+verify_jwt = false
+
+[functions.twilio-webhook]
+verify_jwt = false
+
+[functions.transcribe-audio]
+verify_jwt = false
+
+[functions.track-email]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false

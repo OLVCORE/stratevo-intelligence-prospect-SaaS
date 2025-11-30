@@ -16,9 +16,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useSimpleTOTVSCheck } from '@/hooks/useSimpleTOTVSCheck';
+import { useUsageVerification } from '@/hooks/useUsageVerification';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
+import { useTenantSearchTerms, useTenantProducts } from '@/hooks/useTenantConfig';
 import { useEnsureSTCHistory } from '@/hooks/useEnsureSTCHistory';
 import { SimilarCompaniesTab } from '@/components/intelligence/SimilarCompaniesTab';
 import { Analysis360Tab } from '@/components/intelligence/Analysis360Tab';
@@ -49,7 +51,6 @@ import { ReportComparison } from './ReportComparison';
 import { IntentDashboard } from './IntentDashboard';
 import { AdvancedFilters } from './AdvancedFilters';
 import { exportEvidencesToCSV, exportEvidencesToExcel, exportEvidencesToJSON } from '@/services/exportService';
-import { supabase } from '@/integrations/supabase/client';
 import {
   RefreshCw,
   CheckCircle,
@@ -76,7 +77,7 @@ import {
   Loader2
 } from 'lucide-react';
 
-interface TOTVSCheckCardProps {
+interface UsageVerificationCardProps {
   companyId?: string;
   companyName?: string;
   cnpj?: string;
@@ -86,7 +87,7 @@ interface TOTVSCheckCardProps {
   latestReport?: any;
 }
 
-export default function TOTVSCheckCard({
+export default function UsageVerificationCard({
   companyId,
   companyName,
   cnpj,
@@ -94,8 +95,13 @@ export default function TOTVSCheckCard({
   autoVerify = false,
   onResult,
   latestReport,
-}: TOTVSCheckCardProps) {
-  console.info('[TOTS] ✅ TOTVSCheckCard montado — SaveBar deveria aparecer aqui');
+}: UsageVerificationCardProps) {
+  console.info('[VERIFICATION] ✅ UsageVerificationCard montado — SaveBar deveria aparecer aqui');
+  
+  // 🔥 NOVO: Buscar dados do tenant
+  const { tenant } = useTenant();
+  const { data: tenantSearchTerms } = useTenantSearchTerms();
+  const { data: tenantProducts } = useTenantProducts();
   
   // 🔥 GARANTIR que existe um stcHistoryId ANTES de processar
   const { stcHistoryId, isCreating: isCreatingHistory } = useEnsureSTCHistory({
@@ -126,14 +132,14 @@ export default function TOTVSCheckCard({
   const [currentPhase, setCurrentPhase] = useState<string | null>(null);
   
   // 🚨 SISTEMA DE SALVAMENTO POR ABA
-  const [activeTab, setActiveTab] = useState('detection'); // 🔄 NOVA ORDEM: Começa em TOTVS Check!
+  const [activeTab, setActiveTab] = useState('detection'); // 🔄 NOVA ORDEM: Começa em Verificação de Uso!
   const [pendingTab, setPendingTab] = useState<string | null>(null);
   const [showUnsavedAlert, setShowUnsavedAlert] = useState(false);
   const queryClient = useQueryClient();
   
   // Track de mudanças não salvas por aba
   const [unsavedChanges, setUnsavedChanges] = useState<Record<string, boolean>>({
-    detection: false,   // 1. TOTVS (auto)
+    detection: false,   // 1. Verificação de Uso (auto)
     decisors: false,    // 2. Decisores (manual)
     digital: false,     // 3. Digital Intelligence (manual) - RENOMEADO de keywords
     products: false,    // 4. Produtos Recomendados (manual)
@@ -149,7 +155,7 @@ export default function TOTVSCheckCard({
   const tabDataRef = useRef<Record<string, any>>({});
   
   // 🔐 Estado de salvamento (usado para bloqueio sequencial)
-  const [totvsSaved, setTotvsSaved] = useState(false);
+  const [verificationSaved, setVerificationSaved] = useState(false);
   
   // Compartilhar dados entre abas (Keywords → Competitors)
   const [sharedSimilarCompanies, setSharedSimilarCompanies] = useState<any[]>([]);
@@ -346,8 +352,17 @@ export default function TOTVSCheckCard({
       terms.push(...variations);
     }
     
-    // Adicionar "TOTVS"
-    terms.push('TOTVS');
+    // 🔥 NOVO: Adicionar termos do tenant (dinâmico)
+    if (tenantSearchTerms && tenantSearchTerms.length > 0) {
+      terms.push(...tenantSearchTerms);
+    } else {
+      // Fallback: usar nome do tenant se disponível
+      if (tenant?.nome) {
+        terms.push(tenant.nome);
+      }
+      // Fallback: se não tem tenant configurado, não adicionar termos específicos
+      // (deve ser configurado pelo tenant)
+    }
     
     // Adicionar produtos detectados
     if (products && products.length > 0) {
@@ -367,12 +382,13 @@ export default function TOTVSCheckCard({
   // ⚠️ MAS: Se enabled=true (usuário clicou em verificar), forçar busca mesmo com relatório salvo
   const shouldFetchLive = enabled; // 🔥 SEMPRE respeitar enabled quando usuário clica
 
-  const { data: liveData, isLoading: isLoadingLive, refetch, isFetching } = useSimpleTOTVSCheck({
+  const { data: liveData, isLoading: isLoadingLive, refetch, isFetching } = useUsageVerification({
     companyId,
     companyName,
     cnpj,
     domain,
-    enabled: shouldFetchLive && (!!companyName || !!cnpj), // 🔥 Garantir que tem dados necessários
+    tenantId: tenant?.id, // 🔥 NOVO: Passar tenant_id
+    enabled: shouldFetchLive && (!!companyName || !!cnpj) && !!tenant?.id, // 🔥 Garantir que tem tenant
   });
 
   // Usar relatório salvo como fonte principal se existir
@@ -394,7 +410,7 @@ export default function TOTVSCheckCard({
   const data = (enabled && freshData) ? freshData : (savedDetectionReport || fallbackData || freshData);
   const isLoading = (isLoadingLive || isFetching) && enabled; // 🔥 Mostrar loading apenas quando enabled=true
   
-  console.log('[TOTVS] 🔍 Data source resolution:', {
+      console.log('[VERIFICATION] 🔍 Data source resolution:', {
     hasSavedDetection: !!savedDetectionReport,
     hasFallback: !!fallbackData,
     hasFresh: !!freshData,
@@ -407,7 +423,7 @@ export default function TOTVSCheckCard({
     const savedEvidencesCount = savedDetectionReport?.evidences?.length || 0;
     const freshEvidencesCount = freshData?.evidences?.length || 0;
     
-    console.log('[TOTVS-CARD] 🔍 Data sources:', {
+        console.log('[VERIFICATION-CARD] 🔍 Data sources:', {
       hasDetectionReport: !!savedDetectionReport,
       hasLiveData: !!liveData,
       savedEvidences: savedEvidencesCount,
@@ -448,7 +464,7 @@ export default function TOTVSCheckCard({
     if (latestReport?.full_report) {
       const report = latestReport.full_report;
       
-      console.log('[TOTVS] 📦 Full report recebido:', {
+        console.log('[VERIFICATION] 📦 Full report recebido:', {
         hasDetection: !!report.detection_report,
         hasDecisors: !!report.decisors_report,
         hasKeywords: !!report.keywords_seo_report,
@@ -476,15 +492,15 @@ export default function TOTVSCheckCard({
       // 🔥 NOVO: Propagar website descoberto pelos decisores
       if (report.decisors_report?.companyData?.website) {
         setDiscoveredWebsite(report.decisors_report.companyData.website);
-        console.log('[TOTVS] 🌐 Website descoberto pelos decisores:', report.decisors_report.companyData.website);
+        console.log('[VERIFICATION] 🌐 Website descoberto pelos decisores:', report.decisors_report.companyData.website);
       }
       
-      // 🔥 CRITICAL: Se tem detection_report, marcar TOTVS como salvo
+      // 🔥 CRITICAL: Se tem detection_report, marcar Verificação como salva
       if (report.detection_report) {
-        setTotvsSaved(true);
+        setVerificationSaved(true);
         // ⚠️ NÃO ativar enabled automaticamente - só mostrar dados salvos
         // setEnabled(true); // REMOVIDO: estava ativando verificação automaticamente
-        console.log('[TOTVS] ✅ TOTVS marcado como salvo (dados do histórico)');
+        console.log('[VERIFICATION] ✅ Verificação marcada como salva (dados do histórico)');
       }
       
       // 🔥 CRITICAL: Marcar outras abas como salvas se tiverem dados (atualizar unsavedChanges)
@@ -516,8 +532,8 @@ export default function TOTVSCheckCard({
         setUnsavedChanges(prev => ({ ...prev, executive: false }));
       }
       
-      console.log('[TOTVS] ✅ Dados salvos carregados em tabDataRef');
-      console.log('[TOTVS] 📊 Status das abas após carregar:', {
+      console.log('[VERIFICATION] ✅ Dados salvos carregados em tabDataRef');
+      console.log('[VERIFICATION] 📊 Status das abas após carregar:', {
         detection: !!report.detection_report,
         decisors: !!report.decisors_report,
         digital: !!report.digital_report,
@@ -532,15 +548,15 @@ export default function TOTVSCheckCard({
     }
   }, [latestReport]);
 
-  // 🔐 REGISTRAR TODAS AS ABAS no tabsRegistry assim que TOTVSCheckCard monta
+  // 🔐 REGISTRAR TODAS AS ABAS no tabsRegistry assim que UsageVerificationCard monta
   // Isso garante que todas as abas estejam no registry mesmo antes de serem visitadas
   useEffect(() => {
-    console.log('[TOTVS-REG] 🚀 Registrando TODAS as abas no tabsRegistry...');
+    console.log('[VERIFICATION-REG] 🚀 Registrando TODAS as abas no tabsRegistry...');
     
-    // 1️⃣ ABA TOTVS (detection)
+    // 1️⃣ ABA VERIFICAÇÃO DE USO (detection)
     registerTabInGlobal('detection', {
       flushSave: async () => {
-        console.log('[TOTVS-SAVE] 💾 Salvando aba TOTVS...');
+        console.log('[VERIFICATION-SAVE] 💾 Salvando aba Verificação de Uso...');
         if (data && companyId) {
           const success = await saveTabToDatabase({
             companyId,
@@ -550,12 +566,12 @@ export default function TOTVSCheckCard({
             tabData: data,
           });
           if (success) {
-            setTotvsSaved(true);
+            setVerificationSaved(true);
             setUnsavedChanges(prev => ({ ...prev, detection: false }));
           }
         }
       },
-      getStatus: () => totvsSaved ? 'completed' : 'draft',
+      getStatus: () => verificationSaved ? 'completed' : 'draft',
     });
     
     // 2️⃣ ABA DECISORES (decisors)
@@ -711,13 +727,13 @@ export default function TOTVSCheckCard({
       getStatus: () => tabDataRef.current.executive ? 'completed' : 'draft',
     });
     
-    console.log('[TOTVS-REG] ✅ Todas as 10 abas registradas no tabsRegistry!');
+    console.log('[VERIFICATION-REG] ✅ Todas as 10 abas registradas no tabsRegistry!');
     
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis
     // Os componentes filhos vão SOBRESCREVER estes registros quando montarem,
     // mas estes registros antecipados garantem que todas as abas estejam no registry
     // desde o início, mesmo antes de serem visitadas
-  }, [data, totvsSaved, companyId, companyName, stcHistoryId]);
+  }, [data, verificationSaved, companyId, companyName, stcHistoryId]);
 
   // 🔒 SNAPSHOT: Carregar snapshot para verificar modo read-only
   useEffect(() => {
@@ -776,12 +792,12 @@ export default function TOTVSCheckCard({
   }, [data, onResult]);
 
   const handleVerify = async () => {
-    console.log('[TOTVS] 🔍 handleVerify chamado', { hasSaved, companyId, companyName, cnpj });
+    console.log('[VERIFICATION] 🔍 handleVerify chamado', { hasSaved, companyId, companyName, cnpj });
     
     // 🎯 INICIAR TRACKING DE PROGRESSO (CRÍTICO: Deve ser ANTES de qualquer await)
     setVerificationStartTime(Date.now());
     setCurrentPhase('job_portals');
-    console.log('[TOTVS] 🎯 Progresso iniciado:', { startTime: Date.now(), phase: 'job_portals' });
+    console.log('[VERIFICATION] 🎯 Progresso iniciado:', { startTime: Date.now(), phase: 'job_portals' });
     
     // 🚨 SE JÁ TEM RELATÓRIO SALVO, PERGUNTAR SE QUER REPROCESSAR
     if (hasSaved) {
@@ -791,23 +807,23 @@ export default function TOTVSCheckCard({
         'Deseja realmente reprocessar a análise?'
       );
       if (!confirmar) {
-        console.log('[TOTVS] ❌ Usuário cancelou reprocessamento');
+        console.log('[VERIFICATION] ❌ Usuário cancelou reprocessamento');
         return;
       }
       
       // 🔥 DELETAR CACHE ANTIGO PARA FORÇAR NOVA BUSCA
       if (companyId) {
         try {
-          // 1. Deletar de simple_totvs_checks
+          // 1. Deletar de simple_totvs_checks (tabela legada)
           const { error: deleteError } = await supabase
             .from('simple_totvs_checks')
             .delete()
             .eq('company_id', companyId);
           
           if (deleteError) {
-            console.error('[TOTVS] ❌ Erro ao deletar simple_totvs_checks:', deleteError);
+            console.error('[VERIFICATION] ❌ Erro ao deletar simple_totvs_checks:', deleteError);
           } else {
-            console.log('[TOTVS] 🗑️ Cache deletado de simple_totvs_checks');
+            console.log('[VERIFICATION] 🗑️ Cache deletado de simple_totvs_checks');
           }
           
           // 2. 🔥 CRÍTICO: Deletar também o registro mais recente do stc_verification_history
@@ -838,12 +854,12 @@ export default function TOTVSCheckCard({
       }
       
       // 🔥 REMOVER COMPLETAMENTE O CACHE DO REACT QUERY (não só invalidar)
-      queryClient.removeQueries({ queryKey: ['simple-totvs-check', companyId, companyName, cnpj] });
+      queryClient.removeQueries({ queryKey: ['usage-verification', companyId, companyName, cnpj] });
       queryClient.removeQueries({ queryKey: ['latest-stc-report', companyId] });
       console.log('[TOTVS] 🗑️ Cache do React Query REMOVIDO completamente');
       
       // 🔥 INVALIDAR QUERIES ANTES de habilitar (garante que refetch não use cache)
-      queryClient.invalidateQueries({ queryKey: ['simple-totvs-check', companyId, companyName, cnpj] });
+      queryClient.invalidateQueries({ queryKey: ['usage-verification', companyId, companyName, cnpj] });
       queryClient.invalidateQueries({ queryKey: ['latest-stc-report', companyId] });
       console.log('[TOTVS] 🔄 Queries INVALIDADAS');
       
@@ -867,7 +883,7 @@ export default function TOTVSCheckCard({
       console.log('[TOTVS] 🔍 Estado atual: enabled=', true, 'companyName=', companyName, 'cnpj=', cnpj);
       
       // 🔥 CRÍTICO: Remover query novamente antes de refetch para garantir
-      queryClient.removeQueries({ queryKey: ['simple-totvs-check', companyId, companyName, cnpj] });
+      queryClient.removeQueries({ queryKey: ['usage-verification', companyId, companyName, cnpj] });
       
       const result = await refetch({ cancelRefetch: true }); // cancelRefetch força nova busca
       console.log('[TOTVS] ✅ Refetch executado:', result);
@@ -932,7 +948,7 @@ export default function TOTVSCheckCard({
       } 
       // FASE 2: totvs_cases (15-23s)
       else if (elapsed < 23) {
-        setCurrentPhase('totvs_cases');
+        setCurrentPhase('product_cases');
       } 
       // FASE 3: official_sources (23-33s)
       else if (elapsed < 33) {
@@ -956,7 +972,7 @@ export default function TOTVSCheckCard({
       } 
       // FASE 8: totvs_partners (63-66s)
       else if (elapsed < 66) {
-        setCurrentPhase('totvs_partners');
+        setCurrentPhase('product_partners');
       } 
       // FASE 9: google_news (66-71s)
       else if (elapsed < 71) {
@@ -1023,7 +1039,7 @@ export default function TOTVSCheckCard({
         try {
           // Montar full_report com dados de todas as abas
           const fullReport = {
-            detection_report: data, // Dados do TOTVS Check (auto)
+            detection_report: data, // Dados da Verificação de Uso (auto)
             decisors_report: tabDataRef.current.decisors,
             digital_report: tabDataRef.current.digital, // 🔥 Digital Intelligence (substitui keywords)
             competitors_report: tabDataRef.current.competitors,
@@ -1039,7 +1055,7 @@ export default function TOTVSCheckCard({
               saved_by: 'user',
               version: '2.0',
               tabs_completed: Object.values(getStatuses()).filter(s => s === 'completed').length,
-              total_tabs: 10, // 🔥 ATUALIZADO: 10 abas (TOTVS, Decisores, Digital, Competitors, Similar, Clients, 360°, Products, Opportunities, Executive)
+              total_tabs: 10, // 🔥 ATUALIZADO: 10 abas (Verificação, Decisores, Digital, Competitors, Similar, Clients, 360°, Products, Opportunities, Executive)
             },
           };
           
@@ -1456,10 +1472,10 @@ export default function TOTVSCheckCard({
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full flex flex-col h-[calc(100vh-300px)]">
         <TabsList className="sticky top-0 z-50 grid w-full grid-cols-10 mb-6 h-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-1 rounded-lg shadow-lg border-b-2 border-primary/20">
-          {/* 🔄 NOVA ORDEM: TOTVS → Decisores → Digital → ... → Executive */}
+          {/* 🔄 NOVA ORDEM: Verificação → Decisores → Digital → ... → Executive */}
           <TabsTrigger value="detection" className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-primary/10 font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg">
             <Search className="w-4 h-4" />
-            <span>TOTVS</span>
+            <span>Verificação</span>
             <TabIndicator status={latestReport?.full_report?.__status?.detection?.status || 'draft'} />
             {getStatuses().detection === 'completed' && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-lg animate-pulse" />
@@ -1467,10 +1483,10 @@ export default function TOTVSCheckCard({
           </TabsTrigger>
           <TabsTrigger 
             value="decisors" 
-            disabled={!totvsSaved} 
+            disabled={!verificationSaved} 
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <UserCircle className="w-4 h-4" />
             <span>Decisores</span>
             {getStatuses().decisors === 'completed' && (
@@ -1479,10 +1495,10 @@ export default function TOTVSCheckCard({
           </TabsTrigger>
           <TabsTrigger 
             value="digital" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <Globe className="w-4 h-4" />
             <span>Digital</span>
             {getStatuses().digital === 'completed' && (
@@ -1491,55 +1507,55 @@ export default function TOTVSCheckCard({
           </TabsTrigger>
           <TabsTrigger 
             value="competitors" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <Target className="w-4 h-4" />
             <span>Competitors</span>
           </TabsTrigger>
           <TabsTrigger 
             value="similar" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <Building2 className="w-4 h-4" />
             <span>Similar</span>
           </TabsTrigger>
           <TabsTrigger 
             value="clients" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <Users className="w-4 h-4" />
             <span>Clients</span>
           </TabsTrigger>
           <TabsTrigger 
             value="analysis" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <BarChart3 className="w-4 h-4" />
             <span>360°</span>
           </TabsTrigger>
           <TabsTrigger 
             value="products" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <Package className="w-4 h-4" />
             <span>Products</span>
           </TabsTrigger>
           <TabsTrigger 
             value="opportunities" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold bg-orange-500/10 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-900"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <Target className="w-4 h-4" />
             <span>Oportunidades</span>
             {getStatuses().opportunities === 'completed' && (
@@ -1548,24 +1564,24 @@ export default function TOTVSCheckCard({
           </TabsTrigger>
           <TabsTrigger 
             value="executive" 
-            disabled={!totvsSaved}
+            disabled={!verificationSaved}
             className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed font-bold"
           >
-            {!totvsSaved && <span className="text-sm">🔒</span>}
+            {!verificationSaved && <span className="text-sm">🔒</span>}
             <LayoutDashboard className="w-4 h-4" />
             <span>Executive</span>
           </TabsTrigger>
         </TabsList>
         
 
-        {/* 🔄 NOVA ORDEM: TOTVS → Decisores → Digital → Competitors → Similar → Clients → 360° → Products → Executive */}
+        {/* 🔄 NOVA ORDEM: Verificação → Decisores → Digital → Competitors → Similar → Clients → 360° → Products → Executive */}
 
-        {/* ABA 1: TOTVS CHECK (GO/NO-GO) */}
+        {/* ABA 1: VERIFICAÇÃO DE USO (GO/NO-GO) */}
         <TabsContent value="detection" className="mt-0 flex-1 overflow-hidden">
-          <UniversalTabWrapper tabName="TOTVS Check">
+          <UniversalTabWrapper tabName="Verificação de Uso">
           {/* 🐛 DEBUG: Log state antes de renderizar */}
           {(() => {
-            console.log('[TOTVS-TAB-RENDER] Condições:', {
+            console.log('[VERIFICATION-TAB-RENDER] Condições:', {
               hasData: !!data,
               enabled,
               dataKeys: data ? Object.keys(data) : [],
@@ -1581,10 +1597,10 @@ export default function TOTVSCheckCard({
                 <Search className="w-10 h-10 text-primary" />
               </div>
               <h3 className="text-xl font-semibold mb-2">
-                Verificação TOTVS
+                Verificação de Uso
               </h3>
               <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-                Verifica se a empresa já é cliente TOTVS através de <strong>47 fontes premium</strong>:<br/>
+                Verifica se a empresa já utiliza produtos/serviços através de <strong>70 fontes premium</strong>:<br/>
                 📋 30 portais de vagas | 📰 26 notícias & tech | 🎥 6 vídeos & social | 🤝 1 parceiro
               </p>
               <Button onClick={handleVerify} size="lg" disabled={isLoading}>
@@ -1822,7 +1838,7 @@ export default function TOTVSCheckCard({
             <div className="text-center py-6">
               <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
-                Nenhuma evidência de uso de TOTVS encontrada
+                Nenhuma evidência de uso encontrada
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {data.methodology?.searched_sources} fontes consultadas
@@ -1850,9 +1866,11 @@ export default function TOTVSCheckCard({
             companyName={companyName}
             linkedinUrl={data?.linkedin_url}
             domain={domain}
+            tenantId={tenant?.id}
+            tenantSectorCode={tenant?.sector_code}
             savedData={latestReport?.full_report?.decisors_report}
             onDataChange={(decisorsData) => {
-              console.log('[TOTVS] 💾 Salvando decisores:', decisorsData);
+              console.log('[VERIFICATION] 💾 Salvando decisores:', decisorsData);
               tabDataRef.current.decisors = decisorsData;
               setUnsavedChanges(prev => ({ ...prev, decisors: true }));
               setTabsStatus(prev => ({ ...prev, decisors: 'success' }));
@@ -1883,7 +1901,9 @@ export default function TOTVSCheckCard({
             companyName={companyName}
             cnpj={cnpj}
             domain={discoveredWebsite || domain}
-            sector={latestReport?.full_report?.icp_score?.sector}
+            sector={latestReport?.full_report?.icp_score?.sector || tenant?.sector_code}
+            tenantId={tenant?.id}
+            tenantSectorCode={tenant?.sector_code}
             stcStatus={data?.status}
             savedData={latestReport?.full_report?.digital_report} // 🔥 PASSAR DADOS SALVOS!
             stcHistoryId={stcHistoryId || undefined}
@@ -1941,6 +1961,8 @@ export default function TOTVSCheckCard({
             companyName={companyName}
             cnpj={cnpj}
             domain={domain}
+            tenantId={tenant?.id}
+            tenantSectorCode={tenant?.sector_code}
             savedData={latestReport?.full_report?.competitors_report}
             stcHistoryId={stcHistoryId || undefined}
             similarCompanies={sharedSimilarCompanies}
@@ -1971,6 +1993,9 @@ export default function TOTVSCheckCard({
               companyId={companyId}
               companyName={companyName}
               cnpj={cnpj}
+              tenantId={tenant?.id}
+              tenantSectorCode={tenant?.sector_code}
+              tenantNicheCode={tenant?.niche_code}
               savedData={latestReport?.full_report?.similar_companies_report}
               stcHistoryId={stcHistoryId || undefined}
               onDataChange={(similarData) => {
@@ -2006,6 +2031,8 @@ export default function TOTVSCheckCard({
             companyId={companyId}
             companyName={companyName}
             cnpj={cnpj}
+            tenantId={tenant?.id}
+            tenantSectorCode={tenant?.sector_code}
             savedData={latestReport?.full_report?.clients_report}
             stcHistoryId={stcHistoryId || undefined}
             onDataChange={(clientsData) => {
@@ -2036,6 +2063,8 @@ export default function TOTVSCheckCard({
               companyName={companyName}
               stcResult={data}
               similarCompanies={similarCompaniesData}
+              tenantId={tenant?.id}
+              tenantSectorCode={tenant?.sector_code}
               savedData={latestReport?.full_report?.analysis_report}
               stcHistoryId={stcHistoryId || undefined}
               onDataChange={(analysisData) => {
@@ -2073,6 +2102,8 @@ export default function TOTVSCheckCard({
             cnpj={cnpj}
             stcResult={data}
             similarCompanies={similarCompaniesData}
+            tenantId={tenant?.id}
+            tenantSectorCode={tenant?.sector_code}
             savedData={latestReport?.full_report?.products_report}
             stcHistoryId={stcHistoryId}
             onDataChange={(productsData) => {
@@ -2100,7 +2131,9 @@ export default function TOTVSCheckCard({
           <OpportunitiesTab
             companyId={companyId}
             companyName={companyName}
-            sector={data?.company_info?.segment || data?.company_info?.industry || 'Outros'}
+            sector={data?.company_info?.segment || data?.company_info?.industry || tenant?.sector_code || 'Outros'}
+            tenantId={tenant?.id}
+            tenantSectorCode={tenant?.sector_code}
             stcResult={data}
             savedData={latestReport?.full_report?.opportunities_report}
             stcHistoryId={stcHistoryId}
@@ -2133,6 +2166,8 @@ export default function TOTVSCheckCard({
             competitorsCount={data?.evidences?.filter((e: any) => e.detected_products?.length > 0).length || 0}
             clientsCount={Math.floor((similarCompaniesData?.length || 0) * 2.5)}
             maturityScore={data?.digital_maturity_score || 0}
+            tenantId={tenant?.id}
+            tenantSectorCode={tenant?.sector_code}
             savedData={latestReport?.full_report?.executive_report}
             stcHistoryId={stcHistoryId || undefined}
             onDataChange={(executiveData) => {
@@ -2252,7 +2287,7 @@ export default function TOTVSCheckCard({
             
             // 🔥 FORÇAR RE-RENDER: Invalidar TODAS as queries relacionadas
             await queryClient.invalidateQueries({ queryKey: ['latest-stc-report'] });
-            await queryClient.invalidateQueries({ queryKey: ['simple-totvs-check'] });
+            await queryClient.invalidateQueries({ queryKey: ['usage-verification'] });
             await queryClient.invalidateQueries({ queryKey: ['stc-history'] });
             
             // 🔥 FORÇAR REFRESH DA PÁGINA para aplicar dados

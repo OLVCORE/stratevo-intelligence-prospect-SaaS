@@ -14,7 +14,7 @@
  * 
  * COMPATIBILIDADE:
  * ✅ Mantém 100% dos campos BR (CNPJ, Receita Federal, TOTVS, ICP)
- * ✅ Mantém TOTVSStatusBadge e QuarantineEnrichmentStatusBadge
+ * ✅ Mantém VerificationStatusBadge e QuarantineEnrichmentStatusBadge
  * ✅ Adiciona suporte a campos internacionais (Trade Intelligence)
  * 
  * ============================================================================
@@ -51,7 +51,7 @@ import {
   FileText,
   Linkedin,
 } from 'lucide-react';
-import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
+import { VerificationStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
 
 // ============================================================================
@@ -253,9 +253,9 @@ export function ExpandableCompaniesTableBR({
                     )}
                   </TableCell>
                   
-                  {/* Status TOTVS */}
+                  {/* Status Verificação */}
                   <TableCell className="text-center">
-                    <TOTVSStatusBadge
+                    <VerificationStatusBadge
                       status={company.totvs_status}
                       confidence={company.totvs_confidence}
                       size="sm"
@@ -449,7 +449,7 @@ export function ExpandableCompaniesTableBR({
                                   Verificação TOTVS
                                 </h4>
                                 <div className="flex items-center justify-center">
-                                  <TOTVSStatusBadge
+                                  <VerificationStatusBadge
                                     status={company.totvs_status}
                                     confidence={company.totvs_confidence}
                                     size="lg"

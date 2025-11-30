@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
-import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
+import { VerificationStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
 import { 
   CheckCircle2, 
   Rocket, 
@@ -772,8 +772,8 @@ export default function ApprovedLeads() {
                             showProgress={true}
                           />
                           
-                          {/* ✅ BADGE STATUS TOTVS */}
-                          <TOTVSStatusBadge
+                          {/* ✅ BADGE STATUS VERIFICAÇÃO */}
+                          <VerificationStatusBadge
                             status={
                               (lead as any).raw_data?.stc_verification_history?.status || 
                               (lead as any).raw_data?.totvs_check?.status || 

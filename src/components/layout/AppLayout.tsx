@@ -10,6 +10,7 @@ import ScrollToTop from "@/components/common/ScrollToTop";
 import ScrollToBottom from "@/components/common/ScrollToBottom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { TrevoAssistant } from "@/components/trevo/TrevoAssistant";
+import { TenantSelector } from "./TenantSelector";
 
 import { Button } from "@/components/ui/button";
 import { Sparkles, Home } from "lucide-react";
@@ -43,6 +44,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
           <div className="flex items-center gap-2 md:gap-3 flex-1 max-w-2xl mx-2 md:mx-4">
             <GlobalSearch />
+            <TenantSelector />
             <Button
               variant="outline"
               onClick={() => setInsightsOpen(true)}

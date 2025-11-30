@@ -223,26 +223,486 @@ export interface NCMInfo {
 
 export async function searchNCM(query: string): Promise<NCMInfo[]> {
   try {
-    const response = await fetch(`${BRASILAPI_BASE}/ncm/v1?search=${encodeURIComponent(query)}`);
-    if (!response.ok) return [];
-    const ncms = await response.json();
-    console.log('[BrasilAPI] ✅ NCM encontrados:', ncms.length);
-    return ncms;
+    console.log('[BrasilAPI] 🔍 Buscando NCM:', query);
+    
+    // Se for um código numérico (4-8 dígitos), tentar buscar diretamente por código primeiro
+    const cleanQuery = query.replace(/[.\-]/g, '').trim();
+    const isNumericCode = /^\d{4,8}$/.test(cleanQuery);
+    
+    let results: NCMInfo[] = [];
+    
+    // Se for código numérico, tentar buscar por código exato primeiro
+    if (isNumericCode && cleanQuery.length >= 4) {
+      try {
+        // Buscar código completo (8 dígitos) ou parcial
+        const codeToSearch = cleanQuery.length === 8 ? cleanQuery : cleanQuery.padEnd(8, '0');
+        console.log('[BrasilAPI] 🔍 Tentando buscar código direto:', codeToSearch);
+        const exactMatch = await getNCMByCode(codeToSearch);
+        if (exactMatch) {
+          console.log('[BrasilAPI] ✅ NCM encontrado por código:', exactMatch);
+          results.push(exactMatch);
+        }
+      } catch (e) {
+        console.warn('[BrasilAPI] ⚠️ Busca por código falhou, tentando busca geral:', e);
+        // Ignorar erro e continuar com busca por descrição
+      }
+    }
+    
+    // Sempre buscar por descrição também (ou se código não funcionou)
+    console.log('[BrasilAPI] 🔍 Buscando por descrição:', query);
+    const searchResponse = await fetch(`${BRASILAPI_BASE}/ncm/v1?search=${encodeURIComponent(query)}`);
+    if (searchResponse.ok) {
+      const searchResults = await searchResponse.json();
+      console.log('[BrasilAPI] 📊 Resultados da busca:', searchResults?.length || 0);
+      results = [...results, ...(Array.isArray(searchResults) ? searchResults : [])];
+    } else {
+      console.error('[BrasilAPI] ❌ Erro na busca:', searchResponse.status);
+    }
+    
+    // Remover duplicatas baseado no código
+    const uniqueResults = results.filter((ncm, index, self) =>
+      index === self.findIndex(n => n.codigo === ncm.codigo)
+    );
+    
+    console.log('[BrasilAPI] ✅ NCM encontrados (total único):', uniqueResults.length);
+    return uniqueResults;
   } catch (error) {
-    console.error('[BrasilAPI] Erro NCM:', error);
+    console.error('[BrasilAPI] ❌ Erro NCM:', error);
     return [];
   }
 }
 
 export async function getNCMByCode(code: string): Promise<NCMInfo | null> {
   try {
-    const response = await fetch(`${BRASILAPI_BASE}/ncm/v1/${code}`);
-    if (!response.ok) return null;
-    return await response.json();
+    // Limpar código (remover pontos e traços)
+    const cleanCode = code.replace(/[.\-]/g, '').trim();
+    
+    // Se não tiver 8 dígitos, tentar completar com zeros à direita
+    const codeToSearch = cleanCode.length < 8 ? cleanCode.padEnd(8, '0') : cleanCode.substring(0, 8);
+    
+    const response = await fetch(`${BRASILAPI_BASE}/ncm/v1/${codeToSearch}`);
+    if (!response.ok) {
+      // Se não encontrou código completo, tentar buscar por prefixo (4 primeiros dígitos)
+      if (cleanCode.length >= 4) {
+        const prefixCode = cleanCode.substring(0, 4);
+        const prefixResponse = await fetch(`${BRASILAPI_BASE}/ncm/v1?search=${prefixCode}`);
+        if (prefixResponse.ok) {
+          const prefixResults = await prefixResponse.json();
+          // Retornar o primeiro resultado que corresponde ao código
+          const match = Array.isArray(prefixResults) 
+            ? prefixResults.find((ncm: NCMInfo) => ncm.codigo.startsWith(prefixCode))
+            : null;
+          if (match) return match;
+        }
+      }
+      return null;
+    }
+    const data = await response.json();
+    return data;
   } catch (error) {
     console.error('[BrasilAPI] Erro NCM:', error);
     return null;
   }
+}
+
+// ===== 13. CNAE (IBGE API) =====
+export interface CNAEInfo {
+  id: number;
+  descricao: string;
+  codigo: string;
+  observacoes?: string;
+  descricoes?: string[]; // Múltiplas descrições quando o mesmo código tem variações
+  classe?: {
+    id: number;
+    descricao: string;
+    codigo: string;
+  };
+  grupo?: {
+    id: number;
+    descricao: string;
+    codigo: string;
+  };
+  divisao?: {
+    id: number;
+    descricao: string;
+    codigo: string;
+  };
+  secao?: {
+    id: number;
+    descricao: string;
+    codigo: string;
+  };
+}
+
+const IBGE_API_BASE = 'https://servicodados.ibge.gov.br/api/v2';
+
+export async function searchCNAE(query: string): Promise<CNAEInfo[]> {
+  try {
+    console.log('[IBGE API] 🔍 Buscando CNAE:', query);
+    
+    // Limpar query (remover formatação)
+    const cleanQuery = query.replace(/[.\-\/]/g, '').trim();
+    
+    // Se for um código numérico (5-7 dígitos), tentar buscar diretamente primeiro
+    if (/^\d{5,7}$/.test(cleanQuery)) {
+      try {
+        // Formatar código CNAE (ex: 62015 -> 62.01-5/00)
+        const formattedCode = formatCNAECode(cleanQuery);
+        console.log('[IBGE API] 🔍 Tentando buscar código direto:', formattedCode);
+        const directResponse = await fetch(`${IBGE_API_BASE}/cnae/subclasses/${formattedCode}`);
+        if (directResponse.ok) {
+          const directResult = await directResponse.json();
+          // Verificar se é um objeto válido (não array vazio)
+          if (directResult && !directResult.erro && typeof directResult === 'object' && directResult.codigo) {
+            console.log('[IBGE API] ✅ CNAE encontrado por código:', directResult);
+            return [directResult];
+          }
+        }
+      } catch (e) {
+        console.warn('[IBGE API] ⚠️ Busca por código falhou, tentando busca geral:', e);
+        // Continuar com busca por descrição
+      }
+    }
+    
+    // Buscar todas as subclasses e filtrar por descrição ou código
+    console.log('[IBGE API] 🔍 Buscando todas as subclasses...');
+    const response = await fetch(`${IBGE_API_BASE}/cnae/subclasses`);
+    if (!response.ok) {
+      console.error('[IBGE API] ❌ Erro ao buscar subclasses:', response.status);
+      return [];
+    }
+    
+    const allSubclasses = await response.json();
+    console.log('[IBGE API] 📊 Total de subclasses carregadas:', allSubclasses?.length || 0);
+    
+    if (!Array.isArray(allSubclasses) || allSubclasses.length === 0) {
+      console.warn('[IBGE API] ⚠️ Nenhuma subclasse retornada');
+      return [];
+    }
+    
+    // Debug: verificar formato dos primeiros códigos
+    const sampleCodes = allSubclasses.slice(0, 10).map(c => ({
+      id: c.id,
+      codigo: c.codigo,
+      codigoType: typeof c.codigo,
+      codigoClean: String(c.codigo || '').replace(/[.\-\/]/g, ''),
+      descricao: c.descricao?.substring(0, 50) || ''
+    }));
+    console.log('[IBGE API] 🔍 Debug - Primeiros 10 códigos:', sampleCodes);
+    console.log('[IBGE API] 🔍 Debug - Query original:', query);
+    console.log('[IBGE API] 🔍 Debug - Query limpa:', cleanQuery);
+    
+    // Debug CRÍTICO: verificar estrutura completa dos primeiros códigos
+    const firstFew = allSubclasses.slice(0, 5);
+    console.log('[IBGE API] 🔍 Debug - Estrutura completa dos primeiros 5:', firstFew);
+    
+    // Debug adicional: verificar se há códigos que começam com a query
+    const testCodes = allSubclasses.slice(0, 20).map(c => {
+      const codigoStr = String(c.codigo || '');
+      const codigoClean = codigoStr.replace(/[.\-\/]/g, '').trim();
+      return {
+        original: codigoStr,
+        clean: codigoClean,
+        startsWith01: codigoClean.startsWith('01'),
+        startsWith0134: codigoClean.startsWith('0134'),
+      };
+    });
+    console.log('[IBGE API] 🔍 Debug - Teste de códigos:', testCodes);
+    
+    // Debug: procurar manualmente códigos que começam com "01"
+    const manualSearch01 = allSubclasses
+      .map(c => {
+        const codigoStr = String(c.codigo || '');
+        const codigoClean = codigoStr.replace(/[.\-\/]/g, '').trim();
+        return { original: codigoStr, clean: codigoClean, cnae: c };
+      })
+      .filter(item => item.clean.startsWith('01'))
+      .slice(0, 10);
+    console.log('[IBGE API] 🔍 Debug - Códigos que começam com "01" (manual):', manualSearch01);
+    
+    // Filtrar por descrição ou código (incluindo busca parcial)
+    // Normalizar os dados primeiro para garantir código e descrição
+    const filtered = allSubclasses
+      .map((cnae: any) => {
+        if (!cnae) return null;
+        
+        // Verificar código em diferentes formatos que a API IBGE pode retornar
+        let codigoStr = cnae.codigo || cnae.codigo_subclasse || cnae.subclasse || '';
+        const descricaoStr = cnae.descricao || cnae.descricao_subclasse || cnae.nome || '';
+        
+        // Se não tem código mas tem ID, tentar usar como fallback
+        if (!codigoStr && cnae.id) {
+          codigoStr = String(cnae.id);
+        }
+        
+        // Garantir que temos código e descrição
+        if (!codigoStr || codigoStr === 'undefined' || codigoStr === 'null' || codigoStr === '' || !descricaoStr) {
+          return null;
+        }
+        
+        // Retornar objeto normalizado
+        return {
+          ...cnae,
+          codigo: String(codigoStr).trim(),
+          descricao: String(descricaoStr).trim()
+        };
+      })
+      .filter((cnae: any) => cnae !== null)
+      .filter((cnae: any) => {
+        if (!cnae || !cnae.codigo || !cnae.descricao) return false;
+        
+        const codigoStr = String(cnae.codigo);
+        const searchLower = query.toLowerCase().trim();
+        const descLower = String(cnae.descricao || '').toLowerCase();
+        
+        // Buscar por descrição (contém o texto)
+        if (descLower.includes(searchLower)) {
+          return true;
+        }
+        
+        // Buscar por código (remover TODA formatação e comparar)
+        const codigoClean = codigoStr.replace(/[.\-\/\s]/g, '').trim();
+        const queryClean = cleanQuery.trim();
+        
+        // Se a query é numérica, buscar por código parcial ou completo
+        if (/^\d+$/.test(queryClean) && queryClean.length > 0) {
+          // Estratégia 1: Buscar se o código COMEÇA com a query (mais comum)
+          if (codigoClean.length > 0 && codigoClean.startsWith(queryClean)) {
+            console.log(`[IBGE API] ✅ Match por startsWith: "${codigoClean}" começa com "${queryClean}"`);
+            return true;
+          }
+          
+          // Estratégia 2: Buscar se contém a query (para casos como "0134" dentro de "0134101")
+          if (codigoClean.length > 0 && codigoClean.includes(queryClean)) {
+            return true;
+          }
+          
+          // Estratégia 3: Buscar no código formatado original (ex: "01" encontra "01.11-1/01")
+          const codigoSemPontos = codigoStr.replace(/[.\-\s]/g, '').replace(/\//g, '').trim();
+          if (codigoSemPontos.length > 0 && codigoSemPontos.startsWith(queryClean)) {
+            return true;
+          }
+          
+          // Estratégia 4: Buscar por seção (2 primeiros dígitos) - formato SS.DD-C/SS
+          if (queryClean.length === 2) {
+            const matchSection = codigoStr.match(/^(\d{2})/);
+            if (matchSection && matchSection[1] === queryClean) {
+              return true;
+            }
+          }
+          
+          // Estratégia 5: Buscar por divisão (4 dígitos: SSDD)
+          if (queryClean.length >= 4) {
+            const matchDivision = codigoStr.match(/^(\d{2})\.(\d{2})/);
+            if (matchDivision) {
+              const sectionDivision = matchDivision[1] + matchDivision[2];
+              if (sectionDivision === queryClean.substring(0, 4)) {
+                return true;
+              }
+            }
+            // Também tentar sem ponto
+            if (codigoClean.length >= 4 && codigoClean.substring(0, 4) === queryClean.substring(0, 4)) {
+              return true;
+            }
+          }
+          
+          // Estratégia 6: Buscar no código original sem formatação
+          if (codigoStr.startsWith(queryClean)) {
+            return true;
+          }
+        } else {
+          // Se não é numérico, buscar apenas por descrição
+          return descLower.includes(searchLower);
+        }
+        
+        return false;
+      });
+    
+    // Mapear para CNAEInfo garantindo que todos têm código e descrição
+    const mappedResults: CNAEInfo[] = filtered
+      .map((cnae: any) => {
+        // Garantir que temos código e descrição válidos
+        const codigoFinal = String(cnae.codigo || '').trim();
+        const descricaoFinal = String(cnae.descricao || '').trim();
+        
+        if (!codigoFinal || !descricaoFinal) {
+          console.warn('[IBGE API] ⚠️ CNAE sem código ou descrição ignorado:', cnae);
+          return null;
+        }
+        
+        return {
+          id: cnae.id || 0,
+          codigo: codigoFinal,
+          descricao: descricaoFinal,
+          observacoes: cnae.observacoes,
+          classe: cnae.classe,
+          grupo: cnae.grupo,
+          divisao: cnae.divisao,
+          secao: cnae.secao
+        };
+      })
+      .filter((cnae: CNAEInfo | null): cnae is CNAEInfo => cnae !== null && !!cnae.codigo && !!cnae.descricao)
+    
+    console.log('[IBGE API] ✅ CNAE encontrados:', mappedResults.length);
+    if (mappedResults.length > 0) {
+      console.log('[IBGE API] 📋 Primeiros resultados:', mappedResults.slice(0, 5).map(c => `${c.codigo} - ${c.descricao?.substring(0, 60)}`));
+    } else {
+      // Debug adicional: procurar manualmente por códigos que começam com a query
+      const codesStartingWithQuery = allSubclasses
+        .filter(c => {
+          const codigoStr = String(c.codigo || '');
+          const codigoClean = codigoStr.replace(/[.\-\/]/g, '');
+          return codigoClean.startsWith(cleanQuery);
+        })
+        .slice(0, 5)
+        .map(c => ({
+          codigo: c.codigo,
+          codigoClean: String(c.codigo || '').replace(/[.\-\/]/g, ''),
+          descricao: c.descricao?.substring(0, 50)
+        }));
+      console.log(`[IBGE API] 🔍 Debug - Códigos que começam com "${cleanQuery}":`, codesStartingWithQuery);
+    }
+    
+    return mappedResults.slice(0, 30); // Limitar a 30 resultados
+  } catch (error) {
+    console.error('[IBGE API] ❌ Erro CNAE:', error);
+    return [];
+  }
+}
+
+export async function getCNAEByCode(code: string): Promise<CNAEInfo | null> {
+  try {
+    console.log('[IBGE API] 🔍 Buscando CNAE por código:', code);
+    
+    // Limpar código (remover formatação)
+    const cleanCode = code.replace(/[.\-\/]/g, '').trim();
+    
+    // Buscar todas as subclasses e filtrar pelo código exato
+    // A API do IBGE pode retornar múltiplos registros para o mesmo código
+    console.log('[IBGE API] 🔍 Buscando todas as subclasses para filtrar por código:', cleanCode);
+    const response = await fetch(`${IBGE_API_BASE}/cnae/subclasses`);
+    if (!response.ok) {
+      console.warn('[IBGE API] ⚠️ Erro ao buscar subclasses:', response.status);
+      return null;
+    }
+    
+    const allSubclasses = await response.json();
+    
+    if (!Array.isArray(allSubclasses)) {
+      console.warn('[IBGE API] ⚠️ Resposta não é um array');
+      return null;
+    }
+    
+    // Filtrar todos os registros que correspondem ao código
+    // Para código de 4 dígitos (ex: 0134), buscar códigos que começam com ele (ex: 01.34-2/00)
+    const matchingCNAEs = allSubclasses
+      .filter((cnae: any) => {
+        if (!cnae) return false;
+        
+        // Verificar código em diferentes formatos
+        let codigoCNAE = cnae.codigo || cnae.codigo_subclasse || cnae.subclasse || '';
+        if (!codigoCNAE && cnae.id) {
+          // Se não tem código mas tem ID, tentar usar ID como fallback
+          codigoCNAE = String(cnae.id);
+        }
+        
+        if (!codigoCNAE || codigoCNAE === 'undefined' || codigoCNAE === 'null') {
+          return false;
+        }
+        
+        const cnaeCodeClean = String(codigoCNAE).replace(/[.\-\/]/g, '').trim();
+        
+        // Se o código digitado é de 4 dígitos, buscar todos que começam com ele
+        if (cleanCode.length === 4) {
+          return cnaeCodeClean.startsWith(cleanCode);
+        }
+        
+        // Para outros tamanhos, buscar por correspondência exata ou parcial
+        return cnaeCodeClean === cleanCode || cnaeCodeClean.startsWith(cleanCode);
+      })
+      .map((cnae: any) => {
+        // Garantir que temos código e descrição
+        let codigo = cnae.codigo || cnae.codigo_subclasse || cnae.subclasse || '';
+        const descricao = cnae.descricao || cnae.descricao_subclasse || '';
+        
+        // Se não tem código formatado, tentar construir do ID
+        if (!codigo && cnae.id) {
+          // Formatar ID como código CNAE se possível
+          codigo = formatCNAECode(String(cnae.id));
+        }
+        
+        return {
+          ...cnae,
+          codigo: codigo || String(cnae.id || ''),
+          descricao: descricao || cnae.nome || ''
+        };
+      })
+      .filter((cnae: any) => cnae.codigo && cnae.descricao); // Garantir que tem ambos
+    
+    if (matchingCNAEs.length === 0) {
+      console.warn('[IBGE API] ⚠️ Nenhum CNAE encontrado para código:', code);
+      return null;
+    }
+    
+    console.log(`[IBGE API] ✅ Encontrados ${matchingCNAEs.length} registros para código ${code}`);
+    
+    // Pegar o primeiro registro (com código e descrição completos do IBGE)
+    const primeiro = matchingCNAEs[0];
+    
+    // Debug: verificar estrutura completa
+    console.log('[IBGE API] 📋 Estrutura completa do CNAE encontrado:', {
+      codigo: primeiro.codigo,
+      codigoTipo: typeof primeiro.codigo,
+      descricao: primeiro.descricao,
+      descricaoTipo: typeof primeiro.descricao,
+      descricaoLength: primeiro.descricao?.length,
+      id: primeiro.id,
+      objetoCompleto: primeiro
+    });
+    
+    // Garantir que retornamos o código formatado completo (ex: "01.34-2/00")
+    // e a descrição completa do IBGE
+    if (!primeiro.codigo || !primeiro.descricao) {
+      console.error('[IBGE API] ❌ CNAE encontrado mas sem código ou descrição:', primeiro);
+      return null;
+    }
+    
+    console.log('[IBGE API] ✅ CNAE encontrado:', primeiro.codigo, '-', primeiro.descricao);
+    
+    return primeiro as CNAEInfo;
+  } catch (error) {
+    console.error('[IBGE API] ❌ Erro ao buscar CNAE por código:', error);
+    return null;
+  }
+}
+
+// Formatar código CNAE para formato padrão (ex: 62015 -> 62.01-5/00)
+function formatCNAECode(code: string): string {
+  const clean = code.replace(/[.\-\/]/g, '').trim();
+  
+  // Se já está formatado corretamente, retornar como está
+  if (code.includes('.') && code.includes('-') && code.includes('/')) {
+    return code;
+  }
+  
+  if (clean.length === 7) {
+    // Formato: 6201500 -> 62.01-5/00
+    return `${clean.substring(0, 2)}.${clean.substring(2, 4)}-${clean.substring(4, 5)}/${clean.substring(5, 7)}`;
+  } else if (clean.length === 5) {
+    // Formato: 62015 -> 62.01-5/00
+    return `${clean.substring(0, 2)}.${clean.substring(2, 4)}-${clean.substring(4, 5)}/00`;
+  } else if (clean.length === 4) {
+    // Formato: 0134 -> 01.34-1/00 (divisão - assumir subclasse 1)
+    // Mas na verdade, "0134" pode ser uma classe, não subclasse
+    // Tentar buscar como classe primeiro: 01.34-1/00
+    return `${clean.substring(0, 2)}.${clean.substring(2, 4)}-1/00`;
+  } else if (clean.length === 2) {
+    // Formato: 01 -> tentar buscar como seção (mas API pode não aceitar)
+    // Retornar como está para busca parcial
+    return code;
+  }
+  
+  return code; // Retornar como está se não conseguir formatar
 }
 
 // ===== 10. PIX (Participantes) =====

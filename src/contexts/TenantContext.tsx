@@ -37,7 +37,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const tenantData = await multiTenantService.obterTenantDoUsuario(user.id);
 
       if (!tenantData) {
-        setError('Usuário não está associado a nenhum tenant');
+        // Não é erro se o usuário ainda não completou o onboarding
+        setError(null); // Não definir erro para não bloquear onboarding
         setTenant(null);
         return;
       }

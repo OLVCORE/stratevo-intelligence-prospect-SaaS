@@ -49,7 +49,7 @@ export function FitReport({ companyId }: FitReportProps) {
 
   const analyzeMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('analyze-totvs-fit', {
+      const { data, error } = await supabase.functions.invoke('analyze-product-fit', {
         body: { companyId }
       });
       if (error) throw error;
@@ -58,7 +58,7 @@ export function FitReport({ companyId }: FitReportProps) {
     onSuccess: () => {
       toast({
         title: "✅ Análise concluída",
-        description: "Recomendações TOTVS geradas com sucesso",
+        description: "Recomendações de produtos geradas com sucesso",
       });
       queryClient.invalidateQueries({ queryKey: ['company-fit', companyId] });
     },
@@ -72,7 +72,7 @@ export function FitReport({ companyId }: FitReportProps) {
   });
 
   const aiAnalysis = company?.governance_signals?.find(
-    (s: any) => s.signal_type === 'governance_gap_analysis' || s.signal_type === 'totvs_fit_analysis'
+    (s: any) => s.signal_type === 'governance_gap_analysis' || s.signal_type === 'product_fit_analysis'
   )?.raw_data as any;
 
   if (companyLoading) {
@@ -103,7 +103,7 @@ export function FitReport({ companyId }: FitReportProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5 text-primary" />
-            Análise de Fit TOTVS
+            Análise de Fit de Produtos
           </CardTitle>
           <CardDescription>
             Gere recomendações personalizadas com IA
@@ -114,7 +114,7 @@ export function FitReport({ companyId }: FitReportProps) {
             <Sparkles className="h-16 w-16 text-primary mx-auto mb-4" />
             <p className="text-lg font-semibold mb-2">Análise não realizada</p>
             <p className="text-sm text-muted-foreground mb-6">
-              Clique no botão abaixo para gerar uma análise completa de adequação aos produtos TOTVS
+              Clique no botão abaixo para gerar uma análise completa de adequação aos produtos
             </p>
             <Button
               onClick={() => analyzeMutation.mutate()}
@@ -157,7 +157,7 @@ export function FitReport({ companyId }: FitReportProps) {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" />
-                Score de Adequação TOTVS
+                Score de Adequação de Produtos
               </CardTitle>
               <CardDescription className="mt-2">
                 Análise gerada por IA baseada em múltiplos fatores
@@ -279,7 +279,7 @@ export function FitReport({ companyId }: FitReportProps) {
               Estratégia de Implementação
             </CardTitle>
             <CardDescription>
-              Roadmap sugerido para adoção das soluções TOTVS
+              Roadmap sugerido para adoção das soluções
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -360,7 +360,7 @@ export function FitReport({ companyId }: FitReportProps) {
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
               Análise gerada em {new Date(company.governance_signals?.find(
-                (s: any) => s.signal_type === 'governance_gap_analysis' || s.signal_type === 'totvs_fit_analysis'
+                (s: any) => s.signal_type === 'governance_gap_analysis' || s.signal_type === 'product_fit_analysis'
               )?.created_at || '').toLocaleDateString('pt-BR')}
             </div>
             <Button

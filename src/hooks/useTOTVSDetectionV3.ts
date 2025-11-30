@@ -88,7 +88,7 @@ export function useTOTVSDetectionV3() {
 
   return useMutation({
     mutationFn: async (params: TOTVSDetectionV3Params) => {
-      const { data, error } = await supabase.functions.invoke('detect-totvs-usage-v3', {
+      const { data, error } = await supabase.functions.invoke('detect-usage-v3', {
         body: {
           company_id: params.companyId,
           company_name: params.companyName,
@@ -109,18 +109,18 @@ export function useTOTVSDetectionV3() {
       queryClient.invalidateQueries({ queryKey: ['totvs-detection-v3'] });
       
       if (data.status === 'disqualified') {
-        toast.error('⛔ EMPRESA DESCARTADA - JÁ USA TOTVS', {
-          description: `${data.disqualification_reason || 'Detectado uso de produtos TOTVS'} (Score: ${data.score}/100)`,
+        toast.error('⛔ EMPRESA DESCARTADA - CLIENTE IDENTIFICADO', {
+          description: `${data.disqualification_reason || 'Detectado uso de produtos/serviços'} (Score: ${data.score}/100)`,
           duration: 8000,
         });
       } else {
-        toast.success('✅ Empresa qualificada - Sem uso de TOTVS detectado', {
+        toast.success('✅ Empresa qualificada - Sem uso detectado', {
           description: `Lead válido para prospecção ativa (Score: ${data.score}/100)`,
         });
       }
     },
     onError: (error: Error) => {
-      toast.error('Erro ao detectar uso de TOTVS', {
+      toast.error('Erro ao detectar uso', {
         description: error.message,
       });
     },

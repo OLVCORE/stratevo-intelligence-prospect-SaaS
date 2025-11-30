@@ -6,6 +6,7 @@ interface SimpleTOTVSCheckParams {
   companyName?: string;
   cnpj?: string;
   domain?: string;
+  tenantId?: string; // 🔥 NOVO: tenant_id para análises baseadas no tenant
   enabled?: boolean;
 }
 
@@ -14,6 +15,7 @@ export const useSimpleTOTVSCheck = ({
   companyName,
   cnpj,
   domain,
+  tenantId, // 🔥 NOVO
   enabled = false,
 }: SimpleTOTVSCheckParams) => {
   return useQuery({
@@ -37,14 +39,15 @@ export const useSimpleTOTVSCheck = ({
       const startTime = Date.now();
       
       try {
-        const { data, error } = await supabase.functions.invoke('simple-totvs-check', {
-          body: {
-            company_id: companyId,
-            company_name: companyName,
-            cnpj,
-            domain,
-          },
-        });
+      const { data, error } = await supabase.functions.invoke('simple-totvs-check', {
+        body: {
+          company_id: companyId,
+          company_name: companyName,
+          cnpj,
+          domain,
+          tenant_id: tenantId, // 🔥 NOVO: Passar tenant_id para Edge Function
+        },
+      });
         
         const duration = Date.now() - startTime;
         console.log(`[HOOK] ⏱️ Edge Function respondeu em ${duration}ms`);

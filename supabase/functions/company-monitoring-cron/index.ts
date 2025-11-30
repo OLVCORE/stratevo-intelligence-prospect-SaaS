@@ -51,9 +51,9 @@ serve(async (req) => {
       console.log(`\n🏢 Verificando: ${company.company_name}`);
 
       try {
-        // 1. Detectar TOTVS
+        // 1. Detectar uso
         const { data: totvsData, error: totvsError } = await supabase.functions.invoke(
-          'detect-totvs-usage',
+          'detect-usage',
           {
             body: {
               company_id: company.company_id,

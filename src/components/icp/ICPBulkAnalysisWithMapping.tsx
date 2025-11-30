@@ -15,9 +15,10 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { mapAllColumns, mapColumnToField, getSystemFields, getFieldLabel, type ColumnMapping } from '@/lib/csvMapper';
 import { cn } from '@/lib/utils';
-import { calculateICPScore } from '@/lib/icpCalculator';
+import { calculateICPScore, type ICPCriteria } from '@/lib/icpCalculator';
 import { useSaveToQuarantine } from '@/hooks/useICPQuarantine';
 import { useICPMappingTemplates } from '@/hooks/useICPMappingTemplates';
+import { useTenant } from '@/contexts/TenantContext';
 import PreAnalysisReport from './PreAnalysisReport';
 import LiveProcessingDashboard from './LiveProcessingDashboard';
 import FinalReportDashboard from './FinalReportDashboard';
@@ -59,8 +60,13 @@ interface ProcessingCompany {
   error?: string;
 }
 
-export default function ICPBulkAnalysisWithMapping() {
+interface ICPBulkAnalysisWithMappingProps {
+  icpId?: string;
+}
+
+export default function ICPBulkAnalysisWithMapping({ icpId }: ICPBulkAnalysisWithMappingProps = {}) {
   const navigate = useNavigate();
+  const { tenant } = useTenant();
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
@@ -82,9 +88,63 @@ export default function ICPBulkAnalysisWithMapping() {
   const [templateDescription, setTemplateDescription] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isParsingFile, setIsParsingFile] = useState(false);
+  const [selectedICP, setSelectedICP] = useState<any>(null);
   const { toast } = useToast();
   const { mutateAsync: saveToQuarantine } = useSaveToQuarantine();
   const { templates, saveTemplate, deleteTemplate, markAsUsed } = useICPMappingTemplates();
+
+  // Buscar dados do ICP se icpId fornecido
+  useEffect(() => {
+    if (icpId && tenant?.id) {
+      loadICPData();
+    }
+  }, [icpId, tenant?.id]);
+
+  const loadICPData = async () => {
+    if (!icpId || !tenant?.id) return;
+    
+    try {
+      // Buscar metadata
+      const { data: metadata, error: metaError } = await (supabase as any)
+        .from('icp_profiles_metadata')
+        .select('*')
+        .eq('id', icpId)
+        .eq('tenant_id', tenant.id)
+        .single();
+
+      if (metaError) throw metaError;
+
+      // Buscar dados completos do ICP no schema do tenant via RPC
+      if (metadata?.schema_name && metadata?.icp_profile_id) {
+        try {
+          const { data: icpData, error: icpError } = await supabase
+            .rpc('get_icp_profile_from_tenant', {
+              p_schema_name: metadata.schema_name,
+              p_icp_profile_id: metadata.icp_profile_id
+            });
+
+          if (!icpError && icpData) {
+            setSelectedICP({ ...metadata, ...icpData });
+          } else {
+            console.warn('[ICPBulkAnalysis] Erro ao buscar icp_profile via RPC:', icpError);
+            setSelectedICP(metadata);
+          }
+        } catch (err) {
+          console.error('[ICPBulkAnalysis] Erro ao buscar icp_profile:', err);
+          setSelectedICP(metadata);
+        }
+      } else {
+        setSelectedICP(metadata);
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar ICP:', error);
+      toast({
+        title: 'Aviso',
+        description: 'Não foi possível carregar o ICP selecionado. Usando critérios padrão.',
+        variant: 'default',
+      });
+    }
+  };
 
   // ⚠️⚠️⚠️ DO NOT CHANGE: Restore upload state from sessionStorage ⚠️⚠️⚠️
   useEffect(() => {
@@ -605,7 +665,7 @@ export default function ICPBulkAnalysisWithMapping() {
         { nome: 'Receita Federal', status: 'online' as const, tempo_resposta: 120 },
         { nome: 'LinkedIn', status: 'online' as const, tempo_resposta: 200 },
         { nome: 'Portais de Vagas', status: 'online' as const, tempo_resposta: 300 },
-        { nome: 'Web Scraping TOTVS', status: 'online' as const, tempo_resposta: 500 },
+        { nome: 'Análise Estratégica', status: 'online' as const, tempo_resposta: 500 },
       ],
       estimativa_tempo: allData.length * 180,
       estimativa_creditos: allData.length * 5,
@@ -681,7 +741,7 @@ export default function ICPBulkAnalysisWithMapping() {
 
     toast({
       title: "✅ Análise ICP concluída!",
-      description: `${successCount} na quarentena | ${rejectedCount} descartadas (TOTVS) | ${errorCount} erros. Acesse Quarentena ICP para aprovar.`,
+      description: `${successCount} na quarentena | ${rejectedCount} descartadas (cliente existente) | ${errorCount} erros. Acesse Quarentena ICP para aprovar.`,
       duration: 10000,
     });
   };
@@ -787,8 +847,8 @@ export default function ICPBulkAnalysisWithMapping() {
 
       const analysisId = analysisRecord?.id;
 
-      let encontrouTotvs = false;
-      let evidenciasTotvs: any[] = [];
+      let encontrouClienteExistente = false;
+      let evidenciasClienteExistente: any[] = [];
       let portaisVerificados = 0;
       let scraperFailed = false;
 
@@ -828,10 +888,10 @@ export default function ICPBulkAnalysisWithMapping() {
             progress: 60 
           });
 
-          // Verificar se encontrou TOTVS (score alto de TOTVS = cliente existente)
-          encontrouTotvs = scraperData.score >= 70; // Se score >= 70, pode ser cliente TOTVS
-          if (encontrouTotvs) {
-            evidenciasTotvs = [
+          // Verificar se encontrou cliente existente (score alto = cliente já cadastrado)
+          encontrouClienteExistente = scraperData.score >= 70; // Se score >= 70, pode ser cliente existente
+          if (encontrouClienteExistente) {
+            evidenciasClienteExistente = [
               { fonte: 'Análise Multicanal', descricao: `Score ICP alto detectado: ${scraperData.score}` }
             ];
           }
@@ -847,16 +907,16 @@ export default function ICPBulkAnalysisWithMapping() {
         });
       }
 
-      // Se encontrou TOTVS E o scraper funcionou corretamente, marcar como descartado
-      if (encontrouTotvs && !scraperFailed) {
+      // Se encontrou cliente existente E o scraper funcionou corretamente, marcar como descartado
+      if (encontrouClienteExistente && !scraperFailed) {
         await supabase
           .from('icp_analysis_results')
           .update({
             status: 'descartado',
-            motivo_descarte: 'Cliente TOTVS detectado',
-            is_cliente_totvs: true,
-            totvs_products: evidenciasTotvs.map(e => e.fonte || 'TOTVS'),
-            analysis_data: { evidencias: evidenciasTotvs },
+            motivo_descarte: 'Cliente já existente detectado',
+            is_cliente_existente: true,
+            evidencias_cliente_existente: evidenciasClienteExistente.map(e => e.fonte || 'Análise'),
+            analysis_data: { evidencias: evidenciasClienteExistente },
             analyzed_at: new Date().toISOString(),
           })
           .eq('id', analysisId);
@@ -866,9 +926,9 @@ export default function ICPBulkAnalysisWithMapping() {
           cnpj: cnpj,
           name: name,
           status: 'rejected',
-          motivo: 'Cliente TOTVS',
-          encontrou_totvs: true,
-          evidencias: evidenciasTotvs,
+          motivo: 'Cliente já existente',
+          encontrou_cliente_existente: true,
+          evidencias: evidenciasClienteExistente,
           portais_verificados: portaisVerificados,
           icp_score: 0,
           temperatura: 'cold',
@@ -879,7 +939,7 @@ export default function ICPBulkAnalysisWithMapping() {
 
         updateCompanyStatus({ 
           status: 'completed', 
-          currentStep: 'DESCARTADO - Cliente TOTVS', 
+          currentStep: 'DESCARTADO - Cliente já existente', 
           progress: 100,
           result
         });
@@ -892,7 +952,23 @@ export default function ICPBulkAnalysisWithMapping() {
         progress: 70 
       });
 
-      const icpResult = calculateICPScore(rawData);
+      // Converter dados do ICP para ICPCriteria
+      const icpCriteria: ICPCriteria | undefined = selectedICP ? {
+        uf_prioritarias: Array.isArray(selectedICP.estados_alvo) ? selectedICP.estados_alvo : [],
+        municipios_prioritarios: Array.isArray(selectedICP.municipios_alvo) ? selectedICP.municipios_alvo : [],
+        portes_prioritarios: Array.isArray(selectedICP.porte_alvo) ? selectedICP.porte_alvo : [],
+        faturamento_minimo: selectedICP.faturamento_min || undefined,
+        funcionarios_minimo: selectedICP.funcionarios_min || undefined,
+        cnaes_prioritarios: Array.isArray(selectedICP.cnaes_alvo) ? selectedICP.cnaes_alvo : [],
+        situacoes_validas: ['ATIVA'],
+        peso_localizacao: 20,
+        peso_porte: 30,
+        peso_cnae: 25,
+        peso_situacao: 10,
+        peso_tecnologia: 15,
+      } : undefined;
+
+      const icpResult = calculateICPScore(rawData, icpCriteria);
 
       updateCompanyStatus({ 
         currentStep: 'Salvando na Quarentena ICP', 
@@ -923,7 +999,7 @@ export default function ICPBulkAnalysisWithMapping() {
         temperatura: icpResult.temperatura,
         breakdown: icpResult.breakdown,
         motivos: icpResult.motivos,
-        encontrou_totvs: false,
+        encontrou_cliente_existente: false,
         portais_verificados: portaisVerificados,
       };
 
@@ -967,8 +1043,8 @@ export default function ICPBulkAnalysisWithMapping() {
       Motivo: r.motivo || (r.error ? `Erro: ${r.error}` : '-'),
       'Score ICP': r.icp_score || 0,
       Temperatura: r.temperatura || '-',
-      'Encontrou TOTVS': r.encontrou_totvs ? 'Sim' : 'Não',
-      'Evidências TOTVS': r.evidencias ? r.evidencias.length : 0,
+      'Cliente Existente': r.encontrou_cliente_existente ? 'Sim' : 'Não',
+      'Evidências': r.evidencias ? r.evidencias.length : 0,
       'Portais Verificados': r.portais_verificados || 0,
     })));
     
@@ -1061,10 +1137,10 @@ export default function ICPBulkAnalysisWithMapping() {
           <div className="text-center space-y-6">
             <Upload className="w-16 h-16 mx-auto text-muted-foreground" />
             <div>
-              <h2 className="text-2xl font-bold mb-2">Análise ICP em Massa com Verificação TOTVS</h2>
+              <h2 className="text-2xl font-bold mb-2">Análise ICP em Massa</h2>
               <p className="text-muted-foreground mb-6">
-                Sistema robusto de análise que:<br/>
-                <span className="inline-flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-500" /> Verifica 40+ portais de vagas para detectar clientes TOTVS</span><br/>
+                Sistema robusto de análise baseado no seu ICP configurado:<br/>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-500" /> Análise baseada no ICP do seu tenant</span><br/>
                 <span className="inline-flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-500" /> Calcula score ICP detalhado para cada empresa</span><br/>
                 <span className="inline-flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-500" /> Processa até 3 empresas simultaneamente</span><br/>
                 <span className="inline-flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-500" /> Gera relatório completo com evidências</span>
@@ -1891,7 +1967,7 @@ export default function ICPBulkAnalysisWithMapping() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="font-bold text-green-900 flex items-center gap-2">
-                          {company.result?.encontrou_totvs ? (
+                          {company.result?.encontrou_cliente_existente ? (
                             <XCircle className="w-4 h-4 text-red-500" />
                           ) : (
                             <CheckCircle className="w-4 h-4 text-green-500" />

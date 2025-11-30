@@ -35,7 +35,7 @@ interface QuarantineActionsMenuProps {
   onBulkEnrichReceita?: () => Promise<void>;
   onBulkEnrichApollo?: () => Promise<void>;
   onBulkEnrich360?: () => Promise<void>;
-  onBulkTotvsCheck?: () => Promise<void>;
+  onBulkVerification?: () => Promise<void>;
   onBulkDiscoverCNPJ?: () => Promise<void>;
   onBulkApprove?: () => Promise<void>;
   onReverifyAllV2?: () => void;
@@ -55,7 +55,7 @@ export function QuarantineActionsMenu({
   onBulkEnrichReceita,
   onBulkEnrichApollo,
   onBulkEnrich360,
-  onBulkTotvsCheck,
+  onBulkVerification,
   onBulkDiscoverCNPJ,
   onBulkApprove,
   onReverifyAllV2,
@@ -191,21 +191,21 @@ export function QuarantineActionsMenu({
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs font-semibold text-primary">🎯 Verificação TOTVS em Massa</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-semibold text-primary">🎯 Verificação de Uso em Massa</DropdownMenuLabel>
         
         <DropdownMenuGroup>
-          {onBulkTotvsCheck && (
+          {onBulkVerification && (
             <DropdownMenuItem 
               onClick={() => {
-                if (selectedCount === 0 || !onBulkTotvsCheck) return;
-                onBulkTotvsCheck();
+                if (selectedCount === 0 || !onBulkVerification) return;
+                onBulkVerification();
               }}
               disabled={selectedCount === 0 || isProcessing}
               className="transition-all duration-200 cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 hover:shadow-md hover:border-l-2 hover:border-red-500"
             >
               <Target className="h-4 w-4 mr-2 text-red-600" />
               <div className="flex flex-col">
-                <span className="font-semibold">Processar TOTVS em Lote</span>
+                <span className="font-semibold">Processar Verificação em Lote</span>
                 <span className="text-xs text-muted-foreground">
                   Verifica + Decisores + Digital (3 abas automáticas)
                 </span>

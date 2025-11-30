@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Company, Inserts } from '@/lib/db';
+import { useTenant } from '@/contexts/TenantContext';
 
 export const COMPANIES_QUERY_KEY = ['companies'];
 
@@ -98,12 +99,20 @@ export function useCompany(id: string) {
 
 export function useCreateCompany() {
   const queryClient = useQueryClient();
+  const { tenant } = useTenant();
   
   return useMutation({
     mutationFn: async (company: Inserts<'companies'>) => {
+      if (!tenant) {
+        throw new Error('Tenant não disponível');
+      }
+
       const { data, error } = await supabase
         .from('companies')
-        .insert([company])
+        .insert([{
+          ...company,
+          tenant_id: tenant.id,
+        }])
         .select()
         .single();
       

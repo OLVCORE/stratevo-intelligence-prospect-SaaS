@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useState } from 'react';
-import { SimpleTOTVSCheckDialog } from '@/components/intelligence/SimpleTOTVSCheckDialog';
+import { UsageVerificationDialog } from '@/components/intelligence/UsageVerificationDialog';
 
 interface PoolRowActionsProps {
   lead: any;
@@ -21,7 +21,7 @@ export function PoolRowActions({
   onQualify,
 }: PoolRowActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showTOTVSCheck, setShowTOTVSCheck] = useState(false);
+  const [showVerificationDialog, setShowVerificationDialog] = useState(false);
 
   const handleQualify = () => {
     onQualify(lead.id);
@@ -45,16 +45,16 @@ export function PoolRowActions({
           <DropdownMenuLabel>Ações</DropdownMenuLabel>
           <DropdownMenuSeparator />
           
-          {/* Simple TOTVS Check */}
+          {/* Verificação de Uso */}
           <DropdownMenuItem 
             onClick={() => {
-              setShowTOTVSCheck(true);
+              setShowVerificationDialog(true);
               setIsOpen(false);
             }}
             className="hover:bg-accent hover:border-l-4 hover:border-primary transition-all cursor-pointer"
           >
             <Target className="h-4 w-4 mr-2" />
-            Simple TOTVS Check
+            Verificação de Uso
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
@@ -70,14 +70,14 @@ export function PoolRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
       
-      {showTOTVSCheck && (
-        <SimpleTOTVSCheckDialog
+      {showVerificationDialog && (
+        <UsageVerificationDialog
           companyId={lead.id}
           companyName={lead.razao_social || "Empresa"}
           cnpj={lead.cnpj || undefined}
           domain={lead.domain || undefined}
-          open={showTOTVSCheck}
-          onOpenChange={setShowTOTVSCheck}
+          open={showVerificationDialog}
+          onOpenChange={setShowVerificationDialog}
         />
       )}
     </>

@@ -48,14 +48,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password
     });
     
-    if (!error) {
-      navigate('/dashboard');
-    }
+    // Não redirecionar aqui - deixar TenantGuard decidir
+    // Se tiver tenant → dashboard, se não → onboarding
+    // Mas aguardar um pouco para o TenantContext carregar
     
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
+    // Após registro, não redirecionar automaticamente
+    // O TenantGuard vai decidir: se não tiver tenant → onboarding, se tiver → dashboard
     const redirectUrl = `${window.location.origin}/dashboard`;
     
     const { error } = await supabase.auth.signUp({
@@ -69,6 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
     
+    // Não redirecionar aqui - deixar TenantGuard decidir após login automático
+    // Se registro foi bem-sucedido, o usuário será redirecionado pelo TenantGuard
+    
     return { error };
   };
 
@@ -76,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
+        // TenantGuard vai decidir para onde redirecionar após login
         redirectTo: `${window.location.origin}/dashboard`
       }
     });
@@ -84,8 +90,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // Limpar tudo: localStorage, sessionStorage, cache
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Fazer logout do Supabase
     await supabase.auth.signOut();
+    
+    // Redirecionar para login
     navigate('/login');
+    
+    // Forçar reload para garantir limpeza completa
+    window.location.href = '/login';
   };
 
   return (

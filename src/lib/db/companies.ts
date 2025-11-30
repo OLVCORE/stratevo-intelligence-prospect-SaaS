@@ -91,11 +91,28 @@ export const companiesRepository = {
    * Cria ou atualiza empresa (upsert por CNPJ)
    */
   async upsert(company: Inserts<'companies'>): Promise<Company | null> {
-    dbLogger.log('upsert', 'companies', { name: company.name });
+    dbLogger.log('upsert', 'companies', { name: (company as any).company_name || (company as any).name });
+
+    // Obter tenant_id via RPC se não fornecido
+    let tenantId = (company as any).tenant_id;
+    if (!tenantId) {
+      const { data: tenantIdData } = await (supabase as any).rpc('get_user_tenant');
+      tenantId = tenantIdData;
+    }
+
+    if (!tenantId) {
+      dbLogger.error('upsert', 'companies', new Error('Tenant ID não disponível'));
+      return null;
+    }
+
+    const companyWithTenant = {
+      ...company,
+      tenant_id: tenantId,
+    };
 
     const { data, error } = await supabase
       .from('companies')
-      .upsert(company, { onConflict: 'cnpj' })
+      .upsert(companyWithTenant, { onConflict: 'cnpj' })
       .select()
       .single();
 

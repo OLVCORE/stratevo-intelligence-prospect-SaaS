@@ -9,17 +9,26 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { AuthProvider } from "./contexts/AuthContext";
 import { TenantProvider } from "./contexts/TenantContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import TOTVSCheckReport from "@/pages/Leads/TOTVSCheckReport";
+import { TenantGuard } from "./components/TenantGuard";
+import UsageVerificationReport from "@/pages/Leads/UsageVerificationReport";
 import { Loader2 } from "lucide-react";
 import SafeModeBanner from "@/components/dev/SafeModeBanner";
 import { AuthTokenGuard } from "./components/auth/AuthTokenGuard";
+import { Sentry } from "@/lib/sentry";
+import { ProductTour } from "@/components/onboarding/ProductTour";
+import { PageViewTracker } from "@/components/common/PageViewTracker";
+import "@/lib/analytics"; // Initialize analytics
 
 // Eager load only critical pages
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
+import PlansPage from "./pages/PlansPage";
 const TenantOnboarding = lazy(() => import("./pages/TenantOnboarding"));
+const TenantOnboardingIntro = lazy(() => import("./pages/TenantOnboardingIntro"));
+const OnboardingICPRecommendations = lazy(() => import("./pages/OnboardingICPRecommendations"));
+const SolutionsPage = lazy(() => import("./pages/SolutionsPage"));
 
 // Lazy load auth pages
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -34,7 +43,7 @@ const Intelligence360Page = lazy(() => import("./pages/Intelligence360Page"));
 const CompaniesManagementPage = lazy(() => import("./pages/CompaniesManagementPage"));
 const MaturityPage = lazy(() => import("./pages/MaturityPage"));
 const TechStackPage = lazy(() => import("./pages/TechStackPage"));
-const FitTOTVSPage = lazy(() => import("./pages/FitTOTVSPage"));
+const FitAnalysisPage = lazy(() => import("./pages/FitAnalysisPage"));
 const GovernancePage = lazy(() => import("./pages/GovernancePage"));
 const AccountStrategyPage = lazy(() => import("./pages/AccountStrategyPage"));
 const StrategyHistoryPage = lazy(() => import("./pages/StrategyHistoryPage"));
@@ -44,7 +53,11 @@ const CompanyDiscoveryPage = lazy(() => import("./pages/CompanyDiscoveryPage"));
 const CentralICPHome = lazy(() => import("./pages/CentralICP/Home"));
 const IndividualAnalysis = lazy(() => import("./pages/CentralICP/IndividualAnalysis"));
 const BatchAnalysis = lazy(() => import("./pages/CentralICP/BatchAnalysis"));
-const BatchTOTVSAnalysis = lazy(() => import("./pages/CentralICP/BatchTOTVSAnalysis"));
+const BatchUsageAnalysis = lazy(() => import("./pages/CentralICP/BatchUsageAnalysis"));
+const ICPProfiles = lazy(() => import("./pages/CentralICP/ICPProfiles"));
+const CreateNewICP = lazy(() => import("./pages/CentralICP/CreateNewICP"));
+const ICPDetail = lazy(() => import("./pages/CentralICP/ICPDetail"));
+const ICPReports = lazy(() => import("./pages/CentralICP/ICPReports"));
 const ResultsDashboard = lazy(() => import("./pages/CentralICP/ResultsDashboard"));
 const AuditCompliance = lazy(() => import("./pages/CentralICP/AuditCompliance"));
 const SalesIntelligenceFeed = lazy(() => import("./pages/SalesIntelligence/Feed"));
@@ -72,7 +85,14 @@ const SDRWhatsAppConfigPage = lazy(() => import("./pages/SDRWhatsAppConfigPage")
 const SDRAnalyticsPage = lazy(() => import("./pages/SDRAnalyticsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const EmailSettingsPage = lazy(() => import("./pages/EmailSettingsPage"));
+const MyCompaniesPage = lazy(() => import("./pages/MyCompanies"));
+const UsersManagementPage = lazy(() => import("./pages/admin/UsersManagement"));
 const GeographicAnalysisPage = lazy(() => import("./pages/GeographicAnalysisPage"));
+// CRM Module
+const CRMModule = lazy(() => import("./modules/crm"));
+const OnboardingTenant = lazy(() => import("./pages/crm/OnboardingTenant"));
+// Sales Academy Module
+const SalesAcademyModule = lazy(() => import("./modules/sales-academy"));
 const GoalsPage = lazy(() => import("./pages/GoalsPage"));
 const RegionalExpansionPage = lazy(() => import("./pages/insights/RegionalExpansionPage"));
 const ChurnAlertPage = lazy(() => import("./pages/insights/ChurnAlertPage"));
@@ -120,8 +140,10 @@ const PageLoader = () => (
 // TREVO agora está no AppLayout header - não precisa mais deste wrapper
 // Removido para evitar duplicação
 
-// Componente de fallback quando há erro
-function ErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
+// Componente de fallback quando há erro (compatível com Sentry)
+function ErrorFallback({ error, resetError }: { error: unknown; resetError: () => void }) {
+  const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro inesperado';
+  
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
@@ -141,7 +163,7 @@ function ErrorFallback({ error, resetError }: { error: Error; resetError: () => 
         
         <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
           <p className="text-xs font-mono text-gray-700 break-all">
-            {error.message}
+            {errorMessage}
           </p>
         </div>
         
@@ -166,30 +188,38 @@ function ErrorFallback({ error, resetError }: { error: Error; resetError: () => 
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-          <AuthProvider>
-          <TenantProvider>
-          <AuthTokenGuard />
-          <Suspense fallback={<PageLoader />}>
+  <Sentry.ErrorBoundary fallback={ErrorFallback}>
+    <QueryClientProvider client={queryClient}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+            <AuthProvider>
+            <TenantProvider>
+            <AuthTokenGuard />
+            <PageViewTracker />
+            <ProductTour runOnMount={true} />
+            <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<Auth />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/install" element={<PWAInstallPage />} />
+            <Route path="/tenant-onboarding-intro" element={<TenantOnboardingIntro />} />
             <Route path="/tenant-onboarding" element={<TenantOnboarding />} />
+            <Route path="/plans" element={<PlansPage />} />
+            <Route path="/solutions" element={<SolutionsPage />} />
               <Route path="/" element={<Index />} />
               <Route
                 path="/dashboard"
                 element={
                   <ProtectedRoute>
-                    <AppLayout>
-                      <Dashboard />
-                    </AppLayout>
+                    <TenantGuard>
+                      <AppLayout>
+                        <Dashboard />
+                      </AppLayout>
+                    </TenantGuard>
                   </ProtectedRoute>
                 }
               />
@@ -210,6 +240,14 @@ const App = () => (
                 }
               />
             <Route path="/onboarding" element={<Onboarding />} />
+            <Route
+              path="/onboarding/icp-recommendations"
+              element={
+                <ProtectedRoute>
+                  <OnboardingICPRecommendations />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/search"
               element={
@@ -283,7 +321,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <FitTOTVSPage />
+                    <FitAnalysisPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -508,6 +546,38 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            {/* CRM Module Routes */}
+            <Route
+              path="/crm/*"
+              element={
+                <ProtectedRoute>
+                  <TenantGuard>
+                    <CRMModule />
+                  </TenantGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/crm/onboarding"
+              element={
+                <ProtectedRoute>
+                  <OnboardingTenant />
+                </ProtectedRoute>
+              }
+            />
+            {/* Sales Academy Module Routes */}
+            <Route
+              path="/sales-academy/*"
+              element={
+                <ProtectedRoute>
+                  <TenantGuard>
+                    <AppLayout>
+                      <SalesAcademyModule />
+                    </AppLayout>
+                  </TenantGuard>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/settings"
               element={
@@ -520,7 +590,29 @@ const App = () => (
               path="/email-settings"
               element={
                 <ProtectedRoute>
-                  <EmailSettingsPage />
+                  <AppLayout>
+                    <EmailSettingsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/my-companies"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <MyCompaniesPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <UsersManagementPage />
+                  </AppLayout>
                 </ProtectedRoute>
               }
             />
@@ -567,11 +659,61 @@ const App = () => (
               }
             />
             <Route
+              path="/central-icp/batch-analysis"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <BatchAnalysis />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/profiles"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ICPProfiles />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/create"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CreateNewICP />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/profile/:id"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ICPDetail />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/reports/:icpId"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ICPReports />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/central-icp/batch-totvs"
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <BatchTOTVSAnalysis />
+                    <BatchUsageAnalysis />
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -763,7 +905,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <TOTVSCheckReport />
+                    <UsageVerificationReport />
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -773,7 +915,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <TOTVSCheckReport />
+                    <UsageVerificationReport />
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -880,6 +1022,7 @@ const App = () => (
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
+  </Sentry.ErrorBoundary>
 );
 
 export default App;

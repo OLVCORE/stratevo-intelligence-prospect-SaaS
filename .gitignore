@@ -19,6 +19,23 @@ dist-ssr
 .env.production
 .env.development
 
+# Arquivos com valores reais de APIs (NUNCA commitar!)
+VALORES_REAIS_LOCAL.md
+ADICIONAR_OPENAI_KEY_SUPABASE.md
+CORRIGIR_CHAVE_OPENAI.md
+VERCEL_COPY_PASTE_DIRETO.txt
+DIAGNOSTICAR_CHAVE_EXISTENTE.md
+SOLUCAO_CHAVE_EXISTENTE.md
+TESTAR_OPENAI_KEY.ps1
+TESTAR_CHAVE_SUPABASE.ps1
+VERIFICAR_OPENAI_KEY.md
+CONFIGURAR_OPENAI_KEY.md
+
+# Arquivos de documentação com possíveis secrets
+*_KEY_*.md
+*_SECRET_*.md
+*COPY_PASTE*.txt
+
 # Supabase temp files
 supabase/.temp
 supabase/.branches

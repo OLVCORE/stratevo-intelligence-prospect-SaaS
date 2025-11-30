@@ -33,7 +33,7 @@ interface QuarantineRowActionsProps {
   onEnrichApollo?: (id: string) => Promise<void>;
   onEnrichEconodata?: (id: string) => Promise<void>;
   onEnrich360?: (id: string) => Promise<void>;
-  onEnrichTotvsCheck?: (id: string) => Promise<void>;
+  onEnrichVerification?: (id: string) => Promise<void>;
   onDiscoverCNPJ?: (id: string) => void;
   onOpenExecutiveReport?: () => void;
   onEnrichCompleto?: (id: string) => Promise<void>;
@@ -51,7 +51,7 @@ export function QuarantineRowActions({
   onEnrichApollo,
   onEnrichEconodata,
   onEnrich360,
-  onEnrichTotvsCheck,
+  onEnrichVerification,
   onDiscoverCNPJ,
   onOpenExecutiveReport,
   onEnrichCompleto,
@@ -213,34 +213,34 @@ export function QuarantineRowActions({
 
           <DropdownMenuSeparator />
 
-          {/* Simple TOTVS Check - Abrir modal (origem única) */}
+          {/* Verificação de Uso - Abrir modal (origem única) */}
           <Tooltip delayDuration={100}>
             <TooltipTrigger asChild>
               <DropdownMenuItem 
                 onClick={() => {
                   setShowReport(true);
                   setIsOpen(false);
-                  toast.info('Use o botão "Verificar Agora" ou "Atualizar" dentro do relatório para executar o check.');
+                  toast.info('Use o botão "Verificar Agora" ou "Atualizar" dentro do relatório para executar a verificação.');
                 }}
                 disabled={isEnriching}
                 className="relative animate-pulse bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 hover:from-primary/30 hover:via-primary/20 hover:to-primary/30 border-l-4 border-primary font-semibold cursor-pointer transition-all dark:from-primary/30 dark:via-primary/20 dark:to-primary/30 dark:hover:from-primary/40 dark:hover:via-primary/30 dark:hover:to-primary/40"
               >
-                {enrichingAction === 'TOTVS Check' ? (
+                {enrichingAction === 'Verificação de Uso' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-primary" />
                 ) : (
                   <Target className="h-4 w-4 mr-2 text-primary" />
                 )}
-                <span className="text-primary">Simple TOTVS Check (STC)</span>
+                <span className="text-primary">Verificação de Uso (STC)</span>
                 <Sparkles className="h-3 w-3 ml-auto text-primary animate-pulse" />
               </DropdownMenuItem>
             </TooltipTrigger>
             <TooltipContent side="right" className="max-w-xs bg-primary text-primary-foreground">
-              <p className="font-semibold text-sm">⭐ STC - TOTVS Checker (Prioritário)</p>
-              <p className="text-xs mt-1">Verifica em <strong>47 fontes premium</strong>: 30 portais vagas, 26 notícias/tech (Baguete, CIO, Exame), 6 vídeos/social (YouTube, Instagram), 1 parceiro (Fusion). Detecta triple/double/single match com highlight de termos encontrados</p>
+              <p className="font-semibold text-sm">⭐ STC - Verificação de Uso (Prioritário)</p>
+              <p className="text-xs mt-1">Verifica em <strong>70 fontes premium</strong>: 30 portais vagas, 26 notícias/tech (Baguete, CIO, Exame), 6 vídeos/social (YouTube, Instagram), 1 parceiro (Fusion). Detecta triple/double/single match com highlight de termos encontrados</p>
             </TooltipContent>
           </Tooltip>
 
-          {/* Ver Relatório TOTVS (Modal) */}
+          {/* Ver Relatório de Verificação (Modal) */}
           <Tooltip delayDuration={100}>
             <TooltipTrigger asChild>
               <DropdownMenuItem 
@@ -258,7 +258,7 @@ export function QuarantineRowActions({
             </TooltipTrigger>
             <TooltipContent side="right" className="max-w-xs">
               <p className="font-semibold text-sm">Relatório Executivo ICP</p>
-              <p className="text-xs text-muted-foreground mt-1">Exibe análise completa consolidada: ICP score, temperatura, fit TOTVS, maturidade digital, diagnóstico 360° e recomendações de abordagem</p>
+              <p className="text-xs text-muted-foreground mt-1">Exibe análise completa consolidada: ICP score, temperatura, verificação de uso, maturidade digital, diagnóstico 360° e recomendações de abordagem</p>
             </TooltipContent>
           </Tooltip>
 

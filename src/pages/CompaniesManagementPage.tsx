@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EnrichmentStatusBadge } from '@/components/companies/EnrichmentStatusBadge';
-import { SimpleTOTVSCheckDialog } from '@/components/intelligence/SimpleTOTVSCheckDialog';
+import { UsageVerificationDialog } from '@/components/intelligence/UsageVerificationDialog';
 import { STCAgent } from '@/components/intelligence/STCAgent';
 import {
   Table,
@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp } from 'lucide-react';
+import { TableSkeleton } from '@/components/ui/skeletons';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
@@ -2173,7 +2174,7 @@ export default function CompaniesManagementPage() {
         </div>
 
         {stcCompany && (
-          <SimpleTOTVSCheckDialog
+          <UsageVerificationDialog
             open={stcDialogOpen}
             onOpenChange={setStcDialogOpen}
             companyId={stcCompany.id}

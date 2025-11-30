@@ -20,7 +20,7 @@ export default function FitTOTVSPage() {
   const [isBulkRunning, setIsBulkRunning] = useState(false);
 
   const { data: companies, isLoading, refetch } = useQuery({
-    queryKey: ['fit-totvs-companies'],
+    queryKey: ['fit-analysis-companies'],
     queryFn: async () => {
       const { data } = await supabase
         .from('companies')
@@ -39,14 +39,14 @@ export default function FitTOTVSPage() {
   const companyIds = useMemo(() => (companies?.map((c: any) => c.id) ?? []), [companies]);
 
   const { data: analyses, isLoading: isAnalysesLoading, refetch: refetchAnalyses } = useQuery({
-    queryKey: ['fit-totvs-analyses', companyIds],
+    queryKey: ['fit-analysis-analyses', companyIds],
     enabled: companyIds.length > 0,
     queryFn: async () => {
       const { data } = await supabase
         .from('governance_signals')
         .select('*')
         .in('company_id', companyIds)
-        .eq('signal_type', 'totvs_fit_analysis')
+        .eq('signal_type', 'product_fit_analysis')
         .order('detected_at', { ascending: false });
       return data || [];
     }
@@ -62,7 +62,7 @@ export default function FitTOTVSPage() {
 
   const analyzeMutation = useMutation({
     mutationFn: async (companyId: string) => {
-      const { data, error } = await supabase.functions.invoke('analyze-totvs-fit', {
+      const { data, error } = await supabase.functions.invoke('analyze-product-fit', {
         body: { companyId }
       });
       if (error) throw error;
@@ -71,7 +71,7 @@ export default function FitTOTVSPage() {
     onSuccess: () => {
       toast({
         title: "✅ Análise concluída",
-        description: "Recomendações TOTVS geradas com IA",
+        description: "Recomendações de produtos geradas com IA",
       });
       refetch();
       refetchAnalyses();
@@ -100,7 +100,7 @@ export default function FitTOTVSPage() {
     let failed = 0;
     for (const id of selectedIds) {
       try {
-        const { error } = await supabase.functions.invoke('analyze-totvs-fit', {
+        const { error } = await supabase.functions.invoke('analyze-product-fit', {
           body: { companyId: id }
         });
         if (error) throw error as any;
@@ -129,9 +129,9 @@ export default function FitTOTVSPage() {
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">Fit TOTVS</h1>
+            <h1 className="text-4xl font-bold text-foreground mb-2">Análise de Fit de Produtos</h1>
             <p className="text-muted-foreground">
-              Análise de aderência e recomendações de produtos TOTVS
+              Análise de aderência e recomendações de produtos
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -453,8 +453,8 @@ export default function FitTOTVSPage() {
       {/* Botão de Explicação */}
       <div className="mt-8 flex justify-center">
         <ExplainabilityButton
-          title="Critérios da Análise de Fit TOTVS"
-          description="Entenda como identificamos a compatibilidade e momento ideal para produtos TOTVS"
+          title="Critérios da Análise de Fit de Produtos"
+          description="Entenda como identificamos a compatibilidade e momento ideal para produtos"
           analysisType="Product-Market Fit"
           dataSources={[
             {
@@ -488,10 +488,10 @@ export default function FitTOTVSPage() {
             {
               name: "Recomendação de Produtos",
               weight: "30%",
-              description: "IA analisa gaps e sugere produtos TOTVS específicos com justificativa de por que fazem sentido."
+              description: "IA analisa gaps e sugere produtos específicos com justificativa de por que fazem sentido."
             }
           ]}
-          methodology="A IA (Gemini 2.5 Flash) cruza dados da empresa com padrões de clientes TOTVS bem-sucedidos. Fit Score = similaridade com ICP ideal. Timing Score = presença de sinais de compra (hiring, growth, pain points). Produtos são recomendados baseado em gaps entre estado atual e best practices do setor."
+          methodology="A IA (Gemini 2.5 Flash) cruza dados da empresa com padrões de clientes bem-sucedidos. Fit Score = similaridade com ICP ideal. Timing Score = presença de sinais de compra (hiring, growth, pain points). Produtos são recomendados baseado em gaps entre estado atual e best practices do setor."
           interpretation="Fit > 80 + Timing > 70 = CONTA QUENTE (abordar imediatamente). Fit > 60 = BOM FIT (incluir em cadência). Timing > 70 = MOMENTO IDEAL (priorizar contato). Fit < 40 = BAIXA PRIORIDADE (nutrir para futuro)."
         />
       </div>

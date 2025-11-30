@@ -42,24 +42,112 @@ export class MultiTenantService {
     // Gerar schema name
     const schemaName = `tenant_${slug}`;
     
+    // TENTATIVA 1: Tentar criar via Edge Function (bypass PostgREST)
+    try {
+      console.log('[MultiTenantService] Tentando criar tenant via Edge Function...');
+      
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        throw new Error('VITE_SUPABASE_URL não configurada');
+      }
+
+      // Edge Function não precisa de autenticação (usa SERVICE_ROLE_KEY internamente)
+      // Mas Supabase exige apikey header para Edge Functions públicas
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-tenant`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': anonKey,
+          'Authorization': `Bearer ${anonKey}`, // Adicionar Authorization também
+        },
+        body: JSON.stringify({
+          nome: dados.nome,
+          cnpj: dados.cnpj,
+          email: dados.email,
+          telefone: dados.telefone,
+          plano: dados.plano || 'FREE',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || `HTTP ${response.status}` };
+        }
+        
+        console.error('[MultiTenantService] ❌ Edge Function erro:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        
+        throw new Error(`Edge Function falhou: ${errorData.error || errorData.message || response.statusText}`);
+      }
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        console.log('[MultiTenantService] ✅ Tenant criado via Edge Function:', result.data.id);
+        return result.data;
+      } else {
+        throw new Error(result.error || 'Erro ao criar tenant via Edge Function');
+      }
+    } catch (edgeError: any) {
+      console.warn('[MultiTenantService] ⚠️ Edge Function falhou:', edgeError.message);
+      // Continuar para próxima tentativa
+    }
+
+    // TENTATIVA 2: Tentar criar via RPC function
+    try {
+      console.log('[MultiTenantService] Tentando criar tenant via RPC...');
+      const { data: tenant, error: rpcError } = await (supabase as any).rpc('create_tenant_direct', {
+        p_slug: slug,
+        p_nome: dados.nome,
+        p_cnpj: dados.cnpj.replace(/\D/g, ''),
+        p_email: dados.email,
+        p_schema_name: schemaName,
+        p_telefone: dados.telefone || null,
+        p_plano: dados.plano || 'FREE',
+        p_status: 'TRIAL',
+        p_creditos: dados.plano === 'FREE' ? 10 : 100,
+        p_data_expiracao: this.calcularDataExpiracao(dados.plano || 'FREE').toISOString(),
+      });
+
+      if (!rpcError && tenant && tenant.length > 0) {
+        console.log('[MultiTenantService] ✅ Tenant criado via RPC');
+        return tenant[0];
+      }
+    } catch (rpcError) {
+      console.warn('[MultiTenantService] ⚠️ RPC falhou, tentando método direto:', rpcError);
+    }
+
+    // TENTATIVA 3: Método direto via PostgREST (fallback)
+    console.log('[MultiTenantService] Tentando criar tenant via PostgREST direto...');
+    
     // Verificar unicidade
-    const { data: existente } = await supabase
+    const { data: existente } = await (supabase as any)
       .from('tenants')
       .select('*')
-      .or(`slug.eq.${slug},cnpj.eq.${dados.cnpj},schema_name.eq.${schemaName}`)
-      .single();
+      .or(`slug.eq.${slug},cnpj.eq.${dados.cnpj.replace(/\D/g, '')},schema_name.eq.${schemaName}`)
+      .maybeSingle();
     
     if (existente) {
-      throw new Error('Tenant já existe com este slug, CNPJ ou schema');
+      // Retornar tenant existente ao invés de lançar erro
+      console.log('[MultiTenantService] ✅ Tenant já existe, retornando existente:', existente.id);
+      return existente as Tenant;
     }
     
     // Criar tenant (trigger criará schema automaticamente)
-    const { data: tenant, error } = await supabase
+    const cnpjClean = dados.cnpj.replace(/\D/g, ''); // 🔥 CORRIGIDO: Definir cnpjClean antes de usar
+    const { data: tenant, error } = await (supabase as any)
       .from('tenants')
       .insert({
         slug,
         nome: dados.nome,
-        cnpj: dados.cnpj,
+        cnpj: cnpjClean,
         email: dados.email,
         telefone: dados.telefone,
         schema_name: schemaName,
@@ -92,7 +180,7 @@ export class MultiTenantService {
    * Obter tenant por ID
    */
   async obterTenant(tenantId: string): Promise<Tenant | null> {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('tenants')
       .select('*')
       .eq('id', tenantId)
@@ -109,7 +197,7 @@ export class MultiTenantService {
    * Obter tenant por slug
    */
   async obterTenantPorSlug(slug: string): Promise<Tenant | null> {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('tenants')
       .select('*')
       .eq('slug', slug)
@@ -150,7 +238,7 @@ export class MultiTenantService {
       },
     });
     
-    return tenantClient;
+    return tenantClient as any;
   }
   
   /**
@@ -164,7 +252,7 @@ export class MultiTenantService {
     }
     
     // Deletar schema PostgreSQL via Edge Function ou SQL direto
-    const { error: dropError } = await supabase.rpc('drop_tenant_schema', {
+    const { error: dropError } = await (supabase as any).rpc('drop_tenant_schema', {
       schema_name: tenant.schema_name,
     });
     
@@ -174,7 +262,7 @@ export class MultiTenantService {
     }
     
     // Deletar tenant (cascade deleta users, subscription, logs)
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('tenants')
       .delete()
       .eq('id', tenantId);
@@ -200,7 +288,7 @@ export class MultiTenantService {
       throw new Error('Créditos insuficientes');
     }
     
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('tenants')
       .update({
         creditos: tenant.creditos - quantidade,
@@ -223,7 +311,7 @@ export class MultiTenantService {
       throw new Error('Tenant não encontrado');
     }
     
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('tenants')
       .update({
         creditos: tenant.creditos + quantidade,
@@ -256,7 +344,7 @@ export class MultiTenantService {
       const dataExpiracao = new Date(tenant.data_expiracao);
       if (dataExpiracao < new Date()) {
         // Auto-suspender
-        await supabase
+        await (supabase as any)
           .from('tenants')
           .update({ status: 'SUSPENDED' })
           .eq('id', tenantId);
@@ -269,19 +357,58 @@ export class MultiTenantService {
   
   /**
    * Obter tenant do usuário autenticado
+   * Usa a função RPC get_user_tenant() para evitar problemas de RLS
    */
   async obterTenantDoUsuario(authUserId: string): Promise<Tenant | null> {
-    const { data: user } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('auth_user_id', authUserId)
-      .single();
-    
-    if (!user) {
+    try {
+      // Primeiro, tentar usar a função RPC get_user_tenant() (mais seguro)
+      const { data: tenantId, error: rpcError } = await (supabase as any).rpc('get_user_tenant');
+      
+      if (!rpcError && tenantId) {
+        return this.obterTenant(tenantId);
+      }
+      
+      // Se RPC não funcionar, tentar buscar diretamente da tabela users
+      try {
+        const { data: user, error } = await (supabase as any)
+          .from('users')
+          .select('tenant_id')
+          .eq('auth_user_id', authUserId)
+          .single();
+        
+        if (error) {
+          // Se a tabela não existir, não é erro - usuário ainda não completou onboarding
+          if (error.code === 'PGRST116' || error.message?.includes('Could not find the table')) {
+            console.log('[MultiTenant] Tabela users não existe ainda - usuário precisa completar onboarding');
+            return null;
+          }
+          console.warn('[MultiTenant] Erro ao buscar usuário:', error.message);
+          return null;
+        }
+        
+        if (!user || !user.tenant_id) {
+          console.log('[MultiTenant] Usuário não tem tenant associado - precisa completar onboarding');
+          return null;
+        }
+        
+        return this.obterTenant(user.tenant_id);
+      } catch (tableError: any) {
+        // Se a tabela não existir, não é erro crítico
+        if (tableError.message?.includes('Could not find the table') || tableError.message?.includes('does not exist')) {
+          console.log('[MultiTenant] Tabela users não existe ainda - usuário precisa completar onboarding');
+          return null;
+        }
+        throw tableError;
+      }
+    } catch (err: any) {
+      // Não logar como erro se for apenas "tabela não existe"
+      if (err.message?.includes('Could not find the table') || err.message?.includes('does not exist')) {
+        console.log('[MultiTenant] Tabela users não existe ainda - usuário precisa completar onboarding');
+        return null;
+      }
+      console.error('[MultiTenant] Erro ao obter tenant do usuário:', err);
       return null;
     }
-    
-    return this.obterTenant(user.tenant_id);
   }
   
   // ===== MÉTODOS AUXILIARES =====
@@ -325,16 +452,21 @@ export class MultiTenantService {
     ipAddress?: string;
     userAgent?: string;
   }): Promise<void> {
-    await supabase.from('audit_logs').insert({
-      tenant_id: dados.tenantId,
-      user_id: dados.userId,
-      action: dados.action,
-      entity: dados.entity,
-      entity_id: dados.entityId,
-      metadados: dados.metadados,
-      ip_address: dados.ipAddress,
-      user_agent: dados.userAgent,
-    });
+    try {
+      await (supabase as any).from('audit_logs').insert({
+        tenant_id: dados.tenantId,
+        user_id: dados.userId,
+        action: dados.action,
+        entity: dados.entity,
+        entity_id: dados.entityId,
+        metadados: dados.metadados,
+        ip_address: dados.ipAddress,
+        user_agent: dados.userAgent,
+      });
+    } catch (error) {
+      // Não bloquear criação de tenant se log falhar
+      console.warn('[MultiTenant] Erro ao logar auditoria (não crítico):', error);
+    }
   }
 }
 

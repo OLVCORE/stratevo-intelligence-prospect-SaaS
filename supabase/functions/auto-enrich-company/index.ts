@@ -168,10 +168,10 @@ serve(async (req) => {
       console.error(`❌ Maturity calculation failed:`, error);
     }
 
-    // 5. Fit TOTVS Analysis (AI-Powered)
-    console.log(`🎯 Analyzing TOTVS fit with AI`);
+    // 5. Fit Analysis (AI-Powered)
+    console.log(`🎯 Analyzing product fit with AI`);
     try {
-      const { data: fitData, error: fitError } = await supabaseClient.functions.invoke('analyze-totvs-fit', {
+      const { data: fitData, error: fitError } = await supabaseClient.functions.invoke('analyze-product-fit', {
         body: { companyId }
       });
       

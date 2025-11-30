@@ -1,10 +1,12 @@
 import { ArrowLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ICPBulkAnalysisWithMapping from '@/components/icp/ICPBulkAnalysisWithMapping';
 
 export default function BatchAnalysis() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const icpId = searchParams.get('icp');
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -15,7 +17,7 @@ export default function BatchAnalysis() {
         <div className="flex-1">
           <h1 className="text-3xl font-bold">Análise ICP em Massa</h1>
           <p className="text-muted-foreground">
-            Upload de qualquer CSV com mapeamento inteligente automático
+            {icpId ? 'Análise baseada no ICP selecionado' : 'Upload de qualquer CSV com mapeamento inteligente automático'}
           </p>
         </div>
         <Button variant="outline" onClick={() => navigate('/leads/icp-quarantine')}>
@@ -23,7 +25,7 @@ export default function BatchAnalysis() {
         </Button>
       </div>
 
-      <ICPBulkAnalysisWithMapping />
+      <ICPBulkAnalysisWithMapping icpId={icpId || undefined} />
     </div>
   );
 }

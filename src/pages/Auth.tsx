@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +15,23 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, user, loading: authLoading } = useAuth();
+  const { tenant, loading: tenantLoading } = useTenant();
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  // Redirecionar se já estiver autenticado
+  useEffect(() => {
+    if (!authLoading && !tenantLoading && user) {
+      if (tenant) {
+        // Tem tenant → redirecionar para dashboard
+        navigate('/dashboard', { replace: true });
+      } else {
+        // Não tem tenant → redirecionar para onboarding
+        navigate('/tenant-onboarding', { replace: true });
+      }
+    }
+  }, [user, tenant, authLoading, tenantLoading, navigate]);
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,9 +51,12 @@ export default function Auth() {
           ? 'Email ou senha incorretos' 
           : error.message
       });
+      setIsLoading(false);
+    } else {
+      // Login bem-sucedido - aguardar TenantContext carregar e redirecionar
+      // O useEffect acima vai fazer o redirecionamento
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -62,8 +81,9 @@ export default function Auth() {
     } else {
       toast({
         title: 'Conta criada com sucesso!',
-        description: 'Você já pode fazer login.'
+        description: 'Redirecionando para configuração inicial...'
       });
+      // Redirecionamento será feito pelo AuthContext
     }
 
     setIsLoading(false);
@@ -82,6 +102,15 @@ export default function Auth() {
       setIsLoading(false);
     }
   };
+
+  // Se já estiver autenticado, mostrar loading enquanto redireciona
+  if (user && !authLoading && !tenantLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-background p-4">

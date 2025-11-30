@@ -171,7 +171,7 @@ serve(async (req) => {
       try {
         // Verificar se é cliente TOTVS
         const { data: stcCheck } = await supabaseClient.functions.invoke(
-          'simple-totvs-check',
+          'usage-verification',
           {
             body: {
               companyName: clientName,

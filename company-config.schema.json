@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "company": {
+      "type": "object",
+      "properties": {
+        "cnpj": {
+          "type": "string",
+          "pattern": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
+          "description": "CNPJ da empresa cadastrada"
+        },
+        "razaoSocial": { "type": "string" },
+        "nomeFantasia": { "type": "string" },
+        "website": { "type": "string", "format": "uri" },
+        "email": { "type": "string", "format": "email" },
+        "telefone": { "type": "string" },
+        "setorPrincipal": { "type": "string" },
+        "porteEmpresa": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["cnpj", "razaoSocial"]
+    },
+    "tenant": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "schemaName": { "type": "string" },
+        "plano": { "type": "string", "enum": ["FREE", "STARTER", "GROWTH", "ENTERPRISE"] },
+        "status": { "type": "string", "enum": ["active", "suspended", "inactive"] }
+      }
+    },
+    "icps": {
+      "type": "object",
+      "properties": {
+        "principal": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "nome": { "type": "string" },
+            "tipo": { "type": "string", "enum": ["core"] },
+            "ativo": { "type": "boolean" }
+          }
+        },
+        "mercados": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "nome": { "type": "string" },
+              "tipo": { "type": "string", "enum": ["mercado"] },
+              "setorFoco": { "type": "string" },
+              "nichoFoco": { "type": "string" },
+              "ativo": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "version": { "type": "string" }
+  },
+  "required": ["company", "version"]
+}
+

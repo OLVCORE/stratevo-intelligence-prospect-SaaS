@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { logger } from '@/lib/utils/logger';
+import { Sentry } from '@/lib/sentry';
 
 interface Props {
   children: ReactNode;
@@ -45,6 +46,20 @@ export class ErrorBoundary extends Component<Props, State> {
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
     });
+
+    // Send to Sentry if available
+    if (Sentry && Sentry.captureException) {
+      Sentry.captureException(error, {
+        contexts: {
+          react: {
+            componentStack: errorInfo.componentStack,
+          },
+        },
+        tags: {
+          errorBoundary: this.props.context || 'Unknown',
+        },
+      });
+    }
 
     // Try to persist error to backend for recovery
     this.persistErrorForRecovery(error, errorInfo);

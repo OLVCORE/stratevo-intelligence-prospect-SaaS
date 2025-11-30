@@ -22,12 +22,12 @@ import { useRestoreAllBatchDiscarded } from '@/hooks/useRestoreDiscarded';
 import { QuarantineActionsMenu } from '@/components/icp/QuarantineActionsMenu';
 import { QuarantineRowActions } from '@/components/icp/QuarantineRowActions';
 import { DiscardedCompaniesModal } from '@/components/icp/DiscardedCompaniesModal';
-import TOTVSCheckCard from '@/components/totvs/TOTVSCheckCard';
+import UsageVerificationCard from '@/components/totvs/TOTVSCheckCard';
 import { STCAgent } from '@/components/intelligence/STCAgent';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { ICPScoreTooltip } from '@/components/icp/ICPScoreTooltip';
-import { TOTVSStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
+import { VerificationStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
 import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/companies/EnrichmentProgressModal';
 import { ExpandedCompanyCard } from '@/components/companies/ExpandedCompanyCard';
 import { toast } from 'sonner';
@@ -40,6 +40,19 @@ import { searchApolloOrganizations, searchApolloPeople } from '@/services/apollo
 import { enrichment360Simplificado } from '@/services/enrichment360';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
+
+// Helper para normalizar source_name removendo referências a TOTVS/TVS
+const normalizeSourceName = (sourceName: string | null | undefined): string => {
+  if (!sourceName) return 'Sem origem';
+  
+  // Remove referências a TOTVS/TVS
+  return sourceName
+    .replace(/[-_]?TVS/gi, '')
+    .replace(/[-_]?TOTVS/gi, '')
+    .replace(/Web Search\s*-?\s*/gi, 'Web Search')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Sem origem';
+};
 
 export default function ICPQuarantine() {
   const navigate = useNavigate();
@@ -56,7 +69,7 @@ export default function ICPQuarantine() {
   const [filterSector, setFilterSector] = useState<string[]>([]);
   const [filterUF, setFilterUF] = useState<string[]>([]);
   const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
-  const [filterTOTVSStatus, setFilterTOTVSStatus] = useState<string[]>([]); // 🆕 FILTRO STATUS TOTVS
+  const [filterVerificationStatus, setFilterVerificationStatus] = useState<string[]>([]); // 🆕 FILTRO STATUS VERIFICAÇÃO
   
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCompany, setPreviewCompany] = useState<any>(null);
@@ -382,8 +395,8 @@ export default function ICPQuarantine() {
     },
   }); */
 
-  // FASE 3: TOTVS Simple Check Mutation
-  const enrichTotvsCheckMutation = useMutation({
+  // FASE 3: Verificação de Uso Mutation
+  const enrichVerificationMutation = useMutation({
     mutationFn: async (analysisId: string) => {
       const { data: analysis } = await supabase
         .from('icp_analysis_results')
@@ -398,9 +411,9 @@ export default function ICPQuarantine() {
         ? analysis.raw_analysis as Record<string, any>
         : {};
 
-      // Executar apenas Simple TOTVS Check (unificado)
+      // Executar apenas Verificação de Uso (unificado)
       const simpleDomain = sanitizeDomain(rawData.domain || analysis.website || null);
-      const { data, error } = await supabase.functions.invoke('simple-totvs-check', {
+      const { data, error } = await supabase.functions.invoke('usage-verification', {
         body: {
           company_id: analysis.company_id || analysis.id,
           company_name: analysis.razao_social,
@@ -425,7 +438,7 @@ export default function ICPQuarantine() {
         })
         .eq('id', analysisId);
 
-      // Recalcular score após TOTVS check
+      // Recalcular score após verificação
       await supabase.rpc('calculate_icp_score_quarantine', {
         p_analysis_id: analysisId
       });
@@ -433,12 +446,12 @@ export default function ICPQuarantine() {
       return data;
     },
     onSuccess: (data) => {
-      const status = data?.found ? '⚠️ Cliente TOTVS detectado' : '✅ NÃO é cliente TOTVS';
-      toast.success(`TOTVS Check concluído - ${status}`);
+      const status = data?.found ? '⚠️ Cliente identificado' : '✅ Não é cliente identificado';
+      toast.success(`Verificação concluída - ${status}`);
       queryClient.invalidateQueries({ queryKey: ['icp-quarantine'] });
     },
     onError: (error: any) => {
-      toast.error('Erro no TOTVS Check', {
+      toast.error('Erro na verificação', {
         description: error.message,
       });
     },
@@ -534,8 +547,8 @@ export default function ICPQuarantine() {
       
       // 🔍 FILTROS INTELIGENTES POR COLUNA
       
-      // Filtro por Origem
-      if (filterOrigin.length > 0 && !filterOrigin.includes(c.source_name || '')) {
+      // Filtro por Origem (normalizado)
+      if (filterOrigin.length > 0 && !filterOrigin.includes(normalizeSourceName(c.source_name))) {
         return false;
       }
       
@@ -613,15 +626,15 @@ export default function ICPQuarantine() {
         if (!matchesApolloPeople) return false;
       }
       
-      // 🆕 FILTRO STATUS TOTVS
-      if (filterTOTVSStatus.length > 0) {
-        const totvsStatus = c.totvs_status || 'nao-verificado';
+      // 🆕 FILTRO STATUS VERIFICAÇÃO
+      if (filterVerificationStatus.length > 0) {
+        const verificationStatus = c.totvs_status || 'nao-verificado';
         // Mapear para label legível
-        let totvsLabel = 'Não Verificado';
-        if (totvsStatus === 'go') totvsLabel = 'GO - Não é Cliente';
-        if (totvsStatus === 'no-go') totvsLabel = 'NO-GO - É Cliente';
+        let verificationLabel = 'Não Verificado';
+        if (verificationStatus === 'go') verificationLabel = 'GO - Não é Cliente';
+        if (verificationStatus === 'no-go') verificationLabel = 'NO-GO - É Cliente';
         
-        if (!filterTOTVSStatus.includes(totvsLabel)) return false;
+        if (!filterVerificationStatus.includes(verificationLabel)) return false;
       }
       
       return true;
@@ -860,8 +873,8 @@ export default function ICPQuarantine() {
     return enrichApolloMutation.mutateAsync(id);
   };
 
-  const handleEnrichTotvsCheck = async (id: string) => {
-    return enrichTotvsCheckMutation.mutateAsync(id);
+  const handleEnrichVerification = async (id: string) => {
+    return enrichVerificationMutation.mutateAsync(id);
   };
 
   // ECONODATA: Desabilitado - fase 2
@@ -1065,7 +1078,7 @@ export default function ICPQuarantine() {
     }
   };
 
-  const handleBulkTotvsCheck = async () => {
+  const handleBulkVerification = async () => {
     if (selectedIds.length === 0) {
       toast.error('Selecione pelo menos uma empresa');
       return;
@@ -1074,10 +1087,10 @@ export default function ICPQuarantine() {
     const selectedCompanies = companies.filter(c => selectedIds.includes(c.id));
     
     const confirmacao = window.confirm(
-      `🎯 PROCESSAMENTO TOTVS EM LOTE\n\n` +
+      `🎯 PROCESSAMENTO EM LOTE\n\n` +
       `Empresas selecionadas: ${selectedIds.length}\n\n` +
       `O que será processado:\n` +
-      `✅ TOTVS Check (GO/NO-GO)\n` +
+      `✅ Verificação de Uso (GO/NO-GO)\n` +
       `✅ Decisores (se GO)\n` +
       `✅ Digital (se GO)\n` +
       `✅ Relatório completo salvo automaticamente\n\n` +
@@ -1091,7 +1104,7 @@ export default function ICPQuarantine() {
     if (!confirmacao) return;
     
     toast.loading(`🔄 Processando empresa 0/${selectedIds.length}...`, { 
-      id: 'bulk-totvs',
+      id: 'bulk-verification',
       duration: Infinity,
     });
     
@@ -1105,13 +1118,13 @@ export default function ICPQuarantine() {
       try {
         toast.loading(
           `🔄 ${i + 1}/${selectedIds.length}: ${company.razao_social}`, 
-          { id: 'bulk-totvs' }
+          { id: 'bulk-verification' }
         );
         
         console.log(`[BATCH] 📊 Processando ${i + 1}/${selectedIds.length}: ${company.razao_social}`);
         
-        // 1. TOTVS Check
-        const { data: totvsResult, error: totvsError } = await supabase.functions.invoke('simple-totvs-check', {
+        // 1. Verificação de Uso
+        const { data: verificationResult, error: verificationError } = await supabase.functions.invoke('usage-verification', {
           body: {
             company_name: company.razao_social,
             cnpj: company.cnpj,
@@ -1120,10 +1133,10 @@ export default function ICPQuarantine() {
           },
         });
         
-        if (totvsError) throw totvsError;
+        if (verificationError) throw verificationError;
         
-        const isNoGo = totvsResult?.status === 'no-go';
-        const isGo = totvsResult?.status === 'go';
+        const isNoGo = verificationResult?.status === 'no-go';
+        const isGo = verificationResult?.status === 'go';
         
         // 2. Decisores (SEMPRE - GO ou NO-GO)
         // Custo baixo e pode ser útil no futuro mesmo se NO-GO
@@ -1163,7 +1176,7 @@ export default function ICPQuarantine() {
         
         // 4. Salvar relatório completo
         const fullReport = {
-          detection_report: totvsResult,
+          detection_report: verificationResult,
           decisors_report: decisors,
           keywords_seo_report: digital,
           __status: {
@@ -1180,10 +1193,10 @@ export default function ICPQuarantine() {
         };
         
         console.log(`[BATCH] 💾 Salvando full_report:`, {
-          hasDetection: !!totvsResult,
+          hasDetection: !!verificationResult,
           hasDecisors: !!decisors,
           hasDigital: !!digital,
-          evidencesCount: totvsResult?.evidences?.length || 0,
+          evidencesCount: verificationResult?.evidences?.length || 0,
           decisorsCount: decisors?.decisores?.length || 0,
         });
         
@@ -1193,15 +1206,15 @@ export default function ICPQuarantine() {
             company_id: company.company_id || company.id,
             company_name: company.razao_social,
             cnpj: company.cnpj,
-            status: totvsResult.status,
-            confidence: totvsResult.confidence || 'medium',
-            triple_matches: totvsResult.triple_matches || 0,
-            double_matches: totvsResult.double_matches || 0,
-            single_matches: totvsResult.single_matches || 0,
-            total_score: totvsResult.total_weight || 0,
-            evidences: totvsResult.evidences || [],
-            sources_consulted: totvsResult.methodology?.searched_sources || 0,
-            queries_executed: totvsResult.methodology?.total_queries || 0,
+            status: verificationResult.status,
+            confidence: verificationResult.confidence || 'medium',
+            triple_matches: verificationResult.triple_matches || 0,
+            double_matches: verificationResult.double_matches || 0,
+            single_matches: verificationResult.single_matches || 0,
+            total_score: verificationResult.total_weight || 0,
+            evidences: verificationResult.evidences || [],
+            sources_consulted: verificationResult.methodology?.searched_sources || 0,
+            queries_executed: verificationResult.methodology?.total_queries || 0,
             full_report: fullReport,
           })
           .select()
@@ -1229,7 +1242,7 @@ export default function ICPQuarantine() {
           console.log(`[BATCH] ✅ ${company.razao_social}: GO confirmado`);
         }
         
-        console.log(`[BATCH] ✅ ${company.razao_social}: ${totvsResult.status} (${totvsResult.evidences?.length || 0} evidências)`);
+        console.log(`[BATCH] ✅ ${company.razao_social}: ${verificationResult.status} (${verificationResult.evidences?.length || 0} evidências)`);
         
       } catch (error: any) {
         errors++;
@@ -1242,7 +1255,7 @@ export default function ICPQuarantine() {
       }
     }
     
-    toast.dismiss('bulk-totvs');
+    toast.dismiss('bulk-verification');
     toast.success(`🎉 Processamento em lote concluído!`, {
       description: `✅ ${go} GO (prospects prontos) | ❌ ${noGo} NO-GO (auto-descartados) | ⚠️ ${errors} erros`,
       duration: 10000,
@@ -1308,7 +1321,7 @@ export default function ICPQuarantine() {
     });
   };
 
-  const handleOpenTotvsCheck = (company: any) => {
+  const handleOpenVerification = (company: any) => {
     if (!company?.id) {
       toast.error('ID da empresa não encontrado');
       return;
@@ -1459,10 +1472,10 @@ export default function ICPQuarantine() {
                     onFullEnrich={async () => {
                       const id = selectedIds[0];
                       // ✅ FLUXO CORRETO: Sempre enriquecer Receita primeiro (sem verificar GO/NO-GO)
-                      // Depois o usuário vai para Relatório STC → Aba TOTVS → Define GO/NO-GO
+                      // Depois o usuário vai para Relatório STC → Aba Verificação → Define GO/NO-GO
                       // Só então pode enriquecer Apollo se for GO
                       await handleEnrichReceita(id);
-                      toast.info('✅ Receita Federal atualizada! Agora abra o Relatório STC → Aba TOTVS para verificar GO/NO-GO. Se GO, você poderá enriquecer Apollo.');
+                      toast.info('✅ Receita Federal atualizada! Agora abra o Relatório STC → Aba Verificação para verificar GO/NO-GO. Se GO, você poderá enriquecer Apollo.');
                     }}
                     onReceita={async () => {
                       const id = selectedIds[0];
@@ -1513,7 +1526,7 @@ export default function ICPQuarantine() {
                 onBulkEnrichReceita={handleBulkEnrichReceita}
                 onBulkEnrichApollo={handleBulkEnrichApollo}
                 onBulkEnrich360={handleBulkEnrich360}
-                onBulkTotvsCheck={handleBulkTotvsCheck}
+                onBulkVerification={handleBulkVerification}
                 onBulkDiscoverCNPJ={handleBulkDiscoverCNPJ}
                 onBulkApprove={handleBulkApprove}
                 onRestoreDiscarded={() => restoreAllDiscarded()}
@@ -1688,7 +1701,7 @@ export default function ICPQuarantine() {
                     <ColumnFilter
                       column="source_name"
                       title="Origem"
-                      values={companies.map(c => c.source_name || '')}
+                      values={companies.map(c => normalizeSourceName(c.source_name))}
                       selectedValues={filterOrigin}
                       onFilterChange={setFilterOrigin}
                       onSort={() => handleSort('source_name')}
@@ -1785,7 +1798,7 @@ export default function ICPQuarantine() {
                   <TableHead className="min-w-[110px]">
                     <ColumnFilter
                       column="totvs_status"
-                      title="Status TOTVS"
+                      title="Status Verificação"
                       values={companies.map(c => {
                         const status = c.totvs_status || 'nao-verificado';
                         // Mapear para labels legíveis
@@ -1793,8 +1806,8 @@ export default function ICPQuarantine() {
                         if (status === 'no-go') return 'NO-GO - É Cliente';
                         return 'Não Verificado';
                       })}
-                      selectedValues={filterTOTVSStatus}
-                      onFilterChange={setFilterTOTVSStatus}
+                      selectedValues={filterVerificationStatus}
+                      onFilterChange={setFilterVerificationStatus}
                     />
                   </TableHead>
                   <TableHead className="min-w-[90px]"><span className="font-semibold text-[10px]">Website</span></TableHead>
@@ -1904,12 +1917,12 @@ export default function ICPQuarantine() {
                                 variant="secondary" 
                                 className="bg-blue-600/10 text-blue-600 border-blue-600/30 hover:bg-blue-600/20 transition-colors cursor-help max-w-[140px] truncate"
                               >
-                                {company.source_name}
+                                {normalizeSourceName(company.source_name)}
                               </Badge>
                             </TooltipTrigger>
                             <TooltipContent>
                               <div className="text-xs space-y-1">
-                                <p><strong>Origem:</strong> {company.source_name}</p>
+                                <p><strong>Origem:</strong> {normalizeSourceName(company.source_name)}</p>
                                 {company.source_metadata?.campaign && (
                                   <p><strong>Campanha:</strong> {company.source_metadata.campaign}</p>
                                 )}
@@ -1997,7 +2010,7 @@ export default function ICPQuarantine() {
                       />
                     </TableCell>
                     <TableCell>
-                      <TOTVSStatusBadge
+                      <VerificationStatusBadge
                         status={
                           rawData?.stc_verification_history?.status || 
                           rawData?.totvs_check?.status || 
@@ -2079,7 +2092,7 @@ export default function ICPQuarantine() {
                           </TooltipTrigger>
                           <TooltipContent side="left">
                             <p className="font-semibold">STC Agent</p>
-                            <p className="text-xs">Assistente de vendas e análise TOTVS</p>
+                            <p className="text-xs">Assistente de vendas e análise</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -2096,7 +2109,7 @@ export default function ICPQuarantine() {
                         onEnrichApollo={handleEnrichApollo}
                         onEnrich360={handleEnrich360}
                         onEnrichCompleto={handleEnrichCompleto}
-                        onEnrichTotvsCheck={handleEnrichTotvsCheck}
+                        onEnrichVerification={handleEnrichVerification}
                         onDiscoverCNPJ={handleDiscoverCNPJ}
                         onRestoreIndividual={async (cnpj) => {
                           // Restaurar empresa individual
@@ -2359,7 +2372,7 @@ export default function ICPQuarantine() {
                   );
                 })()}
 
-                {/* Simple TOTVS Check removido do Preview: Preview deve exibir apenas o rosto/Resumo cadastral da empresa */}
+                {/* Verificação de Uso removida do Preview: Preview deve exibir apenas o rosto/Resumo cadastral da empresa */}
 
                 {/* Competitor Intelligence */}
                 {(() => {
@@ -2435,7 +2448,7 @@ export default function ICPQuarantine() {
                 <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
                   <RadioGroupItem value="ja_cliente_totvs" id="ja_cliente" />
                   <Label htmlFor="ja_cliente" className="flex-1 cursor-pointer">
-                    ⚠️ Já é cliente TOTVS
+                    ⚠️ Já é cliente identificado
                   </Label>
                 </div>
                 

@@ -120,7 +120,7 @@ export function EdgeFunctionTester() {
   };
 
   const testAnalyzeTOTVSFit = async () => {
-    const fn = 'analyze-totvs-fit';
+    const fn = 'analyze-product-fit';
     updateResult(fn, { status: 'loading' });
     const start = Date.now();
 
@@ -316,19 +316,19 @@ export function EdgeFunctionTester() {
             </div>
             <Button
               onClick={testAnalyzeTOTVSFit}
-              disabled={testResults['analyze-totvs-fit']?.status === 'loading'}
+              disabled={testResults['analyze-product-fit']?.status === 'loading'}
               className="w-full"
             >
-              {testResults['analyze-totvs-fit']?.status === 'loading' ? (
+              {testResults['analyze-product-fit']?.status === 'loading' ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Testando...
                 </>
               ) : (
-                'Testar analyze-totvs-fit'
+                'Testar analyze-product-fit'
               )}
             </Button>
-            {renderResult('analyze-totvs-fit')}
+            {renderResult('analyze-product-fit')}
           </TabsContent>
         </Tabs>
       </CardContent>

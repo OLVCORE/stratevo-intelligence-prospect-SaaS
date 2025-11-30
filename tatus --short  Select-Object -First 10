@@ -1,0 +1,95 @@
+warning: in the working copy of 'src/App.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/common/ErrorBoundary.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/companies/ApolloReviewDialog.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/debug/EdgeFunctionTester.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/icp/QuarantineActionsMenu.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/AppLayout.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/AppSidebar.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/leads-pool/PoolRowActions.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/onboarding/OnboardingWizard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/onboarding/steps/Step3PerfilClienteIdeal.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/onboarding/steps/Step4SituacaoAtual.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/reports/FitReport.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/roi/InteractiveROICalculator.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/sdr/DealFormDialog.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/sdr/EnhancedWhatsAppInterface.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/totvs/TOTVSCheckCard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/totvs/TOTVSStatusBadge.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/contexts/AuthContext.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/hooks/useCompanyDiscovery.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/hooks/useReverifyAllCompanies.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/hooks/useTOTVSDetectionV2.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/hooks/useTOTVSDetectionV3.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/db/companies.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/Auth.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CentralICP/BatchAnalysis.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CentralICP/IndividualAnalysis.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CompaniesManagementPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/FitTOTVSPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/Index.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/Leads/ICPQuarantine.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/SettingsPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/config.toml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/capture-lead-api/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/sdr-send-message/index.ts', LF will be replaced by CRLF the next time Git touches it
+.gitignore
+CHECKLIST_FINAL_COMPLETO.md
+RESUMO_CORRECOES_FINAIS.md
+RESUMO_FINAL_CORRECOES.md
+package-lock.json
+package.json
+src/App.tsx
+src/components/common/ErrorBoundary.tsx
+src/components/companies/ApolloReviewDialog.tsx
+src/components/companies/ExpandableCompaniesTableBR.tsx
+src/components/debug/EdgeFunctionTester.tsx
+src/components/icp/ICPBulkAnalysisWithMapping.tsx
+src/components/icp/QuarantineActionsMenu.tsx
+src/components/icp/QuarantineRowActions.tsx
+src/components/icp/tabs/OpportunitiesTab.tsx
+src/components/layout/AppLayout.tsx
+src/components/layout/AppSidebar.tsx
+src/components/leads-pool/PoolRowActions.tsx
+src/components/onboarding/OnboardingWizard.tsx
+src/components/onboarding/ProgressBar.tsx
+src/components/onboarding/steps/Step1DadosBasicos.tsx
+src/components/onboarding/steps/Step3PerfilClienteIdeal.tsx
+src/components/onboarding/steps/Step4SituacaoAtual.tsx
+src/components/onboarding/steps/Step5HistoricoEnriquecimento.tsx
+src/components/reports/FitReport.tsx
+src/components/roi/InteractiveROICalculator.tsx
+src/components/sdr/DealFormDialog.tsx
+src/components/sdr/EnhancedWhatsAppInterface.tsx
+src/components/totvs/TOTVSCheckCard.tsx
+src/components/totvs/TOTVSStatusBadge.tsx
+src/components/totvs/VerificationProgressBar.tsx
+src/contexts/AuthContext.tsx
+src/contexts/TenantContext.tsx
+src/hooks/useCompanies.ts
+src/hooks/useCompanyDiscovery.ts
+src/hooks/useReverifyAllCompanies.ts
+src/hooks/useSimpleTOTVSCheck.ts
+src/hooks/useTOTVSDetectionV2.ts
+src/hooks/useTOTVSDetectionV3.ts
+src/hooks/useTenantData.ts
+src/lib/db/companies.ts
+src/pages/Auth.tsx
+src/pages/CentralICP/BatchAnalysis.tsx
+src/pages/CentralICP/BatchTOTVSAnalysis.tsx
+src/pages/CentralICP/IndividualAnalysis.tsx
+src/pages/CompaniesManagementPage.tsx
+src/pages/FitTOTVSPage.tsx
+src/pages/Index.tsx
+src/pages/Leads/ApprovedLeads.tsx
+src/pages/Leads/ICPQuarantine.tsx
+src/pages/SettingsPage.tsx
+src/pages/TenantOnboarding.tsx
+src/services/brasilApiComplete.ts
+src/services/multi-tenant.service.ts
+supabase/config.toml
+supabase/functions/analyze-stc-automatic/index.ts
+supabase/functions/auto-enrich-company/index.ts
+supabase/functions/capture-lead-api/index.ts
+supabase/functions/client-discovery-wave7/index.ts
+supabase/functions/company-monitoring-cron/index.ts
+supabase/functions/sdr-send-message/index.ts

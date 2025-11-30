@@ -144,7 +144,7 @@ serve(async (req) => {
     if (request.channel === 'whatsapp') {
       sendResult = await sendWhatsApp(request.to, request.body, user.id, supabase);
     } else if (request.channel === 'email') {
-      sendResult = await sendEmail(request.to, request.subject || 'Mensagem', request.body, user.id, supabase);
+      sendResult = await sendEmail(request.to, request.subject || 'Mensagem', request.body, user.id, supabase, companyId, conversationId);
     } else {
       throw new Error('Unsupported channel');
     }
@@ -325,7 +325,7 @@ async function sendWhatsApp(to: string, body: string, userId: string, supabase: 
   }
 }
 
-async function sendEmail(to: string, subject: string, body: string, userId: string, supabase: any): Promise<{ success: boolean; providerMessageId?: string; error?: string }> {
+async function sendEmail(to: string, subject: string, body: string, userId: string, supabase: any, companyId?: string, conversationId?: string): Promise<{ success: boolean; providerMessageId?: string; error?: string; trackingToken?: string }> {
   try {
     // Get email integration credentials from database
     const { data: integration, error: integrationError } = await supabase
@@ -374,6 +374,23 @@ async function sendEmail(to: string, subject: string, body: string, userId: stri
       };
     }
 
+    // Criar tracking token
+    const trackingToken = crypto.randomUUID();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const trackingPixelUrl = `${supabaseUrl}/functions/v1/crm-email-tracking-webhook?token=${trackingToken}&type=open`;
+    
+    // Adicionar tracking pixel ao HTML
+    const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" />`;
+    
+    // Substituir links no body por versões com tracking
+    const linkRegex = /<a\s+([^>]*href=["']([^"']+)["'][^>]*)>/gi;
+    let trackedBody = body.replace(linkRegex, (match, attrs, url) => {
+      const trackedUrl = `${supabaseUrl}/functions/v1/crm-email-tracking-webhook?token=${trackingToken}&type=click&url=${encodeURIComponent(url)}`;
+      return `<a ${attrs.replace(url, trackedUrl)}>`;
+    });
+    
+    trackedBody = trackedBody.replace(/\n/g, '<br>') + trackingPixel;
+
     // Send via Resend API directly
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -385,7 +402,7 @@ async function sendEmail(to: string, subject: string, body: string, userId: stri
         from: 'OLV Consultores <contato@consultores.olvinternacional.com.br>',
         to: [to],
         subject: subject,
-        html: body.replace(/\n/g, '<br>'),
+        html: trackedBody,
       }),
     });
 
@@ -401,9 +418,67 @@ async function sendEmail(to: string, subject: string, body: string, userId: stri
     const data = await response.json();
     console.log('[Email] Sent successfully via Resend:', data.id);
 
+    // Criar registro de tracking
+    if (companyId) {
+      // Buscar tenant_id da company
+      const { data: company } = await supabase
+        .from('companies')
+        .select('tenant_id')
+        .eq('id', companyId)
+        .single();
+
+      if (company?.tenant_id) {
+        // Buscar lead_id ou deal_id relacionado
+        let leadId = null;
+        let dealId = null;
+
+        if (conversationId) {
+          const { data: conv } = await supabase
+            .from('conversations')
+            .select('company_id')
+            .eq('id', conversationId)
+            .single();
+
+          if (conv?.company_id) {
+            const { data: lead } = await supabase
+              .from('leads')
+              .select('id')
+              .eq('company_id', conv.company_id)
+              .eq('tenant_id', company.tenant_id)
+              .limit(1)
+              .maybeSingle();
+            leadId = lead?.id || null;
+
+            const { data: deal } = await supabase
+              .from('deals')
+              .select('id')
+              .eq('company_id', conv.company_id)
+              .eq('tenant_id', company.tenant_id)
+              .limit(1)
+              .maybeSingle();
+            dealId = deal?.id || null;
+          }
+        }
+
+        await supabase
+          .from('email_tracking')
+          .insert({
+            tenant_id: company.tenant_id,
+            tracking_token: trackingToken,
+            recipient_email: to,
+            subject: subject,
+            lead_id: leadId,
+            deal_id: dealId,
+            sent_at: new Date().toISOString(),
+            delivery_status: 'sent',
+          });
+      }
+    }
+
     return { 
       success: true, 
       providerMessageId: data.id || `${Date.now()}@resend.dev`,
+      trackingToken: trackingToken,
     };
 
   } catch (error: any) {

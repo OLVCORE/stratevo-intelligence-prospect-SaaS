@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <!-- Google Tag Manager - Loaded only after consent and not in preview -->
+    <script>
+      (function() {
+        window.dataLayer = window.dataLayer || [];
+        function isLovablePreview() {
+          try {
+            const h = location.hostname || '';
+            return h.endsWith('.lovableproject.com') || h.endsWith('.lovable.app') || location.search.includes('__lovable_token');
+          } catch (e) { return true; }
+        }
+        function loadGTM() {
+          if (window.gtmLoaded) return;
+          window.gtmLoaded = true;
+          (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+          new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+          j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+          'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+          })(window,document,'script','dataLayer','GTM-T3P68DR');
+        }
+        // If consent already given and not in preview, load GTM
+        if (!isLovablePreview() && localStorage.getItem('cookieConsent') === 'accepted') {
+          loadGTM();
+        }
+        // Listen for consent event
+        window.addEventListener('cookieConsentAccepted', function() {
+          if (!isLovablePreview()) loadGTM();
+        });
+      })();
+    </script>
+    <!-- End Google Tag Manager -->
+    
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Favicons - multiple sizes for better visibility -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.png" />
+    
+    
+    <!-- LGPD - Adopt.io (disabled in preview to avoid cross-origin frame access) -->
+    <meta name="adopt-website-id" content="1d3503e5-6e70-4135-906f-6c9840d27875" />
+    <script>
+      (function() {
+        function isLovablePreview() {
+          try {
+            const h = location.hostname || '';
+            return h.endsWith('.lovableproject.com') || h.endsWith('.lovable.app') || location.search.includes('__lovable_token');
+          } catch (e) { return true; }
+        }
+        if (!isLovablePreview()) {
+          var s = document.createElement('script');
+          s.src = 'https://tag.goadopt.io/injector.js?website_code=1d3503e5-6e70-4135-906f-6c9840d27875';
+          s.async = true;
+          s.className = 'adopt-injector';
+          document.head.appendChild(s);
+        } else {
+          console.log('Adopt cookie script disabled in preview environment');
+        }
+      })();
+    </script>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#059669" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Espaço Olinda" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/logo-192.png" />
+    
+    <!-- Performance: Preconnect to external domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+    
+    <!-- Signature Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&display=swap" rel="stylesheet" />
+    
+    <title>Espaço Olinda | Casamentos e Eventos de Luxo no Campo - São Paulo</title>
+    <meta name="description" content="Espaço premium para casamentos e eventos corporativos em São Paulo. Cerimônia coberta, hospedagem inclusa, 1 evento/dia. Exclusividade e natureza a 45min de SP." />
+    <meta name="keywords" content="espaço para casamento sp, casamento no campo são paulo, eventos corporativos sp, espaço eventos premium, venue casamento luxo, hospedagem eventos" />
+    <meta name="author" content="Espaço Olinda" />
+    <meta name="geo.region" content="BR-SP" />
+    <meta name="geo.placename" content="São Paulo" />
+    <link rel="canonical" href="https://olinda-verde-luxo.lovable.app/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://espacoolinda.com.br" />
+    <meta property="og:title" content="Espaço Olinda | Casamentos e Eventos de Luxo no Campo" />
+    <meta property="og:description" content="Onde o 'sim' encontra a natureza. Cerimônia coberta, hospedagem on-site e 1 evento por dia para sua celebração exclusiva." />
+    <meta property="og:image" content="https://espacoolinda.com.br/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://espacoolinda.com.br" />
+    <meta name="twitter:title" content="Espaço Olinda | Casamentos e Eventos de Luxo no Campo" />
+    <meta name="twitter:description" content="Onde o 'sim' encontra a natureza. Experiência completa para eventos inesquecíveis." />
+    <meta name="twitter:image" content="https://espacoolinda.com.br/og-image.jpg" />
+    
+    <!-- Structured Data - EventVenue -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "EventVenue",
+      "name": "Espaço Olinda",
+      "description": "Espaço premium para casamentos e eventos corporativos no campo. Cerimônia coberta, hospedagem inclusa, exclusividade total.",
+      "url": "https://olinda-verde-luxo.lovable.app",
+      "telephone": "+55-11-99999-9999",
+      "email": "contato@espacoolinda.com.br",
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "BR",
+        "addressRegion": "SP",
+        "addressLocality": "São Paulo"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": "-23.5505",
+        "longitude": "-46.6333"
+      },
+      "image": "https://olinda-verde-luxo.lovable.app/og-image.jpg",
+      "priceRange": "$$$",
+      "openingHoursSpecification": {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+        "opens": "09:00",
+        "closes": "23:00"
+      },
+      "amenityFeature": [
+        {
+          "@type": "LocationFeatureSpecification",
+          "name": "Cerimônia Coberta",
+          "value": true
+        },
+        {
+          "@type": "LocationFeatureSpecification",
+          "name": "Hospedagem On-Site",
+          "value": true
+        },
+        {
+          "@type": "LocationFeatureSpecification",
+          "name": "Estacionamento",
+          "value": true
+        }
+      ],
+      "sameAs": [
+        "https://instagram.com/espacoolinda"
+      ]
+    }
+    </script>
+    
+    <!-- Structured Data - LocalBusiness -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "LocalBusiness",
+      "name": "Espaço Olinda",
+      "image": "https://olinda-verde-luxo.lovable.app/hero-main.jpg",
+      "description": "Espaço exclusivo para casamentos, eventos corporativos e celebrações em meio à natureza exuberante de Santa Isabel, SP.",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Santa Isabel",
+        "addressLocality": "Santa Isabel",
+        "addressRegion": "SP",
+        "addressCountry": "BR"
+      },
+      "telephone": "+55-11-1234-5678",
+      "url": "https://olinda-verde-luxo.lovable.app",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "reviewCount": "127"
+      }
+    }
+    </script>
+    
+    <!-- Structured Data - Reviews and Aggregate Rating -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      "itemListElement": [
+        {
+          "@type": "Review",
+          "author": {"@type": "Person", "name": "Ana Paula & Ricardo"},
+          "datePublished": "2024-09-15",
+          "reviewBody": "O Espaço Olinda superou todas as nossas expectativas. A cerimônia ao ar livre foi mágica e a equipe nos apoiou em cada detalhe. Nossos convidados elogiaram muito!",
+          "reviewRating": {"@type": "Rating","ratingValue": "5","bestRating": "5","worstRating": "1"},
+          "itemReviewed": {"@type": "EventVenue", "name": "Espaço Olinda"}
+        },
+        {
+          "@type": "Review",
+          "author": {"@type": "Person", "name": "Tech Solutions Brasil"},
+          "datePublished": "2024-08-20",
+          "reviewBody": "Realizamos nosso evento de lançamento no Espaço Olinda. A estrutura é impecável, o ambiente inspirador e o atendimento excepcional. Voltaremos com certeza!",
+          "reviewRating": {"@type": "Rating","ratingValue": "5","bestRating": "5","worstRating": "1"},
+          "itemReviewed": {"@type": "EventVenue", "name": "Espaço Olinda"}
+        },
+        {
+          "@type": "Review",
+          "author": {"@type": "Person", "name": "Juliana & Fernando"},
+          "datePublished": "2024-07-10",
+          "reviewBody": "Um sonho realizado! Desde a primeira visita até o grande dia, tudo foi perfeito. A hospedagem permitiu que aproveitássemos cada momento com nossa família.",
+          "reviewRating": {"@type": "Rating","ratingValue": "5","bestRating": "5","worstRating": "1"},
+          "itemReviewed": {"@type": "EventVenue", "name": "Espaço Olinda"}
+        }
+      ]
+    }
+    </script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Onde fica o Espaço Olinda e como chegar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "O Espaço Olinda está localizado em Santa Isabel (SP), a apenas 50 minutos de São Paulo. Use o Waze: https://waze.com/ul/h6gz5e4hkx."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Qual o valor da locação do Espaço Olinda?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Os valores de locação iniciam em R$ 15.000, incluindo uso exclusivo do espaço, mobiliário e estrutura de apoio."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Há pacotes com buffet incluso?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sim. O pacote com locação e buffet parte de R$ 40.000 para até 150 pessoas, incluindo buffet, bebidas, equipe, segurança, limpeza e estacionamento."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "O Espaço Olinda realiza eventos corporativos?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sim. Ideal para confraternizações, treinamentos, lançamentos e eventos empresariais com estrutura completa e ambiente sofisticado."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Posso contratar meus próprios fornecedores?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sim. O cliente tem liberdade total para contratar seus fornecedores, desde que regulamentados e em conformidade com as normas do espaço."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Há hospedagem disponível?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sim. O Espaço Olinda oferece suítes e acomodações para até 40 pessoas, proporcionando conforto e conveniência."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Como solicitar um orçamento personalizado?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Entre em contato pelo WhatsApp ou formulário do site informando tipo de evento, data e número de convidados para uma proposta personalizada."
+          }
+        }
+      ]
+    }
+    </script>
+  </head>
+
+  <body>
+    <!-- Google Tag Manager (noscript) removed in preview and until consent to avoid cross-origin issues -->
+    
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Service Worker Registration (disabled in preview to avoid cache issues) -->
+    <script>
+      (function() {
+        function isLovablePreview() {
+          try {
+            const h = location.hostname || '';
+            return h.endsWith('.lovableproject.com') || h.endsWith('.lovable.app') || location.search.includes('__lovable_token');
+          } catch (e) { return true; }
+        }
+        if ('serviceWorker' in navigator) {
+          if (isLovablePreview()) {
+            // In preview, ensure no stale SW controls the page
+            navigator.serviceWorker.getRegistrations().then(regs => {
+              regs.forEach(r => r.unregister());
+              console.log('SW unregistered in preview');
+            }).catch(() => {});
+          } else {
+            window.addEventListener('load', () => {
+              navigator.serviceWorker.register('/sw.js')
+                .then(registration => console.log('SW registered:', registration))
+                .catch(error => console.log('SW registration failed:', error));
+            });
+          }
+        }
+      })();
+    </script>
+  </body>
+</html>

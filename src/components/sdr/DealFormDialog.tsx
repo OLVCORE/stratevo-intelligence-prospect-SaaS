@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 import { Loader2, Check, ChevronsUpDown, Building2, Sparkles, X, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { normalizeCompanyData } from '@/lib/utils/companyDataNormalizer';
@@ -23,6 +24,7 @@ interface DealFormDialogProps {
 
 export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialogProps) {
   const { toast } = useToast();
+  const { tenant } = useTenant();
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'select' | 'manual' | 'icp'>('icp');
   const [companies, setCompanies] = useState<any[]>([]);
@@ -317,7 +319,10 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
 
           const { data: created, error: insertErr } = await supabase
             .from('companies')
-            .insert(companyData)
+            .insert({
+              ...companyData,
+              tenant_id: tenant?.id,
+            })
             .select('id, company_name, cnpj, employees, industry, revenue, lead_score, location')
             .single();
           

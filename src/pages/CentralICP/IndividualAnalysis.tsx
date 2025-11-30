@@ -23,6 +23,7 @@ export default function IndividualAnalysis() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const companyId = searchParams.get('company');
+  const icpId = searchParams.get('icp');
   const [showCompanySelector, setShowCompanySelector] = useState(!companyId);
   const [showEnrichmentDialog, setShowEnrichmentDialog] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -80,7 +81,10 @@ export default function IndividualAnalysis() {
 
   const handleSelectCompany = (ids: string[]) => {
     const newCompanyId = ids[0];
-    navigate(`/central-icp/individual?company=${newCompanyId}`);
+    const url = icpId 
+      ? `/central-icp/individual?company=${newCompanyId}&icp=${icpId}`
+      : `/central-icp/individual?company=${newCompanyId}`;
+    navigate(url);
     setShowCompanySelector(false);
   };
 

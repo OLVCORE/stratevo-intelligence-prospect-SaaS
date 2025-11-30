@@ -1,3 +1,4 @@
+'use client';
 import { 
   LayoutDashboard, 
   Search, 
@@ -40,7 +41,15 @@ import {
   DollarSign,
   History,
   XCircle,
-  Filter
+  Filter,
+  UsersRound,
+  Calendar,
+  Mail,
+  UserCog,
+  Calculator,
+  GraduationCap,
+  Play,
+  Plus
 } from "lucide-react";
 import {
   Sidebar,
@@ -152,6 +161,20 @@ const menuGroups: MenuGroup[] = [
     icon: Filter,
     items: [
       {
+        title: "Central ICP",
+        icon: Target,
+        url: "/central-icp",
+        highlighted: true,
+        description: "Hub central de análise e gestão de ICP",
+        submenu: [
+          { title: "Home", icon: LayoutDashboard, url: "/central-icp", description: "Visão geral da Central ICP" },
+          { title: "Meus ICPs", icon: FileText, url: "/central-icp/profiles", description: "Visualizar e gerenciar ICPs configurados" },
+          { title: "Análise Individual", icon: Search, url: "/central-icp/individual", description: "Qualificar empresas uma por vez" },
+          { title: "Análise em Massa", icon: Zap, url: "/central-icp/batch-analysis", description: "Processar múltiplas empresas automaticamente" },
+          { title: "Dashboard", icon: BarChart3, url: "/central-icp/dashboard", description: "Resultados e métricas de qualificação" },
+        ],
+      },
+      {
         title: "Quarentena ICP",
         icon: Inbox,
         url: "/leads/icp-quarantine",
@@ -170,12 +193,6 @@ const menuGroups: MenuGroup[] = [
         icon: XCircle,
         url: "/leads/discarded",
         description: "Histórico de empresas descartadas"
-      },
-      {
-        title: "Histórico STC",
-        icon: Target,
-        url: "/leads/stc-history",
-        description: "Verificações TOTVS realizadas"
       },
     ]
   },
@@ -197,6 +214,13 @@ const menuGroups: MenuGroup[] = [
           { title: "Sales Coaching", icon: Award, url: "/sdr/coaching", description: "Análise de calls com IA e coaching personalizado" },
           { title: "Integrações", icon: Zap, url: "/sdr/integrations", description: "Conecte com CRM, e-mail e ferramentas externas" },
         ],
+      },
+      {
+        title: "CRM",
+        icon: Users,
+        url: "/crm",
+        highlighted: true,
+        description: "Sistema completo de CRM multi-tenant com automações e analytics"
       },
     ]
   },
@@ -231,6 +255,19 @@ const menuGroups: MenuGroup[] = [
         icon: BookOpen,
         url: "/playbooks",
         description: "Guias de abordagem, melhores práticas e scripts aprovados"
+      },
+      {
+        title: "Academia de Vendas",
+        icon: GraduationCap,
+        url: "/sales-academy",
+        description: "Trilhas de aprendizado, certificações e simulador de vendas",
+        submenu: [
+          { title: "Dashboard", icon: LayoutDashboard, url: "/sales-academy/dashboard", description: "Visão geral do seu progresso" },
+          { title: "Trilhas de Aprendizado", icon: BookOpen, url: "/sales-academy/learning-paths", description: "Explore trilhas personalizadas" },
+          { title: "Certificações", icon: Award, url: "/sales-academy/certifications", description: "Certifique suas habilidades" },
+          { title: "Biblioteca de Playbooks", icon: FileText, url: "/sales-academy/playbooks", description: "Playbooks testados e aprovados" },
+          { title: "Simulador de Vendas", icon: Play, url: "/sales-academy/simulator", description: "Pratique em cenários realistas" },
+        ],
       },
       {
         title: "Biblioteca de Personas",
@@ -290,7 +327,12 @@ const menuGroups: MenuGroup[] = [
         title: "Configurações",
         icon: Settings,
         url: "/settings",
-        description: "Integrações, preferências do sistema e gerenciamento de usuários"
+        description: "Integrações, preferências do sistema e gerenciamento de usuários",
+        submenu: [
+          { title: "Configurações Gerais", icon: Settings, url: "/settings", description: "Integrações e preferências" },
+          { title: "Minhas Empresas", icon: Building2, url: "/my-companies", description: "Gerenciar múltiplos CNPJs" },
+          { title: "Gerenciar Usuários", icon: Users, url: "/admin/users", description: "Convidar e gerenciar usuários" },
+        ],
       },
     ]
   },
@@ -541,7 +583,7 @@ export function AppSidebar() {
               </p>
             </div>
           )}
-          
+
           {/* Toggle button - sempre visível */}
           <div className="pt-2 border-t border-sidebar-border/50">
             <Button

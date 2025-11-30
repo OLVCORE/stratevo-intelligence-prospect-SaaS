@@ -1,0 +1,495 @@
+# 🎯 METODOLOGIA DE TRIAGEM - ANÁLISE DE INTENÇÃO DE COMPRA
+
+## 📋 VISÃO GERAL
+
+A **Verificação de Uso** (busca de evidências de consumo) **NÃO SE APLICA MAIS** em um ambiente multi-tenant genérico.
+
+**NOVO OBJETIVO:** **TRIAGEM** - Avaliar **Intenção de Compra** através de análise 360° focada em **FIT** e **OPORTUNIDADE**.
+
+---
+
+## 🔄 MUDANÇA DE PARADIGMA
+
+### **ANTES (TOTVS-específico):**
+- ❌ Buscar evidências de uso de produtos TOTVS
+- ❌ Se encontrar → NO-GO (não pode vender)
+- ❌ Objetivo: Evitar prospectar clientes existentes
+
+### **AGORA (Multi-tenant genérico):**
+- ✅ Avaliar **Intenção de Compra** (Purchase Intention)
+- ✅ Analisar **FIT** entre empresa investigada e produtos do tenant
+- ✅ Identificar **OPORTUNIDADES** de negócio
+- ✅ Objetivo: Qualificar leads baseado em potencial de compra
+
+---
+
+## 🎯 NOVA METODOLOGIA: TRIAGEM 360°
+
+### **1. ANÁLISE DE FIT ESTRUTURAL**
+
+#### **A. Fit por Setor/Nicho**
+```
+Score de Fit Setorial = (
+  Setor da Empresa ∈ Setores-Alvo do Tenant? → 100 pts : 0 pts
+  + Nicho da Empresa ∈ Nichos-Alvo do Tenant? → 50 pts : 0 pts
+  + CNAE Principal ∈ CNAEs-Alvo do Tenant? → 30 pts : 0 pts
+)
+```
+
+**Métricas:**
+- **Setor:** Match exato = 100%, Similar = 50%, Diferente = 0%
+- **Nicho:** Match exato = 100%, Similar = 30%, Diferente = 0%
+- **CNAE:** Match exato = 100%, CNAE relacionado = 50%, Não relacionado = 0%
+
+---
+
+#### **B. Fit por NCM (Nomenclatura Comum do Mercosul)**
+```
+Score de Fit NCM = (
+  NCMs da Empresa ∩ NCMs-Alvo do Tenant → 100 pts por match
+  + NCMs Relacionados → 50 pts por match
+)
+```
+
+**Lógica:**
+- Se tenant vende produtos com NCM específico
+- E empresa investigada trabalha com esses NCMs
+- → **FIT ALTO** (empresa precisa de software para gerenciar esses produtos)
+
+**Exemplo:**
+- Tenant: Software para gestão de NCM 8471 (Computadores)
+- Empresa: Importa/Exporta NCM 8471
+- → **FIT ALTO** (empresa precisa de software para gerenciar esses produtos)
+
+---
+
+#### **C. Fit por Porte e Características**
+```
+Score de Fit Porte = (
+  Porte da Empresa ∈ Portes-Alvo do Tenant? → 100 pts : 0 pts
+  + Receita ∈ Faixa-Alvo do Tenant? → 50 pts : 0 pts
+  + Funcionários ∈ Faixa-Alvo do Tenant? → 30 pts : 0 pts
+)
+```
+
+**Métricas:**
+- **Porte:** Micro/Pequena/Média/Grande → Match com ICP do tenant
+- **Receita:** Faixa de receita-alvo do tenant
+- **Funcionários:** Número de funcionários-alvo
+
+---
+
+### **2. ANÁLISE DE INTENÇÃO DE COMPRA**
+
+#### **A. Sinais de Expansão/Crescimento**
+```
+Score de Intenção = Σ (Peso do Sinal × Relevância)
+```
+
+**Sinais (com pesos):**
+- **Contratações recentes** (vagas abertas): 30 pts
+- **Expansão geográfica** (novas filiais): 25 pts
+- **Investimento em tecnologia** (vagas TI, notícias): 20 pts
+- **Crescimento de receita** (notícias financeiras): 15 pts
+- **Mudança de gestão** (novos executivos): 10 pts
+
+**Fontes:**
+- Portais de vagas (LinkedIn, Indeed, Gupy)
+- Notícias de expansão/investimento
+- Mudanças no quadro societário (Receita Federal)
+- Sinais de digitalização
+
+---
+
+#### **B. Sinais de Dor/Pain Points**
+```
+Score de Dor = Σ (Intensidade da Dor × Relevância para Produto)
+```
+
+**Dores identificadas:**
+- **Ineficiência operacional** (notícias sobre problemas): 25 pts
+- **Necessidade de modernização** (artigos sobre transformação digital): 20 pts
+- **Compliance/Regulamentação** (mudanças regulatórias): 15 pts
+- **Escalabilidade** (crescimento rápido sem estrutura): 10 pts
+
+**Como detectar:**
+- Análise de notícias (palavras-chave: "problema", "desafio", "necessidade")
+- Análise de vagas (busca por perfis que resolvem dores específicas)
+- Análise de setor (tendências e desafios do setor)
+
+---
+
+#### **C. Sinais de Budget/Recursos**
+```
+Score de Budget = (
+  Receita crescente → 30 pts
+  + Investimentos recentes → 25 pts
+  + Contratações estratégicas → 20 pts
+  + Expansão → 15 pts
+)
+```
+
+**Indicadores:**
+- Receita em crescimento (últimos 2 anos)
+- Investimentos em tecnologia/infraestrutura
+- Contratações de cargos estratégicos (CIO, CTO, Diretor de TI)
+- Expansão de operações
+
+---
+
+### **3. ANÁLISE DE TIMING**
+
+#### **A. Momento Ideal de Abordagem**
+```
+Score de Timing = (
+  Sinal de compra recente (< 90 dias) → 100 pts
+  + Sinal de compra médio (90-180 dias) → 50 pts
+  + Sinal de compra antigo (> 180 dias) → 20 pts
+)
+```
+
+**Sinais de timing:**
+- Vagas abertas recentes relacionadas ao produto
+- Notícias de investimento/expansão recentes
+- Mudanças organizacionais recentes
+- Eventos do setor próximos
+
+---
+
+### **4. ANÁLISE DE COMPETIÇÃO**
+
+#### **A. Verificação de Concorrentes**
+```
+Score de Concorrência = (
+  Usa concorrente direto → -50 pts (mais difícil de converter)
+  + Usa solução legada → +30 pts (oportunidade de migração)
+  + Sem solução → +50 pts (greenfield)
+)
+```
+
+**Lógica:**
+- Se empresa usa concorrente direto → Menor prioridade
+- Se empresa usa solução legada → Oportunidade de migração
+- Se empresa não tem solução → Oportunidade greenfield (mais fácil)
+
+---
+
+## 📊 SISTEMA DE SCORING FINAL
+
+### **Fórmula de Score de Intenção de Compra**
+
+```
+Score de Intenção de Compra (0-100) = (
+  Fit Estrutural        × 30% +
+  Intenção de Compra    × 35% +
+  Timing                × 20% +
+  Competição            × 15%
+)
+```
+
+**Componentes:**
+
+1. **Fit Estrutural (0-100):**
+   - Fit Setor/Nicho: 0-100
+   - Fit NCM: 0-100
+   - Fit Porte: 0-100
+   - **Média ponderada:** Setor (50%) + NCM (30%) + Porte (20%)
+
+2. **Intenção de Compra (0-100):**
+   - Sinais de Expansão: 0-30
+   - Sinais de Dor: 0-25
+   - Sinais de Budget: 0-20
+   - Outros sinais: 0-25
+
+3. **Timing (0-100):**
+   - Recência dos sinais
+   - Momento ideal de abordagem
+
+4. **Competição (0-100):**
+   - Uso de concorrente: -50
+   - Solução legada: +30
+   - Sem solução: +50
+
+---
+
+## 🎯 CLASSIFICAÇÃO FINAL (TRIAGEM)
+
+### **TIER 1: LEAD QUENTE (80-100 pontos)**
+**Critérios:**
+- ✅ Fit estrutural alto (setor + NCM + porte)
+- ✅ Múltiplos sinais de intenção de compra
+- ✅ Timing ideal (sinais recentes)
+- ✅ Sem concorrente forte OU solução legada
+
+**Ação:** Abordagem imediata, alta prioridade
+
+---
+
+### **TIER 2: LEAD MORNO (60-79 pontos)**
+**Critérios:**
+- ✅ Fit estrutural médio-alto
+- ✅ Alguns sinais de intenção
+- ✅ Timing moderado
+- ✅ Oportunidade identificada
+
+**Ação:** Abordagem estruturada, nurturing
+
+---
+
+### **TIER 3: LEAD FRIO (40-59 pontos)**
+**Critérios:**
+- ⚠️ Fit estrutural médio
+- ⚠️ Poucos sinais de intenção
+- ⚠️ Timing não ideal
+- ⚠️ Concorrência presente
+
+**Ação:** Monitoramento, abordagem futura
+
+---
+
+### **TIER 4: DESQUALIFICADO (0-39 pontos)**
+**Critérios:**
+- ❌ Fit estrutural baixo
+- ❌ Sem sinais de intenção
+- ❌ Timing inadequado
+- ❌ Concorrente forte instalado
+
+**Ação:** Descartar ou arquivar para futuro
+
+---
+
+## 🔍 FONTES DE DADOS PARA TRIAGEM
+
+### **1. Dados Estruturais (Fit)**
+- **Receita Federal:** Setor, CNAE, Porte, Natureza Jurídica
+- **Configuração do Tenant:** Setores-alvo, Nichos-alvo, CNAEs-alvo, NCMs-alvo
+- **Empresa Investigada:** Dados cadastrais completos
+
+### **2. Sinais de Intenção**
+- **Portais de Vagas:** LinkedIn, Indeed, Gupy (vagas relacionadas)
+- **Notícias:** Expansão, investimento, mudanças
+- **Receita Federal:** Mudanças societárias, aumento de capital
+- **Apollo/LinkedIn:** Contratações estratégicas, mudanças organizacionais
+
+### **3. Análise de Concorrência**
+- **Web Search:** Menções de concorrentes
+- **Tecnologias:** Stack tecnológico atual
+- **Notícias:** Parcerias com concorrentes
+
+---
+
+## 🛠️ IMPLEMENTAÇÃO TÉCNICA
+
+### **1. Nova Edge Function: `analise-triagem`**
+
+```typescript
+// supabase/functions/analise-triagem/index.ts
+
+interface AnaliseTriagemRequest {
+  company_id: string;
+  company_name: string;
+  cnpj: string;
+  tenant_id: string;
+}
+
+interface AnaliseTriagemResult {
+  score_intencao_compra: number; // 0-100
+  tier: 'quente' | 'morno' | 'frio' | 'desqualificado';
+  fit_estrutural: {
+    fit_setor: number;
+    fit_nicho: number;
+    fit_cnae: number;
+    fit_ncm: number;
+    fit_porte: number;
+  };
+  intencao_compra: {
+    sinais_expansao: number;
+    pontos_dor: number;
+    sinais_budget: number;
+    score_total: number;
+  };
+  timing: {
+    score_recencia: number;
+    momento_ideal: boolean;
+  };
+  competicao: {
+    usa_concorrente: boolean;
+    usa_legado: boolean;
+    greenfield: boolean;
+    score: number;
+  };
+  recomendacoes: string[];
+  proximas_acoes: string[];
+}
+```
+
+---
+
+### **2. Componente de Triagem na UI**
+
+```typescript
+// src/components/triagem/AnaliseTriagemCard.tsx
+
+interface AnaliseTriagemCardProps {
+  companyId: string;
+  companyName: string;
+  cnpj: string;
+}
+
+// Exibe:
+// - Score de Intenção de Compra (0-100)
+// - Breakdown por componente (Fit, Intenção, Timing, Competição)
+// - Tier (QUENTE/MORNO/FRIO/DESQUALIFICADO)
+// - Recomendações e próximas ações
+```
+
+---
+
+### **3. Integração com Quarentena ICP**
+
+```typescript
+// Ao adicionar empresa na quarentena:
+// 1. Buscar dados estruturais (Receita Federal)
+// 2. Executar Análise de Triagem
+// 3. Classificar automaticamente por Tier
+// 4. Exibir Score de Intenção de Compra
+```
+
+---
+
+## 📋 CHECKLIST DE IMPLEMENTAÇÃO
+
+### **FASE 1: Estrutura Base**
+- [ ] Criar tabela `resultados_analise_triagem`
+- [ ] Criar Edge Function `analise-triagem`
+- [ ] Criar componente `AnaliseTriagemCard`
+- [ ] Integrar com Quarentena ICP
+
+### **FASE 2: Análise de Fit**
+- [ ] Implementar cálculo de Fit Setorial
+- [ ] Implementar cálculo de Fit NCM
+- [ ] Implementar cálculo de Fit Porte
+- [ ] Buscar dados do tenant (setores, nichos, CNAEs, NCMs)
+
+### **FASE 3: Sinais de Intenção**
+- [ ] Buscar vagas relacionadas (portais)
+- [ ] Analisar notícias de expansão/investimento
+- [ ] Detectar mudanças societárias (Receita Federal)
+- [ ] Identificar sinais de dor/pain points
+
+### **FASE 4: Timing e Competição**
+- [ ] Calcular recência dos sinais
+- [ ] Verificar uso de concorrentes
+- [ ] Identificar soluções legadas
+- [ ] Classificar timing ideal
+
+### **FASE 5: Scoring e Classificação**
+- [ ] Implementar fórmula de Score de Intenção de Compra
+- [ ] Classificar por Tier (QUENTE/MORNO/FRIO/DESQUALIFICADO)
+- [ ] Gerar recomendações automáticas
+- [ ] Sugerir próximas ações
+
+---
+
+## 🎯 PRÓXIMOS PASSOS RECOMENDADOS
+
+1. **Revisar configuração do Tenant:**
+   - Setores-alvo
+   - Nichos-alvo
+   - CNAEs-alvo
+   - NCMs-alvo
+   - Portes-alvo
+
+2. **Criar Edge Function `analise-triagem`:**
+   - Implementar análise 360°
+   - Calcular Score de Intenção de Compra
+   - Classificar por Tier
+
+3. **Atualizar UI:**
+   - Substituir "Verificação de Uso" por "Triagem - Intenção de Compra"
+   - Exibir score e breakdown
+   - Mostrar recomendações e ações
+
+4. **Integrar com fluxo existente:**
+   - Quarentena ICP → Triagem → Classificação automática
+   - Leads Aprovados → Priorização por Tier
+
+---
+
+## 📊 EXEMPLO DE RESULTADO
+
+```json
+{
+  "score_intencao_compra": 78,
+  "tier": "morno",
+  "fit_estrutural": {
+    "fit_setor": 100,
+    "fit_nicho": 80,
+    "fit_cnae": 100,
+    "fit_ncm": 60,
+    "fit_porte": 100,
+    "total": 88
+  },
+  "intencao_compra": {
+    "sinais_expansao": 25,
+    "pontos_dor": 20,
+    "sinais_budget": 15,
+    "score_total": 60
+  },
+  "timing": {
+    "score_recencia": 70,
+    "momento_ideal": true
+  },
+  "competicao": {
+    "usa_concorrente": false,
+    "usa_legado": true,
+    "greenfield": false,
+    "score": 30
+  },
+  "recomendacoes": [
+    "Empresa está em processo de modernização (oportunidade de migração)",
+    "Fit alto com setor e CNAE do tenant",
+    "Sinais de expansão recentes indicam momento ideal"
+  ],
+  "proximas_acoes": [
+    "Abordar com proposta de migração de solução legada",
+    "Enfatizar casos de sucesso no setor",
+    "Agendar reunião com Diretor de TI"
+  ]
+}
+```
+
+---
+
+## ✅ RESUMO DAS MUDANÇAS
+
+### **ANTES (TOTVS-específico):**
+- ❌ Double/Triple matching apenas para produtos TOTVS
+- ❌ Produtos hardcoded (Protheus, RM, Winthor, etc.)
+- ❌ Validação específica para TOTVS
+- ❌ Objetivo: Evitar prospectar clientes existentes
+
+### **AGORA (Genérico Multi-tenant):**
+- ✅ Análise de Fit Estrutural (Setor/Nicho/CNAE/NCM/Porte)
+- ✅ Análise de Intenção de Compra (sinais de expansão, dor, budget)
+- ✅ Análise de Timing (momento ideal de abordagem)
+- ✅ Análise de Competição (oportunidades de migração/greenfield)
+- ✅ Sistema adaptável a qualquer setor/niche
+- ✅ Objetivo: Qualificar leads por potencial de compra
+
+---
+
+## 🎯 GLOSSÁRIO
+
+- **TRIAGEM:** Processo de classificação e priorização de leads baseado em análise 360°
+- **INTENÇÃO DE COMPRA:** Probabilidade de uma empresa comprar os produtos/serviços do tenant
+- **FIT ESTRUTURAL:** Alinhamento entre características da empresa e ICP do tenant
+- **TIER:** Nível de prioridade (Quente/Morno/Frio/Desqualificado)
+- **GREENFIELD:** Oportunidade de primeira implementação (empresa sem solução similar)
+- **LEGADO:** Solução antiga que pode ser substituída
+
+---
+
+**Última atualização:** 2025-01-19  
+**Versão:** 1.0 (Triagem - Intenção de Compra)
+

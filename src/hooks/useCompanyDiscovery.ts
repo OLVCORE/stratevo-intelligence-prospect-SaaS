@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
 
 export interface DiscoveryParams {
@@ -122,9 +123,14 @@ export function useValidateEnrichCompany() {
 
 export function useAddCompaniesToBank() {
   const queryClient = useQueryClient();
+  const { tenant } = useTenant();
 
   return useMutation({
     mutationFn: async (suggestedCompanyIds: string[]) => {
+      if (!tenant) {
+        throw new Error('Tenant não disponível');
+      }
+
       // Para cada empresa sugerida, adicionar ao banco
       const promises = suggestedCompanyIds.map(async (id) => {
         const { data: suggested } = await supabase
@@ -139,7 +145,7 @@ export function useAddCompaniesToBank() {
         const { data: newCompany, error: insertError } = await supabase
           .from('companies')
           .insert([{
-            name: suggested.company_name,
+            company_name: suggested.company_name,
             cnpj: suggested.cnpj,
             domain: suggested.domain,
             state: suggested.state,
@@ -148,7 +154,8 @@ export function useAddCompaniesToBank() {
             niche_code: suggested.niche_code,
             apollo_data: suggested.apollo_data,
             raw_data: suggested.receita_ws_data,
-          }])
+            tenant_id: tenant.id,
+          }] as any)
           .select()
           .single();
 

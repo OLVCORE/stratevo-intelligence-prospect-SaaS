@@ -111,23 +111,30 @@ export function useTenantICPProfile() {
         throw new Error('Tenant não disponível');
       }
 
-      // Buscar ICP Profile do schema do tenant
-      // Isso requer acesso direto ao schema ou uma função SQL
-      const { data, error } = await tenantSupabase
-        .rpc('get_icp_profile', { tenant_schema: tenant.schema_name })
-        .single();
+      // Buscar ICP Profile do schema do tenant via RPC
+      // Primeiro buscar metadata para obter icp_profile_id
+      const { data: metadata } = await supabase
+        .from('icp_profiles_metadata')
+        .select('schema_name, icp_profile_id')
+        .eq('tenant_id', tenant.id)
+        .eq('icp_principal', true)
+        .eq('ativo', true)
+        .maybeSingle();
 
-      if (error) {
-        // Fallback: buscar via tabela se existir
-        const { data: fallbackData, error: fallbackError } = await tenantSupabase
-          .from('icp_profile')
-          .select('*')
-          .limit(1)
-          .single();
+      if (metadata?.schema_name && metadata?.icp_profile_id) {
+        const { data: icpData, error: icpError } = await supabase
+          .rpc('get_icp_profile_from_tenant', {
+            p_schema_name: metadata.schema_name,
+            p_icp_profile_id: metadata.icp_profile_id,
+          });
 
-        if (fallbackError) throw fallbackError;
-        return fallbackData;
+        if (!icpError && icpData) {
+          return icpData;
+        }
       }
+
+      // Se não encontrou, retornar null
+      return null;
 
       return data;
     },

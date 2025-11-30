@@ -1,8 +1,8 @@
 /**
- * 🏷️ TOTVS STATUS BADGE - Badge visual para tabelas
+ * 🏷️ VERIFICATION STATUS BADGE - Badge visual para tabelas
  * 
- * Badge compacto para mostrar status TOTVS em tabelas (Quarentena/Aprovadas)
- * - ✅ Cliente TOTVS (vermelho)
+ * Badge compacto para mostrar status de verificação de uso em tabelas (Quarentena/Aprovadas)
+ * - ✅ Cliente Identificado (vermelho)
  * - ✅ Não Cliente (verde)
  * - ⚪ Não Verificado (cinza)
  */
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-interface TOTVSStatusBadgeProps {
+interface VerificationStatusBadgeProps {
   status?: 'go' | 'no-go' | 'revisar' | null;
   confidence?: 'high' | 'medium' | 'low';
   tripleMatches?: number;
@@ -22,7 +22,7 @@ interface TOTVSStatusBadgeProps {
   className?: string;
 }
 
-export function TOTVSStatusBadge({
+export function VerificationStatusBadge({
   status,
   confidence,
   tripleMatches = 0,
@@ -30,7 +30,7 @@ export function TOTVSStatusBadge({
   showDetails = true,
   size = 'sm',
   className,
-}: TOTVSStatusBadgeProps) {
+}: VerificationStatusBadgeProps) {
   
   // 🎨 CONFIGURAÇÃO VISUAL POR STATUS
   const getConfig = () => {
@@ -42,12 +42,12 @@ export function TOTVSStatusBadge({
         textColor: 'text-gray-400',
         borderColor: 'border-gray-500/30',
         label: 'Não Verificado',
-        description: 'Status TOTVS ainda não foi verificado',
+        description: 'Status de verificação ainda não foi verificado',
       };
     }
     
     if (status === 'no-go') {
-      // ❌ NO-GO = JÁ É CLIENTE TOTVS
+      // ❌ NO-GO = JÁ É CLIENTE IDENTIFICADO
       return {
         icon: XCircle,
         iconColor: 'text-red-500',
@@ -55,7 +55,7 @@ export function TOTVSStatusBadge({
         textColor: 'text-red-400',
         borderColor: 'border-red-500/40',
         label: 'NO-GO - É Cliente',
-        description: '❌ Cliente TOTVS confirmado - NÃO ABORDAR para venda!',
+        description: '❌ Cliente identificado - NÃO ABORDAR para venda!',
       };
     }
     

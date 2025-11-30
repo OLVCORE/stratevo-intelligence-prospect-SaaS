@@ -1,0 +1,32 @@
+{
+  "$schema": "./company-config.schema.json",
+  "company": {
+    "cnpj": "",
+    "razaoSocial": "",
+    "nomeFantasia": "",
+    "website": "",
+    "email": "",
+    "telefone": "",
+    "setorPrincipal": "",
+    "porteEmpresa": "",
+    "createdAt": "",
+    "updatedAt": ""
+  },
+  "tenant": {
+    "id": "",
+    "schemaName": "",
+    "plano": "FREE",
+    "status": "active"
+  },
+  "icps": {
+    "principal": {
+      "id": "",
+      "nome": "ICP Principal",
+      "tipo": "core",
+      "ativo": true
+    },
+    "mercados": []
+  },
+  "version": "1.0.0"
+}
+

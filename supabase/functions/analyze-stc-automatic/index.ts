@@ -30,9 +30,9 @@ serve(async (req) => {
 
     console.log('[ANALYZE-STC] Analisando:', companyName);
 
-    // Invocar Edge Function simple-totvs-check existente
+    // Invocar Edge Function usage-verification existente
     const { data: stcResult, error: stcError } = await supabaseClient.functions.invoke(
-      'simple-totvs-check',
+      'usage-verification',
       {
         body: {
           cnpj,

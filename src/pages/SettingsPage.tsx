@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useTenant } from '@/contexts/TenantContext';
+import { Link } from 'react-router-dom';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -24,6 +33,18 @@ interface UserProfile {
   facebook_url: string | null;
 }
 
+interface ICPMetadata {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  tipo: 'core' | 'mercado' | string;
+  setor_foco: string | null;
+  nicho_foco: string | null;
+  icp_principal: boolean;
+  ativo: boolean;
+  updated_at: string | null;
+}
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -39,10 +60,18 @@ export default function SettingsPage() {
   const [twitterUrl, setTwitterUrl] = useState('');
   const [telegramUsername, setTelegramUsername] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
+  const { tenant } = useTenant();
+  const [icps, setIcps] = useState<ICPMetadata[]>([]);
+  const [icpsLoading, setIcpLoading] = useState(false);
+  const [generatedIcpCount, setGeneratedIcpCount] = useState<number | null>(null);
 
   useEffect(() => {
     loadProfile();
   }, [user]);
+
+  useEffect(() => {
+    loadIcpData();
+  }, [tenant]);
 
   const loadProfile = async () => {
     if (!user) return;
@@ -52,9 +81,24 @@ export default function SettingsPage() {
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle(); // 🔥 CORRIGIR: Usar maybeSingle() para evitar erro 404 quando não existe perfil
 
-      if (error) throw error;
+      // 🔥 CORRIGIR: Tratar erro 404 quando perfil não existe ou tabela não existe
+      if (error) {
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404')) {
+          // Tabela não existe ou perfil não encontrado - não é erro crítico
+          console.warn('[SettingsPage] Perfil não encontrado ou tabela não existe:', error);
+          setProfile(null);
+          return;
+        }
+        throw error;
+      }
+
+      // Se não há dados, criar perfil vazio
+      if (!data) {
+        setProfile(null);
+        return;
+      }
 
       setProfile(data);
       setFullName(data.full_name || '');
@@ -65,11 +109,59 @@ export default function SettingsPage() {
       setTwitterUrl(data.twitter_url || '');
       setTelegramUsername(data.telegram_username || '');
       setFacebookUrl(data.facebook_url || '');
-    } catch (error) {
+    } catch (error: any) {
+      // 🔥 CORRIGIR: Tratar erro de forma mais elegante
+      if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.message?.includes('404')) {
+        console.warn('[SettingsPage] Perfil não disponível:', error);
+        setProfile(null);
+        return;
+      }
       console.error('Error loading profile:', error);
-      toast.error('Erro ao carregar perfil');
+      // Não mostrar toast para erro 404 - é esperado se a tabela não existe
+      if (!error?.message?.includes('404')) {
+        toast.error('Erro ao carregar perfil');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadIcpData = async () => {
+    if (!tenant?.id) {
+      setIcps([]);
+      setGeneratedIcpCount(null);
+      return;
+    }
+
+    setIcpLoading(true);
+    try {
+      const [icpsResponse, counterResponse] = await Promise.all([
+        supabase
+          .from("icp_profiles_metadata")
+          .select("id, nome, descricao, tipo, setor_foco, nicho_foco, icp_principal, ativo, updated_at")
+          .eq("tenant_id", tenant.id)
+          .order("updated_at", { ascending: false }),
+        supabase
+          .from("icp_generation_counters")
+          .select("generated_count")
+          .eq("tenant_id", tenant.id)
+          .maybeSingle(), // 🔥 CORRIGIR: Usar maybeSingle() para evitar erro 406 quando não existe registro
+      ]);
+
+      if (icpsResponse.error) {
+        throw icpsResponse.error;
+      }
+
+      setIcps(icpsResponse.data || []);
+      setGeneratedIcpCount(
+        counterResponse.error || !counterResponse.data
+          ? null
+          : counterResponse.data.generated_count ?? 0
+      );
+    } catch (error) {
+      console.warn("Erro ao carregar ICPs:", error);
+    } finally {
+      setIcpLoading(false);
     }
   };
 
@@ -311,6 +403,73 @@ export default function SettingsPage() {
                 onChange={(e) => setFacebookUrl(e.target.value)}
                 placeholder="https://facebook.com/seu-perfil"
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <CardTitle>ICP Manager</CardTitle>
+                <Badge variant="outline" className="text-xs">
+                  ICPs gerados: {generatedIcpCount ?? 0}
+                </Badge>
+              </div>
+              <CardDescription>Gerencie ICPs já gerados e revise o contador oficial.</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {icpsLoading ? (
+              <p className="text-sm text-muted-foreground">Carregando ICPs...</p>
+            ) : icps.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum ICP registrado ainda.</p>
+            ) : (
+              <ul className="space-y-3">
+                {icps.map((icp) => (
+                  <li
+                    key={icp.id}
+                    className="rounded-2xl border border-border px-4 py-3 bg-background/60"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-sm font-semibold">
+                        <div className="flex items-center gap-2">
+                          <span>{icp.nome}</span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {icp.tipo === "core" ? "ICP Principal" : "ICP Mercado"}
+                          </Badge>
+                        </div>
+                        {icp.updated_at && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Atualizado em{" "}
+                            {new Date(icp.updated_at).toLocaleDateString("pt-BR", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {icp.descricao || "Sem descrição adicional."}
+                      </p>
+                      <div className="text-[11px] text-muted-foreground">
+                        Setor: {icp.setor_foco || "—"} · Nicho: {icp.nicho_foco || "—"} · Status:{" "}
+                        {icp.ativo ? "Ativo" : "Inativo"}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="flex flex-col gap-2 pt-2 md:flex-row">
+              <Button asChild variant="outline" className="flex-1">
+                <Link to="/central-icp">Abrir Central ICP</Link>
+              </Button>
+              <Button asChild className="flex-1">
+                <Link to="/tenant-onboarding">Gerar novo ICP</Link>
+              </Button>
             </div>
           </CardContent>
         </Card>

@@ -12,9 +12,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, TrendingUp, DollarSign, Calendar, AlertCircle, ArrowLeft, Download, Save, Eye, FileSpreadsheet } from 'lucide-react';
 import { CashFlowChart } from './charts/CashFlowChart';
 import { BenefitsBreakdown } from './charts/BenefitsBreakdown';
-import { TOTVSProductSelector, type TOTVSProduct } from './TOTVSProductSelector';
+import { ProductSelector, type Product } from './ProductSelector';
 import { CurrentCostsSelector, type CurrentCostItem } from './CurrentCostsSelector';
-import { TOTVSCostsSelector, type TOTVSCostItem } from './TOTVSCostsSelector';
+import { ProductCostsSelector, type ProductCostItem } from './ProductCostsSelector';
 import { ExportButton } from '@/components/export/ExportButton';
 import { ScrollToTopButton } from '@/components/common/ScrollToTopButton';
 import { UnsavedChangesWarning } from '@/components/common/UnsavedChangesWarning';
@@ -88,9 +88,9 @@ export function InteractiveROICalculator({ companyId, accountStrategyId, initial
 
   // Estado completo para draft
   const [localState, setLocalState] = useState({
-    selectedProducts: [] as TOTVSProduct[],
+    selectedProducts: [] as Product[],
     currentCosts: [] as CurrentCostItem[],
-    totvsCosts: [] as TOTVSCostItem[],
+    productCosts: [] as ProductCostItem[],
     inputs: {
       currentCosts: {
         software: initialData?.currentCosts?.software || 0,
@@ -117,7 +117,7 @@ export function InteractiveROICalculator({ companyId, accountStrategyId, initial
     results: null as ROIOutput | null,
   });
 
-  const { selectedProducts, currentCosts, totvsCosts, inputs, results } = localState;
+  const { selectedProducts, currentCosts, productCosts, inputs, results } = localState;
 
   // Hook para salvamento progressivo
   const {
@@ -153,7 +153,7 @@ const cpqSignature = JSON.stringify({
   useEffect(() => {
     if (!cpqSignature) return;
     if (cpqData?.selectedProducts && cpqData.selectedProducts.length > 0) {
-      const convertedProducts: (TOTVSProduct & { fromCPQ?: boolean })[] = cpqData.selectedProducts.map(product => {
+      const convertedProducts: (Product & { fromCPQ?: boolean })[] = cpqData.selectedProducts.map(product => {
         const effectivePrice = cpqData.priceOverrides?.[product.sku] ?? product.base_price;
         const totalLicenseCost = effectivePrice * product.quantity;
         return {
@@ -230,7 +230,7 @@ const cpqSignature = JSON.stringify({
       return sum + base + subs;
     }, 0);
     
-    const totalTotvsCosts = totvsCosts.reduce((sum, c) => sum + (c.cost || 0), 0);
+    const totalProductCosts = productCosts.reduce((sum, c) => sum + (c.cost || 0), 0);
 
     updateData(prev => ({
       ...prev,
@@ -239,12 +239,12 @@ const cpqSignature = JSON.stringify({
         proposedInvestment: {
           ...prev.inputs.proposedInvestment,
           licenses: totalLicenses,
-          implementation: totalImplementation + totalTotvsCosts,
+          implementation: totalImplementation + totalProductCosts,
           firstYearMaintenance: totalMaintenance,
         }
       }
     }));
-  }, [selectedProducts, totvsCosts, updateData]);
+  }, [selectedProducts, productCosts, updateData]);
 
   // Auto-calculate current costs when they change
   useEffect(() => {
@@ -483,8 +483,8 @@ const cpqSignature = JSON.stringify({
             </div>
           )}
           
-          {/* Seletor de Produtos TOTVS */}
-          <TOTVSProductSelector
+          {/* Seletor de Produtos */}
+          <ProductSelector
                 selectedProducts={selectedProducts}
                 onProductsChange={(products) => {
                   setLocalState(prev => ({ ...prev, selectedProducts: products }));
@@ -507,16 +507,16 @@ const cpqSignature = JSON.stringify({
               />
           </div>
 
-          {/* Investimento Proposto TOTVS */}
+          {/* Investimento Proposto */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">2. Investimento Proposto</h3>
             <p className="text-sm text-muted-foreground">
-              Quanto custará a solução TOTVS
+              Quanto custará a solução
             </p>
 
-              <TOTVSCostsSelector
-                selectedCosts={totvsCosts}
-                onCostsChange={(costs) => updateData(prev => ({ ...prev, totvsCosts: costs }))}
+              <ProductCostsSelector
+                selectedCosts={productCosts}
+                onCostsChange={(costs) => updateData(prev => ({ ...prev, productCosts: costs }))}
                 onSaveCost={save}
               />
 
@@ -705,7 +705,7 @@ const cpqSignature = JSON.stringify({
                 <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                 <h3 className="text-lg font-semibold mb-2">Nenhum resultado ainda</h3>
                 <p className="text-muted-foreground mb-4">
-                  Configure os produtos TOTVS e custos na aba "Inputs" e clique em "Calcular ROI Completo"
+                  Configure os produtos e custos na aba "Inputs" e clique em "Calcular ROI Completo"
                 </p>
                 <Button onClick={calculateROI} disabled={isCalculating}>
                   {isCalculating ? (

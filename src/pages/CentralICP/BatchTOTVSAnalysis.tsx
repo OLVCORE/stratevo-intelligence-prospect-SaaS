@@ -4,12 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Upload, Play, Download, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { useBatchTOTVSAnalysis } from '@/hooks/useBatchTOTVSAnalysis';
+import { useBatchUsageAnalysis } from '@/hooks/useBatchUsageAnalysis';
 import { toast } from 'sonner';
 
 export default function BatchTOTVSAnalysis() {
   const [companies, setCompanies] = useState<any[]>([]);
-  const { processBatch, isProcessing, progress } = useBatchTOTVSAnalysis();
+  const { processBatch, isProcessing, progress } = useBatchUsageAnalysis();
 
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -70,7 +70,7 @@ export default function BatchTOTVSAnalysis() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-2">Análise TOTVS em Massa</h1>
+        <h1 className="text-3xl font-bold mb-2">Análise de Verificação em Massa</h1>
         <p className="text-muted-foreground">
           Processe 10, 100, ou 200 empresas automaticamente
         </p>
@@ -114,7 +114,7 @@ export default function BatchTOTVSAnalysis() {
             2. Processar em Lote
           </CardTitle>
           <CardDescription>
-            Cada empresa será processada automaticamente com 3 abas: TOTVS + Decisores + Digital
+            Cada empresa será processada automaticamente com 3 abas: Verificação + Decisores + Digital
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

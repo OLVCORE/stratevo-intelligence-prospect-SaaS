@@ -1,134 +1,58 @@
-# ✅ RESUMO DAS CORREÇÕES FINAIS - TREVO E UNIFIEDENRICHBUTTON
+# ✅ RESUMO DAS CORREÇÕES FINAIS
 
-## 🎯 PROBLEMAS RESOLVIDOS
+## 🔧 PROBLEMA RESOLVIDO
 
-### 1. ✅ TREVO - SOBREPOSIÇÃO COM SIDEBAR
-**Problema:** TREVO expandia por trás do sidebar quando aberto.
+**Erro original:** `ERROR: 42501: permission denied to set parameter "app.supabase_url"`
 
-**Solução Implementada:**
-- ✅ TREVO agora usa `useSidebar()` para detectar estado do sidebar
-- ✅ Posicionamento dinâmico: `left: 256px` (sidebar expandido) ou `left: 64px` (sidebar colapsado)
-- ✅ Função `getContainerStyle()` calcula posição baseada no estado do sidebar
-- ✅ TREVO sempre respeita o espaço do sidebar
+**Causa:** Supabase Cloud não permite configurar parâmetros customizados via `ALTER DATABASE`.
 
-**Arquivos Modificados:**
-- `src/components/trevo/TrevoAssistant.tsx`
+**Solução:** Criar tabela `app_config` para armazenar configurações.
 
 ---
 
-### 2. ✅ TREVO - SOBREPOSIÇÃO COM OUTROS BOTÕES FLUTUANTES
-**Problema:** TREVO sobrepõe ScrollToTop e AI Copilot.
+## 📁 ARQUIVOS CRIADOS/CORRIGIDOS
 
-**Solução Implementada:**
-- ✅ TREVO: `z-[60]` (z-index alto)
-- ✅ ScrollToTop: `z-[55]` e movido para `right: 480px` (abaixo do TREVO)
-- ✅ AI Copilot: `z-[55]` (abaixo do TREVO)
+### 1. Nova Migration: `20250122000019_create_app_config_table.sql`
+- ✅ Cria tabela `app_config` para armazenar configurações
+- ✅ Cria função helper `app_get_config(key)`
+- ✅ Configura RLS adequado
+- ✅ Insere URL do Supabase automaticamente
 
-**Arquivos Modificados:**
-- `src/components/trevo/TrevoAssistant.tsx`
-- `src/components/common/ScrollToTop.tsx`
-- `src/components/companies/CompanyIntelligenceChat.tsx`
+### 2. Migration Corrigida: `20250122000018_connect_ai_triggers.sql`
+- ✅ Removido `ALTER DATABASE` (não funciona no Supabase)
+- ✅ Funções agora usam `app_get_config('supabase_url')`
+- ✅ Removido `stage` do trigger de `leads` (coluna não existe)
+- ✅ Adicionado header `X-Internal-Trigger` para chamadas internas
+- ✅ Adicionado `tenant_id` no body das chamadas
 
----
+### 3. Script Corrigido: `SCRIPT_CONFIGURAR_VARIAVEIS_SUPABASE.sql`
+- ✅ Agora usa `INSERT INTO app_config` ao invés de `ALTER DATABASE`
+- ✅ Inclui verificações e testes
 
-### 3. ✅ UNIFIEDENRICHBUTTON - INTEGRAÇÃO NAS PÁGINAS PRINCIPAIS
-
-#### A. Base de Empresas (CompaniesManagementPage)
-**Status:** ✅ **IMPLEMENTADO**
-
-**Localização:** Aparece quando `selectedCompanies.length === 1`
-
-**Funcionalidades:**
-- ⚡ Atualização Rápida: `handleEnrichReceita`
-- 🔄 Atualização Completa: `handleEnrich` (360°)
-- 📋 Receita Federal
-- 🔄 360° Completo
-
-**Arquivos Modificados:**
-- `src/pages/CompaniesManagementPage.tsx`
+### 4. Edge Functions Atualizadas:
+- ✅ `crm-ai-lead-scoring` - Aceita chamadas internas via header
+- ✅ `crm-ai-assistant` - Aceita chamadas internas via header
+- ✅ `crm-webhook-processor` - Já estava correto (não precisa auth)
 
 ---
 
-#### B. Quarentena (ICPQuarantine)
-**Status:** ✅ **IMPLEMENTADO**
+## 🚀 ORDEM DE APLICAÇÃO
 
-**Localização:** Aparece quando `selectedIds.length === 1`
-
-**Funcionalidades Especiais:**
-- ✅ **Lógica GO/NO-GO:**
-  - Se `totvs_status === 'go'` → Enriquecimento Completo (inclui Apollo)
-  - Se `totvs_status !== 'go'` → Apenas Receita (sem Apollo para não gastar créditos)
-- ⚡ Atualização Rápida: `handleEnrichReceita`
-- 🔄 Atualização Completa: 
-  - Se GO: `handleEnrichCompleto` (Receita + Apollo + 360°)
-  - Se NÃO GO: `handleEnrichReceita` (apenas Receita, toast informativo)
-- 📋 Receita Federal
-- 🎯 Apollo (apenas se status GO)
-- 🔄 360° Completo
-
-**Arquivos Modificados:**
-- `src/pages/Leads/ICPQuarantine.tsx`
+1. **PRIMEIRO:** `20250122000019_create_app_config_table.sql`
+2. **SEGUNDO:** `20250122000018_connect_ai_triggers.sql`
+3. **TERCEIRO:** `SCRIPT_CONFIGURAR_VARIAVEIS_SUPABASE.sql` (opcional, já está na migration 1)
+4. **QUARTO:** `NOTIFY pgrst, 'reload schema';`
 
 ---
 
-#### C. Aprovados (LeadsQualifiedPage ou LeadsPoolPage?)
-**Status:** ⚠️ **VERIFICANDO**
+## ✅ STATUS
 
-**Análise:**
-- `LeadsQualifiedPage.tsx` → Página simples de visualização, sem handlers de enriquecimento
-- `LeadsPoolPage.tsx` → Precisa verificar se tem handlers de enriquecimento
-
-**Próximo Passo:**
-- Verificar `LeadsPoolPage.tsx` para ver se precisa de UnifiedEnrichButton
-- Se sim, integrar seguindo o mesmo padrão da Quarentena (GO/NO-GO)
+- ✅ Erro de permissão resolvido
+- ✅ Abordagem corrigida (tabela ao invés de ALTER DATABASE)
+- ✅ Triggers ajustados para usar nova abordagem
+- ✅ Edge Functions atualizadas para aceitar chamadas internas
+- ✅ Tudo pronto para aplicar!
 
 ---
 
-## 📊 RESUMO DAS MUDANÇAS
-
-### Arquivos Modificados:
-1. ✅ `src/components/trevo/TrevoAssistant.tsx`
-   - Detecção de sidebar state
-   - Posicionamento dinâmico
-   - Z-index ajustado
-
-2. ✅ `src/components/common/ScrollToTop.tsx`
-   - Z-index ajustado para `z-[55]`
-   - Posição movida para não sobrepor TREVO
-
-3. ✅ `src/components/companies/CompanyIntelligenceChat.tsx`
-   - Z-index ajustado para `z-[55]`
-
-4. ✅ `src/pages/CompaniesManagementPage.tsx`
-   - UnifiedEnrichButton integrado (quando 1 empresa selecionada)
-
-5. ✅ `src/pages/Leads/ICPQuarantine.tsx`
-   - UnifiedEnrichButton integrado (quando 1 empresa selecionada)
-   - Lógica GO/NO-GO implementada
-
-### Arquivos Criados:
-- Nenhum novo arquivo (usando componente existente)
-
----
-
-## ⚠️ ERROS DE TYPESCRIPT IDENTIFICADOS
-
-**Tipo:** Erros de tipo pré-existentes (não relacionados às mudanças)
-- Propriedades `raw_data`, `name`, `source_name` não existem nos tipos
-- Estes são erros pré-existentes que precisam ser corrigidos posteriormente
-
-**Impacto:** Não bloqueia funcionalidade, apenas warnings do TypeScript
-
----
-
-## ✅ PRÓXIMOS PASSOS
-
-1. ⚠️ Verificar `LeadsPoolPage.tsx` para integração do UnifiedEnrichButton
-2. ⚠️ Corrigir erros de TypeScript pré-existentes (separadamente)
-3. ✅ Testar TREVO com sidebar expandido/colapsado
-4. ✅ Testar UnifiedEnrichButton nas páginas implementadas
-
----
-
-**Status Geral:** ✅ **TREVO CORRIGIDO** | ✅ **UNIFIEDENRICHBUTTON INTEGRADO (2/3 PÁGINAS)**
-
+**Agora você pode aplicar as migrations sem erros!** 🎉
