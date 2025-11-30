@@ -72,6 +72,9 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
   );
   const [customNiches, setCustomNiches] = useState<Niche[]>(initialData?.customNiches || []);
   const [newCustomNiche, setNewCustomNiche] = useState<Record<string, string>>({});
+  
+  // 🆕 Estado para setor customizado
+  const [newCustomSector, setNewCustomSector] = useState('');
 
   // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa)
   useEffect(() => {
@@ -650,6 +653,32 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
     setNewCustomNiche({ ...newCustomNiche, [sectorCode]: '' });
   };
 
+  // 🆕 Adicionar setor customizado
+  const handleAddCustomSector = () => {
+    const sectorName = newCustomSector.trim();
+    if (!sectorName) return;
+    
+    // Gerar código único para o setor
+    const sectorCode = `CUSTOM_${Date.now()}`;
+    
+    const newSector: Sector = {
+      sector_code: sectorCode,
+      sector_name: sectorName,
+      description: 'Setor customizado pelo usuário'
+    };
+    
+    // Adicionar setor à lista
+    setSectors(prev => [...prev, newSector]);
+    
+    // Selecionar automaticamente o novo setor
+    toggleSector(sectorCode);
+    
+    // Limpar input
+    setNewCustomSector('');
+    
+    console.log('[Step2] ✅ Setor customizado adicionado:', newSector);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -840,10 +869,14 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
                     <Badge
                       key={sectorCode}
                       variant="secondary"
-                      className="text-sm px-3 py-1 cursor-pointer hover:bg-destructive/20"
+                      className={cn(
+                        "text-sm px-3 py-1 cursor-pointer hover:bg-destructive/20",
+                        sectorCode.startsWith('CUSTOM_') && "bg-primary/20 border-primary"
+                      )}
                       onClick={() => toggleSector(sectorCode)}
                     >
                       {sector.sector_name}
+                      {sectorCode.startsWith('CUSTOM_') && <span className="ml-1 text-xs opacity-60">(custom)</span>}
                       <X className="ml-2 h-3 w-3" />
                     </Badge>
                   );
@@ -851,6 +884,32 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
               </div>
             </div>
           )}
+
+          {/* 🆕 Adicionar Setor Customizado */}
+          <div className="flex gap-2 pt-3 border-t border-border/50">
+            <Input
+              placeholder="Adicionar setor customizado..."
+              value={newCustomSector}
+              onChange={(e) => setNewCustomSector(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddCustomSector();
+                }
+              }}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              onClick={handleAddCustomSector}
+              disabled={!newCustomSector.trim()}
+              size="icon"
+              variant="outline"
+              title="Adicionar setor customizado"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
