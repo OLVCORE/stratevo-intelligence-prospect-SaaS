@@ -1560,39 +1560,88 @@ export function OnboardingWizard() {
         }
       }
 
-      // PASSO 2: Criar ou atualizar usuário vinculado ao tenant
-      console.log('[OnboardingWizard] 👤 Criando/atualizando usuário...');
-      const { error: userError } = await (supabase as any)
+      // PASSO 2: Verificar limite de tenants do plano e criar vínculo
+      console.log('[OnboardingWizard] 👤 Verificando limite de tenants e criando vínculo...');
+      
+      // 2.1: Contar quantos tenants o usuário já tem
+      const { count: currentTenantCount } = await (supabase as any)
         .from('users')
-        .upsert({
-          email: tenantData.email,
-          nome: tenantData.razaoSocial,
-          tenant_id: tenant.id,
-          auth_user_id: user.id,
-          role: 'OWNER',
-        }, {
-          onConflict: 'auth_user_id'
-        });
-
-      if (userError) {
-        console.error('[OnboardingWizard] Erro ao criar usuário:', userError);
-        // Tentar apenas atualizar se o usuário já existe
+        .select('*', { count: 'exact', head: true })
+        .eq('auth_user_id', user.id);
+      
+      // 2.2: Buscar o plano do usuário (do tenant mais recente ou FREE)
+      const { data: userPlanData } = await (supabase as any)
+        .from('users')
+        .select('tenants(plano)')
+        .eq('auth_user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      const currentPlan = userPlanData?.[0]?.tenants?.plano || 'FREE';
+      
+      // 2.3: Definir limite baseado no plano
+      const planLimits: Record<string, number> = {
+        'FREE': 1,
+        'STARTER': 2,
+        'GROWTH': 5,
+        'ENTERPRISE': 15,
+      };
+      const tenantLimit = planLimits[currentPlan.toUpperCase()] || 1;
+      
+      console.log(`[OnboardingWizard] 📊 Plano: ${currentPlan}, Tenants: ${currentTenantCount || 0}/${tenantLimit}`);
+      
+      // 2.4: Verificar se pode criar mais tenants
+      if ((currentTenantCount || 0) >= tenantLimit) {
+        console.warn('[OnboardingWizard] ⚠️ Limite de tenants atingido');
+        toast.error(`Seu plano ${currentPlan} permite no máximo ${tenantLimit} empresa(s). Faça upgrade para adicionar mais.`);
+        throw new Error(`Limite de empresas atingido. Plano ${currentPlan} permite ${tenantLimit} empresa(s).`);
+      }
+      
+      // 2.5: Verificar se já existe vínculo com este tenant específico
+      const { data: existingLink } = await (supabase as any)
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .eq('tenant_id', tenant.id)
+        .maybeSingle();
+      
+      if (existingLink) {
+        console.log('[OnboardingWizard] ℹ️ Vínculo já existe, atualizando...');
         const { error: updateError } = await (supabase as any)
           .from('users')
           .update({
-            tenant_id: tenant.id,
             email: tenantData.email,
             nome: tenantData.razaoSocial,
+            role: 'OWNER',
           })
-          .eq('auth_user_id', user.id);
-
+          .eq('id', existingLink.id);
+        
         if (updateError) {
-          console.error('[OnboardingWizard] Erro ao atualizar usuário:', updateError);
-          throw new Error(`Erro ao criar/atualizar usuário: ${userError.message}`);
+          console.error('[OnboardingWizard] Erro ao atualizar vínculo:', updateError);
+        }
+      } else {
+        // 2.6: Criar NOVO vínculo (INSERT, não UPSERT)
+        console.log('[OnboardingWizard] ➕ Criando novo vínculo usuário-tenant...');
+        const { error: insertError } = await (supabase as any)
+          .from('users')
+          .insert({
+            email: tenantData.email,
+            nome: tenantData.razaoSocial,
+            tenant_id: tenant.id,
+            auth_user_id: user.id,
+            role: 'OWNER',
+          });
+
+        if (insertError) {
+          console.error('[OnboardingWizard] Erro ao criar vínculo:', insertError);
+          // Se for erro de constraint duplicada, ignorar (vínculo já existe)
+          if (!insertError.message?.includes('duplicate') && !insertError.message?.includes('unique')) {
+            throw new Error(`Erro ao vincular usuário: ${insertError.message}`);
+          }
         }
       }
 
-      console.log('[OnboardingWizard] ✅ Usuário criado');
+      console.log('[OnboardingWizard] ✅ Vínculo usuário-tenant criado/atualizado');
 
       // PASSO 3: Salvar todos os dados do onboarding na sessão (para processamento com IA depois)
       console.log('[OnboardingWizard] 💾 Salvando dados do onboarding...');
