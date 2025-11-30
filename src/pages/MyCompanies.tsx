@@ -54,6 +54,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getPlanLimits, formatLimit, getUpgradePlan, isAdminEmail, type PlanType } from '@/config/planLimits';
+import { TenantTrashModal } from '@/components/tenants/TenantTrashModal';
 
 interface Tenant {
   id: string;
@@ -93,6 +94,9 @@ export default function MyCompanies() {
   const [adminPassword, setAdminPassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  
+  // Estado para modal da lixeira
+  const [trashModalOpen, setTrashModalOpen] = useState(false);
   
   // Estados para limites de plano
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
@@ -376,43 +380,38 @@ export default function MyCompanies() {
 
     setIsDeleting(true);
     try {
-      // 🔥 CRÍTICO: Deletar em cascata (tenant, schema, dados relacionados)
-      // Isso deve ser feito via Edge Function para segurança
-      const { error } = await supabase.functions.invoke('delete-tenant', {
-        body: {
-          tenant_id: tenantToDelete.id,
-          admin_password: adminPassword, // ⚠️ REMOVER EM PRODUÇÃO - usar JWT
-        },
+      // 🗑️ SOFT DELETE: Move para lixeira ao invés de deletar permanentemente
+      const { data, error } = await (supabase as any).rpc('soft_delete_tenant', {
+        p_tenant_id: tenantToDelete.id,
+        p_reason: 'Deletado manualmente pelo administrador'
       });
 
       if (error) throw error;
 
-      toast.success(`Empresa "${tenantToDelete.nome}" deletada com sucesso!`);
-      setDeleteDialogOpen(false);
-      setTenantToDelete(null);
-      setAdminPassword('');
-      await loadTenants();
-      setSelectedTenants([]);
-    } catch (error: any) {
-      console.error('Erro ao deletar tenant:', error);
-      toast.error('Erro ao deletar empresa. Tente novamente.');
-      
-      // Fallback: deletar via RPC se Edge Function não existir
-      try {
-        const { error: deleteError } = await (supabase as any).rpc('delete_tenant_cascade', {
-          p_tenant_id: tenantToDelete.id,
+      if (data?.success) {
+        toast.success(`"${tenantToDelete.nome}" movido para lixeira!`, {
+          description: 'Você pode restaurar em até 30 dias.',
+          action: {
+            label: 'Ver Lixeira',
+            onClick: () => setTrashModalOpen(true),
+          },
         });
-        if (deleteError) throw deleteError;
-        
-        toast.success(`Empresa "${tenantToDelete.nome}" deletada com sucesso!`);
         setDeleteDialogOpen(false);
         setTenantToDelete(null);
         setAdminPassword('');
         await loadTenants();
         setSelectedTenants([]);
-      } catch (fallbackError) {
-        console.error('Erro no fallback:', fallbackError);
-        toast.error('Não foi possível deletar a empresa. Verifique as permissões.');
+      } else {
+        throw new Error(data?.error || 'Erro desconhecido');
+      }
+    } catch (error: any) {
+      console.error('Erro ao deletar tenant:', error);
+      
+      // Se a função não existir, mostrar mensagem para aplicar migration
+      if (error.message?.includes('does not exist')) {
+        toast.error('Função de lixeira não encontrada. Execute a migration no Supabase.');
+      } else {
+        toast.error('Erro ao deletar empresa. Tente novamente.');
       }
     } finally {
       setIsDeleting(false);
@@ -439,35 +438,50 @@ export default function MyCompanies() {
     setIsDeleting(true);
     try {
       const tenantsToDelete = tenants.filter(t => selectedTenants.includes(t.id));
+      let successCount = 0;
+      let errorCount = 0;
       
-      // Deletar um por um (em produção, fazer em lote via Edge Function)
+      // 🗑️ SOFT DELETE: Move cada tenant para a lixeira
       for (const tenant of tenantsToDelete) {
         try {
-          const { error } = await supabase.functions.invoke('delete-tenant', {
-            body: {
-              tenant_id: tenant.id,
-              admin_password: adminPassword, // ⚠️ REMOVER EM PRODUÇÃO
-            },
+          const { data, error } = await (supabase as any).rpc('soft_delete_tenant', {
+            p_tenant_id: tenant.id,
+            p_reason: 'Deleção em massa pelo administrador'
           });
 
           if (error) {
             console.error(`Erro ao deletar ${tenant.nome}:`, error);
-            // Continuar com os outros
+            errorCount++;
+          } else if (data?.success) {
+            successCount++;
+          } else {
+            errorCount++;
           }
         } catch (error) {
           console.error(`Erro ao deletar ${tenant.nome}:`, error);
-          // Continuar com os outros
+          errorCount++;
         }
       }
 
-      toast.success(`${selectedTenants.length} empresa(s) deletada(s) com sucesso!`);
+      if (successCount > 0) {
+        toast.success(`${successCount} empresa(s) movida(s) para lixeira!`, {
+          description: errorCount > 0 ? `${errorCount} falha(s)` : 'Você pode restaurar em até 30 dias.',
+          action: {
+            label: 'Ver Lixeira',
+            onClick: () => setTrashModalOpen(true),
+          },
+        });
+      } else if (errorCount > 0) {
+        toast.error('Falha ao deletar empresas. Verifique se a migration foi aplicada.');
+      }
+      
       setBulkDeleteDialogOpen(false);
       setAdminPassword('');
       setSelectedTenants([]);
       await loadTenants();
     } catch (error: any) {
       console.error('Erro ao deletar tenants em massa:', error);
-      toast.error('Erro ao deletar empresas. Algumas podem não ter sido deletadas.');
+      toast.error('Erro ao deletar empresas. Execute a migration no Supabase.');
     } finally {
       setIsDeleting(false);
     }
@@ -522,6 +536,17 @@ export default function MyCompanies() {
               Deletar Selecionadas ({selectedTenants.length})
             </Button>
           )}
+          
+          {/* 🗑️ Botão Ver Lixeira */}
+          <Button
+            variant="outline"
+            onClick={() => setTrashModalOpen(true)}
+            className="flex items-center gap-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+          >
+            <Trash2 className="h-4 w-4" />
+            Ver Lixeira
+          </Button>
+          
           <Button variant="outline" onClick={() => navigate('/tenant-onboarding')} className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
             Retomar onboarding / Gerar SP
@@ -1180,6 +1205,14 @@ export default function MyCompanies() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 🗑️ Modal da Lixeira */}
+      <TenantTrashModal
+        open={trashModalOpen}
+        onOpenChange={setTrashModalOpen}
+        onTenantRestored={loadTenants}
+      />
     </div>
   );
 }
+
