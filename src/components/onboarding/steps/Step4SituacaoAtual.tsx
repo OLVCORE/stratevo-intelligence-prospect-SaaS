@@ -39,8 +39,12 @@ interface ConcorrenteDireto {
 
 interface TicketECiclo {
   ticketMedio: number;
+  ticketMin?: number;    // 🆕 Valor mínimo do ticket
+  ticketMax?: number;    // 🆕 Valor máximo do ticket
   cicloVenda: number;
-  criterio: string; // Critério comum para ticket e ciclo (ex: "compra única", "projeto", "contrato", "licitações", etc.)
+  cicloMin?: number;     // 🆕 Prazo mínimo em dias
+  cicloMax?: number;     // 🆕 Prazo máximo em dias
+  criterio: string; // Critério/Enquadramento (ex: "Spot", "Projetos", "Contratos", "Licitações", etc.)
 }
 
 export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
@@ -227,6 +231,132 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
       ...formData,
       casosDeUso: formData.casosDeUso.filter((_, i) => i !== index),
     });
+  };
+
+  // 🆕 Parser inteligente para extrair valores monetários (R$ 10.000 a R$ 80.000)
+  const parseValorMonetario = (texto: string): { min: number; max: number; media: number } => {
+    // Remove "R$", pontos de milhar, e normaliza
+    const limpo = texto.replace(/R\$\s*/gi, '').replace(/\./g, '').replace(/,/g, '.');
+    
+    // Tenta encontrar padrão "X a Y" ou "X - Y"
+    const matchRange = limpo.match(/([\d]+)\s*(?:a|até|-|–)\s*([\d]+)/i);
+    if (matchRange) {
+      const min = parseFloat(matchRange[1]) || 0;
+      const max = parseFloat(matchRange[2]) || 0;
+      return { min, max, media: Math.round((min + max) / 2) };
+    }
+    
+    // Se não encontrar range, tenta valor único
+    const matchSingle = limpo.match(/([\d]+)/);
+    if (matchSingle) {
+      const valor = parseFloat(matchSingle[1]) || 0;
+      return { min: valor, max: valor, media: valor };
+    }
+    
+    return { min: 0, max: 0, media: 0 };
+  };
+
+  // 🆕 Parser para extrair dias (15 a 45 dias)
+  const parseDias = (texto: string): { min: number; max: number; media: number } => {
+    // Caso especial para "Ciclo mensal"
+    if (texto.toLowerCase().includes('mensal')) {
+      return { min: 30, max: 30, media: 30 };
+    }
+    
+    // Remove "dias", "mensal", etc.
+    const limpo = texto.replace(/dias?|mensal|meses?/gi, '').trim();
+    
+    // Tenta encontrar padrão "X a Y"
+    const matchRange = limpo.match(/(\d+)\s*(?:a|até|-|–)\s*(\d+)/i);
+    if (matchRange) {
+      const min = parseInt(matchRange[1]) || 0;
+      const max = parseInt(matchRange[2]) || 0;
+      return { min, max, media: Math.round((min + max) / 2) };
+    }
+    
+    // Valor único
+    const matchSingle = limpo.match(/(\d+)/);
+    if (matchSingle) {
+      const valor = parseInt(matchSingle[1]) || 0;
+      return { min: valor, max: valor, media: valor };
+    }
+    
+    return { min: 0, max: 0, media: 0 };
+  };
+
+  // 🆕 Parser de tabela colada (detecta tabs, pipes, ou múltiplas linhas)
+  const parseTicketsColados = (texto: string): TicketECiclo[] => {
+    const linhas = texto.split(/[\n\r]+/).filter(l => l.trim());
+    const resultados: TicketECiclo[] = [];
+    
+    for (const linha of linhas) {
+      // Separar por tab, pipe, ou múltiplos espaços
+      const colunas = linha.split(/[\t|]|(?:\s{2,})/).map(c => c.trim()).filter(c => c);
+      
+      if (colunas.length >= 3) {
+        // Formato esperado: Critério | Valor | Prazo | Enquadramento(opcional)
+        const criterio = colunas[0];
+        const valorInfo = parseValorMonetario(colunas[1]);
+        const diasInfo = parseDias(colunas[2]);
+        const enquadramento = colunas[3] || criterio;
+        
+        if (valorInfo.media > 0 || diasInfo.media > 0) {
+          resultados.push({
+            criterio: enquadramento || criterio,
+            ticketMedio: valorInfo.media,
+            ticketMin: valorInfo.min,
+            ticketMax: valorInfo.max,
+            cicloVenda: diasInfo.media,
+            cicloMin: diasInfo.min,
+            cicloMax: diasInfo.max,
+          });
+        }
+      } else if (colunas.length === 2) {
+        // Formato simples: Critério | Valor
+        const criterio = colunas[0];
+        const valorInfo = parseValorMonetario(colunas[1]);
+        
+        if (valorInfo.media > 0) {
+          resultados.push({
+            criterio,
+            ticketMedio: valorInfo.media,
+            ticketMin: valorInfo.min,
+            ticketMax: valorInfo.max,
+            cicloVenda: 30,
+            cicloMin: 30,
+            cicloMax: 30,
+          });
+        }
+      }
+    }
+    
+    console.log('[Step4] 📋 Tickets parseados:', resultados);
+    return resultados;
+  };
+
+  // 🆕 Handler para paste em massa de tickets
+  const handlePasteTickets = (e: React.ClipboardEvent) => {
+    const texto = e.clipboardData.getData('text');
+    const linhas = texto.split(/[\n\r]+/).filter(l => l.trim());
+    
+    // Se tiver mais de 1 linha ou tiver tabs/pipes, é uma tabela
+    if (linhas.length > 1 || texto.includes('\t') || texto.includes('|')) {
+      e.preventDefault();
+      
+      const novosTickets = parseTicketsColados(texto);
+      if (novosTickets.length > 0) {
+        const updatedTickets = [...formData.ticketsECiclos, ...novosTickets];
+        setFormData({
+          ...formData,
+          ticketsECiclos: updatedTickets,
+        });
+        console.log(`[Step4] ✅ Adicionados ${novosTickets.length} tickets em massa`);
+        
+        if (onSave) {
+          onSave({ ...formData, ticketsECiclos: updatedTickets });
+        }
+      }
+    }
   };
 
   // 🔥 NOVO: Funções para gerenciar tickets e ciclos na mesma linha
@@ -656,13 +786,16 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
           </div>
 
           {/* Tickets Médios e Ciclos de Venda - Tabela (mesma linha) */}
-          <div className="space-y-2">
+          <div className="space-y-2" onPaste={handlePasteTickets}>
             <Label className="text-foreground">
               Tickets Médios e Ciclos de Venda
               {formData.ticketsECiclos.length > 0 && (
                 <span className="text-muted-foreground ml-2">({formData.ticketsECiclos.length} linha{formData.ticketsECiclos.length !== 1 ? 's' : ''} adicionada{formData.ticketsECiclos.length !== 1 ? 's' : ''})</span>
               )}
             </Label>
+            <p className="text-xs text-muted-foreground">
+              💡 Dica: Cole uma tabela (Critério | Valor | Prazo) para adicionar vários de uma vez!
+            </p>
             
             {/* Tabela de entrada - Nova linha */}
             <div className="grid grid-cols-12 gap-2 items-end">
@@ -694,7 +827,7 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
                   type="text"
                   value={novoTicketECiclo.criterio}
                   onChange={(e) => setNovoTicketECiclo({ ...novoTicketECiclo, criterio: e.target.value })}
-                  placeholder="Ex: compra única, projeto, contrato, licitações..."
+                  placeholder="Ex: Spot, Projetos, Contratos, Licitações..."
                   className="w-full"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -732,12 +865,32 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
                 {formData.ticketsECiclos.map((item, index) => (
                   <div key={index} className="grid grid-cols-12 gap-2 items-center py-2 border-b last:border-b-0">
                     <div className="col-span-4">
-                      <span className="font-semibold">
-                        R$ {item.ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
+                      {/* Mostrar min-max se disponível, senão só o valor médio */}
+                      {item.ticketMin && item.ticketMax && item.ticketMin !== item.ticketMax ? (
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-sm">
+                            R$ {item.ticketMin.toLocaleString('pt-BR')} - R$ {item.ticketMax.toLocaleString('pt-BR')}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            (média: R$ {item.ticketMedio.toLocaleString('pt-BR')})
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-semibold">
+                          R$ {item.ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                      )}
                     </div>
                     <div className="col-span-3">
-                      <span className="font-semibold">{item.cicloVenda} dias</span>
+                      {/* Mostrar min-max de dias se disponível */}
+                      {item.cicloMin && item.cicloMax && item.cicloMin !== item.cicloMax ? (
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-sm">{item.cicloMin} - {item.cicloMax} dias</span>
+                          <span className="text-xs text-muted-foreground">(média: {item.cicloVenda})</span>
+                        </div>
+                      ) : (
+                        <span className="font-semibold">{item.cicloVenda} dias</span>
+                      )}
                     </div>
                     <div className="col-span-4 text-sm text-muted-foreground">
                       {item.criterio}
