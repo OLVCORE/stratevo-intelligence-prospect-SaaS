@@ -979,7 +979,27 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
               <div className="flex flex-wrap gap-2">
                 {selectedSectors.map((sectorCode) => {
                   const sector = sectors.find(s => s.sector_code === sectorCode);
-                  if (!sector) return null;
+                  
+                  // 🔥 DEBUG: Log para verificar se encontrou o setor
+                  if (sectorCode.startsWith('CUSTOM_')) {
+                    console.log(`[Step2] 🏷️ Renderizando badge para ${sectorCode}:`, {
+                      encontrado: !!sector,
+                      sectorName: sector?.sector_name,
+                      totalSectors: sectors.length,
+                      sectorsComCustom: sectors.filter(s => s.sector_code.startsWith('CUSTOM_')).map(s => s.sector_code),
+                    });
+                  }
+                  
+                  // 🆕 FALLBACK: Se não encontrar o setor, criar um temporário para setores customizados
+                  const displayName = sector?.sector_name || (
+                    sectorCode.startsWith('CUSTOM_') 
+                      ? (initialData?.customSectorNames?.[sectorCode] || sectorCode.replace('CUSTOM_', '').replace(/_\d+$/, ''))
+                      : sectorCode
+                  );
+                  
+                  // Não pular setores customizados mesmo se não encontrados
+                  if (!sector && !sectorCode.startsWith('CUSTOM_')) return null;
+                  
                   return (
                     <Badge
                       key={sectorCode}
@@ -990,7 +1010,7 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
                       )}
                       onClick={() => toggleSector(sectorCode)}
                     >
-                      {sector.sector_name}
+                      {displayName}
                       {sectorCode.startsWith('CUSTOM_') && <span className="ml-1 text-xs opacity-60">(custom)</span>}
                       <X className="ml-2 h-3 w-3" />
                     </Badge>
