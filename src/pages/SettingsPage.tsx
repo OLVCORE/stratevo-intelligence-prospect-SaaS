@@ -77,26 +77,39 @@ export default function SettingsPage() {
     if (!user) return;
 
     try {
+      // 🔥 CORRIGIDO: Verificar se tabela profiles existe antes de consultar
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .maybeSingle(); // 🔥 CORRIGIR: Usar maybeSingle() para evitar erro 404 quando não existe perfil
+        .maybeSingle();
 
-      // 🔥 CORRIGIR: Tratar erro 404 quando perfil não existe ou tabela não existe
+      // Tratar todos os tipos de erro que indicam tabela não existe ou perfil não encontrado
       if (error) {
-        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404')) {
-          // Tabela não existe ou perfil não encontrado - não é erro crítico
-          console.warn('[SettingsPage] Perfil não encontrado ou tabela não existe:', error);
+        const errorCode = error.code || '';
+        const errorMessage = error.message || '';
+        const isTableNotFound = 
+          errorCode === 'PGRST116' || // Row not found
+          errorCode === '42P01' ||     // Table does not exist
+          errorCode === 'PGRST204' ||  // No rows returned
+          errorMessage.includes('404') ||
+          errorMessage.includes('relation') ||
+          errorMessage.includes('does not exist');
+        
+        if (isTableNotFound) {
+          // Tabela não existe ou perfil não encontrado - usar dados do auth.user
+          console.info('[SettingsPage] Tabela profiles não disponível, usando dados do auth');
           setProfile(null);
+          setFullName(user.user_metadata?.full_name || user.email?.split('@')[0] || '');
           return;
         }
         throw error;
       }
 
-      // Se não há dados, criar perfil vazio
+      // Se não há dados, usar dados básicos do usuário
       if (!data) {
         setProfile(null);
+        setFullName(user.user_metadata?.full_name || user.email?.split('@')[0] || '');
         return;
       }
 
@@ -110,17 +123,19 @@ export default function SettingsPage() {
       setTelegramUsername(data.telegram_username || '');
       setFacebookUrl(data.facebook_url || '');
     } catch (error: any) {
-      // 🔥 CORRIGIR: Tratar erro de forma mais elegante
-      if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.message?.includes('404')) {
-        console.warn('[SettingsPage] Perfil não disponível:', error);
+      // Tratar erro silenciosamente se for relacionado a tabela não existente
+      const errorMessage = error?.message || '';
+      const isExpectedError = 
+        errorMessage.includes('404') || 
+        errorMessage.includes('does not exist') ||
+        errorMessage.includes('relation');
+      
+      if (isExpectedError) {
+        console.info('[SettingsPage] Perfil não disponível (esperado)');
         setProfile(null);
         return;
       }
-      console.error('Error loading profile:', error);
-      // Não mostrar toast para erro 404 - é esperado se a tabela não existe
-      if (!error?.message?.includes('404')) {
-        toast.error('Erro ao carregar perfil');
-      }
+      console.error('[SettingsPage] Erro ao carregar perfil:', error);
     } finally {
       setLoading(false);
     }

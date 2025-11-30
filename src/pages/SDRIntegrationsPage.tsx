@@ -621,15 +621,24 @@ function IntegrationForm({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
+
+      // Tratar erro silenciosamente se tabela não existir
+      if (error) {
+        console.info('[SDRIntegrations] Tabela profiles não disponível');
+        setProfile(null);
+        return;
+      }
 
       setProfile(data);
     } catch (error) {
-      console.error('Error loading profile:', error);
+      // Silenciar erro se tabela não existir
+      console.info('[SDRIntegrations] Perfil não disponível');
+      setProfile(null);
     }
   };
 

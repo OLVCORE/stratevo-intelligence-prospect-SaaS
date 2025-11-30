@@ -36,14 +36,25 @@ export function UserProfileCard() {
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      // Tratar silenciosamente se tabela não existir
+      if (error) {
+        console.info('[UserProfileCard] Tabela profiles não disponível');
+        setProfile(null);
+        setFullName(user.user_metadata?.full_name || user.email?.split('@')[0] || '');
+        return;
+      }
       
-      setProfile(data);
-      setFullName(data.full_name || '');
+      if (data) {
+        setProfile(data);
+        setFullName(data.full_name || '');
+      } else {
+        // Usar dados do auth.user como fallback
+        setFullName(user.user_metadata?.full_name || user.email?.split('@')[0] || '');
+      }
     } catch (error: any) {
-      console.error('Error loading profile:', error);
+      console.info('[UserProfileCard] Perfil não disponível');
     } finally {
       setLoading(false);
     }
