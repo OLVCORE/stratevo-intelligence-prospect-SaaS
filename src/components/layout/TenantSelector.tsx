@@ -80,20 +80,17 @@ export function TenantSelector() {
     try {
       setLoading(true);
       
-      // Atualizar tenant atual do usuário
-      const { error } = await (supabase as any)
-        .from('users')
-        .update({ tenant_id: tenantId })
-        .eq('auth_user_id', user.id);
-
-      if (error) throw error;
-
+      // 🆕 Apenas salvar a preferência no localStorage (não atualiza banco!)
+      // O sistema multi-tenant permite múltiplos registros por usuário
+      localStorage.setItem('selectedTenantId', tenantId);
+      
+      console.log('[TenantSelector] ✅ Trocando para tenant:', tenantId);
       toast.success('Empresa alterada! Recarregando...');
       
       // Recarregar página para aplicar novo tenant
       setTimeout(() => {
         window.location.href = '/dashboard';
-      }, 500);
+      }, 300);
     } catch (error: any) {
       console.error('Erro ao trocar empresa:', error);
       toast.error('Erro ao trocar empresa');

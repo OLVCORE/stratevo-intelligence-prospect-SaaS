@@ -357,10 +357,33 @@ export class MultiTenantService {
   
   /**
    * Obter tenant do usuário autenticado
+   * @param authUserId - ID do usuário autenticado
+   * @param preferredTenantId - ID do tenant preferido (opcional, vem do localStorage)
    * Usa a função RPC get_user_tenant() para evitar problemas de RLS
    */
-  async obterTenantDoUsuario(authUserId: string): Promise<Tenant | null> {
+  async obterTenantDoUsuario(authUserId: string, preferredTenantId?: string | null): Promise<Tenant | null> {
     try {
+      // 🆕 Se houver um tenant preferido, verificar se o usuário tem acesso a ele
+      if (preferredTenantId) {
+        const { data: hasAccess } = await (supabase as any)
+          .from('users')
+          .select('tenant_id')
+          .eq('auth_user_id', authUserId)
+          .eq('tenant_id', preferredTenantId)
+          .maybeSingle();
+        
+        if (hasAccess) {
+          console.log('[MultiTenant] ✅ Usando tenant preferido:', preferredTenantId);
+          return this.obterTenant(preferredTenantId);
+        } else {
+          console.log('[MultiTenant] ⚠️ Tenant preferido não acessível, buscando primeiro disponível');
+          // Limpar preferência inválida
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('selectedTenantId');
+          }
+        }
+      }
+      
       // Primeiro, tentar usar a função RPC get_user_tenant() (mais seguro)
       const { data: tenantId, error: rpcError } = await (supabase as any).rpc('get_user_tenant');
       
@@ -369,12 +392,13 @@ export class MultiTenantService {
       }
       
       // Se RPC não funcionar, tentar buscar diretamente da tabela users
+      // 🆕 Buscar TODOS os tenants do usuário (não apenas .single())
       try {
-        const { data: user, error } = await (supabase as any)
+        const { data: userTenants, error } = await (supabase as any)
           .from('users')
           .select('tenant_id')
           .eq('auth_user_id', authUserId)
-          .single();
+          .order('created_at', { ascending: false });
         
         if (error) {
           // Se a tabela não existir, não é erro - usuário ainda não completou onboarding
@@ -386,12 +410,15 @@ export class MultiTenantService {
           return null;
         }
         
-        if (!user || !user.tenant_id) {
+        if (!userTenants || userTenants.length === 0) {
           console.log('[MultiTenant] Usuário não tem tenant associado - precisa completar onboarding');
           return null;
         }
         
-        return this.obterTenant(user.tenant_id);
+        // 🆕 Usar o primeiro tenant (mais recente)
+        const firstTenantId = userTenants[0].tenant_id;
+        console.log('[MultiTenant] 📋 Usando primeiro tenant disponível:', firstTenantId);
+        return this.obterTenant(firstTenantId);
       } catch (tableError: any) {
         // Se a tabela não existir, não é erro crítico
         if (tableError.message?.includes('Could not find the table') || tableError.message?.includes('does not exist')) {

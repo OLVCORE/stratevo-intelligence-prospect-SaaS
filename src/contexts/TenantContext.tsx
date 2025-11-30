@@ -33,8 +33,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       setError(null);
 
-      // Buscar tenant do usuário
-      const tenantData = await multiTenantService.obterTenantDoUsuario(user.id);
+      // 🆕 Buscar tenant preferido do localStorage
+      const preferredTenantId = localStorage.getItem('selectedTenantId');
+
+      // Buscar tenant do usuário (passando preferência se existir)
+      const tenantData = await multiTenantService.obterTenantDoUsuario(user.id, preferredTenantId);
 
       if (!tenantData) {
         // Não é erro se o usuário ainda não completou o onboarding
@@ -43,6 +46,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // 🆕 Salvar o tenant atual no localStorage para próxima sessão
+      localStorage.setItem('selectedTenantId', tenantData.id);
+      
       setTenant(tenantData);
     } catch (err: any) {
       console.error('Erro ao carregar tenant:', err);
