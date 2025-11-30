@@ -973,60 +973,47 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
           </Popover>
 
           {/* Setores Selecionados */}
-          {/* 🔥 DEBUG: Log ANTES do render */}
-          {console.log('[Step2] 🔵 RENDER selectedSectors:', selectedSectors, 'sectorsCount:', sectors.length)}
           {selectedSectors.length > 0 && (
             <div className="space-y-2">
               <Label className="text-sm text-foreground">Setores Selecionados:</Label>
               <div className="flex flex-wrap gap-2">
-                {selectedSectors.map((sectorCode) => {
-                  // 🔥 DEBUG: Log para TODOS os setores
-                  console.log(`[Step2] 🏷️ Processando badge para: "${sectorCode}"`, {
-                    isCustom: sectorCode.startsWith('CUSTOM_'),
-                    encontradoEmSectors: !!sectors.find(s => s.sector_code === sectorCode),
-                  });
+                {selectedSectors.map((sectorCodeOrName) => {
+                  const sector = sectors.find(s => s.sector_code === sectorCodeOrName);
                   
-                  const sector = sectors.find(s => s.sector_code === sectorCode);
+                  // 🆕 Verificar se é um código CUSTOM_ OU se é um nome que não existe no banco
+                  const isExplicitCustom = sectorCodeOrName.startsWith('CUSTOM_');
+                  const isNameNotInDatabase = !sector && !isExplicitCustom;
+                  const isCustomSector = isExplicitCustom || isNameNotInDatabase;
                   
-                  // 🆕 FALLBACK: Se não encontrar o setor, criar um temporário para setores customizados
+                  // Determinar nome a exibir
                   let displayName = sector?.sector_name;
                   
-                  if (!displayName && sectorCode.startsWith('CUSTOM_')) {
-                    // Tentar múltiplas fontes para o nome
-                    displayName = initialData?.customSectorNames?.[sectorCode];
-                    console.log(`[Step2] 📋 customSectorNames[${sectorCode}] =`, displayName);
-                    
-                    if (!displayName) {
-                      // Último fallback: limpar o código
-                      displayName = sectorCode.replace('CUSTOM_', '').replace(/_\d+$/, '') || 'Setor Customizado';
-                      console.log(`[Step2] 📋 Fallback name =`, displayName);
+                  if (!displayName) {
+                    if (isExplicitCustom) {
+                      // É um código CUSTOM_xxx - buscar nome
+                      displayName = initialData?.customSectorNames?.[sectorCodeOrName] 
+                        || sectorCodeOrName.replace('CUSTOM_', '').replace(/_\d+$/, '') 
+                        || 'Setor Customizado';
+                    } else {
+                      // É um NOME que não existe no banco - usar diretamente
+                      displayName = sectorCodeOrName;
                     }
                   }
                   
-                  if (!displayName) {
-                    displayName = sectorCode; // Fallback final
-                  }
-                  
-                  // Não pular setores customizados - SEMPRE renderizar
-                  if (!sector && !sectorCode.startsWith('CUSTOM_')) {
-                    console.log(`[Step2] ⏭️ Pulando setor não-custom não encontrado: ${sectorCode}`);
-                    return null;
-                  }
-                  
-                  console.log(`[Step2] ✅ Renderizando badge: "${displayName}" para código "${sectorCode}"`);
+                  console.log(`[Step2] 🏷️ Badge: "${displayName}" (código: "${sectorCodeOrName}", custom: ${isCustomSector})`);
                   
                   return (
                     <Badge
-                      key={sectorCode}
+                      key={sectorCodeOrName}
                       variant="secondary"
                       className={cn(
                         "text-sm px-3 py-1 cursor-pointer hover:bg-destructive/20",
-                        sectorCode.startsWith('CUSTOM_') && "bg-primary/20 border-primary"
+                        isCustomSector && "bg-primary/20 border-primary"
                       )}
-                      onClick={() => toggleSector(sectorCode)}
+                      onClick={() => toggleSector(sectorCodeOrName)}
                     >
                       {displayName}
-                      {sectorCode.startsWith('CUSTOM_') && <span className="ml-1 text-xs opacity-60">(custom)</span>}
+                      {isCustomSector && <span className="ml-1 text-xs opacity-60">(custom)</span>}
                       <X className="ml-2 h-3 w-3" />
                     </Badge>
                   );
@@ -1261,3 +1248,4 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
     </form>
   );
 }
+
