@@ -125,6 +125,16 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
     onNext(formData);
   };
 
+  // 🆕 Função para processar texto colado (detecta lista com quebras de linha)
+  const processarTextoColado = (texto: string): string[] => {
+    // Separar por quebras de linha, vírgulas ou ponto e vírgula
+    const itens = texto
+      .split(/[\n\r]+|[;]/)
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+    return itens;
+  };
+
   const adicionarDiferencial = () => {
     if (novoDiferencial.trim()) {
       setFormData({
@@ -133,6 +143,36 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
       });
       setNovoDiferencial('');
     }
+  };
+
+  // 🆕 Adicionar múltiplos diferenciais (colar em massa)
+  const adicionarDiferenciaisEmMassa = (texto: string) => {
+    const itens = processarTextoColado(texto);
+    if (itens.length > 0) {
+      // Filtrar itens que já existem para evitar duplicatas
+      const novosItens = itens.filter(item => !formData.diferenciais.includes(item));
+      if (novosItens.length > 0) {
+        setFormData({
+          ...formData,
+          diferenciais: [...formData.diferenciais, ...novosItens],
+        });
+        setNovoDiferencial('');
+        console.log(`[Step4] ✅ Adicionados ${novosItens.length} diferenciais em massa`);
+      }
+    }
+  };
+
+  // 🆕 Handler para paste de diferenciais
+  const handlePasteDiferencial = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const texto = e.clipboardData.getData('text');
+    const itens = processarTextoColado(texto);
+    
+    // Se tiver mais de 1 item, é uma lista - processar em massa
+    if (itens.length > 1) {
+      e.preventDefault(); // Impedir paste normal
+      adicionarDiferenciaisEmMassa(texto);
+    }
+    // Se for só 1 item, deixar o paste normal acontecer
   };
 
   const removerDiferencial = (index: number) => {
@@ -150,6 +190,36 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
       });
       setNovoCasoUso('');
     }
+  };
+
+  // 🆕 Adicionar múltiplos casos de uso (colar em massa)
+  const adicionarCasosDeUsoEmMassa = (texto: string) => {
+    const itens = processarTextoColado(texto);
+    if (itens.length > 0) {
+      // Filtrar itens que já existem para evitar duplicatas
+      const novosItens = itens.filter(item => !formData.casosDeUso.includes(item));
+      if (novosItens.length > 0) {
+        setFormData({
+          ...formData,
+          casosDeUso: [...formData.casosDeUso, ...novosItens],
+        });
+        setNovoCasoUso('');
+        console.log(`[Step4] ✅ Adicionados ${novosItens.length} casos de uso em massa`);
+      }
+    }
+  };
+
+  // 🆕 Handler para paste de casos de uso
+  const handlePasteCasoUso = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const texto = e.clipboardData.getData('text');
+    const itens = processarTextoColado(texto);
+    
+    // Se tiver mais de 1 item, é uma lista - processar em massa
+    if (itens.length > 1) {
+      e.preventDefault(); // Impedir paste normal
+      adicionarCasosDeUsoEmMassa(texto);
+    }
+    // Se for só 1 item, deixar o paste normal acontecer
   };
 
   const removerCasoUso = (index: number) => {
@@ -498,7 +568,8 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
                     adicionarDiferencial();
                   }
                 }}
-                placeholder="Ex: Preço competitivo, Suporte 24/7, Implementação rápida"
+                onPaste={handlePasteDiferencial}
+                placeholder="Ex: Preço competitivo, Suporte 24/7 (cole uma lista para adicionar vários)"
                 className="flex-1"
               />
               <Button
@@ -511,6 +582,9 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
                 Adicionar
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              💡 Dica: Cole uma lista com quebras de linha para adicionar vários de uma vez!
+            </p>
             {formData.diferenciais.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {formData.diferenciais.map((diferencial, index) => (
@@ -547,7 +621,8 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
                     adicionarCasoUso();
                   }
                 }}
-                placeholder="Ex: Automação de processos, Análise de dados, Gestão de equipes"
+                onPaste={handlePasteCasoUso}
+                placeholder="Ex: Automação de processos, Análise de dados (cole uma lista para adicionar vários)"
                 className="flex-1"
               />
               <Button
@@ -560,6 +635,9 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
                 Adicionar
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              💡 Dica: Cole uma lista com quebras de linha para adicionar vários de uma vez!
+            </p>
             {formData.casosDeUso.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {formData.casosDeUso.map((casoUso, index) => (
