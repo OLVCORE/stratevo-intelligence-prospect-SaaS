@@ -91,9 +91,21 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
 export function useTenant() {
   const context = useContext(TenantContext);
+  
+  // 🆕 Em vez de lançar erro, retornar valores padrão (mais robusto)
+  // Isso evita crashes quando componentes são renderizados durante error recovery
   if (context === undefined) {
-    throw new Error('useTenant must be used within a TenantProvider');
+    console.warn('[useTenant] Chamado fora do TenantProvider - retornando valores padrão');
+    return {
+      tenant: null,
+      loading: false,
+      error: null,
+      refreshTenant: async () => {},
+      isActive: false,
+      creditos: 0,
+    };
   }
+  
   return context;
 }
 
