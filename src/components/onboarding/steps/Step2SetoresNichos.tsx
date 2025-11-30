@@ -973,32 +973,47 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
           </Popover>
 
           {/* Setores Selecionados */}
+          {/* 🔥 DEBUG: Log ANTES do render */}
+          {console.log('[Step2] 🔵 RENDER selectedSectors:', selectedSectors, 'sectorsCount:', sectors.length)}
           {selectedSectors.length > 0 && (
             <div className="space-y-2">
               <Label className="text-sm text-foreground">Setores Selecionados:</Label>
               <div className="flex flex-wrap gap-2">
                 {selectedSectors.map((sectorCode) => {
+                  // 🔥 DEBUG: Log para TODOS os setores
+                  console.log(`[Step2] 🏷️ Processando badge para: "${sectorCode}"`, {
+                    isCustom: sectorCode.startsWith('CUSTOM_'),
+                    encontradoEmSectors: !!sectors.find(s => s.sector_code === sectorCode),
+                  });
+                  
                   const sector = sectors.find(s => s.sector_code === sectorCode);
                   
-                  // 🔥 DEBUG: Log para verificar se encontrou o setor
-                  if (sectorCode.startsWith('CUSTOM_')) {
-                    console.log(`[Step2] 🏷️ Renderizando badge para ${sectorCode}:`, {
-                      encontrado: !!sector,
-                      sectorName: sector?.sector_name,
-                      totalSectors: sectors.length,
-                      sectorsComCustom: sectors.filter(s => s.sector_code.startsWith('CUSTOM_')).map(s => s.sector_code),
-                    });
+                  // 🆕 FALLBACK: Se não encontrar o setor, criar um temporário para setores customizados
+                  let displayName = sector?.sector_name;
+                  
+                  if (!displayName && sectorCode.startsWith('CUSTOM_')) {
+                    // Tentar múltiplas fontes para o nome
+                    displayName = initialData?.customSectorNames?.[sectorCode];
+                    console.log(`[Step2] 📋 customSectorNames[${sectorCode}] =`, displayName);
+                    
+                    if (!displayName) {
+                      // Último fallback: limpar o código
+                      displayName = sectorCode.replace('CUSTOM_', '').replace(/_\d+$/, '') || 'Setor Customizado';
+                      console.log(`[Step2] 📋 Fallback name =`, displayName);
+                    }
                   }
                   
-                  // 🆕 FALLBACK: Se não encontrar o setor, criar um temporário para setores customizados
-                  const displayName = sector?.sector_name || (
-                    sectorCode.startsWith('CUSTOM_') 
-                      ? (initialData?.customSectorNames?.[sectorCode] || sectorCode.replace('CUSTOM_', '').replace(/_\d+$/, ''))
-                      : sectorCode
-                  );
+                  if (!displayName) {
+                    displayName = sectorCode; // Fallback final
+                  }
                   
-                  // Não pular setores customizados mesmo se não encontrados
-                  if (!sector && !sectorCode.startsWith('CUSTOM_')) return null;
+                  // Não pular setores customizados - SEMPRE renderizar
+                  if (!sector && !sectorCode.startsWith('CUSTOM_')) {
+                    console.log(`[Step2] ⏭️ Pulando setor não-custom não encontrado: ${sectorCode}`);
+                    return null;
+                  }
+                  
+                  console.log(`[Step2] ✅ Renderizando badge: "${displayName}" para código "${sectorCode}"`);
                   
                   return (
                     <Badge
