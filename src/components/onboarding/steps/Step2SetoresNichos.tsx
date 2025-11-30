@@ -101,29 +101,6 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
       
       if (sectorCodesToUse.length > 0) {
         setSelectedSectors(sectorCodesToUse);
-        
-        // 🆕 CRÍTICO: Re-adicionar setores customizados à lista de setores
-        const customSectors = sectorCodesToUse
-          .filter((code: string) => code.startsWith('CUSTOM_'))
-          .map((code: string) => {
-            // Buscar o nome do setor nos dados salvos
-            const savedSectorName = initialData.customSectorNames?.[code] || 
-                                   code.replace('CUSTOM_', '').replace(/_\d+$/, '');
-            return {
-              sector_code: code,
-              sector_name: savedSectorName,
-              description: 'Setor customizado pelo usuário'
-            };
-          });
-        
-        if (customSectors.length > 0) {
-          console.log('[Step2] ➕ Re-adicionando setores customizados:', customSectors);
-          setSectors(prev => {
-            const existingCodes = prev.map(s => s.sector_code);
-            const newSectors = customSectors.filter((s: Sector) => !existingCodes.includes(s.sector_code));
-            return [...prev, ...newSectors];
-          });
-        }
       }
       
       // Atualizar nichos por setor
@@ -136,7 +113,31 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
         setCustomNiches(initialData.customNiches);
       }
     }
-  }, [initialData, sectors]);
+  }, [initialData]);
+
+  // 🆕 SEPARADO: Garantir que setores customizados estejam na lista para exibição
+  useEffect(() => {
+    if (!initialData?.customSectorNames || !selectedSectors.length) return;
+    
+    const customSectorCodes = selectedSectors.filter(code => code.startsWith('CUSTOM_'));
+    if (customSectorCodes.length === 0) return;
+    
+    // Verificar se já estão na lista
+    const missingCustomSectors = customSectorCodes.filter(
+      code => !sectors.some(s => s.sector_code === code)
+    );
+    
+    if (missingCustomSectors.length > 0) {
+      const newCustomSectors = missingCustomSectors.map(code => ({
+        sector_code: code,
+        sector_name: initialData.customSectorNames[code] || code.replace('CUSTOM_', '').replace(/_\d+$/, ''),
+        description: 'Setor customizado pelo usuário'
+      }));
+      
+      console.log('[Step2] 🔧 Adicionando setores customizados faltantes à lista:', newCustomSectors);
+      setSectors(prev => [...prev, ...newCustomSectors]);
+    }
+  }, [selectedSectors, sectors, initialData?.customSectorNames]);
   
   // Estados para dropdowns (um por setor)
   const [sectorsDropdownOpen, setSectorsDropdownOpen] = useState(false);
