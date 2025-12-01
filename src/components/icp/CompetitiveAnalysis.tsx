@@ -1,6 +1,6 @@
 /**
- * 🏆 CompetitiveAnalysis - Análise Competitiva Profunda
- * Análise de concorrentes com dados da web via SERPER + IA
+ * 🏆 CompetitiveAnalysis - Análise Competitiva Profunda CORRIGIDA
+ * Usa dados REAIS dos concorrentes cadastrados na Aba 4
  */
 
 import { useState, useEffect } from 'react';
@@ -17,8 +17,6 @@ import {
   Building2, 
   Globe, 
   Linkedin, 
-  Twitter,
-  Instagram,
   Search,
   AlertTriangle,
   CheckCircle2,
@@ -34,53 +32,79 @@ import {
   Users,
   DollarSign,
   Award,
-  Eye
+  Eye,
+  MapPin,
+  FileText,
+  Factory,
+  Scale
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-interface Competitor {
-  nome: string;
-  cnpj?: string;
+// Interface com TODOS os dados do concorrente da Aba 4
+interface ConcorrenteDireto {
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia?: string;
+  setor: string;
+  cidade: string;
+  estado: string;
+  capitalSocial: number;
+  cnaePrincipal: string;
+  cnaePrincipalDescricao?: string;
   website?: string;
-  setor?: string;
-  descricao?: string;
-  diferenciais?: string[];
-  pontosFracos?: string[];
+  diferencialDeles?: string;
 }
 
-interface CompetitorWebData {
-  nome: string;
-  website?: string;
+interface CompetitorEnriched extends ConcorrenteDireto {
+  // Dados enriquecidos da web
   descricaoWeb?: string;
-  redesSociais?: {
-    linkedin?: string;
-    instagram?: string;
-    twitter?: string;
-    facebook?: string;
-  };
-  noticias?: Array<{
-    titulo: string;
-    url: string;
-    data?: string;
-  }>;
-  presencaDigital?: {
-    score: number;
-    nivel: 'baixo' | 'medio' | 'alto';
-  };
-  produtosServicos?: string[];
-  diferenciais?: string[];
-  pontosFracos?: string[];
+  linkedinUrl?: string;
+  instagramUrl?: string;
+  facebookUrl?: string;
+  noticias?: Array<{ titulo: string; url: string; data?: string }>;
+  produtos?: string[];
+  presencaDigitalScore?: number;
+  // Análise estratégica
+  pontosFortesIdentificados?: string[];
+  pontosFrageisIdentificados?: string[];
+  ameacaPotencial?: 'alta' | 'media' | 'baixa';
 }
 
 interface CompetitiveAnalysisProps {
   tenantId: string;
   icpId?: string;
   companyName: string;
-  competitors: Competitor[];
+  competitors: ConcorrenteDireto[];
   diferenciais?: string[];
 }
+
+// Formatar CNPJ
+const formatCNPJ = (cnpj: string) => {
+  const clean = cnpj.replace(/\D/g, '');
+  return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+};
+
+// Formatar moeda
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value);
+};
+
+// Classificar ameaça baseado no capital social
+const classifyThreat = (capitalSocial: number, yourCapital: number = 1000000): 'alta' | 'media' | 'baixa' => {
+  const ratio = capitalSocial / yourCapital;
+  if (ratio > 10) return 'alta';
+  if (ratio > 2) return 'media';
+  return 'baixa';
+};
 
 export default function CompetitiveAnalysis({ 
   tenantId, 
@@ -91,150 +115,192 @@ export default function CompetitiveAnalysis({
 }: CompetitiveAnalysisProps) {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [competitorData, setCompetitorData] = useState<CompetitorWebData[]>([]);
+  const [enrichedCompetitors, setEnrichedCompetitors] = useState<CompetitorEnriched[]>([]);
   const [ceoAnalysis, setCeoAnalysis] = useState<string | null>(null);
-  const [swotAnalysis, setSwotAnalysis] = useState<any>(null);
-  const [marketShareAnalysis, setMarketShareAnalysis] = useState<any>(null);
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
 
-  // Carregar dados salvos
+  // Inicializar com dados dos concorrentes
   useEffect(() => {
-    if (tenantId) {
-      loadSavedAnalysis();
+    if (competitors.length > 0) {
+      console.log('[CompetitiveAnalysis] 📊 Concorrentes recebidos:', competitors);
+      // Converter concorrentes para formato enriquecido
+      const initial: CompetitorEnriched[] = competitors.map(c => ({
+        ...c,
+        ameacaPotencial: classifyThreat(c.capitalSocial || 0)
+      }));
+      setEnrichedCompetitors(initial);
     }
-  }, [tenantId]);
+  }, [competitors]);
 
-  const loadSavedAnalysis = async () => {
+  // Calcular totais
+  const totalCapitalConcorrentes = enrichedCompetitors.reduce((sum, c) => sum + (c.capitalSocial || 0), 0);
+  const maiorConcorrente = enrichedCompetitors.reduce((max, c) => 
+    (c.capitalSocial || 0) > (max?.capitalSocial || 0) ? c : max, enrichedCompetitors[0]);
+
+  // Buscar dados enriquecidos de um concorrente
+  const enrichCompetitor = async (competitor: ConcorrenteDireto): Promise<CompetitorEnriched> => {
     try {
-      const { data, error } = await (supabase as any)
-        .from('competitive_analysis')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!error && data) {
-        setCompetitorData(data.competitor_data || []);
-        setCeoAnalysis(data.ceo_analysis);
-        setSwotAnalysis(data.swot_analysis);
-        setMarketShareAnalysis(data.market_share_analysis);
-      }
-    } catch (err) {
-      console.error('Erro ao carregar análise:', err);
-    }
-  };
-
-  // Buscar dados dos concorrentes na web via SERPER
-  const analyzeCompetitor = async (competitor: Competitor): Promise<CompetitorWebData> => {
-    try {
-      // Buscar na web via SERPER
-      const { data: searchData, error: searchError } = await supabase.functions.invoke('serper-search', {
+      // Busca específica usando razão social
+      const searchQuery = `"${competitor.razaoSocial}" ${competitor.setor || 'empresa'} Brasil`;
+      
+      const { data: searchData, error } = await supabase.functions.invoke('serper-search', {
         body: {
-          query: `${competitor.nome} empresa ${competitor.setor || ''} Brasil site oficial`,
+          query: searchQuery,
           num: 5
         }
       });
 
-      // Buscar notícias
-      const { data: newsData } = await supabase.functions.invoke('serper-search', {
+      if (error) {
+        console.warn(`[SERPER] Erro ao buscar ${competitor.razaoSocial}:`, error);
+      }
+
+      // Buscar LinkedIn específico
+      const { data: linkedinData } = await supabase.functions.invoke('serper-search', {
         body: {
-          query: `${competitor.nome} notícias 2024`,
-          type: 'news',
+          query: `"${competitor.razaoSocial}" site:linkedin.com/company`,
           num: 3
         }
       });
 
-      // Buscar redes sociais
-      const { data: socialData } = await supabase.functions.invoke('serper-search', {
+      // Buscar notícias específicas
+      const { data: newsData } = await supabase.functions.invoke('serper-search', {
         body: {
-          query: `${competitor.nome} linkedin instagram site:linkedin.com OR site:instagram.com`,
+          query: `"${competitor.razaoSocial}" OR "${competitor.nomeFantasia || competitor.razaoSocial}" notícias 2024`,
+          type: 'news',
           num: 5
         }
       });
 
       // Processar resultados
-      const webData: CompetitorWebData = {
-        nome: competitor.nome,
-        website: competitor.website,
-        descricaoWeb: searchData?.organic?.[0]?.snippet || competitor.descricao,
+      const enriched: CompetitorEnriched = {
+        ...competitor,
+        descricaoWeb: searchData?.organic?.[0]?.snippet || '',
+        linkedinUrl: linkedinData?.organic?.find((r: any) => r.link?.includes('linkedin.com/company'))?.link,
         noticias: newsData?.news?.slice(0, 3).map((n: any) => ({
           titulo: n.title,
           url: n.link,
           data: n.date
         })) || [],
-        redesSociais: {
-          linkedin: socialData?.organic?.find((r: any) => r.link?.includes('linkedin.com'))?.link,
-          instagram: socialData?.organic?.find((r: any) => r.link?.includes('instagram.com'))?.link,
-        },
-        presencaDigital: {
-          score: Math.floor(Math.random() * 40) + 60, // TODO: calcular score real
-          nivel: 'medio'
-        },
-        diferenciais: competitor.diferenciais || [],
-        pontosFracos: competitor.pontosFracos || []
+        presencaDigitalScore: calculateDigitalScore(searchData, linkedinData),
+        ameacaPotencial: classifyThreat(competitor.capitalSocial || 0),
+        pontosFortesIdentificados: [],
+        pontosFrageisIdentificados: []
       };
 
-      // Ajustar nível de presença digital
-      if (webData.presencaDigital) {
-        if (webData.presencaDigital.score >= 80) webData.presencaDigital.nivel = 'alto';
-        else if (webData.presencaDigital.score >= 50) webData.presencaDigital.nivel = 'medio';
-        else webData.presencaDigital.nivel = 'baixo';
+      // Identificar pontos fortes baseado no capital
+      if (competitor.capitalSocial > 50000000) {
+        enriched.pontosFortesIdentificados?.push('Grande capacidade de investimento');
+      }
+      if (enriched.linkedinUrl) {
+        enriched.pontosFortesIdentificados?.push('Presença forte no LinkedIn');
+      }
+      if ((enriched.noticias?.length || 0) > 0) {
+        enriched.pontosFortesIdentificados?.push('Visibilidade na mídia');
       }
 
-      return webData;
+      return enriched;
     } catch (err) {
-      console.error(`Erro ao analisar ${competitor.nome}:`, err);
+      console.error(`Erro ao enriquecer ${competitor.razaoSocial}:`, err);
       return {
-        nome: competitor.nome,
-        website: competitor.website,
-        descricaoWeb: competitor.descricao,
-        diferenciais: competitor.diferenciais,
-        pontosFracos: competitor.pontosFracos
+        ...competitor,
+        ameacaPotencial: classifyThreat(competitor.capitalSocial || 0)
       };
     }
   };
 
-  // Gerar análise completa de CEO
-  const generateCEOAnalysis = async (competitorData: CompetitorWebData[]) => {
+  // Calcular score de presença digital
+  const calculateDigitalScore = (searchData: any, linkedinData: any): number => {
+    let score = 30; // Base
+    if (searchData?.organic?.length > 0) score += 20;
+    if (searchData?.organic?.length > 3) score += 10;
+    if (linkedinData?.organic?.find((r: any) => r.link?.includes('linkedin.com'))) score += 20;
+    if (searchData?.knowledgeGraph) score += 20;
+    return Math.min(score, 100);
+  };
+
+  // Gerar análise estratégica de CEO
+  const generateCEOAnalysis = async () => {
     try {
+      // Criar prompt detalhado com dados REAIS
+      const competitorDetails = enrichedCompetitors.map(c => `
+### ${c.razaoSocial} ${c.nomeFantasia ? `(${c.nomeFantasia})` : ''}
+- **CNPJ:** ${formatCNPJ(c.cnpj)}
+- **Capital Social:** ${formatCurrency(c.capitalSocial)}
+- **Setor:** ${c.setor}
+- **CNAE:** ${c.cnaePrincipal} - ${c.cnaePrincipalDescricao || 'N/A'}
+- **Localização:** ${c.cidade}/${c.estado}
+- **Nível de Ameaça:** ${c.ameacaPotencial?.toUpperCase() || 'N/A'}
+- **Diferencial Identificado:** ${c.diferencialDeles || 'Não informado'}
+- **Presença Digital:** ${c.presencaDigitalScore || 'N/A'}%
+${c.pontosFortesIdentificados?.length ? `- **Pontos Fortes:** ${c.pontosFortesIdentificados.join(', ')}` : ''}
+      `).join('\n');
+
+      const prompt = `
+Você é um CEO e Estrategista de Mercado experiente, especializado em análise competitiva do setor de EPIs (Equipamentos de Proteção Individual) no Brasil.
+
+## EMPRESA ANALISADA: ${companyName}
+
+### Nossos Diferenciais Competitivos:
+${diferenciais.map((d, i) => `${i + 1}. ${d}`).join('\n')}
+
+## ANÁLISE COMPETITIVA DETALHADA
+
+### Concorrentes Diretos (${enrichedCompetitors.length} identificados):
+${competitorDetails}
+
+### Dados Consolidados do Mercado:
+- **Capital Total dos Concorrentes:** ${formatCurrency(totalCapitalConcorrentes)}
+- **Maior Concorrente:** ${maiorConcorrente?.razaoSocial || 'N/A'} (${formatCurrency(maiorConcorrente?.capitalSocial || 0)})
+- **Média de Capital:** ${formatCurrency(totalCapitalConcorrentes / (enrichedCompetitors.length || 1))}
+
+---
+
+## FORNEÇA UMA ANÁLISE ESTRATÉGICA COMPLETA:
+
+### 1. 📊 ANÁLISE DE POSICIONAMENTO
+- Onde ${companyName} se posiciona em relação a cada concorrente?
+- Quais são os gaps de mercado identificados?
+- Qual o market share estimado de cada player?
+
+### 2. ⚔️ ANÁLISE DE AMEAÇAS (por concorrente)
+Para cada concorrente, analise:
+- Nível de ameaça real (considerando capital, localização, CNAE)
+- Possíveis movimentos estratégicos deles
+- Como podem impactar nosso negócio
+
+### 3. 💡 OPORTUNIDADES DE DIFERENCIAÇÃO
+- Onde podemos nos destacar?
+- Nichos não atendidos pelos concorrentes
+- Vantagens competitivas sustentáveis
+
+### 4. 🎯 ESTRATÉGIA DE MARKET SHARE
+- Como conquistar clientes dos concorrentes?
+- Regiões com menor presença competitiva
+- Segmentos vulneráveis de cada concorrente
+
+### 5. 📋 PLANO DE AÇÃO IMEDIATO (90 dias)
+Liste 5-7 ações específicas, priorizadas e mensuráveis.
+
+### 6. 🔮 CENÁRIO FUTURO (2-3 anos)
+- Tendências do mercado de EPIs
+- Movimentos esperados dos concorrentes
+- Posicionamento ideal para ${companyName}
+
+---
+
+Use dados específicos, seja direto e pragmático. Foque em ações executáveis.
+      `;
+
       const { data, error } = await supabase.functions.invoke('generate-icp-report', {
         body: {
           tenant_id: tenantId,
-          report_type: 'competitive_analysis',
-          custom_prompt: `
-            Você é um CEO e Estrategista de Mercado experiente. Analise a seguinte situação competitiva:
-
-            ## EMPRESA ANALISADA: ${companyName}
-            ### Diferenciais:
-            ${diferenciais.map(d => `- ${d}`).join('\n')}
-
-            ## CONCORRENTES IDENTIFICADOS:
-            ${competitorData.map(c => `
-            ### ${c.nome}
-            - Website: ${c.website || 'N/A'}
-            - Descrição: ${c.descricaoWeb || 'N/A'}
-            - Presença Digital: ${c.presencaDigital?.nivel || 'N/A'} (Score: ${c.presencaDigital?.score || 0})
-            - Diferenciais: ${c.diferenciais?.join(', ') || 'N/A'}
-            - Pontos Fracos: ${c.pontosFracos?.join(', ') || 'N/A'}
-            `).join('\n')}
-
-            FORNEÇA:
-            1. **Análise de Posicionamento Competitivo**: Onde ${companyName} se posiciona vs concorrentes
-            2. **Oportunidades de Diferenciação**: Gaps de mercado que podem ser explorados
-            3. **Ameaças Competitivas**: Principais riscos e movimentos dos concorrentes
-            4. **Estratégia de Market Share**: Como aumentar participação de mercado
-            5. **Recomendações de Ação Imediata**: Top 5 ações para os próximos 90 dias
-            6. **Visão de Longo Prazo**: Cenário competitivo em 2-3 anos
-
-            Seja específico, use dados quando disponíveis, e foque em ações práticas.
-          `
+          report_type: 'competitive_ceo',
+          custom_prompt: prompt
         }
       });
 
-      if (!error && data?.report_data?.analysis) {
-        return data.report_data.analysis;
-      }
-      return null;
+      if (error) throw error;
+      return data?.report_data?.analysis || null;
     } catch (err) {
       console.error('Erro ao gerar análise CEO:', err);
       return null;
@@ -245,8 +311,8 @@ export default function CompetitiveAnalysis({
   const runFullAnalysis = async () => {
     if (competitors.length === 0) {
       toast({
-        title: 'Sem concorrentes',
-        description: 'Adicione concorrentes no Step 4 do Onboarding para realizar a análise.',
+        title: 'Sem concorrentes cadastrados',
+        description: 'Adicione concorrentes na Aba 4 (Situação Atual) do Onboarding.',
         variant: 'destructive'
       });
       return;
@@ -256,48 +322,39 @@ export default function CompetitiveAnalysis({
     try {
       toast({
         title: '🔍 Iniciando Análise Competitiva...',
-        description: `Analisando ${competitors.length} concorrentes na web.`
+        description: `Enriquecendo dados de ${competitors.length} concorrentes.`
       });
 
-      // Analisar cada concorrente
-      const analyzedData: CompetitorWebData[] = [];
-      for (const competitor of competitors) {
-        const data = await analyzeCompetitor(competitor);
-        analyzedData.push(data);
+      // Enriquecer cada concorrente
+      const enrichedResults: CompetitorEnriched[] = [];
+      for (let i = 0; i < competitors.length; i++) {
+        const competitor = competitors[i];
+        toast({
+          title: `📡 Analisando ${i + 1}/${competitors.length}`,
+          description: competitor.razaoSocial
+        });
+        const enriched = await enrichCompetitor(competitor);
+        enrichedResults.push(enriched);
+        // Pequeno delay para não sobrecarregar API
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      setCompetitorData(analyzedData);
+      setEnrichedCompetitors(enrichedResults);
 
-      // Gerar análise de CEO
+      // Gerar análise CEO
       toast({
-        title: '🧠 Gerando análise estratégica...',
-        description: 'A IA está processando os dados competitivos.'
+        title: '🧠 Gerando análise estratégica de CEO...',
+        description: 'Processando dados com IA.'
       });
-      const ceoReport = await generateCEOAnalysis(analyzedData);
-      setCeoAnalysis(ceoReport);
+      const analysis = await generateCEOAnalysis();
+      if (analysis) {
+        setCeoAnalysis(analysis);
+      }
 
-      // Gerar SWOT
-      setSwotAnalysis({
-        strengths: diferenciais.slice(0, 4),
-        weaknesses: ['Necessidade de maior presença digital', 'Portfólio limitado em alguns nichos'],
-        opportunities: ['Expansão regional', 'Novos nichos de mercado', 'Digitalização de processos'],
-        threats: analyzedData.map(c => `Concorrência de ${c.nome}`).slice(0, 3)
-      });
-
-      // Salvar análise
-      await (supabase as any)
-        .from('competitive_analysis')
-        .upsert({
-          tenant_id: tenantId,
-          icp_id: icpId,
-          competitor_data: analyzedData,
-          ceo_analysis: ceoReport,
-          swot_analysis: swotAnalysis,
-          analyzed_at: new Date().toISOString()
-        }, { onConflict: 'tenant_id' });
+      setLastAnalyzedAt(new Date().toISOString());
 
       toast({
         title: '✅ Análise Competitiva Concluída!',
-        description: 'Todos os dados foram processados e salvos.'
+        description: `${enrichedResults.length} concorrentes analisados com sucesso.`
       });
     } catch (error: any) {
       console.error('Erro na análise:', error);
@@ -309,6 +366,21 @@ export default function CompetitiveAnalysis({
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  // Renderizar badge de ameaça
+  const ThreatBadge = ({ level }: { level?: 'alta' | 'media' | 'baixa' }) => {
+    if (!level) return null;
+    const colors = {
+      alta: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+      media: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+      baixa: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+    };
+    return (
+      <Badge className={cn('font-medium', colors[level])}>
+        {level === 'alta' && '⚠️ '}{level.toUpperCase()}
+      </Badge>
+    );
   };
 
   return (
@@ -323,12 +395,19 @@ export default function CompetitiveAnalysis({
                 Análise Competitiva Profunda
               </CardTitle>
               <CardDescription className="mt-2">
-                Análise de {competitors.length} concorrentes com dados da web, redes sociais e recomendações estratégicas de CEO
+                {competitors.length > 0 
+                  ? `${competitors.length} concorrentes cadastrados • Capital total: ${formatCurrency(totalCapitalConcorrentes)}`
+                  : 'Nenhum concorrente cadastrado - adicione na Aba 4 do Onboarding'}
               </CardDescription>
+              {lastAnalyzedAt && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Última análise: {new Date(lastAnalyzedAt).toLocaleString('pt-BR')}
+                </p>
+              )}
             </div>
             <Button
               onClick={runFullAnalysis}
-              disabled={analyzing}
+              disabled={analyzing || competitors.length === 0}
               className="bg-purple-600 hover:bg-purple-700"
             >
               {analyzing ? (
@@ -339,7 +418,7 @@ export default function CompetitiveAnalysis({
               ) : (
                 <>
                   <Search className="h-4 w-4 mr-2" />
-                  {competitorData.length > 0 ? 'Atualizar Análise' : 'Iniciar Análise'}
+                  {ceoAnalysis ? 'Atualizar Análise' : 'Iniciar Análise'}
                 </>
               )}
             </Button>
@@ -347,14 +426,14 @@ export default function CompetitiveAnalysis({
         </CardHeader>
       </Card>
 
-      {/* Lista de Concorrentes Cadastrados */}
+      {/* Sem concorrentes */}
       {competitors.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">Nenhum concorrente cadastrado</h3>
             <p className="text-muted-foreground mb-4">
-              Adicione concorrentes no Step 4 (Situação Atual) do Onboarding para realizar a análise competitiva.
+              Adicione concorrentes na <strong>Aba 4 (Situação Atual)</strong> do Onboarding para realizar a análise competitiva.
             </p>
           </CardContent>
         </Card>
@@ -368,119 +447,118 @@ export default function CompetitiveAnalysis({
           </TabsList>
 
           {/* Visão Geral */}
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Card Sua Empresa */}
-              <Card className="border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Building2 className="h-5 w-5 text-green-600" />
-                    {companyName}
-                  </CardTitle>
-                  <Badge variant="default" className="w-fit bg-green-600">Sua Empresa</Badge>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
+          <TabsContent value="overview" className="space-y-6">
+            {/* KPIs */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="bg-red-50 dark:bg-red-950/30 border-red-200">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground mb-2">Diferenciais:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {diferenciais.slice(0, 4).map((d, idx) => (
-                          <Badge key={idx} variant="outline" className="text-xs bg-green-100 dark:bg-green-900">
-                            {d.length > 30 ? d.slice(0, 30) + '...' : d}
-                          </Badge>
-                        ))}
-                      </div>
+                      <p className="text-sm text-red-700 dark:text-red-300">Concorrentes</p>
+                      <p className="text-3xl font-bold text-red-900 dark:text-red-100">{competitors.length}</p>
                     </div>
+                    <AlertTriangle className="h-8 w-8 text-red-400" />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Cards de Concorrentes (resumo) */}
-              {competitors.slice(0, 2).map((competitor, idx) => {
-                const webData = competitorData.find(c => c.nome === competitor.nome);
-                return (
-                  <Card key={idx} className="border-red-500/30 bg-red-50/50 dark:bg-red-950/20">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <AlertTriangle className="h-5 w-5 text-red-600" />
-                        {competitor.nome}
-                      </CardTitle>
-                      <Badge variant="destructive" className="w-fit">Concorrente</Badge>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {webData?.presencaDigital && (
-                          <div>
-                            <p className="text-sm text-muted-foreground">Presença Digital:</p>
-                            <div className="flex items-center gap-2">
-                              <Progress value={webData.presencaDigital.score} className="h-2" />
-                              <span className="text-sm font-medium">{webData.presencaDigital.score}%</span>
-                            </div>
-                          </div>
-                        )}
-                        {webData?.redesSociais?.linkedin && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Linkedin className="h-4 w-4 text-blue-600" />
-                            <span>LinkedIn encontrado</span>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+              <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-amber-700 dark:text-amber-300">Capital Total</p>
+                      <p className="text-xl font-bold text-amber-900 dark:text-amber-100">
+                        {formatCurrency(totalCapitalConcorrentes)}
+                      </p>
+                    </div>
+                    <DollarSign className="h-8 w-8 text-amber-400" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">Maior Concorrente</p>
+                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100 truncate max-w-[150px]">
+                        {maiorConcorrente?.nomeFantasia || maiorConcorrente?.razaoSocial?.split(' ')[0] || 'N/A'}
+                      </p>
+                      <p className="text-xs text-blue-600">{formatCurrency(maiorConcorrente?.capitalSocial || 0)}</p>
+                    </div>
+                    <Building2 className="h-8 w-8 text-blue-400" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-green-50 dark:bg-green-950/30 border-green-200">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-green-700 dark:text-green-300">Seus Diferenciais</p>
+                      <p className="text-3xl font-bold text-green-900 dark:text-green-100">{diferenciais.length}</p>
+                    </div>
+                    <Shield className="h-8 w-8 text-green-400" />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
-            {/* Market Share Estimado */}
+            {/* Ranking de Concorrentes por Capital */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <PieChart className="h-5 w-5 text-primary" />
-                  Posicionamento Competitivo Estimado
+                  <Scale className="h-5 w-5 text-primary" />
+                  Ranking por Capital Social
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-green-600">{companyName}</span>
-                      <span className="font-bold">~25%</span>
-                    </div>
-                    <Progress value={25} className="h-3 bg-green-100" />
-                    
-                    {competitors.slice(0, 3).map((c, idx) => (
-                      <div key={idx}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">{c.nome}</span>
-                          <span className="text-sm font-medium">{20 - idx * 5}%</span>
+                <div className="space-y-4">
+                  {[...enrichedCompetitors]
+                    .sort((a, b) => (b.capitalSocial || 0) - (a.capitalSocial || 0))
+                    .map((competitor, idx) => {
+                      const percentage = totalCapitalConcorrentes > 0 
+                        ? ((competitor.capitalSocial || 0) / totalCapitalConcorrentes) * 100 
+                        : 0;
+                      return (
+                        <div key={idx} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="w-6 h-6 rounded-full flex items-center justify-center">
+                                {idx + 1}
+                              </Badge>
+                              <span className="font-medium">{competitor.razaoSocial}</span>
+                              <ThreatBadge level={competitor.ameacaPotencial} />
+                            </div>
+                            <span className="font-bold">{formatCurrency(competitor.capitalSocial || 0)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Progress value={percentage} className="h-2 flex-1" />
+                            <span className="text-xs text-muted-foreground w-12">{percentage.toFixed(1)}%</span>
+                          </div>
                         </div>
-                        <Progress value={20 - idx * 5} className="h-2" />
-                      </div>
-                    ))}
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Outros</span>
-                      <span className="text-sm font-medium">~{100 - 25 - competitors.slice(0, 3).reduce((a, _, i) => a + (20 - i * 5), 0)}%</span>
+                      );
+                    })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Mapa de Localização */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-primary" />
+                  Distribuição Geográfica
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {enrichedCompetitors.map((competitor, idx) => (
+                    <div key={idx} className="p-3 bg-muted rounded-lg text-center">
+                      <p className="font-medium text-sm truncate">{competitor.nomeFantasia || competitor.razaoSocial.split(' ')[0]}</p>
+                      <p className="text-xs text-muted-foreground">{competitor.cidade}/{competitor.estado}</p>
                     </div>
-                  </div>
-                  
-                  <div className="space-y-3 pl-6 border-l">
-                    <h4 className="font-semibold">Oportunidades de Expansão:</h4>
-                    <ul className="space-y-2 text-sm">
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Nichos não explorados pelos concorrentes</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Regiões com baixa penetração competitiva</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Diferenciação por tecnologia e inovação</span>
-                      </li>
-                    </ul>
-                  </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -488,146 +566,140 @@ export default function CompetitiveAnalysis({
 
           {/* Detalhes dos Concorrentes */}
           <TabsContent value="competitors" className="space-y-4">
-            {competitors.map((competitor, idx) => {
-              const webData = competitorData.find(c => c.nome === competitor.nome);
-              return (
-                <Card key={idx}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Building2 className="h-5 w-5" />
-                          {competitor.nome}
-                        </CardTitle>
-                        <CardDescription>
-                          {competitor.setor && <Badge variant="outline" className="mr-2">{competitor.setor}</Badge>}
-                          {competitor.website && (
-                            <a 
-                              href={competitor.website.startsWith('http') ? competitor.website : `https://${competitor.website}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline inline-flex items-center gap-1"
-                            >
-                              <Globe className="h-3 w-3" />
-                              {competitor.website}
+            {enrichedCompetitors.map((competitor, idx) => (
+              <Card key={idx} className="border-l-4 border-l-red-500">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Building2 className="h-5 w-5" />
+                        {competitor.razaoSocial}
+                      </CardTitle>
+                      {competitor.nomeFantasia && (
+                        <p className="text-sm text-muted-foreground">{competitor.nomeFantasia}</p>
+                      )}
+                    </div>
+                    <ThreatBadge level={competitor.ameacaPotencial} />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Dados Cadastrais */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-primary" />
+                        Dados Cadastrais
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">CNPJ:</span>
+                          <span className="font-mono">{formatCNPJ(competitor.cnpj)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Capital Social:</span>
+                          <span className="font-bold text-amber-600">{formatCurrency(competitor.capitalSocial || 0)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Setor:</span>
+                          <Badge variant="outline">{competitor.setor}</Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Localização:</span>
+                          <span>{competitor.cidade}/{competitor.estado}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CNAE e Atividade */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                        <Factory className="h-4 w-4 text-primary" />
+                        Atividade Econômica
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">CNAE Principal:</span>
+                          <p className="font-mono text-xs bg-muted p-1 rounded mt-1">{competitor.cnaePrincipal}</p>
+                        </div>
+                        {competitor.cnaePrincipalDescricao && (
+                          <div>
+                            <span className="text-muted-foreground">Descrição:</span>
+                            <p className="text-xs mt-1">{competitor.cnaePrincipalDescricao}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Presença Digital */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-primary" />
+                        Presença Digital
+                      </h4>
+                      {competitor.presencaDigitalScore !== undefined ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Progress value={competitor.presencaDigitalScore} className="h-2 flex-1" />
+                            <span className="text-sm font-medium">{competitor.presencaDigitalScore}%</span>
+                          </div>
+                          {competitor.linkedinUrl && (
+                            <a href={competitor.linkedinUrl} target="_blank" rel="noopener noreferrer" 
+                               className="flex items-center gap-2 text-blue-600 hover:underline text-sm">
+                              <Linkedin className="h-4 w-4" /> LinkedIn
                               <ExternalLink className="h-3 w-3" />
                             </a>
                           )}
-                        </CardDescription>
-                      </div>
-                      {webData?.presencaDigital && (
-                        <div className="text-right">
-                          <p className="text-sm text-muted-foreground">Presença Digital</p>
-                          <Badge 
-                            variant={webData.presencaDigital.nivel === 'alto' ? 'default' : 
-                                    webData.presencaDigital.nivel === 'medio' ? 'secondary' : 'destructive'}
-                          >
-                            {webData.presencaDigital.score}% - {webData.presencaDigital.nivel.toUpperCase()}
-                          </Badge>
+                          {competitor.website && (
+                            <a href={competitor.website.startsWith('http') ? competitor.website : `https://${competitor.website}`} 
+                               target="_blank" rel="noopener noreferrer"
+                               className="flex items-center gap-2 text-blue-600 hover:underline text-sm">
+                              <Globe className="h-4 w-4" /> Website
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
                         </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Clique em "Iniciar Análise" para enriquecer dados
+                        </p>
                       )}
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Informações da Web */}
-                      <div className="space-y-4">
-                        {webData?.descricaoWeb && (
-                          <div>
-                            <p className="text-sm font-medium mb-1">Descrição (Web):</p>
-                            <p className="text-sm text-muted-foreground">{webData.descricaoWeb}</p>
-                          </div>
-                        )}
-                        
-                        {/* Redes Sociais */}
-                        <div>
-                          <p className="text-sm font-medium mb-2">Redes Sociais:</p>
-                          <div className="flex gap-2">
-                            {webData?.redesSociais?.linkedin && (
-                              <a href={webData.redesSociais.linkedin} target="_blank" rel="noopener noreferrer">
-                                <Badge variant="outline" className="cursor-pointer hover:bg-blue-100">
-                                  <Linkedin className="h-3 w-3 mr-1" /> LinkedIn
-                                </Badge>
-                              </a>
-                            )}
-                            {webData?.redesSociais?.instagram && (
-                              <a href={webData.redesSociais.instagram} target="_blank" rel="noopener noreferrer">
-                                <Badge variant="outline" className="cursor-pointer hover:bg-pink-100">
-                                  <Instagram className="h-3 w-3 mr-1" /> Instagram
-                                </Badge>
-                              </a>
-                            )}
-                            {!webData?.redesSociais?.linkedin && !webData?.redesSociais?.instagram && (
-                              <span className="text-sm text-muted-foreground">Nenhuma encontrada</span>
-                            )}
-                          </div>
-                        </div>
+                  </div>
 
-                        {/* Notícias */}
-                        {webData?.noticias && webData.noticias.length > 0 && (
-                          <div>
-                            <p className="text-sm font-medium mb-2">Últimas Notícias:</p>
-                            <ul className="space-y-1">
-                              {webData.noticias.map((news, nIdx) => (
-                                <li key={nIdx}>
-                                  <a 
-                                    href={news.url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="text-sm text-primary hover:underline flex items-center gap-1"
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                    {news.titulo.length > 60 ? news.titulo.slice(0, 60) + '...' : news.titulo}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Análise Competitiva */}
-                      <div className="space-y-4">
-                        {competitor.diferenciais && competitor.diferenciais.length > 0 && (
-                          <div>
-                            <p className="text-sm font-medium mb-2 flex items-center gap-1">
-                              <Award className="h-4 w-4 text-amber-500" /> Diferenciais:
-                            </p>
-                            <ul className="space-y-1">
-                              {competitor.diferenciais.map((d, dIdx) => (
-                                <li key={dIdx} className="text-sm flex items-start gap-2">
-                                  <CheckCircle2 className="h-3 w-3 text-amber-500 mt-1" />
-                                  {d}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {competitor.pontosFracos && competitor.pontosFracos.length > 0 && (
-                          <div>
-                            <p className="text-sm font-medium mb-2 flex items-center gap-1">
-                              <XCircle className="h-4 w-4 text-red-500" /> Pontos Fracos:
-                            </p>
-                            <ul className="space-y-1">
-                              {competitor.pontosFracos.map((p, pIdx) => (
-                                <li key={pIdx} className="text-sm flex items-start gap-2">
-                                  <XCircle className="h-3 w-3 text-red-500 mt-1" />
-                                  {p}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
+                  {/* Diferencial identificado */}
+                  {competitor.diferencialDeles && (
+                    <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
+                      <p className="text-sm font-medium flex items-center gap-2">
+                        <Award className="h-4 w-4 text-amber-600" />
+                        Diferencial Identificado:
+                      </p>
+                      <p className="text-sm mt-1">{competitor.diferencialDeles}</p>
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                  )}
+
+                  {/* Notícias (se enriquecido) */}
+                  {competitor.noticias && competitor.noticias.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium mb-2">Últimas Notícias:</p>
+                      <ul className="space-y-1">
+                        {competitor.noticias.map((news, nIdx) => (
+                          <li key={nIdx}>
+                            <a href={news.url} target="_blank" rel="noopener noreferrer"
+                               className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                              <ExternalLink className="h-3 w-3" />
+                              {news.titulo.length > 80 ? news.titulo.slice(0, 80) + '...' : news.titulo}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
           </TabsContent>
 
-          {/* Análise SWOT */}
+          {/* SWOT */}
           <TabsContent value="swot" className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               {/* Forças */}
@@ -640,12 +712,15 @@ export default function CompetitiveAnalysis({
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
-                    {(swotAnalysis?.strengths || diferenciais.slice(0, 4)).map((item: string, idx: number) => (
+                    {diferenciais.slice(0, 5).map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
+                        <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                         {item}
                       </li>
                     ))}
+                    {diferenciais.length === 0 && (
+                      <li className="text-sm text-muted-foreground">Cadastre diferenciais na Aba 4</li>
+                    )}
                   </ul>
                 </CardContent>
               </Card>
@@ -660,12 +735,18 @@ export default function CompetitiveAnalysis({
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
-                    {(swotAnalysis?.weaknesses || ['Necessidade de maior presença digital', 'Portfólio limitado em alguns nichos']).map((item: string, idx: number) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
-                        <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
-                        {item}
-                      </li>
-                    ))}
+                    <li className="flex items-start gap-2 text-sm">
+                      <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                      {enrichedCompetitors.filter(c => (c.capitalSocial || 0) > 10000000).length} concorrentes com capital superior
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                      Necessidade de maior presença digital
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                      Concorrentes em {new Set(enrichedCompetitors.map(c => c.estado)).size} estados diferentes
+                    </li>
                   </ul>
                 </CardContent>
               </Card>
@@ -680,12 +761,22 @@ export default function CompetitiveAnalysis({
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
-                    {(swotAnalysis?.opportunities || ['Expansão regional', 'Novos nichos de mercado', 'Digitalização de processos']).map((item: string, idx: number) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
-                        <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
-                        {item}
-                      </li>
-                    ))}
+                    <li className="flex items-start gap-2 text-sm">
+                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
+                      Nichos com menor presença competitiva
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
+                      Regiões não cobertas pelos concorrentes
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
+                      Diferenciação por tecnologia e personalização
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
+                      Mercado de EPIs em expansão pós-pandemia
+                    </li>
                   </ul>
                 </CardContent>
               </Card>
@@ -700,19 +791,25 @@ export default function CompetitiveAnalysis({
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
-                    {(swotAnalysis?.threats || competitors.slice(0, 3).map(c => `Concorrência de ${c.nome}`)).map((item: string, idx: number) => (
+                    {enrichedCompetitors.filter(c => c.ameacaPotencial === 'alta').map((c, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm">
                         <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
-                        {item}
+                        <span><strong>{c.nomeFantasia || c.razaoSocial.split(' ')[0]}</strong>: Capital de {formatCurrency(c.capitalSocial)}</span>
                       </li>
                     ))}
+                    {enrichedCompetitors.filter(c => c.ameacaPotencial === 'alta').length === 0 && (
+                      <li className="flex items-start gap-2 text-sm">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                        Monitorar movimentos dos {enrichedCompetitors.length} concorrentes
+                      </li>
+                    )}
                   </ul>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          {/* Análise do CEO */}
+          {/* Análise CEO */}
           <TabsContent value="ceo" className="space-y-4">
             <Card className="border-purple-500/30">
               <CardHeader>
@@ -721,7 +818,7 @@ export default function CompetitiveAnalysis({
                   Análise Estratégica do CEO
                 </CardTitle>
                 <CardDescription>
-                  Recomendações e visão estratégica baseadas na análise competitiva
+                  Recomendações baseadas nos dados REAIS dos {competitors.length} concorrentes cadastrados
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -733,19 +830,21 @@ export default function CompetitiveAnalysis({
                     prose-p:text-foreground/80 prose-p:leading-7
                     prose-li:text-foreground/80
                     prose-strong:text-foreground
+                    prose-ul:my-3 prose-ol:my-3
                   ">
-                    <div dangerouslySetInnerHTML={{ __html: ceoAnalysis.replace(/\n/g, '<br/>') }} />
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{ceoAnalysis}</ReactMarkdown>
                   </div>
                 ) : (
                   <div className="text-center py-12">
                     <Zap className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                     <h3 className="text-lg font-semibold mb-2">Análise não gerada</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Clique em "Iniciar Análise" para gerar recomendações estratégicas de CEO baseadas nos seus concorrentes.
+                    <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                      Clique em "Iniciar Análise" para gerar recomendações estratégicas de CEO 
+                      baseadas nos {competitors.length} concorrentes cadastrados.
                     </p>
                     <Button onClick={runFullAnalysis} disabled={analyzing}>
                       {analyzing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
-                      Gerar Análise
+                      Gerar Análise Completa
                     </Button>
                   </div>
                 )}
@@ -757,4 +856,3 @@ export default function CompetitiveAnalysis({
     </div>
   );
 }
-
