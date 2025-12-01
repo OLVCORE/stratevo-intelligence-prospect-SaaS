@@ -368,6 +368,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
         const updatedRawData = {
           ...(lead.raw_data || {}),
           receita_federal: receita,
+          receita: receita, // Para compatibilidade com o badge
           enriched_receita: true,
           situacao: receita.situacao,
           capital_social: receita.capital_social,
@@ -380,7 +381,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
           enriched_at: new Date().toISOString()
         };
 
-        await supabase
+        const { error } = await supabase
           .from('companies')
           .update({ 
             raw_data: updatedRawData,
@@ -390,8 +391,25 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
           })
           .eq('id', leadId);
 
-        toast.success('✅ Dados da Receita Federal atualizados!');
-        loadLeads();
+        if (error) throw error;
+
+        // Atualizar estado local imediatamente para refletir na UI
+        setLeads(prev => prev.map(l => 
+          l.id === leadId 
+            ? { 
+                ...l, 
+                raw_data: updatedRawData,
+                situacao_cadastral: receita.situacao,
+                uf: receita.uf,
+                municipio: receita.municipio,
+                setor: receita.atividade_principal?.[0]?.text
+              } 
+            : l
+        ));
+
+        toast.success('✅ Dados da Receita Federal atualizados!', {
+          description: `Status: ${receita.situacao || 'OK'} | Progresso: 25%`
+        });
       }
     } catch (error: any) {
       toast.error('Erro ao buscar Receita Federal', { description: error.message });
@@ -402,6 +420,9 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
 
   // Enriquecimento 360° via Edge Function
   const handleEnrich360 = async (leadId: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
     setEnrichingId(leadId);
     try {
       toast.info('🚀 Iniciando análise 360°...');
@@ -412,8 +433,23 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
 
       if (error) throw error;
 
-      toast.success('✅ Análise 360° concluída!');
-      loadLeads();
+      // Atualizar estado local imediatamente
+      const updatedRawData = {
+        ...(lead.raw_data || {}),
+        enrichment_360: true,
+        digital_intelligence: data || true,
+        enriched_360_at: new Date().toISOString()
+      };
+
+      setLeads(prev => prev.map(l => 
+        l.id === leadId 
+          ? { ...l, raw_data: updatedRawData } 
+          : l
+      ));
+
+      toast.success('✅ Análise 360° concluída!', {
+        description: 'Presença digital e dados enriquecidos | Progresso +25%'
+      });
     } catch (error: any) {
       toast.error('Erro na análise 360°', { description: error.message });
     } finally {
@@ -454,10 +490,27 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
         requalified_at: new Date().toISOString()
       };
 
-      await supabase
+      const { error } = await supabase
         .from('companies')
         .update({ raw_data: updatedRawData })
         .eq('id', leadId);
+
+      if (error) throw error;
+
+      // Atualizar estado local imediatamente
+      setLeads(prev => prev.map(l => 
+        l.id === leadId 
+          ? { 
+              ...l, 
+              raw_data: updatedRawData,
+              icp_score: result.best_icp_score,
+              temperatura: result.best_temperatura as 'hot' | 'warm' | 'cold',
+              validation_status: result.decision,
+              best_icp_name: result.best_icp_name,
+              decision_reason: result.decision_reason
+            } 
+          : l
+      ));
 
       const tempEmoji = result.best_temperatura === 'hot' ? '🔥' : 
                         result.best_temperatura === 'warm' ? '🌡️' : '❄️';
@@ -465,7 +518,6 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
       toast.success(`${tempEmoji} Requalificado: Score ${result.best_icp_score}`, {
         description: result.decision_reason
       });
-      loadLeads();
     } catch (error: any) {
       toast.error('Erro ao requalificar', { description: error.message });
     } finally {
@@ -1015,37 +1067,73 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               </p>
             </div>
           ) : (
-            <Table>
+            <div className="overflow-x-auto w-full">
+            <Table className="min-w-[1200px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">
+                  <TableHead className="w-10 sticky left-0 bg-background z-10">
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpandedRow(null)}>
                       {expandedRow ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </Button>
                   </TableHead>
-                  <TableHead className="w-12">
+                  <TableHead className="w-12 sticky left-10 bg-background z-10">
                     <Checkbox
                       checked={selectedLeads.length === filteredLeads.length && filteredLeads.length > 0}
                       onCheckedChange={toggleSelectAll}
                     />
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="min-w-[220px]">
                     <Button variant="ghost" size="sm" onClick={() => handleSort('name')} className="h-8 gap-1">
                       Empresa <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead>CNPJ</TableHead>
-                  <TableHead>
+                  <TableHead className="min-w-[140px]">
+                    <div className="flex items-center gap-1">
+                      CNPJ
+                      <ArrowUpDown className="h-3 w-3 opacity-50" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="min-w-[100px]">
                     <Button variant="ghost" size="sm" onClick={() => handleSort('icp_score')} className="h-8 gap-1">
-                      Score <ArrowUpDown className="h-3 w-3" />
+                      Score ICP <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead>Temperatura</TableHead>
-                  <TableHead>Status CNPJ</TableHead>
-                  <TableHead>Status Análise</TableHead>
-                  <TableHead>UF</TableHead>
-                  <TableHead>Setor</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="min-w-[110px]">
+                    <div className="flex items-center gap-1">
+                      <Filter className="h-3 w-3 opacity-50" />
+                      Temperatura
+                    </div>
+                  </TableHead>
+                  <TableHead className="min-w-[120px]">
+                    <div className="flex items-center gap-1">
+                      <Filter className="h-3 w-3 opacity-50" />
+                      Status CNPJ
+                    </div>
+                  </TableHead>
+                  <TableHead className="min-w-[130px]">
+                    <div className="flex items-center gap-1">
+                      Status Análise
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <AlertTriangle className="h-3 w-3 opacity-50" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">0-100% baseado em:</p>
+                            <p className="text-xs">Receita Federal, Apollo, 360°, TOTVS</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </TableHead>
+                  <TableHead className="min-w-[60px]">
+                    <div className="flex items-center gap-1">
+                      <Filter className="h-3 w-3 opacity-50" />
+                      UF
+                    </div>
+                  </TableHead>
+                  <TableHead className="min-w-[180px]">Setor</TableHead>
+                  <TableHead className="text-right min-w-[150px] sticky right-0 bg-background z-10">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1472,6 +1560,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
