@@ -48,6 +48,7 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ProductComparisonMatrix } from './ProductComparisonMatrix';
 
 // Interface com TODOS os dados do concorrente da Aba 4
 interface ConcorrenteDireto {
@@ -584,9 +585,10 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
       ) : (
         <TooltipProvider>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-5 w-full">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="competitors">Concorrentes ({competitors.length})</TabsTrigger>
+            <TabsTrigger value="products">Comparação Produtos</TabsTrigger>
             <TabsTrigger value="swot">SWOT</TabsTrigger>
             <TabsTrigger value="ceo" className={ceoAnalysis ? 'text-purple-600' : ''}>
               {ceoAnalysis && '✓ '}Análise CEO
@@ -1008,6 +1010,11 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                 </CardContent>
               </Card>
             ))}
+          </TabsContent>
+
+          {/* Comparação de Produtos */}
+          <TabsContent value="products" className="space-y-4">
+            <ProductComparisonMatrix icpId={icpId} />
           </TabsContent>
 
           {/* SWOT */}

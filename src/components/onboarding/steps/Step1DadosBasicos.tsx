@@ -60,6 +60,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     website?: string;
     urlParaScan?: string; // NOVO: URL manual para scan
     produtosExtraidos?: number; // NOVO: Contador de produtos
+    produtos?: Array<{ id: string; nome: string; descricao?: string; categoria?: string }>; // NOVO: Lista de produtos
   }
   
   const [concorrentes, setConcorrentes] = useState<ConcorrenteDireto[]>(
@@ -99,9 +100,32 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         telefone: initialData.telefone || '',
       });
       
-      // 🔥 NOVO: Carregar concorrentes
+      // 🔥 NOVO: Carregar concorrentes e seus produtos
       if (initialData.concorrentesDiretos) {
-        setConcorrentes(initialData.concorrentesDiretos);
+        const loadConcorrentesComProdutos = async () => {
+          const concorrentesComProdutos = await Promise.all(
+            initialData.concorrentesDiretos.map(async (conc: ConcorrenteDireto) => {
+              if (!tenant?.id || !conc.cnpj) return conc;
+              
+              const { data: produtos } = await (supabase
+                .from('tenant_competitor_products' as any)
+                .select('id, nome, descricao, categoria')
+                .eq('tenant_id', tenant.id)
+                .eq('competitor_cnpj', conc.cnpj.replace(/\D/g, ''))
+                .eq('ativo', true)
+                .order('created_at', { ascending: false }));
+              
+              return {
+                ...conc,
+                produtos: (produtos || []) as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
+                produtosExtraidos: produtos?.length || 0
+              };
+            })
+          );
+          setConcorrentes(concorrentesComProdutos);
+        };
+        
+        loadConcorrentesComProdutos();
       }
       
       // Restaurar cnpjData se disponível
@@ -296,12 +320,34 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
 
       if (error) throw error;
 
-      const count = data?.products_extracted || 0;
+      const count = data?.products_inserted || 0;
       
-      // Atualizar contador no concorrente
+      // Buscar produtos extraídos do banco
+      const { data: produtosData } = await (supabase
+        .from('tenant_competitor_products' as any)
+        .select('id, nome, descricao, categoria')
+        .eq('tenant_id', tenant.id)
+        .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
+        .eq('ativo', true)
+        .order('created_at', { ascending: false }));
+      
+      // Atualizar contador e produtos no concorrente
       const updated = [...concorrentes];
-      updated[index] = { ...updated[index], produtosExtraidos: count };
+      updated[index] = { 
+        ...updated[index], 
+        produtosExtraidos: count,
+        produtos: (produtosData || []) as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>
+      };
       setConcorrentes(updated);
+      
+      // Salvar atualização
+      if (onSave) {
+        const dataToSave = {
+          ...formData,
+          concorrentesDiretos: updated,
+        };
+        onSave(dataToSave);
+      }
 
       toast.success(`${count} produtos extraídos de ${concorrente.razaoSocial}!`);
     } catch (err: any) {
@@ -908,6 +954,37 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                           Informe a URL (website, Instagram, LinkedIn) para extrair produtos automaticamente
                         </p>
                       </div>
+                      
+                      {/* 🔥 NOVO: Lista de Produtos Extraídos */}
+                      {concorrente.produtos && concorrente.produtos.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-semibold flex items-center gap-2">
+                              <Package className="h-4 w-4" />
+                              Produtos Extraídos ({concorrente.produtos.length})
+                            </Label>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                            {concorrente.produtos.map((produto, prodIdx) => (
+                              <Card key={produto.id || prodIdx} className="p-2 border-l-2 border-l-green-500">
+                                <div className="space-y-1">
+                                  <div className="font-medium text-sm">{produto.nome}</div>
+                                  {produto.categoria && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {produto.categoria}
+                                    </Badge>
+                                  )}
+                                  {produto.descricao && (
+                                    <p className="text-xs text-muted-foreground line-clamp-2">
+                                      {produto.descricao}
+                                    </p>
+                                  )}
+                                </div>
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <Button
                       type="button"
