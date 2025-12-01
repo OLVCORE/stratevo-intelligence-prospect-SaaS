@@ -107,19 +107,38 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
             initialData.concorrentesDiretos.map(async (conc: ConcorrenteDireto) => {
               if (!tenant?.id || !conc.cnpj) return conc;
               
-              const { data: produtos } = await (supabase
-                .from('tenant_competitor_products' as any)
-                .select('id, nome, descricao, categoria')
-                .eq('tenant_id', tenant.id)
-                .eq('competitor_cnpj', conc.cnpj.replace(/\D/g, ''))
-                .eq('ativo', true)
-                .order('created_at', { ascending: false }));
-              
-              return {
-                ...conc,
-                produtos: (produtos || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
-                produtosExtraidos: produtos?.length || 0
-              };
+              try {
+                const { data: produtos, error } = await (supabase
+                  .from('tenant_competitor_products' as any)
+                  .select('id, nome, descricao, categoria')
+                  .eq('tenant_id', tenant.id)
+                  .eq('competitor_cnpj', conc.cnpj.replace(/\D/g, ''))
+                  .eq('ativo', true)
+                  .order('created_at', { ascending: false }));
+                
+                // Se erro 404, tabela não existe - retornar concorrente sem produtos
+                if (error && (error.code === '42P01' || error.message?.includes('404'))) {
+                  console.warn('[Step1] Tabela tenant_competitor_products não existe. Aplique a migration.');
+                  return {
+                    ...conc,
+                    produtos: [],
+                    produtosExtraidos: 0
+                  };
+                }
+                
+                return {
+                  ...conc,
+                  produtos: (produtos || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
+                  produtosExtraidos: produtos?.length || 0
+                };
+              } catch (err) {
+                console.error('[Step1] Erro ao carregar produtos:', err);
+                return {
+                  ...conc,
+                  produtos: [],
+                  produtosExtraidos: 0
+                };
+              }
             })
           );
           setConcorrentes(concorrentesComProdutos);
@@ -324,15 +343,35 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       const inserted = data?.products_inserted || 0;
       
       // 🔥 CRÍTICO: Sempre buscar produtos do banco após extração (mesmo se não inseriu novos)
-      const { data: produtosData } = await (supabase
-        .from('tenant_competitor_products' as any)
-        .select('id, nome, descricao, categoria')
-        .eq('tenant_id', tenant.id)
-        .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
-        .eq('ativo', true)
-        .order('created_at', { ascending: false }));
+      let produtosData: any[] = [];
+      let totalProdutos = 0;
       
-      const totalProdutos = produtosData?.length || 0;
+      try {
+        const { data, error } = await (supabase
+          .from('tenant_competitor_products' as any)
+          .select('id, nome, descricao, categoria')
+          .eq('tenant_id', tenant.id)
+          .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
+          .eq('ativo', true)
+          .order('created_at', { ascending: false }));
+        
+        if (error && (error.code === '42P01' || error.message?.includes('404'))) {
+          console.warn('[Step1] Tabela tenant_competitor_products não existe. Aplique a migration 20250201000002_tenant_competitor_products.sql');
+          toast.error('Tabela de produtos não encontrada', {
+            description: 'Aplique a migration no Supabase para habilitar esta funcionalidade'
+          });
+        } else if (!error) {
+          produtosData = data || [];
+          totalProdutos = produtosData.length;
+        }
+      } catch (err: any) {
+        console.error('[Step1] Erro ao buscar produtos:', err);
+        if (err.message?.includes('404') || err.code === '42P01') {
+          toast.error('Tabela de produtos não encontrada', {
+            description: 'Aplique a migration no Supabase'
+          });
+        }
+      }
       
       // Atualizar contador e produtos no concorrente
       const updated = [...concorrentes];
@@ -978,33 +1017,65 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                           </Label>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={async () => {
-                              if (!tenant?.id || !concorrente.cnpj) return;
+                              if (!tenant?.id || !concorrente.cnpj) {
+                                toast.error('Dados incompletos para recarregar produtos');
+                                return;
+                              }
                               
-                              const { data: produtosData } = await (supabase
-                                .from('tenant_competitor_products' as any)
-                                .select('id, nome, descricao, categoria')
-                                .eq('tenant_id', tenant.id)
-                                .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
-                                .eq('ativo', true)
-                                .order('created_at', { ascending: false }));
+                              toast.info('Recarregando produtos...');
                               
-                              const updated = [...concorrentes];
-                              updated[index] = {
-                                ...updated[index],
-                                produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
-                                produtosExtraidos: produtosData?.length || 0
-                              };
-                              setConcorrentes(updated);
-                              
-                              toast.success(`${produtosData?.length || 0} produtos carregados!`);
+                              try {
+                                const { data: produtosData, error } = await (supabase
+                                  .from('tenant_competitor_products' as any)
+                                  .select('id, nome, descricao, categoria')
+                                  .eq('tenant_id', tenant.id)
+                                  .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
+                                  .eq('ativo', true)
+                                  .order('created_at', { ascending: false }));
+                                
+                                if (error && (error.code === '42P01' || error.message?.includes('404'))) {
+                                  toast.error('Tabela de produtos não encontrada', {
+                                    description: 'Aplique a migration 20250201000002_tenant_competitor_products.sql no Supabase'
+                                  });
+                                  return;
+                                }
+                                
+                                if (error) {
+                                  throw error;
+                                }
+                                
+                                const updated = [...concorrentes];
+                                updated[index] = {
+                                  ...updated[index],
+                                  produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
+                                  produtosExtraidos: produtosData?.length || 0
+                                };
+                                setConcorrentes(updated);
+                                
+                                // Salvar atualização
+                                if (onSave) {
+                                  const dataToSave = {
+                                    ...formData,
+                                    concorrentesDiretos: updated,
+                                  };
+                                  onSave(dataToSave);
+                                }
+                                
+                                toast.success(`${produtosData?.length || 0} produtos carregados!`);
+                              } catch (err: any) {
+                                console.error('[Step1] Erro ao recarregar produtos:', err);
+                                toast.error('Erro ao recarregar produtos', {
+                                  description: err.message || 'Tente novamente'
+                                });
+                              }
                             }}
-                            className="text-xs"
+                            className="flex items-center gap-2"
                           >
-                            <RefreshCw className="h-3 w-3 mr-1" />
-                            Atualizar
+                            <RefreshCw className="h-4 w-4" />
+                            Recarregar Produtos
                           </Button>
                         </div>
                         {concorrente.produtos && concorrente.produtos.length > 0 ? (
