@@ -45,6 +45,7 @@ import { STCAgent } from '@/components/intelligence/STCAgent';
 import { createQualificationEngine } from '@/services/icpQualificationEngine';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
+import { ColumnFilter } from '@/components/companies/ColumnFilter';
 
 interface Lead {
   id: string;
@@ -89,13 +90,16 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
   const [isProcessing, setIsProcessing] = useState(false);
   const [pageSize, setPageSize] = useState(50);
   
-  // Filtros
-  const [filterTemperatura, setFilterTemperatura] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterUF, setFilterUF] = useState<string>('all');
+  // 🔍 FILTROS POR COLUNA (tipo Excel) - idêntico ao CompaniesManagement
+  const [filterTemperatura, setFilterTemperatura] = useState<string[]>([]);
+  const [filterCnpjStatus, setFilterCnpjStatus] = useState<string[]>([]);
+  const [filterSetor, setFilterSetor] = useState<string[]>([]);
+  const [filterUF, setFilterUF] = useState<string[]>([]);
+  const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
   
   // Ordenação
-  const [sortBy, setSortBy] = useState<'icp_score' | 'name' | 'captured_at'>('icp_score');
+  type SortField = 'icp_score' | 'name' | 'captured_at' | 'cnpj';
+  const [sortBy, setSortBy] = useState<SortField>('icp_score');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Carregar dados diretamente de companies
@@ -104,7 +108,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     
     setLoading(true);
     try {
-      const { data: companiesData, error: cError } = await supabase
+      const { data: companiesData, error: cError } = await (supabase as any)
         .from('companies')
         .select('id, company_name, cnpj, industry, raw_data, created_at, headquarters_state, headquarters_city, tenant_id')
         .eq('tenant_id', tenantId)
@@ -160,6 +164,48 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     loadLeads();
   }, [tenantId, sortBy, sortOrder]);
 
+  // Valores únicos para filtros inteligentes
+  const uniqueTemperaturas = useMemo(() => 
+    Array.from(new Set(leads.map(l => l.temperatura).filter(Boolean))).sort() as string[], [leads]);
+  
+  const uniqueCnpjStatus = useMemo(() => {
+    const statuses = leads.map(l => {
+      const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
+      const situacao = receita?.situacao || l.situacao_cadastral;
+      if (!situacao) return 'Pendente';
+      const s = situacao.toUpperCase();
+      if (s.includes('ATIVA')) return 'Ativa';
+      if (s.includes('BAIXA') || s.includes('INATIV')) return 'Inativa';
+      if (s.includes('INAPTA') || s.includes('SUSPENS')) return 'Inapta';
+      return 'Pendente';
+    });
+    return Array.from(new Set(statuses)).sort();
+  }, [leads]);
+
+  const uniqueSetores = useMemo(() => 
+    Array.from(new Set(leads.map(l => l.setor || l.raw_data?.setor_amigavel || 'N/A').filter(s => s !== 'N/A'))).sort(), [leads]);
+
+  const uniqueUFs = useMemo(() => 
+    Array.from(new Set(leads.map(l => l.uf).filter(Boolean))).sort() as string[], [leads]);
+
+  const getAnalysisStatusFromLead = (lead: Lead) => {
+    const rawData = lead.raw_data || {};
+    const hasReceita = !!(rawData.receita_federal || rawData.receita || rawData.enriched_receita);
+    const hasApollo = !!(rawData.apollo_organization || rawData.enrichment_apollo);
+    const has360 = !!(rawData.digital_intelligence || rawData.enrichment_360);
+    const hasTotvs = !!(rawData.totvs_check || rawData.enriched_totvs);
+    
+    const count = [hasReceita, hasApollo, has360, hasTotvs].filter(Boolean).length;
+    if (count === 0) return '0%';
+    if (count === 1) return '25%';
+    if (count === 2) return '50%';
+    if (count === 3) return '75%';
+    return '100%';
+  };
+
+  const uniqueAnalysisStatus = useMemo(() => 
+    Array.from(new Set(leads.map(l => getAnalysisStatusFromLead(l)))).sort(), [leads]);
+
   // Filtrar leads
   const filteredLeads = useMemo(() => {
     let filtered = [...leads];
@@ -174,23 +220,45 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
       );
     }
     
-    // Filtro por temperatura
-    if (filterTemperatura !== 'all') {
-      filtered = filtered.filter(l => l.temperatura === filterTemperatura);
+    // Filtro por temperatura (array)
+    if (filterTemperatura.length > 0) {
+      filtered = filtered.filter(l => filterTemperatura.includes(l.temperatura || ''));
     }
     
-    // Filtro por status
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(l => l.validation_status === filterStatus);
+    // Filtro por status CNPJ
+    if (filterCnpjStatus.length > 0) {
+      filtered = filtered.filter(l => {
+        const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
+        const situacao = receita?.situacao || l.situacao_cadastral || '';
+        const s = situacao.toUpperCase();
+        let status = 'Pendente';
+        if (s.includes('ATIVA')) status = 'Ativa';
+        else if (s.includes('BAIXA') || s.includes('INATIV')) status = 'Inativa';
+        else if (s.includes('INAPTA') || s.includes('SUSPENS')) status = 'Inapta';
+        return filterCnpjStatus.includes(status);
+      });
+    }
+    
+    // Filtro por setor
+    if (filterSetor.length > 0) {
+      filtered = filtered.filter(l => {
+        const setor = l.setor || l.raw_data?.setor_amigavel || '';
+        return filterSetor.includes(setor);
+      });
     }
     
     // Filtro por UF
-    if (filterUF !== 'all') {
-      filtered = filtered.filter(l => l.uf === filterUF);
+    if (filterUF.length > 0) {
+      filtered = filtered.filter(l => filterUF.includes(l.uf || ''));
+    }
+    
+    // Filtro por status análise
+    if (filterAnalysisStatus.length > 0) {
+      filtered = filtered.filter(l => filterAnalysisStatus.includes(getAnalysisStatusFromLead(l)));
     }
     
     return filtered;
-  }, [leads, searchTerm, filterTemperatura, filterStatus, filterUF]);
+  }, [leads, searchTerm, filterTemperatura, filterCnpjStatus, filterSetor, filterUF, filterAnalysisStatus]);
 
   // Estatísticas
   const stats = useMemo(() => ({
@@ -204,12 +272,6 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
       ? Math.round(filteredLeads.reduce((sum, l) => sum + (l.icp_score || 0), 0) / filteredLeads.length)
       : 0
   }), [filteredLeads]);
-
-  // UFs únicas para filtro
-  const uniqueUFs = useMemo(() => {
-    const ufs = new Set(leads.map(l => l.uf).filter(Boolean));
-    return Array.from(ufs).sort();
-  }, [leads]);
 
   // Seleção
   const toggleSelectAll = () => {
@@ -241,7 +303,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
         decision_updated_at: new Date().toISOString()
       };
       
-      await supabase
+      await (supabase as any)
         .from('companies')
         .update({ raw_data: updatedRawData })
         .eq('id', leadId);
@@ -490,7 +552,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
         requalified_at: new Date().toISOString()
       };
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('companies')
         .update({ raw_data: updatedRawData })
         .eq('id', leadId);
@@ -547,7 +609,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
           validation_status: 'quarantine'
         };
 
-        await supabase
+        await (supabase as any)
           .from('companies')
           .update({ 
             raw_data: updatedRawData,
@@ -727,7 +789,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
   };
 
   // Ordenação
-  const handleSort = (column: 'icp_score' | 'name' | 'captured_at') => {
+  const handleSort = (column: SortField) => {
     if (sortBy === column) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -782,47 +844,11 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               </div>
             </div>
             
-            {/* Filtros */}
+            {/* Botões de Ação */}
             <div className="flex gap-2 flex-wrap">
-              <Select value={filterTemperatura} onValueChange={setFilterTemperatura}>
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Temperatura" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="hot">🔥 HOT</SelectItem>
-                  <SelectItem value="warm">🌡️ WARM</SelectItem>
-                  <SelectItem value="cold">❄️ COLD</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="approved">Aprovado</SelectItem>
-                  <SelectItem value="rejected">Rejeitado</SelectItem>
-                  <SelectItem value="quarantine">Quarentena</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterUF} onValueChange={setFilterUF}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="UF" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {uniqueUFs.map(uf => (
-                    <SelectItem key={uf} value={uf!}>{uf}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
               <Button variant="outline" onClick={() => { loadLeads(); onRefresh?.(); }}>
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Atualizar
               </Button>
 
               {/* Menu de Ações em Massa */}
@@ -1092,24 +1118,59 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       Score ICP <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead>Temperatura</TableHead>
-                  <TableHead>Status CNPJ</TableHead>
                   <TableHead>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger className="flex items-center gap-1">
-                          Status Análise
-                          <AlertTriangle className="h-3 w-3 opacity-50" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">0-100% baseado em:</p>
-                          <p className="text-xs">Receita Federal, Apollo, 360°, TOTVS</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <ColumnFilter
+                      column="temperatura"
+                      title="Temperatura"
+                      values={leads.map(l => l.temperatura || '')}
+                      selectedValues={filterTemperatura}
+                      onFilterChange={setFilterTemperatura}
+                    />
                   </TableHead>
-                  <TableHead>UF</TableHead>
-                  <TableHead>Setor</TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="cnpj_status"
+                      title="Status CNPJ"
+                      values={leads.map(l => {
+                        const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
+                        const situacao = receita?.situacao || l.situacao_cadastral || '';
+                        const s = situacao.toUpperCase();
+                        if (s.includes('ATIVA')) return 'Ativa';
+                        if (s.includes('BAIXA') || s.includes('INATIV')) return 'Inativa';
+                        if (s.includes('INAPTA') || s.includes('SUSPENS')) return 'Inapta';
+                        return 'Pendente';
+                      })}
+                      selectedValues={filterCnpjStatus}
+                      onFilterChange={setFilterCnpjStatus}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="analysis_status"
+                      title="Status Análise"
+                      values={leads.map(l => getAnalysisStatusFromLead(l))}
+                      selectedValues={filterAnalysisStatus}
+                      onFilterChange={setFilterAnalysisStatus}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="uf"
+                      title="UF"
+                      values={leads.map(l => l.uf || '')}
+                      selectedValues={filterUF}
+                      onFilterChange={setFilterUF}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="setor"
+                      title="Setor"
+                      values={leads.map(l => l.setor || l.raw_data?.setor_amigavel || '')}
+                      selectedValues={filterSetor}
+                      onFilterChange={setFilterSetor}
+                    />
+                  </TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>

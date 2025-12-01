@@ -95,7 +95,7 @@ export default function QualificationDashboard() {
       // com dados de qualificação extraídos de raw_data
       let leadsData: any[] = [];
       
-      const { data: companiesData, error: cError } = await supabase
+      const { data: companiesData, error: cError } = await (supabase as any)
         .from('companies')
         .select('id, cnpj, company_name, industry, raw_data, headquarters_state, created_at, tenant_id')
         .eq('tenant_id', tenantId)
@@ -230,7 +230,7 @@ export default function QualificationDashboard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+      <div className="p-8 flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className="ml-3 text-muted-foreground">Carregando dashboard...</span>
       </div>
@@ -238,7 +238,7 @@ export default function QualificationDashboard() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="p-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
