@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Target, 
   TrendingUp, 
@@ -30,8 +29,9 @@ import {
   ThermometerSun,
   Building2,
   Eye,
-  Database
+  Sparkles
 } from 'lucide-react';
+import { BulkUploadDialog } from '@/components/companies/BulkUploadDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from '@/hooks/use-toast';
@@ -79,6 +79,7 @@ export default function QualificationDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTemp, setFilterTemp] = useState<string>('all');
+  const [cnpjSearch, setCnpjSearch] = useState('');
 
   useEffect(() => {
     if (tenantId) {
@@ -578,25 +579,143 @@ export default function QualificationDashboard() {
           <QualificationWeightsConfig />
         </TabsContent>
 
-        {/* Upload */}
-        <TabsContent value="upload">
-          <Card className="py-16 text-center">
-            <Upload className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-xl font-semibold mb-2">Upload de Empresas</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Faça upload de um arquivo CSV/Excel com empresas para qualificar automaticamente contra seus ICPs.
-            </p>
-            <div className="flex justify-center gap-4">
-              <Button onClick={() => navigate('/prospection/upload')}>
-                <Upload className="h-4 w-4 mr-2" />
-                Ir para Upload em Massa
-              </Button>
-              <Button variant="outline" onClick={() => navigate('/prospection/search')}>
-                <Search className="h-4 w-4 mr-2" />
-                Busca Unificada
-              </Button>
-            </div>
+        {/* Upload - Busca Inteligente Integrada */}
+        <TabsContent value="upload" className="space-y-6">
+          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-600" />
+                Busca Inteligente de Empresas
+              </CardTitle>
+              <CardDescription>
+                Busca unificada com detecção automática e enriquecimento 360°
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Busca Individual */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Search className="h-4 w-4" />
+                    Busca Unificada
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Digite CNPJ ou nome da empresa - detecção automática
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="00.000.000/0000-00 ou Nome da Empresa"
+                      value={cnpjSearch}
+                      onChange={(e) => setCnpjSearch(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button 
+                      onClick={() => {
+                        if (cnpjSearch.trim()) {
+                          navigate(`/search?q=${encodeURIComponent(cnpjSearch)}`);
+                        }
+                      }}
+                      disabled={!cnpjSearch.trim()}
+                    >
+                      <Search className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline">✓ Receita Federal</Badge>
+                    <Badge variant="outline">✓ Enriquecimento 360°</Badge>
+                    <Badge variant="outline">✓ Qualificação ICP</Badge>
+                  </div>
+                </div>
+
+                {/* Upload em Massa */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Upload className="h-4 w-4" />
+                    Upload em Massa
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    CSV com até 500 empresas - planilha com 87 campos
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <BulkUploadDialog>
+                      <Button className="w-full">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Fazer Upload CSV/Excel
+                      </Button>
+                    </BulkUploadDialog>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => navigate('/search')}
+                      className="w-full"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Baixar Planilha Exemplo
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
           </Card>
+
+          {/* Informações do Sistema */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Sistema Inteligente</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">Detecção Automática</p>
+                    <p className="text-xs text-muted-foreground">CNPJ ou Nome identificado automaticamente</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                  <CheckCircle2 className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">Enriquecimento 360°</p>
+                    <p className="text-xs text-muted-foreground">Dados de múltiplas fontes em tempo real</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg">
+                  <CheckCircle2 className="h-5 w-5 text-purple-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">Qualificação ICP</p>
+                    <p className="text-xs text-muted-foreground">Score automático HOT/WARM/COLD</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+                  <CheckCircle2 className="h-5 w-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">Normalização Universal</p>
+                    <p className="text-xs text-muted-foreground">87 campos padronizados</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Limites */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+                <div>
+                  <p className="font-medium">Limites Recomendados</p>
+                  <ul className="text-sm text-muted-foreground mt-1 space-y-1">
+                    <li>• <strong>Ideal:</strong> 50 empresas por lote</li>
+                    <li>• <strong>Máximo estável:</strong> 200 empresas</li>
+                    <li>• <strong>Limite absoluto:</strong> 1000 empresas</li>
+                  </ul>
+                  <p className="text-xs text-amber-600 mt-2">
+                    ⚠️ Lotes maiores podem causar lentidão ou erros
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
         </TabsContent>
       </Tabs>
     </div>
