@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
-import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 interface Props {
   onNext: (data: any) => void;
   onBack: () => void;
-  onSave?: () => void | Promise<void>;
+  onSave?: (data?: any) => void | Promise<void>;
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
@@ -322,7 +322,17 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       return;
     }
 
-    setConcorrentes([...concorrentes, { ...novoConcorrente }]);
+    const updatedConcorrentes = [...concorrentes, { ...novoConcorrente }];
+    setConcorrentes(updatedConcorrentes);
+    
+    // 🔥 CRÍTICO: Salvar imediatamente para persistência
+    if (onSave) {
+      const dataToSave = {
+        ...formData,
+        concorrentesDiretos: updatedConcorrentes,
+      };
+      onSave(dataToSave);
+    }
     
     // Limpar formulário
     setNovoConcorrente({
@@ -340,11 +350,23 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     });
     setCnpjConcorrenteEncontrado(false);
     cnpjConcorrenteUltimoBuscadoRef.current = '';
+    
+    toast.success('Concorrente adicionado!');
   };
 
   // 🔥 NOVO: Remover concorrente
   const removerConcorrente = (index: number) => {
-    setConcorrentes(concorrentes.filter((_, i) => i !== index));
+    const updatedConcorrentes = concorrentes.filter((_, i) => i !== index);
+    setConcorrentes(updatedConcorrentes);
+    
+    // 🔥 CRÍTICO: Salvar imediatamente para persistência
+    if (onSave) {
+      const dataToSave = {
+        ...formData,
+        concorrentesDiretos: updatedConcorrentes,
+      };
+      onSave(dataToSave);
+    }
   };
 
   const handleSubmit = (e?: React.FormEvent) => {
@@ -602,60 +624,114 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
 
         {/* Formulário de Novo Concorrente */}
         <Card className="mb-4 border-dashed">
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>CNPJ do Concorrente</Label>
-                <Input
-                  value={novoConcorrente.cnpj}
-                  onChange={(e) => {
-                    const clean = e.target.value.replace(/\D/g, '');
-                    let formatted = clean;
-                    if (clean.length > 2) formatted = clean.substring(0, 2) + '.' + clean.substring(2);
-                    if (clean.length > 5) formatted = formatted.substring(0, 6) + '.' + clean.substring(5);
-                    if (clean.length > 8) formatted = formatted.substring(0, 10) + '/' + clean.substring(8);
-                    if (clean.length > 12) formatted = formatted.substring(0, 15) + '-' + clean.substring(12);
-                    setNovoConcorrente({ ...novoConcorrente, cnpj: formatted });
-                  }}
-                  placeholder="00.000.000/0000-00"
-                />
-                {buscandoCNPJConcorrente && (
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Buscando dados...
-                  </p>
-                )}
-                {cnpjConcorrenteEncontrado && (
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Dados encontrados!
-                  </p>
-                )}
-                {erroCNPJConcorrente && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{erroCNPJConcorrente}</p>
-                )}
-              </div>
-
+          <CardContent className="pt-6 space-y-4">
+            <div>
+              <Label>CNPJ do Concorrente</Label>
+              <Input
+                value={novoConcorrente.cnpj}
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/\D/g, '');
+                  let formatted = clean;
+                  if (clean.length > 2) formatted = clean.substring(0, 2) + '.' + clean.substring(2);
+                  if (clean.length > 5) formatted = formatted.substring(0, 6) + '.' + clean.substring(5);
+                  if (clean.length > 8) formatted = formatted.substring(0, 10) + '/' + clean.substring(8);
+                  if (clean.length > 12) formatted = formatted.substring(0, 15) + '-' + clean.substring(12);
+                  setNovoConcorrente({ ...novoConcorrente, cnpj: formatted });
+                }}
+                placeholder="00.000.000/0000-00"
+                className="w-full"
+              />
+              {buscandoCNPJConcorrente && (
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Buscando dados...
+                </p>
+              )}
               {cnpjConcorrenteEncontrado && (
-                <>
-                  <div>
-                    <Label>Razão Social</Label>
-                    <Input value={novoConcorrente.razaoSocial} readOnly className="bg-muted" />
+                <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Dados encontrados! Preencha a URL e clique em "Adicionar Concorrente"
+                </p>
+              )}
+              {erroCNPJConcorrente && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{erroCNPJConcorrente}</p>
+              )}
+            </div>
+
+            {/* Dados Encontrados - Card Completo */}
+            {cnpjConcorrenteEncontrado && (
+              <Card className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <CardTitle className="text-green-900 dark:text-green-100 text-base">
+                      Dados Encontrados Automaticamente
+                    </CardTitle>
                   </div>
-                  <div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Razão Social:</span>
+                      <p className="font-medium text-foreground">{novoConcorrente.razaoSocial}</p>
+                    </div>
+                    {novoConcorrente.nomeFantasia && (
+                      <div>
+                        <span className="text-muted-foreground">Nome Fantasia:</span>
+                        <p className="font-medium text-foreground">{novoConcorrente.nomeFantasia}</p>
+                      </div>
+                    )}
+                    {novoConcorrente.setor && (
+                      <div>
+                        <span className="text-muted-foreground">Setor:</span>
+                        <p className="font-medium text-foreground">{novoConcorrente.setor}</p>
+                      </div>
+                    )}
+                    {(novoConcorrente.cidade || novoConcorrente.estado) && (
+                      <div>
+                        <span className="text-muted-foreground">Localização:</span>
+                        <p className="font-medium text-foreground">
+                          {novoConcorrente.cidade}{novoConcorrente.cidade && novoConcorrente.estado ? ', ' : ''}{novoConcorrente.estado}
+                        </p>
+                      </div>
+                    )}
+                    {novoConcorrente.capitalSocial > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Capital Social:</span>
+                        <p className="font-medium text-foreground">
+                          R$ {novoConcorrente.capitalSocial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    )}
+                    {novoConcorrente.cnaePrincipal && (
+                      <div>
+                        <span className="text-muted-foreground">CNAE Principal:</span>
+                        <p className="font-mono text-xs text-foreground">{novoConcorrente.cnaePrincipal}</p>
+                      </div>
+                    )}
+                    {novoConcorrente.cnaePrincipalDescricao && (
+                      <div className="col-span-2 md:col-span-3">
+                        <span className="text-muted-foreground">Descrição CNAE:</span>
+                        <p className="text-xs text-foreground">{novoConcorrente.cnaePrincipalDescricao}</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* URL para Scan */}
+                  <div className="mt-4 space-y-2">
                     <Label>URL para Scan (Website, Instagram, LinkedIn)</Label>
                     <Input
                       value={novoConcorrente.urlParaScan || ''}
                       onChange={(e) => setNovoConcorrente({ ...novoConcorrente, urlParaScan: e.target.value })}
                       placeholder="https://exemplo.com.br ou instagram.com/empresa"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground">
                       Informe a URL para extrair produtos automaticamente
                     </p>
                   </div>
-                </>
-              )}
-            </div>
+                </CardContent>
+              </Card>
+            )}
           </CardContent>
         </Card>
 
@@ -665,80 +741,136 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
             {concorrentes.map((concorrente, index) => (
               <Card key={index} className="border-l-4 border-l-blue-500">
                 <CardContent className="pt-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-semibold">{concorrente.razaoSocial}</h4>
-                        {concorrente.nomeFantasia && (
-                          <Badge variant="outline" className="text-xs">
-                            {concorrente.nomeFantasia}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 space-y-3">
+                      {/* Nome da Empresa */}
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-5 w-5 text-blue-600" />
                         <div>
-                          <span className="text-muted-foreground">CNPJ:</span>
-                          <p className="font-medium">{concorrente.cnpj}</p>
+                          <div className="font-semibold text-foreground text-lg">
+                            {concorrente.razaoSocial}
+                          </div>
+                          {concorrente.nomeFantasia && (
+                            <div className="text-sm text-muted-foreground">{concorrente.nomeFantasia}</div>
+                          )}
                         </div>
-                        {concorrente.cidade && (
+                      </div>
+                      
+                      {/* Dados Completos - Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <span className="font-medium text-muted-foreground">CNPJ:</span>
+                          <div className="font-mono text-foreground">{concorrente.cnpj}</div>
+                        </div>
+                        {concorrente.setor && (
                           <div>
-                            <span className="text-muted-foreground">Localização:</span>
-                            <p className="font-medium">{concorrente.cidade}, {concorrente.estado}</p>
+                            <span className="font-medium text-muted-foreground">Setor:</span>
+                            <div className="text-foreground">{concorrente.setor}</div>
+                          </div>
+                        )}
+                        {(concorrente.cidade || concorrente.estado) && (
+                          <div>
+                            <span className="font-medium text-muted-foreground">Localização:</span>
+                            <div className="text-foreground">
+                              {concorrente.cidade}{concorrente.cidade && concorrente.estado ? ', ' : ''}{concorrente.estado}
+                            </div>
                           </div>
                         )}
                         {concorrente.capitalSocial > 0 && (
                           <div>
-                            <span className="text-muted-foreground">Capital:</span>
-                            <p className="font-medium">R$ {concorrente.capitalSocial.toLocaleString('pt-BR')}</p>
+                            <span className="font-medium text-muted-foreground">Capital Social:</span>
+                            <div className="text-foreground">
+                              R$ {concorrente.capitalSocial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          </div>
+                        )}
+                        {concorrente.cnaePrincipal && (
+                          <div>
+                            <span className="font-medium text-muted-foreground">CNAE Principal:</span>
+                            <div className="font-mono text-xs text-foreground">{concorrente.cnaePrincipal}</div>
                           </div>
                         )}
                         {concorrente.produtosExtraidos !== undefined && (
                           <div>
-                            <span className="text-muted-foreground">Produtos:</span>
-                            <p className="font-medium flex items-center gap-1">
+                            <span className="font-medium text-muted-foreground">Produtos Extraídos:</span>
+                            <div className="text-foreground flex items-center gap-1">
                               <Package className="h-3 w-3" />
                               {concorrente.produtosExtraidos}
-                            </p>
+                            </div>
+                          </div>
+                        )}
+                        {concorrente.cnaePrincipalDescricao && (
+                          <div className="col-span-2 md:col-span-3">
+                            <span className="font-medium text-muted-foreground">Descrição CNAE:</span>
+                            <div className="text-xs text-foreground">{concorrente.cnaePrincipalDescricao}</div>
+                          </div>
+                        )}
+                        {concorrente.website && (
+                          <div>
+                            <span className="font-medium text-muted-foreground">Website:</span>
+                            <div className="text-blue-600 hover:underline">
+                              <a href={concorrente.website} target="_blank" rel="noopener noreferrer">
+                                {concorrente.website}
+                              </a>
+                            </div>
                           </div>
                         )}
                       </div>
                       
                       {/* Campo URL + Botão Scan */}
-                      {concorrente.urlParaScan && (
-                        <div className="mt-3 flex gap-2">
+                      <div className="mt-3 space-y-2">
+                        <Label className="text-sm">URL para Extração de Produtos</Label>
+                        <div className="flex gap-2">
                           <Input
-                            value={concorrente.urlParaScan}
+                            value={concorrente.urlParaScan || ''}
                             onChange={(e) => {
                               const updated = [...concorrentes];
                               updated[index] = { ...updated[index], urlParaScan: e.target.value };
                               setConcorrentes(updated);
+                              // Salvar ao editar
+                              if (onSave) {
+                                const dataToSave = {
+                                  ...formData,
+                                  concorrentesDiretos: updated,
+                                };
+                                onSave(dataToSave);
+                              }
                             }}
-                            placeholder="URL para scan"
+                            placeholder="https://exemplo.com.br ou instagram.com/empresa"
                             className="flex-1"
                           />
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="default"
                             size="sm"
                             onClick={() => handleScanConcorrenteURL(concorrente, index)}
                             disabled={scanningConcorrente[index] || !concorrente.urlParaScan}
+                            className="flex items-center gap-2"
                           >
                             {scanningConcorrente[index] ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Escaneando...
+                              </>
                             ) : (
-                              <Sparkles className="h-4 w-4" />
+                              <>
+                                <Sparkles className="h-4 w-4" />
+                                Extrair Produtos
+                              </>
                             )}
-                            Extrair Produtos
                           </Button>
                         </div>
-                      )}
+                        <p className="text-xs text-muted-foreground">
+                          Informe a URL (website, Instagram, LinkedIn) para extrair produtos automaticamente
+                        </p>
+                      </div>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       onClick={() => removerConcorrente(index)}
-                      className="text-destructive hover:text-destructive"
+                      className="text-destructive hover:text-destructive shrink-0"
                     >
                       <X className="h-4 w-4" />
                     </Button>
