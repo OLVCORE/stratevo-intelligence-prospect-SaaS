@@ -199,16 +199,21 @@ serve(async (req) => {
     console.log('[GENERATE-ICP-REPORT] ✅ Tenant:', tenant?.nome);
 
     // 3. 🔥 CRÍTICO: Buscar dados COMPLETOS do onboarding_sessions
-    const { data: session, error: sessionError } = await supabase
+    const { data: sessions, error: sessionError } = await supabase
       .from('onboarding_sessions')
       .select('*')
       .eq('tenant_id', tenant_id)
       .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
 
     if (sessionError) {
       console.error('[GENERATE-ICP-REPORT] ⚠️ Erro ao buscar sessão:', sessionError);
+    }
+
+    const session = sessions && sessions.length > 0 ? sessions[0] : null;
+    
+    if (!session) {
+      console.log('[GENERATE-ICP-REPORT] ⚠️ Nenhuma sessão de onboarding encontrada, usando dados vazios');
     }
 
     // Extrair dados do onboarding
