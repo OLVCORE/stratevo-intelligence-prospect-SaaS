@@ -442,6 +442,34 @@ function buildCEOPrompt(
 
   const isCompleto = reportType === 'completo';
 
+  // 🔥 USAR CRITÉRIOS DE ANÁLISE CONFIGURADOS PELO USUÁRIO
+  const criteriaConfig = criteria || {};
+  const includeMacro = criteriaConfig.include_macroeconomic !== false;
+  const includeSector = criteriaConfig.include_sector_analysis !== false;
+  const includeCnae = criteriaConfig.include_cnae_analysis !== false;
+  const includeForeignTrade = criteriaConfig.include_foreign_trade === true;
+  const includeStatistical = criteriaConfig.include_statistical_analysis !== false;
+  const includeCompetitive = criteriaConfig.include_competitive_analysis !== false;
+  const includeTrends = criteriaConfig.include_market_trends !== false;
+  const includePredictions = criteriaConfig.include_predictions !== false;
+  const customCriteria = criteriaConfig.custom_criteria || [];
+
+  // Construir lista de análises habilitadas
+  const enabledAnalyses: string[] = [];
+  if (includeMacro) enabledAnalyses.push('Análise Macroeconômica (PIB, inflação, crescimento setorial, tendências econômicas nacionais)');
+  if (includeSector) enabledAnalyses.push('Análise de Setores (crescimento histórico, projeções, tamanho de mercado, barreiras de entrada)');
+  if (includeCnae) enabledAnalyses.push('Análise de CNAEs (potencial de mercado, número de empresas, oportunidades não exploradas)');
+  if (includeStatistical) enabledAnalyses.push('Análise Estatística (padrões dos clientes atuais, correlações, ticket médio, ciclo de venda)');
+  if (includeCompetitive) enabledAnalyses.push('Análise Competitiva (posicionamento, diferenciais, pricing, oportunidades de diferenciação)');
+  if (includeTrends) enabledAnalyses.push('Tendências de Mercado (novas tecnologias, transformações setoriais, oportunidades emergentes)');
+  if (includePredictions) enabledAnalyses.push('Previsões e Projeções (análise preditiva, projeções de crescimento, comportamento futuro)');
+  if (includeForeignTrade) enabledAnalyses.push('Comércio Exterior (NCMs promissores, países-alvo, supply chain internacional)');
+  
+  // Adicionar critérios customizados
+  customCriteria.filter((c: any) => c.enabled).forEach((c: any) => {
+    enabledAnalyses.push(`${c.name}: ${c.description || 'Análise personalizada solicitada pelo usuário'}`);
+  });
+
   return `
 # 📊 ANÁLISE ESTRATÉGICA DE ICP - VISÃO DE CEO
 
@@ -536,6 +564,14 @@ ${webSearch}
 ---
 ` : ''}
 
+## ✅ CRITÉRIOS DE ANÁLISE HABILITADOS
+
+O usuário configurou os seguintes critérios de análise que DEVEM ser incluídos no relatório:
+
+${enabledAnalyses.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+
+---
+
 ## 📋 TAREFA: GERAR ${isCompleto ? 'RELATÓRIO COMPLETO' : 'RESUMO EXECUTIVO'}
 
 ${isCompleto ? `
@@ -617,12 +653,75 @@ Como CEO, gere um **RESUMO EXECUTIVO CONCISO** (máximo 2 páginas) contendo:
 
 ---
 
-**IMPORTANTE:**
+**IMPORTANTE - INSTRUÇÕES DE FORMATAÇÃO:**
 - Seja ESPECÍFICO e cite dados dos inputs (CNPJs, valores, setores)
 - Calcule estimativas de TAM/SAM/SOM baseado nos dados brasileiros
 - Identifique padrões nos clientes atuais vs benchmarking
 - Proponha ações ACIONÁVEIS, não genéricas
 - Use formatação Markdown com tabelas quando apropriado
 - Inclua emojis para facilitar a leitura
+- NÃO retorne código ou JSON, apenas texto formatado em Markdown
+- Gere um relatório COMPLETO e DETALHADO, não um esboço
+
+**ANÁLISES OBRIGATÓRIAS (baseadas nos critérios configurados):**
+${includeMacro ? `
+### 📈 ANÁLISE MACROECONÔMICA
+- PIB atual e projeções para os setores alvo
+- Impacto da inflação no poder de compra do ICP
+- Crescimento setorial previsto pelos dados do IBGE/ABDI
+- Tendências econômicas que afetam o mercado-alvo
+` : ''}
+${includeSector ? `
+### 🏭 ANÁLISE SETORIAL DETALHADA
+- Para CADA setor alvo: tamanho, crescimento, players principais
+- Barreiras de entrada e saída
+- Cadeia de valor e posicionamento
+- Oportunidades de consolidação
+` : ''}
+${includeCnae ? `
+### 📋 ANÁLISE DE CNAEs
+- Quantidade estimada de empresas por CNAE alvo no Brasil
+- CNAEs com maior potencial de conversão
+- Oportunidades não exploradas em CNAEs secundários
+` : ''}
+${includeStatistical ? `
+### 📊 ANÁLISE ESTATÍSTICA DOS CLIENTES
+- Padrões identificados nos clientes atuais
+- Ticket médio vs ciclo de venda (correlação)
+- Características dos TOP clientes
+- Segmentação por porte/setor/região
+` : ''}
+${includeCompetitive ? `
+### 🥊 ANÁLISE COMPETITIVA PROFUNDA
+- Matriz de posicionamento vs concorrentes
+- Gaps de mercado não atendidos
+- Estratégias de diferenciação recomendadas
+- Análise de pricing do mercado
+` : ''}
+${includeTrends ? `
+### 🔮 TENDÊNCIAS E PROJEÇÕES
+- Novas tecnologias que impactam o setor
+- Mudanças de comportamento do consumidor B2B
+- Transformações regulatórias previstas
+- Oportunidades emergentes (próximos 3-5 anos)
+` : ''}
+${includePredictions ? `
+### 🎯 PREVISÕES E RECOMENDAÇÕES
+- Previsão de crescimento para o ICP nos próximos 12-36 meses
+- Probabilidade de sucesso em cada segmento
+- Priorização de esforços comerciais
+- ROI estimado por tipo de cliente
+` : ''}
+${includeForeignTrade ? `
+### 🌍 COMÉRCIO EXTERIOR
+- NCMs com maior potencial de exportação/importação
+- Países-alvo para expansão internacional
+- Análise alfandegária e regulatória
+- Oportunidades de supply chain global
+` : ''}
+${customCriteria.filter((c: any) => c.enabled).map((c: any) => `
+### 🔧 ${c.name.toUpperCase()}
+- ${c.description || 'Realize análise conforme solicitado'}
+`).join('')}
 `;
 }
