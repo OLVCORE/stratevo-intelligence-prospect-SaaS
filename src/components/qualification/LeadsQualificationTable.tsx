@@ -36,7 +36,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { useTenant } from '@/hooks/useTenant';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface Lead {
   id: string;
@@ -66,7 +66,8 @@ interface LeadsQualificationTableProps {
 export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualificationTableProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { tenantId } = useTenant();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   
   // State
   const [leads, setLeads] = useState<Lead[]>([]);

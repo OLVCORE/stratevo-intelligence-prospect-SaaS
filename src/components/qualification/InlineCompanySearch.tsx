@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { useTenant } from '@/hooks/useTenant';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   Dialog,
   DialogContent,
@@ -24,7 +24,8 @@ interface InlineCompanySearchProps {
 }
 
 export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps) {
-  const { tenantId } = useTenant();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [previewData, setPreviewData] = useState<any>(null);
