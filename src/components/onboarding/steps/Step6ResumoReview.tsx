@@ -620,35 +620,53 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
       <Card>
         <CardContent className="pt-6">
           {!createdIcpId ? (
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-sm font-medium mb-1">Gerar ICP com base na revisão atual</p>
-                <p className="text-xs text-muted-foreground">
-                  Clique no botão abaixo para gerar o ICP definitivo com análise de IA antes de finalizar o onboarding.
-                </p>
+            <div className="space-y-4">
+              {/* Info sobre o que será gerado */}
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-medium mb-1 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    Gerar ICP Estratégico com IA
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    O ICP será gerado com análise de CEO/Estrategista de Mercado, incluindo:
+                  </p>
+                  <ul className="text-xs text-muted-foreground mt-2 space-y-1 ml-4 list-disc">
+                    <li>Análise Macroeconômica (PIB, inflação, crescimento setorial)</li>
+                    <li>Análise de Setores e CNAEs alvo</li>
+                    <li>Análise Estatística dos clientes atuais</li>
+                    <li>Análise Competitiva e posicionamento</li>
+                    <li>Tendências de Mercado e projeções</li>
+                    <li>Estratégias de expansão de Market Share</li>
+                  </ul>
+                  <p className="text-xs text-muted-foreground mt-3 italic">
+                    💡 Você poderá configurar critérios adicionais depois em "Central ICP → Critérios de Análise"
+                  </p>
+                </div>
+                <Button
+                  variant="default"
+                  size="lg"
+                  onClick={async () => {
+                    if (onGenerate) {
+                      await onGenerate();
+                    }
+                  }}
+                  disabled={!isButtonEnabled || isGenerating}
+                  className="flex items-center gap-2 min-w-[160px]"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Gerando ICP...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      Gerar ICP
+                    </>
+                  )}
+                </Button>
               </div>
-              <Button
-                variant="default"
-                onClick={async () => {
-                  if (onGenerate) {
-                    await onGenerate();
-                  }
-                }}
-                disabled={!isButtonEnabled || isGenerating}
-                className="flex items-center gap-2 min-w-[140px]"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Gerando ICP...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" />
-                    Gerar ICP
-                  </>
-                )}
-              </Button>
             </div>
           ) : (
             <div className="space-y-4">
@@ -657,36 +675,68 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
                 <div className="flex-1">
                   <p className="font-semibold text-green-900 dark:text-green-100">ICP gerado com sucesso!</p>
                   <p className="text-sm text-green-700 dark:text-green-300">
-                    Seu ICP foi criado e está pronto para uso. Você pode visualizar o relatório completo ou resumo abaixo.
+                    Seu ICP foi criado e está pronto para uso. Você pode visualizar os detalhes ou gerar relatórios.
                   </p>
                 </div>
               </div>
               
+              {/* Linha 1: Ações principais do ICP */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button
-                  variant="default"
-                  onClick={() => navigate(`/central-icp/reports/${createdIcpId}?type=completo`)}
-                  className="flex-1"
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Ver Relatório Completo
-                </Button>
-                <Button
                   variant="outline"
-                  onClick={() => navigate(`/central-icp/reports/${createdIcpId}?type=resumo`)}
-                  className="flex-1"
+                  onClick={async () => {
+                    if (onGenerate) {
+                      await onGenerate();
+                    }
+                  }}
+                  disabled={isGenerating}
+                  className="flex-1 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
                 >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Ver Resumo
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Regenerando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Regenerar ICP
+                    </>
+                  )}
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="default"
                   onClick={() => navigate(`/central-icp/profile/${createdIcpId}`)}
                   className="flex-1"
                 >
                   <Target className="w-4 h-4 mr-2" />
                   Ver Detalhes do ICP
                 </Button>
+              </div>
+
+              {/* Linha 2: Relatórios (após gerar ICP) */}
+              <div className="pt-3 border-t">
+                <p className="text-xs text-muted-foreground mb-3 text-center">
+                  📊 Gere relatórios estratégicos com análise de CEO/Estrategista de Mercado:
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate(`/central-icp/reports/${createdIcpId}?type=completo`)}
+                    className="flex-1"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Ver Relatório Completo
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => navigate(`/central-icp/reports/${createdIcpId}?type=resumo`)}
+                    className="flex-1"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Ver Resumo
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -701,7 +751,7 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
       {/* Botões de Navegação */}
       <StepNavigation
         onBack={onBack}
-        onNext={onNext}
+        onNext={() => onNext({})}
         onSave={onSave}
         showSave={!!onSave}
         saveLoading={isSaving}
