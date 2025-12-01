@@ -14,6 +14,280 @@ import { X, Plus, CheckCircle2, Info, Lightbulb, Clock, Sparkles, Loader2, Build
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 
+// =============================================================================
+// 🎯 FUNÇÕES DE MAPEAMENTO CNAE → SETOR (Inteligente)
+// =============================================================================
+
+/**
+ * Extrai o setor a partir da DESCRIÇÃO do CNAE (mais preciso que o código)
+ * Usa palavras-chave para identificar o setor corretamente
+ */
+function extrairSetorDaDescricao(descricao: string): string {
+  if (!descricao) return '';
+  
+  const desc = descricao.toLowerCase();
+  
+  // 🔥 Mapeamento por palavras-chave na descrição (ordem de prioridade)
+  const mapeamentoPorPalavra: Array<{ palavras: string[]; setor: string }> = [
+    // Mineração e Extração
+    { palavras: ['minério', 'minerio', 'minérios', 'minerios', 'extração de minério', 'mineração', 'mina', 'minas'], setor: 'Mineração' },
+    { palavras: ['petróleo', 'petroleo', 'gás natural', 'gas natural', 'exploração de petróleo'], setor: 'Óleo & Gás' },
+    
+    // Indústria Pesada
+    { palavras: ['aeronave', 'aeronaves', 'aviões', 'avioes', 'avião', 'aviao', 'aeronaval', 'aeroespacial', 'helicóptero'], setor: 'Aeronáutico' },
+    { palavras: ['siderurgia', 'siderúrgica', 'siderurgica', 'aço', 'aco', 'ferro', 'laminados', 'fundição', 'fundicao'], setor: 'Siderurgia' },
+    { palavras: ['motor', 'motores', 'bomba', 'bombas', 'elétrico', 'eletrico', 'gerador', 'geradores', 'transformador'], setor: 'Eletromecânico' },
+    { palavras: ['metalurgia', 'metalúrgica', 'metalurgica', 'metal', 'metais', 'alumínio', 'aluminio', 'cobre', 'zinco'], setor: 'Metalurgia' },
+    { palavras: ['automóvel', 'automovel', 'automóveis', 'automoveis', 'veículo', 'veiculo', 'caminhão', 'caminhao', 'ônibus', 'onibus'], setor: 'Automotivo' },
+    { palavras: ['naval', 'navio', 'navios', 'embarcação', 'embarcacao', 'estaleiro'], setor: 'Naval' },
+    
+    // Alimentos e Bebidas
+    { palavras: ['frigorífico', 'frigorifico', 'abate', 'carne', 'carnes', 'bovino', 'suíno', 'suino', 'aves', 'frango'], setor: 'Frigorífico' },
+    { palavras: ['alimento', 'alimentos', 'alimentícia', 'alimenticia', 'alimentício', 'alimenticio'], setor: 'Alimentícia' },
+    { palavras: ['bebida', 'bebidas', 'cerveja', 'refrigerante', 'suco', 'sucos'], setor: 'Bebidas' },
+    
+    // Papel e Celulose
+    { palavras: ['celulose', 'papel', 'papéis', 'papeis', 'papelão', 'papelao', 'embalagem', 'embalagens'], setor: 'Celulose & Papel' },
+    
+    // Química e Petroquímica
+    { palavras: ['química', 'quimica', 'químico', 'quimico', 'petroquímica', 'petroquimica'], setor: 'Química' },
+    { palavras: ['farmacêutica', 'farmaceutica', 'medicamento', 'medicamentos', 'fármaco', 'farmaco'], setor: 'Farmacêutica' },
+    { palavras: ['fertilizante', 'fertilizantes', 'adubo', 'adubos', 'agroquímico', 'agroquimico'], setor: 'Agroquímica' },
+    
+    // Energia
+    { palavras: ['energia', 'elétrica', 'eletrica', 'usina', 'hidrelétrica', 'hidreletrica', 'termelétrica', 'termeletrica'], setor: 'Energia' },
+    { palavras: ['eólica', 'eolica', 'solar', 'renovável', 'renovavel'], setor: 'Energia Renovável' },
+    
+    // Construção
+    { palavras: ['construção', 'construcao', 'construtora', 'engenharia civil', 'edificação', 'edificacao', 'obra', 'obras'], setor: 'Construção' },
+    { palavras: ['cimento', 'concreto', 'argamassa', 'calcário', 'calcario'], setor: 'Cimento' },
+    
+    // Tecnologia
+    { palavras: ['software', 'tecnologia da informação', 'ti', 'desenvolvimento de sistemas', 'programação', 'programacao'], setor: 'TI' },
+    { palavras: ['telecomunicação', 'telecomunicacao', 'telefonia', 'internet', 'rede', 'redes'], setor: 'Telecom' },
+    
+    // Varejo e Comércio
+    { palavras: ['varejo', 'atacado', 'comércio', 'comercio', 'loja', 'lojas', 'supermercado'], setor: 'Comércio' },
+    
+    // Têxtil e Vestuário
+    { palavras: ['têxtil', 'textil', 'tecido', 'tecidos', 'tecelagem', 'fiação', 'fiacao'], setor: 'Têxtil' },
+    { palavras: ['vestuário', 'vestuario', 'roupa', 'roupas', 'confecção', 'confeccao'], setor: 'Vestuário' },
+    { palavras: ['calçado', 'calcado', 'calçados', 'calcados', 'sapato', 'sapatos', 'couro'], setor: 'Calçados' },
+    { palavras: ['luva', 'luvas', 'epi', 'equipamento de proteção', 'segurança do trabalho'], setor: 'EPIs' },
+    
+    // Agro
+    { palavras: ['agrícola', 'agricola', 'agricultura', 'agropecuária', 'agropecuaria', 'plantação', 'plantacao', 'grão', 'grao'], setor: 'Agronegócio' },
+    { palavras: ['pecuária', 'pecuaria', 'gado', 'bovinos', 'criação', 'criacao'], setor: 'Pecuária' },
+    
+    // Transporte e Logística
+    { palavras: ['transporte', 'logística', 'logistica', 'frete', 'carga', 'cargas', 'rodoviário', 'rodoviario'], setor: 'Logística' },
+    { palavras: ['porto', 'portos', 'portuário', 'portuario', 'terminal', 'terminais'], setor: 'Portuário' },
+    
+    // Saúde
+    { palavras: ['hospital', 'hospitalar', 'saúde', 'saude', 'médico', 'medico', 'clínica', 'clinica'], setor: 'Saúde' },
+    
+    // Educação
+    { palavras: ['educação', 'educacao', 'ensino', 'escola', 'universidade', 'faculdade'], setor: 'Educação' },
+    
+    // Serviços Financeiros
+    { palavras: ['banco', 'bancos', 'bancário', 'bancario', 'financeira', 'crédito', 'credito'], setor: 'Financeiro' },
+    { palavras: ['seguro', 'seguros', 'seguradora', 'previdência', 'previdencia'], setor: 'Seguros' },
+    
+    // Holdings (tratamento especial - verificar atividade real)
+    { palavras: ['holding', 'holdings', 'participações', 'participacoes'], setor: 'Holding/Conglomerado' },
+    
+    // Máquinas e Equipamentos
+    { palavras: ['máquina', 'maquina', 'máquinas', 'maquinas', 'equipamento', 'equipamentos', 'industrial'], setor: 'Máquinas & Equipamentos' },
+    
+    // Móveis
+    { palavras: ['móvel', 'movel', 'móveis', 'moveis', 'mobiliário', 'mobiliario', 'marcenaria'], setor: 'Móveis' },
+  ];
+  
+  // Buscar match por palavra-chave
+  for (const { palavras, setor } of mapeamentoPorPalavra) {
+    for (const palavra of palavras) {
+      if (desc.includes(palavra)) {
+        return setor;
+      }
+    }
+  }
+  
+  return '';
+}
+
+/**
+ * Mapeia CNAE para setor usando código (divisão de 2-4 dígitos)
+ * Fallback quando a descrição não é suficiente
+ */
+function mapearCnaePorCodigo(cnaeCode: string): string {
+  if (!cnaeCode || cnaeCode.length < 2) return '';
+  
+  const divisao2 = cnaeCode.substring(0, 2);
+  const divisao3 = cnaeCode.substring(0, 3);
+  const divisao4 = cnaeCode.substring(0, 4);
+  const divisao5 = cnaeCode.substring(0, 5);
+  
+  // 🎯 Mapeamento por 5 dígitos (mais específico)
+  const mapeamento5: Record<string, string> = {
+    '30415': 'Aeronáutico', // Fabricação de aeronaves
+    '30423': 'Aeronáutico', // Fabricação de peças para aeronaves
+    '07103': 'Mineração', // Extração de minério de ferro
+    '07219': 'Mineração', // Extração de minério de alumínio
+    '27101': 'Eletromecânico', // Fabricação de motores elétricos
+    '27102': 'Eletromecânico', // Fabricação de geradores elétricos
+    '27103': 'Eletromecânico', // Fabricação de transformadores
+    '28110': 'Máquinas & Equipamentos', // Fabricação de motores e bombas
+    '10112': 'Frigorífico', // Frigorífico bovinos
+    '10121': 'Frigorífico', // Frigorífico suínos
+    '17109': 'Celulose & Papel', // Fabricação de celulose
+    '24237': 'Siderurgia', // Produção de laminados de aço
+  };
+  
+  if (mapeamento5[divisao5]) return mapeamento5[divisao5];
+  
+  // 🎯 Mapeamento por 4 dígitos
+  const mapeamento4: Record<string, string> = {
+    '0710': 'Mineração',
+    '0721': 'Mineração',
+    '0723': 'Mineração',
+    '0724': 'Mineração',
+    '0725': 'Mineração',
+    '0729': 'Mineração',
+    '0810': 'Mineração',
+    '0891': 'Mineração',
+    '0892': 'Mineração',
+    '0893': 'Mineração',
+    '0899': 'Mineração',
+    '0600': 'Óleo & Gás',
+    '0610': 'Óleo & Gás',
+    '0620': 'Óleo & Gás',
+    '1011': 'Frigorífico',
+    '1012': 'Frigorífico',
+    '1013': 'Frigorífico',
+    '2423': 'Siderurgia',
+    '2424': 'Siderurgia',
+    '2422': 'Siderurgia',
+    '2421': 'Siderurgia',
+    '2710': 'Eletromecânico',
+    '2711': 'Eletromecânico',
+    '2732': 'Eletromecânico',
+    '2733': 'Eletromecânico',
+    '3041': 'Aeronáutico',
+    '3042': 'Aeronáutico',
+    '3099': 'Aeronáutico',
+    '3011': 'Naval',
+    '3012': 'Naval',
+    '1710': 'Celulose & Papel',
+    '1721': 'Celulose & Papel',
+    '1722': 'Celulose & Papel',
+    '6462': 'Holding/Conglomerado',
+    '6463': 'Holding/Conglomerado',
+    '6110': 'Telecom',
+    '6120': 'Telecom',
+    '6130': 'Telecom',
+    '6190': 'Telecom',
+    '6201': 'TI',
+    '6202': 'TI',
+    '6203': 'TI',
+    '6204': 'TI',
+  };
+  
+  if (mapeamento4[divisao4]) return mapeamento4[divisao4];
+  
+  // 🎯 Mapeamento por 2 dígitos (fallback)
+  const mapeamento2: Record<string, string> = {
+    '01': 'Agronegócio',
+    '02': 'Agronegócio',
+    '03': 'Pesca',
+    '05': 'Mineração',
+    '06': 'Óleo & Gás',
+    '07': 'Mineração',
+    '08': 'Mineração',
+    '09': 'Óleo & Gás',
+    '10': 'Alimentícia',
+    '11': 'Bebidas',
+    '12': 'Tabaco',
+    '13': 'Têxtil',
+    '14': 'Vestuário',
+    '15': 'Calçados',
+    '16': 'Madeira',
+    '17': 'Celulose & Papel',
+    '18': 'Gráfica',
+    '19': 'Petroquímica',
+    '20': 'Química',
+    '21': 'Farmacêutica',
+    '22': 'Plástico & Borracha',
+    '23': 'Minerais',
+    '24': 'Metalurgia',
+    '25': 'Metalurgia',
+    '26': 'Eletrônica',
+    '27': 'Eletromecânico',
+    '28': 'Máquinas & Equipamentos',
+    '29': 'Automotivo',
+    '30': 'Outros Equipamentos',
+    '31': 'Móveis',
+    '32': 'Manufatura',
+    '33': 'Manutenção Industrial',
+    '35': 'Energia',
+    '36': 'Saneamento',
+    '37': 'Saneamento',
+    '38': 'Resíduos',
+    '39': 'Ambiental',
+    '41': 'Construção',
+    '42': 'Infraestrutura',
+    '43': 'Construção',
+    '45': 'Automotivo',
+    '46': 'Atacado',
+    '47': 'Varejo',
+    '49': 'Transporte',
+    '50': 'Transporte',
+    '51': 'Aéreo',
+    '52': 'Logística',
+    '53': 'Correios',
+    '55': 'Hotelaria',
+    '56': 'Alimentação',
+    '58': 'Editorial',
+    '59': 'Audiovisual',
+    '60': 'Mídia',
+    '61': 'Telecom',
+    '62': 'TI',
+    '63': 'TI',
+    '64': 'Financeiro',
+    '65': 'Seguros',
+    '66': 'Financeiro',
+    '68': 'Imobiliário',
+    '69': 'Jurídico',
+    '70': 'Consultoria',
+    '71': 'Engenharia',
+    '72': 'P&D',
+    '73': 'Publicidade',
+    '74': 'Design',
+    '75': 'Veterinária',
+    '77': 'Locação',
+    '78': 'RH',
+    '79': 'Turismo',
+    '80': 'Segurança',
+    '81': 'Facilities',
+    '82': 'Administrativo',
+    '84': 'Público',
+    '85': 'Educação',
+    '86': 'Saúde',
+    '87': 'Saúde',
+    '88': 'Assistência Social',
+    '90': 'Cultura',
+    '91': 'Cultura',
+    '92': 'Entretenimento',
+    '93': 'Esportes',
+    '94': 'Associações',
+    '95': 'Manutenção',
+    '96': 'Serviços Pessoais',
+    '97': 'Doméstico',
+    '99': 'Internacional',
+  };
+  
+  return mapeamento2[divisao2] || '';
+}
+
 interface Props {
   onNext: (data: any) => void;
   onBack: () => void;
@@ -164,97 +438,26 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
         estado: data.uf,
       });
 
-      // Extrair setor do CNAE principal (primeiros 2 dígitos indicam seção)
+      // 🔥 MELHORADO: Extrair setor do CNAE usando descrição + código
       let setorExtraido = '';
-      if (data.atividade_principal?.[0]?.code) {
-        const cnaeCode = data.atividade_principal[0].code.replace(/\D/g, '');
-        const secao = cnaeCode.substring(0, 2);
-        // Mapear seções CNAE para setores comuns
-        const setoresPorSecao: Record<string, string> = {
-          '01': 'Agricultura',
-          '02': 'Pecuária',
-          '03': 'Pesca',
-          '05': 'Extrativa',
-          '10': 'Alimentícia',
-          '11': 'Bebidas',
-          '13': 'Têxtil',
-          '14': 'Vestuário',
-          '15': 'Couro',
-          '16': 'Madeira',
-          '17': 'Celulose',
-          '18': 'Gráfica',
-          '19': 'Química',
-          '20': 'Farmacêutica',
-          '21': 'Petroquímica',
-          '22': 'Plástico',
-          '23': 'Mineral',
-          '24': 'Metalurgia',
-          '25': 'Máquinas',
-          '26': 'Eletrônica',
-          '27': 'Equipamentos',
-          '28': 'Automotiva',
-          '29': 'Outros Equipamentos',
-          '30': 'Móveis',
-          '31': 'Manufatura',
-          '32': 'Manufatura',
-          '33': 'Manufatura',
-          '35': 'Energia',
-          '36': 'Água',
-          '37': 'Saneamento',
-          '38': 'Resíduos',
-          '39': 'Remediação',
-          '41': 'Construção',
-          '42': 'Construção',
-          '43': 'Construção',
-          '45': 'Automotiva',
-          '46': 'Comércio',
-          '47': 'Comércio',
-          '49': 'Transporte',
-          '50': 'Transporte',
-          '51': 'Transporte',
-          '52': 'Armazenagem',
-          '53': 'Correios',
-          '55': 'Hospedagem',
-          '56': 'Alimentação',
-          '58': 'Editorial',
-          '59': 'Audiovisual',
-          '60': 'Rádio',
-          '61': 'Telecomunicações',
-          '62': 'TI',
-          '63': 'TI',
-          '64': 'Financeiro',
-          '65': 'Seguros',
-          '66': 'Financeiro',
-          '68': 'Imobiliário',
-          '69': 'Jurídico',
-          '70': 'Consultoria',
-          '71': 'Arquitetura',
-          '72': 'Pesquisa',
-          '73': 'Publicidade',
-          '74': 'Design',
-          '75': 'Veterinária',
-          '77': 'Aluguel',
-          '78': 'RH',
-          '79': 'Viagens',
-          '80': 'Segurança',
-          '81': 'Serviços',
-          '82': 'Administrativo',
-          '85': 'Educacional',
-          '86': 'Saúde',
-          '87': 'Saúde',
-          '88': 'Assistência',
-          '90': 'Criativo',
-          '91': 'Bibliotecas',
-          '92': 'Entretenimento',
-          '93': 'Esportes',
-          '94': 'Associações',
-          '95': 'Manutenção',
-          '96': 'Serviços',
-          '97': 'Doméstico',
-          '98': 'Internacional',
-          '99': 'Público',
-        };
-        setorExtraido = setoresPorSecao[secao] || data.atividade_principal[0].text?.split(' - ')[0] || '';
+      if (data.atividade_principal?.[0]) {
+        const cnaeCode = data.atividade_principal[0].code?.replace(/\D/g, '') || '';
+        const cnaeDescricao = (data.atividade_principal[0].text || '').toLowerCase();
+        
+        // 🎯 PRIORIDADE 1: Extrair setor da DESCRIÇÃO do CNAE (mais preciso)
+        setorExtraido = extrairSetorDaDescricao(cnaeDescricao);
+        
+        // 🎯 PRIORIDADE 2: Se não encontrou na descrição, usar mapeamento por código
+        if (!setorExtraido && cnaeCode) {
+          setorExtraido = mapearCnaePorCodigo(cnaeCode);
+        }
+        
+        // 🎯 PRIORIDADE 3: Fallback genérico
+        if (!setorExtraido) {
+          setorExtraido = 'Industrial';
+        }
+        
+        console.log('[Step5] 🏭 Setor extraído:', { cnaeCode, cnaeDescricao, setorExtraido });
       }
 
       // Preencher campos automaticamente
@@ -410,36 +613,26 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
 
       const data = result.data as any;
       
-      // Extrair setor do CNAE principal (igual à função buscarDadosCNPJ)
+      // 🔥 MELHORADO: Extrair setor do CNAE usando descrição + código (mesma lógica dos clientes)
       let setorExtraido = '';
-      if (data.atividade_principal?.[0]?.code) {
-        const cnaeCode = data.atividade_principal[0].code.replace(/\D/g, '');
-        const secao = cnaeCode.substring(0, 2);
-        // Usar o mesmo mapeamento de setores que está em buscarDadosCNPJ
-        const setoresPorSecao: Record<string, string> = {
-          '01': 'Agricultura', '02': 'Pecuária', '03': 'Pesca', '05': 'Extrativa',
-          '10': 'Alimentícia', '11': 'Bebidas', '13': 'Têxtil', '14': 'Vestuário',
-          '15': 'Couro', '16': 'Madeira', '17': 'Celulose', '18': 'Gráfica',
-          '19': 'Química', '20': 'Farmacêutica', '21': 'Petroquímica', '22': 'Plástico',
-          '23': 'Mineral', '24': 'Metalurgia', '25': 'Máquinas', '26': 'Eletrônica',
-          '27': 'Equipamentos', '28': 'Automotiva', '29': 'Outros Equipamentos',
-          '30': 'Móveis', '31': 'Manufatura', '32': 'Manufatura', '33': 'Manufatura',
-          '35': 'Energia', '36': 'Água', '37': 'Saneamento', '38': 'Resíduos',
-          '39': 'Remediação', '41': 'Construção', '42': 'Construção', '43': 'Construção',
-          '45': 'Automotiva', '46': 'Comércio', '47': 'Comércio', '49': 'Transporte',
-          '50': 'Transporte', '51': 'Transporte', '52': 'Armazenagem', '53': 'Correios',
-          '55': 'Hospedagem', '56': 'Alimentação', '58': 'Editorial', '59': 'Audiovisual',
-          '60': 'Rádio', '61': 'Telecomunicações', '62': 'TI', '63': 'TI',
-          '64': 'Financeiro', '65': 'Seguros', '66': 'Financeiro', '68': 'Imobiliário',
-          '69': 'Jurídico', '70': 'Consultoria', '71': 'Arquitetura', '72': 'Pesquisa',
-          '73': 'Publicidade', '74': 'Design', '75': 'Veterinária', '77': 'Aluguel',
-          '78': 'RH', '79': 'Viagens', '80': 'Segurança', '81': 'Serviços',
-          '82': 'Administrativo', '85': 'Educacional', '86': 'Saúde', '87': 'Saúde',
-          '88': 'Assistência', '90': 'Criativo', '91': 'Bibliotecas', '92': 'Entretenimento',
-          '93': 'Esportes', '94': 'Associações', '95': 'Manutenção', '96': 'Serviços',
-          '97': 'Doméstico', '98': 'Internacional', '99': 'Público',
-        };
-        setorExtraido = setoresPorSecao[secao] || data.atividade_principal[0].text?.split(' - ')[0] || '';
+      if (data.atividade_principal?.[0]) {
+        const cnaeCode = data.atividade_principal[0].code?.replace(/\D/g, '') || '';
+        const cnaeDescricao = (data.atividade_principal[0].text || '').toLowerCase();
+        
+        // Prioridade 1: Descrição
+        setorExtraido = extrairSetorDaDescricao(cnaeDescricao);
+        
+        // Prioridade 2: Código
+        if (!setorExtraido && cnaeCode) {
+          setorExtraido = mapearCnaePorCodigo(cnaeCode);
+        }
+        
+        // Fallback
+        if (!setorExtraido) {
+          setorExtraido = 'Industrial';
+        }
+        
+        console.log('[Step5] 🏭 Setor extraído (benchmarking):', { cnaeCode, cnaeDescricao, setorExtraido });
       }
 
       setNovoBenchmarking({
