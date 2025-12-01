@@ -92,13 +92,15 @@ export default function QualificationDashboard() {
     setLoading(true);
     try {
       // Buscar diretamente de companies (tabela principal que já existe)
-      // com dados de qualificação extraídos de raw_data
+      // FILTRAR: Apenas empresas que NÃO estão em quarentena, pipeline ou descartadas
+      // Isso garante que os contadores reflitam apenas leads em qualificação
       let leadsData: any[] = [];
       
       const { data: companiesData, error: cError } = await (supabase as any)
         .from('companies')
-        .select('id, cnpj, company_name, industry, raw_data, headquarters_state, created_at, tenant_id')
+        .select('id, cnpj, company_name, industry, raw_data, headquarters_state, created_at, tenant_id, pipeline_status')
         .eq('tenant_id', tenantId)
+        .or('pipeline_status.is.null,pipeline_status.eq.qualification,pipeline_status.eq.pending,pipeline_status.eq.new')
         .order('created_at', { ascending: false })
         .limit(200);
       
