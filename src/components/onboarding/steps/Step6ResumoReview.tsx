@@ -358,16 +358,16 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
             <div>
               <span className="text-sm font-semibold text-muted-foreground">Concorrentes Diretos:</span>
               <p className="text-base">
-                {initialData.step4_SituacaoAtual?.concorrentesDiretos?.length || 0} cadastrado(s)
+                {initialData.step1_DadosBasicos?.concorrentesDiretos?.length || 0} cadastrado(s)
               </p>
             </div>
           </div>
           
-          {/* Concorrentes Diretos - Exibir todos os campos */}
-          {initialData.step4_SituacaoAtual?.concorrentesDiretos && initialData.step4_SituacaoAtual.concorrentesDiretos.length > 0 && (
+          {/* Concorrentes Diretos - Exibir todos os campos (movidos do Step 4 para Step 1) */}
+          {initialData.step1_DadosBasicos?.concorrentesDiretos && initialData.step1_DadosBasicos.concorrentesDiretos.length > 0 && (
             <div className="mt-4 space-y-3">
               <span className="text-sm font-semibold text-muted-foreground">Concorrentes Diretos:</span>
-              {initialData.step4_SituacaoAtual.concorrentesDiretos.map((concorrente: any, idx: number) => (
+              {initialData.step1_DadosBasicos.concorrentesDiretos.map((concorrente: any, idx: number) => (
                 <Card key={idx} className="p-3 border-l-4 border-l-blue-500">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
