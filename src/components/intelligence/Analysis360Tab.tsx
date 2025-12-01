@@ -152,7 +152,7 @@ export function Analysis360Tab({
         scoreBreakdown['stc_status'] = {
           points: 5,
           max: 30,
-          description: '⚠️ Verificação TOTVS não realizada'
+          description: '⚠️ Análise de Fit não realizada'
         };
       }
 

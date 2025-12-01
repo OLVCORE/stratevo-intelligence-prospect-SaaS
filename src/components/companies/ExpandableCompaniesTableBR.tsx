@@ -446,7 +446,7 @@ export function ExpandableCompaniesTableBR({
                               <div className="p-4 bg-muted/30 rounded-lg border">
                                 <h4 className="text-sm font-semibold mb-3 flex items-center gap-2 text-primary">
                                   <FileText className="h-4 w-4" />
-                                  Verificação TOTVS
+                                  Dossiê Estratégico
                                 </h4>
                                 <div className="flex items-center justify-center">
                                   <VerificationStatusBadge

@@ -1475,7 +1475,7 @@ export default function UsageVerificationCard({
           {/* 🔄 NOVA ORDEM: Verificação → Decisores → Digital → ... → Executive */}
           <TabsTrigger value="detection" className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-primary/10 font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg">
             <Search className="w-4 h-4" />
-            <span>Verificação</span>
+            <span>Fit Produtos</span>
             <TabIndicator status={latestReport?.full_report?.__status?.detection?.status || 'draft'} />
             {getStatuses().detection === 'completed' && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-lg animate-pulse" />
@@ -1578,7 +1578,7 @@ export default function UsageVerificationCard({
 
         {/* ABA 1: VERIFICAÇÃO DE USO (GO/NO-GO) */}
         <TabsContent value="detection" className="mt-0 flex-1 overflow-hidden">
-          <UniversalTabWrapper tabName="Verificação de Uso">
+          <UniversalTabWrapper tabName="Fit de Produtos">
           {/* 🐛 DEBUG: Log state antes de renderizar */}
           {(() => {
             console.log('[VERIFICATION-TAB-RENDER] Condições:', {
@@ -1597,11 +1597,11 @@ export default function UsageVerificationCard({
                 <Search className="w-10 h-10 text-primary" />
               </div>
               <h3 className="text-xl font-semibold mb-2">
-                Verificação de Uso
+                Análise de Fit de Produtos
               </h3>
               <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-                Verifica se a empresa já utiliza produtos/serviços através de <strong>70 fontes premium</strong>:<br/>
-                📋 30 portais de vagas | 📰 26 notícias & tech | 🎥 6 vídeos & social | 🤝 1 parceiro
+                Calcula a aderência entre seus produtos e a empresa prospectada:<br/>
+                📊 Match CNAE/Setor | 💰 Capital Social | 🏢 Porte | 📍 Localização
               </p>
               <Button onClick={handleVerify} size="lg" disabled={isLoading}>
                 {isLoading ? (

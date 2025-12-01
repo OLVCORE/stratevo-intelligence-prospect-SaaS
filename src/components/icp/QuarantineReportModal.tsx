@@ -262,7 +262,7 @@ export function QuarantineReportModal({
         }
       }
       
-      pdf.save(`relatorio-totvs-${companyName.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`);
+      pdf.save(`dossie-estrategico-${companyName.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`);
       toast.success('PDF gerado com sucesso');
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
@@ -293,7 +293,7 @@ export function QuarantineReportModal({
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-lg font-semibold truncate flex items-center gap-2">
-                  Relatório de Verificação TOTVS
+                  Dossiê Estratégico de Prospecção
                 </DialogTitle>
                 <DialogDescription className="text-sm mt-1 truncate">
                   {companyName}

@@ -136,7 +136,7 @@ export async function generateTOTVSPDF(
   yPosition += 8;
   
   const tabNames: Record<string, string> = {
-    detection_report: '1. Verificação TOTVS',
+    detection_report: '1. Fit de Produtos',
     decisors_report: '2. Decisores & Contatos',
     digital_report: '3. Inteligência Digital',
     competitors_report: '4. Análise de Concorrentes',
