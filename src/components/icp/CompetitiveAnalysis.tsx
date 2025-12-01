@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { 
   Target, 
   TrendingUp, 
@@ -36,7 +38,10 @@ import {
   MapPin,
   FileText,
   Factory,
-  Scale
+  Scale,
+  Info,
+  Crown,
+  HelpCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -78,6 +83,7 @@ interface CompetitiveAnalysisProps {
   tenantId: string;
   icpId?: string;
   companyName: string;
+  companyCapitalSocial?: number; // Capital social da empresa do tenant
   competitors: ConcorrenteDireto[];
   diferenciais?: string[];
 }
@@ -110,6 +116,7 @@ export default function CompetitiveAnalysis({
   tenantId, 
   icpId, 
   companyName, 
+  companyCapitalSocial = 0,
   competitors = [], 
   diferenciais = [] 
 }: CompetitiveAnalysisProps) {
@@ -118,6 +125,7 @@ export default function CompetitiveAnalysis({
   const [enrichedCompetitors, setEnrichedCompetitors] = useState<CompetitorEnriched[]>([]);
   const [ceoAnalysis, setCeoAnalysis] = useState<string | null>(null);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   // Inicializar com dados dos concorrentes
   useEffect(() => {
@@ -126,16 +134,26 @@ export default function CompetitiveAnalysis({
       // Converter concorrentes para formato enriquecido
       const initial: CompetitorEnriched[] = competitors.map(c => ({
         ...c,
-        ameacaPotencial: classifyThreat(c.capitalSocial || 0)
+        ameacaPotencial: classifyThreat(c.capitalSocial || 0, companyCapitalSocial || 1000000)
       }));
       setEnrichedCompetitors(initial);
     }
-  }, [competitors]);
+  }, [competitors, companyCapitalSocial]);
 
   // Calcular totais
   const totalCapitalConcorrentes = enrichedCompetitors.reduce((sum, c) => sum + (c.capitalSocial || 0), 0);
   const maiorConcorrente = enrichedCompetitors.reduce((max, c) => 
     (c.capitalSocial || 0) > (max?.capitalSocial || 0) ? c : max, enrichedCompetitors[0]);
+  
+  // Calcular posição da empresa no ranking
+  const allCompaniesForRanking = [
+    { nome: companyName, capitalSocial: companyCapitalSocial, isYourCompany: true },
+    ...enrichedCompetitors.map(c => ({ ...c, isYourCompany: false }))
+  ].sort((a, b) => (b.capitalSocial || 0) - (a.capitalSocial || 0));
+  
+  const yourPosition = allCompaniesForRanking.findIndex(c => c.isYourCompany) + 1;
+  const totalMarketCapital = totalCapitalConcorrentes + companyCapitalSocial;
+  const yourMarketShare = totalMarketCapital > 0 ? (companyCapitalSocial / totalMarketCapital) * 100 : 0;
 
   // Buscar dados enriquecidos de um concorrente
   const enrichCompetitor = async (competitor: ConcorrenteDireto): Promise<CompetitorEnriched> => {
@@ -343,18 +361,22 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
       // Gerar análise CEO
       toast({
         title: '🧠 Gerando análise estratégica de CEO...',
-        description: 'Processando dados com IA.'
+        description: 'Processando dados com IA. Isso pode levar alguns segundos.'
       });
       const analysis = await generateCEOAnalysis();
       if (analysis) {
         setCeoAnalysis(analysis);
+        // Ir automaticamente para a aba de análise CEO
+        setActiveTab('ceo');
       }
 
       setLastAnalyzedAt(new Date().toISOString());
 
       toast({
         title: '✅ Análise Competitiva Concluída!',
-        description: `${enrichedResults.length} concorrentes analisados com sucesso.`
+        description: analysis 
+          ? 'Análise de CEO gerada! Veja a aba "Análise CEO".'
+          : `${enrichedResults.length} concorrentes analisados. Clique em "Gerar Análise" na aba CEO.`
       });
     } catch (error: any) {
       console.error('Erro na análise:', error);
@@ -438,107 +460,231 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="overview" className="space-y-4">
+        <TooltipProvider>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="competitors">Concorrentes ({competitors.length})</TabsTrigger>
             <TabsTrigger value="swot">SWOT</TabsTrigger>
-            <TabsTrigger value="ceo">Análise CEO</TabsTrigger>
+            <TabsTrigger value="ceo" className={ceoAnalysis ? 'text-purple-600' : ''}>
+              {ceoAnalysis && '✓ '}Análise CEO
+            </TabsTrigger>
           </TabsList>
 
           {/* Visão Geral */}
           <TabsContent value="overview" className="space-y-6">
-            {/* KPIs */}
+            {/* Card da SUA EMPRESA */}
+            <Card className="border-2 border-green-500 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Crown className="h-5 w-5 text-green-600" />
+                  <CardTitle className="text-lg text-green-800 dark:text-green-200">{companyName}</CardTitle>
+                  <Badge className="bg-green-600">SUA EMPRESA</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Capital Social</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                      {companyCapitalSocial > 0 ? formatCurrency(companyCapitalSocial) : 'Não informado'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Sua Posição no Ranking</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                      #{yourPosition} de {allCompaniesForRanking.length}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Market Share Estimado</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                      {yourMarketShare.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div>
+                    <HoverCard>
+                      <HoverCardTrigger asChild>
+                        <div className="cursor-help">
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            Seus Diferenciais <Info className="h-3 w-3" />
+                          </p>
+                          <p className="text-lg font-bold text-green-700 dark:text-green-300">{diferenciais.length}</p>
+                        </div>
+                      </HoverCardTrigger>
+                      <HoverCardContent className="w-80">
+                        <h4 className="font-semibold mb-2">Seus Diferenciais Competitivos:</h4>
+                        <ul className="space-y-1 text-sm">
+                          {diferenciais.map((d, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                              {d}
+                            </li>
+                          ))}
+                          {diferenciais.length === 0 && (
+                            <li className="text-muted-foreground">Nenhum cadastrado</li>
+                          )}
+                        </ul>
+                      </HoverCardContent>
+                    </HoverCard>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* KPIs dos Concorrentes */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="bg-red-50 dark:bg-red-950/30 border-red-200">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm text-red-700 dark:text-red-300">Concorrentes</p>
-                      <p className="text-3xl font-bold text-red-900 dark:text-red-100">{competitors.length}</p>
-                    </div>
-                    <AlertTriangle className="h-8 w-8 text-red-400" />
-                  </div>
-                </CardContent>
-              </Card>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Card className="bg-red-50 dark:bg-red-950/30 border-red-200 cursor-help">
+                    <CardContent className="pt-6">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm text-red-700 dark:text-red-300 flex items-center gap-1">
+                            Concorrentes <HelpCircle className="h-3 w-3" />
+                          </p>
+                          <p className="text-3xl font-bold text-red-900 dark:text-red-100">{competitors.length}</p>
+                        </div>
+                        <AlertTriangle className="h-8 w-8 text-red-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p><strong>Concorrentes Diretos</strong></p>
+                  <p className="text-sm">Empresas que competem diretamente pelos mesmos clientes. Cadastrados na Aba 4 do Onboarding.</p>
+                </TooltipContent>
+              </Tooltip>
 
-              <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm text-amber-700 dark:text-amber-300">Capital Total</p>
-                      <p className="text-xl font-bold text-amber-900 dark:text-amber-100">
-                        {formatCurrency(totalCapitalConcorrentes)}
-                      </p>
-                    </div>
-                    <DollarSign className="h-8 w-8 text-amber-400" />
-                  </div>
-                </CardContent>
-              </Card>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 cursor-help">
+                    <CardContent className="pt-6">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                            Capital Competitivo <HelpCircle className="h-3 w-3" />
+                          </p>
+                          <p className="text-lg font-bold text-amber-900 dark:text-amber-100">
+                            {formatCurrency(totalCapitalConcorrentes)}
+                          </p>
+                        </div>
+                        <DollarSign className="h-8 w-8 text-amber-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p><strong>Poder de Fogo dos Concorrentes</strong></p>
+                  <p className="text-sm">Soma do capital social de todos os concorrentes. Indica a capacidade de investimento e força financeira que você enfrenta no mercado.</p>
+                </TooltipContent>
+              </Tooltip>
 
-              <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm text-blue-700 dark:text-blue-300">Maior Concorrente</p>
-                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100 truncate max-w-[150px]">
-                        {maiorConcorrente?.nomeFantasia || maiorConcorrente?.razaoSocial?.split(' ')[0] || 'N/A'}
-                      </p>
-                      <p className="text-xs text-blue-600">{formatCurrency(maiorConcorrente?.capitalSocial || 0)}</p>
-                    </div>
-                    <Building2 className="h-8 w-8 text-blue-400" />
-                  </div>
-                </CardContent>
-              </Card>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 cursor-help">
+                    <CardContent className="pt-6">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                            Líder do Mercado <HelpCircle className="h-3 w-3" />
+                          </p>
+                          <p className="text-sm font-bold text-blue-900 dark:text-blue-100 truncate max-w-[120px]">
+                            {maiorConcorrente?.nomeFantasia || maiorConcorrente?.razaoSocial?.split(' ')[0] || 'N/A'}
+                          </p>
+                          <p className="text-xs text-blue-600">{formatCurrency(maiorConcorrente?.capitalSocial || 0)}</p>
+                        </div>
+                        <Building2 className="h-8 w-8 text-blue-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p><strong>Seu Principal Concorrente</strong></p>
+                  <p className="text-sm">Concorrente com maior capital social. Representa a maior ameaça em termos de capacidade de investimento.</p>
+                </TooltipContent>
+              </Tooltip>
 
-              <Card className="bg-green-50 dark:bg-green-950/30 border-green-200">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm text-green-700 dark:text-green-300">Seus Diferenciais</p>
-                      <p className="text-3xl font-bold text-green-900 dark:text-green-100">{diferenciais.length}</p>
-                    </div>
-                    <Shield className="h-8 w-8 text-green-400" />
-                  </div>
-                </CardContent>
-              </Card>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Card className="bg-purple-50 dark:bg-purple-950/30 border-purple-200 cursor-help">
+                    <CardContent className="pt-6">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                            Ameaças Altas <HelpCircle className="h-3 w-3" />
+                          </p>
+                          <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                            {enrichedCompetitors.filter(c => c.ameacaPotencial === 'alta').length}
+                          </p>
+                        </div>
+                        <Eye className="h-8 w-8 text-purple-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p><strong>Concorrentes de Alta Ameaça</strong></p>
+                  <p className="text-sm">Empresas com capital social muito superior ao seu, que podem investir pesado em market share.</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
 
-            {/* Ranking de Concorrentes por Capital */}
+            {/* Ranking COMPARATIVO (incluindo sua empresa) */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Scale className="h-5 w-5 text-primary" />
-                  Ranking por Capital Social
+                  Ranking Competitivo por Capital Social
                 </CardTitle>
+                <CardDescription>
+                  Comparação direta: {companyName} vs {competitors.length} concorrentes
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {[...enrichedCompetitors]
-                    .sort((a, b) => (b.capitalSocial || 0) - (a.capitalSocial || 0))
-                    .map((competitor, idx) => {
-                      const percentage = totalCapitalConcorrentes > 0 
-                        ? ((competitor.capitalSocial || 0) / totalCapitalConcorrentes) * 100 
-                        : 0;
-                      return (
-                        <div key={idx} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="w-6 h-6 rounded-full flex items-center justify-center">
-                                {idx + 1}
-                              </Badge>
-                              <span className="font-medium">{competitor.razaoSocial}</span>
-                              <ThreatBadge level={competitor.ameacaPotencial} />
-                            </div>
-                            <span className="font-bold">{formatCurrency(competitor.capitalSocial || 0)}</span>
-                          </div>
+                  {allCompaniesForRanking.map((company, idx) => {
+                    const percentage = totalMarketCapital > 0 
+                      ? ((company.capitalSocial || 0) / totalMarketCapital) * 100 
+                      : 0;
+                    const isYou = (company as any).isYourCompany;
+                    return (
+                      <div key={idx} className={cn(
+                        "space-y-2 p-3 rounded-lg transition-all",
+                        isYou ? "bg-green-100 dark:bg-green-900/30 border-2 border-green-500" : "hover:bg-muted/50"
+                      )}>
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Progress value={percentage} className="h-2 flex-1" />
-                            <span className="text-xs text-muted-foreground w-12">{percentage.toFixed(1)}%</span>
+                            <Badge 
+                              variant={isYou ? "default" : "outline"} 
+                              className={cn(
+                                "w-7 h-7 rounded-full flex items-center justify-center text-sm",
+                                isYou && "bg-green-600"
+                              )}
+                            >
+                              {idx + 1}
+                            </Badge>
+                            <span className={cn("font-medium", isYou && "text-green-700 dark:text-green-300")}>
+                              {(company as any).razaoSocial || company.nome}
+                              {isYou && " (VOCÊ)"}
+                            </span>
+                            {!isYou && <ThreatBadge level={(company as any).ameacaPotencial} />}
+                            {isYou && <Badge className="bg-green-600">SUA EMPRESA</Badge>}
                           </div>
+                          <span className={cn("font-bold", isYou ? "text-green-700 dark:text-green-300" : "")}>
+                            {formatCurrency(company.capitalSocial || 0)}
+                          </span>
                         </div>
-                      );
-                    })}
+                        <div className="flex items-center gap-2">
+                          <Progress 
+                            value={percentage} 
+                            className={cn("h-2 flex-1", isYou && "[&>div]:bg-green-600")} 
+                          />
+                          <span className="text-xs text-muted-foreground w-14 text-right">{percentage.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -852,6 +998,7 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
             </Card>
           </TabsContent>
         </Tabs>
+        </TooltipProvider>
       )}
     </div>
   );

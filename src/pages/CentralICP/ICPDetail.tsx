@@ -59,21 +59,34 @@ export default function ICPDetail() {
         // Construir icpData a partir dos dados do onboarding + metadata
         const enrichedIcpData = {
           ...(metadata?.icp_recommendation?.icp_profile || {}),
+          // Dados da empresa (Step 1)
+          razao_social: session.step1_data?.razaoSocial,
+          nome_fantasia: session.step1_data?.nomeFantasia,
+          cnpj: session.step1_data?.cnpj,
+          capital_social: session.step1_data?.capitalSocial || 0,
+          cidade: session.step1_data?.cidade,
+          estado: session.step1_data?.estado,
+          setor_empresa: session.step1_data?.setor,
+          // Setores e nichos (Step 2/3)
           setores_alvo: session.step2_data?.setoresAlvo || session.step3_data?.setoresAlvo || [],
           nichos_alvo: session.step2_data?.nichosAlvo || session.step3_data?.nichosAlvo || [],
           cnaes_alvo: session.step2_data?.cnaesAlvo || session.step3_data?.cnaesAlvo || [],
+          // Perfil (Step 3)
           faturamento_min: session.step3_data?.faturamentoAlvo?.minimo,
           faturamento_max: session.step3_data?.faturamentoAlvo?.maximo,
           funcionarios_min: session.step3_data?.funcionariosAlvo?.minimo,
           funcionarios_max: session.step3_data?.funcionariosAlvo?.maximo,
           porte_alvo: session.step3_data?.porteAlvo || [],
           localizacao_alvo: session.step3_data?.localizacaoAlvo || {},
+          // Situação atual (Step 4)
           diferenciais: session.step4_data?.diferenciais || [],
           casos_de_uso: session.step4_data?.casosDeUso || [],
           concorrentes: session.step4_data?.concorrentesDiretos || [],
           tickets_ciclos: session.step4_data?.ticketsECiclos || [],
+          // Histórico (Step 5)
           clientes_atuais: session.step5_data?.clientesAtuais || [],
           empresas_benchmarking: session.step5_data?.empresasBenchmarking || [],
+          // Análise IA
           analise_detalhada: metadata?.icp_recommendation?.analise_detalhada || {},
           score_confianca: metadata?.icp_recommendation?.score_confianca || 0,
         };
@@ -792,6 +805,7 @@ export default function ICPDetail() {
             tenantId={tenantId!}
             icpId={id}
             companyName={(tenant as any)?.razao_social || (tenant as any)?.nome_fantasia || profile?.nome || 'Sua Empresa'}
+            companyCapitalSocial={icpData?.capital_social || (tenant as any)?.capital_social || 0}
             competitors={icpData?.concorrentes || []}
             diferenciais={icpData?.diferenciais || []}
           />
