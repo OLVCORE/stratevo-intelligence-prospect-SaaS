@@ -103,6 +103,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Carregar dados diretamente de companies
+  // FILTRAR: Apenas empresas que NÃO estão em quarentena ou aprovadas
   const loadLeads = async () => {
     if (!tenantId) return;
     
@@ -110,8 +111,9 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     try {
       const { data: companiesData, error: cError } = await (supabase as any)
         .from('companies')
-        .select('id, company_name, cnpj, industry, raw_data, created_at, headquarters_state, headquarters_city, tenant_id')
+        .select('id, company_name, cnpj, industry, raw_data, created_at, headquarters_state, headquarters_city, tenant_id, pipeline_status')
         .eq('tenant_id', tenantId)
+        .or('pipeline_status.is.null,pipeline_status.eq.qualification,pipeline_status.eq.pending,pipeline_status.eq.new')
         .order('created_at', { ascending: false })
         .limit(500);
       
@@ -290,8 +292,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     );
   };
 
-  // Helper para atualizar status em raw_data
-  const updateLeadStatus = async (leadIds: string[], newStatus: string) => {
+  // Helper para atualizar status em raw_data E pipeline_status
+  const updateLeadStatus = async (leadIds: string[], newStatus: string, pipelineStatus?: string) => {
     // Para cada lead, atualizar o raw_data com o novo status
     for (const leadId of leadIds) {
       const lead = leads.find(l => l.id === leadId);
@@ -303,24 +305,38 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
         decision_updated_at: new Date().toISOString()
       };
       
+      const updateData: any = { raw_data: updatedRawData };
+      if (pipelineStatus) {
+        updateData.pipeline_status = pipelineStatus;
+      }
+      
       await (supabase as any)
         .from('companies')
-        .update({ raw_data: updatedRawData })
+        .update(updateData)
         .eq('id', leadId);
     }
   };
 
-  // Ações em lote
+  // Ações em lote - APROVAR (mover para Pipeline SDR)
   const handleBulkApprove = async () => {
     if (selectedLeads.length === 0) return;
     
     setIsProcessing(true);
     try {
-      await updateLeadStatus(selectedLeads, 'approved');
+      // Atualizar status para approved e pipeline_status para 'pipeline'
+      await updateLeadStatus(selectedLeads, 'approved', 'pipeline');
       
-      toast.success(`✅ ${selectedLeads.length} lead(s) aprovado(s)!`);
+      // Remover do estado local imediatamente
+      setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
+      
+      toast.success(`✅ ${selectedLeads.length} lead(s) aprovado(s) para Pipeline!`, {
+        description: 'Empresas movidas para SDR Sales Suite',
+        action: {
+          label: 'Ir para Pipeline',
+          onClick: () => navigate('/pipeline')
+        }
+      });
       setSelectedLeads([]);
-      loadLeads();
     } catch (err) {
       console.error('Erro ao aprovar:', err);
       toast.error('Erro ao aprovar leads');
@@ -329,16 +345,22 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     }
   };
 
+  // Ações em lote - REJEITAR (mover para Descartados)
   const handleBulkReject = async () => {
     if (selectedLeads.length === 0) return;
     
     setIsProcessing(true);
     try {
-      await updateLeadStatus(selectedLeads, 'rejected');
+      // Atualizar status para rejected e pipeline_status para 'discarded'
+      await updateLeadStatus(selectedLeads, 'rejected', 'discarded');
       
-      toast.success(`❌ ${selectedLeads.length} lead(s) rejeitado(s)`);
+      // Remover do estado local imediatamente
+      setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
+      
+      toast.success(`❌ ${selectedLeads.length} lead(s) rejeitado(s)`, {
+        description: 'Empresas movidas para Descartados'
+      });
       setSelectedLeads([]);
-      loadLeads();
     } catch (err) {
       console.error('Erro ao rejeitar:', err);
       toast.error('Erro ao rejeitar leads');
@@ -347,23 +369,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     }
   };
 
-  const handleBulkSendToQuarantine = async () => {
-    if (selectedLeads.length === 0) return;
-    
-    setIsProcessing(true);
-    try {
-      await updateLeadStatus(selectedLeads, 'quarantine');
-      
-      toast.success(`🔄 ${selectedLeads.length} lead(s) enviado(s) para quarentena`);
-      setSelectedLeads([]);
-      loadLeads();
-    } catch (err) {
-      console.error('Erro:', err);
-      toast.error('Erro ao enviar para quarentena');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  // A função handleBulkSendToQuarantine está definida após handleGoToQuarantine
+  // e usa handleSendToICPQuarantine para o fluxo correto
 
   const handleBulkDelete = async () => {
     if (selectedLeads.length === 0) return;
@@ -719,6 +726,9 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
       }
 
       if (successCount > 0) {
+        // Remover do estado local IMEDIATAMENTE (não esperar loadLeads)
+        setLeads(prev => prev.filter(l => !leadIds.includes(l.id)));
+        
         toast.success(`✅ ${successCount} lead(s) enviado(s) para Quarentena ICP!`, {
           description: errorCount > 0 
             ? `${errorCount} erro(s) ocorreram. Acesse a Quarentena ICP para validação.`
@@ -735,7 +745,6 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
       }
       
       setSelectedLeads([]);
-      loadLeads();
     } catch (error: any) {
       console.error('Erro ao enviar para quarentena:', error);
       toast.error('Erro ao enviar para quarentena', { description: error.message });
@@ -751,6 +760,15 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     } else {
       navigate('/central-icp/quarantine');
     }
+  };
+
+  // Bulk action: Enviar selecionados para Quarentena
+  const handleBulkSendToQuarantine = async () => {
+    if (selectedLeads.length === 0) {
+      toast.error('Selecione pelo menos um lead para enviar à quarentena');
+      return;
+    }
+    await handleSendToICPQuarantine(selectedLeads);
   };
 
   // Enriquecimento em lote
