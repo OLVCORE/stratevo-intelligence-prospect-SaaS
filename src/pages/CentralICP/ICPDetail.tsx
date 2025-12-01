@@ -5,7 +5,7 @@ import { useTenant } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ICPAnalysisCriteriaConfig from '@/components/icp/ICPAnalysisCriteriaConfig';
@@ -18,6 +18,7 @@ export default function ICPDetail() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [icpData, setIcpData] = useState<any>(null);
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     if (tenantId && id) {
@@ -71,6 +72,64 @@ export default function ICPDetail() {
     }
   };
 
+  // 🔥 REGENERAR ICP: Regenerar análise com dados atualizados do onboarding
+  const handleRegenerateICP = async () => {
+    if (!tenantId || !id) return;
+
+    setRegenerating(true);
+    try {
+      toast({
+        title: '⏳ Regenerando ICP...',
+        description: 'Analisando dados atualizados do onboarding com IA.',
+      });
+
+      // Chamar Edge Function para regenerar análise
+      const { data, error } = await supabase.functions.invoke('analyze-onboarding-icp', {
+        body: {
+          tenant_id: tenantId,
+          icp_id: id,
+          regenerate: true, // Flag para indicar regeneração
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.recommendation) {
+        // Atualizar metadata do ICP com a nova análise
+        const { error: updateError } = await (supabase as any)
+          .from('icp_profiles_metadata')
+          .update({
+            recommendation_data: data.recommendation,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id)
+          .eq('tenant_id', tenantId);
+
+        if (updateError) {
+          console.error('[ICPDetail] Erro ao atualizar metadata:', updateError);
+        }
+      }
+
+      toast({
+        title: '✅ ICP Regenerado!',
+        description: 'A análise foi atualizada com os dados mais recentes do onboarding.',
+      });
+
+      // Recarregar dados
+      await loadProfile();
+
+    } catch (error: any) {
+      console.error('[ICPDetail] Erro ao regenerar ICP:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Não foi possível regenerar o ICP.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -112,6 +171,24 @@ export default function ICPDetail() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRegenerateICP}
+            disabled={regenerating}
+            className="bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-400"
+          >
+            {regenerating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Regenerando...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Atualizar ICP
+              </>
+            )}
+          </Button>
           <Button
             variant="outline"
             onClick={() => navigate(`/central-icp/batch-analysis?icp=${profile.id}`)}

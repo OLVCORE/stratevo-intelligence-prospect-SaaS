@@ -181,12 +181,20 @@ serve(async (req) => {
 
     // 🔥 CRÍTICO: Ler tenant_id do body PRIMEIRO (antes de buscar public user)
     let tenantId: string | null = null;
+    let icpId: string | null = null;
+    let isRegenerate = false;
     try {
       const bodyText = await req.text();
       if (bodyText) {
         const requestBody = JSON.parse(bodyText);
         tenantId = requestBody.tenant_id || null;
-        console.log('[ANALYZE-ONBOARDING-ICP] 📋 Tenant ID recebido do body:', tenantId);
+        icpId = requestBody.icp_id || null;
+        isRegenerate = requestBody.regenerate === true;
+        console.log('[ANALYZE-ONBOARDING-ICP] 📋 Parâmetros recebidos:', { 
+          tenantId, 
+          icpId, 
+          isRegenerate 
+        });
       }
     } catch (err) {
       console.log('[ANALYZE-ONBOARDING-ICP] ⚠️ Body vazio ou inválido, continuando sem tenant_id');
