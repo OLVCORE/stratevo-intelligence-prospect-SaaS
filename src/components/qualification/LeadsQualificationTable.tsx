@@ -43,6 +43,8 @@ import * as XLSX from 'xlsx';
 import { useTenant } from '@/contexts/TenantContext';
 import { STCAgent } from '@/components/intelligence/STCAgent';
 import { createQualificationEngine } from '@/services/icpQualificationEngine';
+import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
+import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnrichmentStatusBadge';
 
 interface Lead {
   id: string;
@@ -1039,7 +1041,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                     </Button>
                   </TableHead>
                   <TableHead>Temperatura</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Status CNPJ</TableHead>
+                  <TableHead>Status Análise</TableHead>
                   <TableHead>UF</TableHead>
                   <TableHead>Setor</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -1107,13 +1110,35 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                         <TemperatureBadge temp={lead.temperatura} score={lead.icp_score} />
                       </TableCell>
                       <TableCell>
-                        <Badge 
-                          variant={lead.validation_status === 'approved' ? 'default' : lead.validation_status === 'rejected' ? 'destructive' : 'secondary'}
-                        >
-                          {lead.validation_status === 'approved' ? '✓ Aprovado' : 
-                           lead.validation_status === 'rejected' ? '✗ Rejeitado' : 
-                           lead.validation_status === 'quarantine' ? '⏳ Quarentena' : '• Pendente'}
-                        </Badge>
+                        {/* Badge de Status CNPJ - Igual à tabela de empresas */}
+                        {(() => {
+                          // Extrair situação da Receita Federal
+                          const situacao = lead.raw_data?.receita_federal?.situacao || 
+                                          lead.raw_data?.situacao || 
+                                          lead.situacao_cadastral;
+                          
+                          let cnpjStatus: string | undefined = undefined;
+                          
+                          if (situacao) {
+                            const sitUpper = String(situacao).toUpperCase();
+                            if (sitUpper.includes('ATIVA') || sitUpper === 'ATIVA') {
+                              cnpjStatus = 'ativa';
+                            } else if (sitUpper.includes('BAIXADA') || sitUpper.includes('INATIVA') || sitUpper.includes('SUSPENSA')) {
+                              cnpjStatus = 'inativo';
+                            } else if (sitUpper.includes('NULA') || sitUpper.includes('INEXISTENTE')) {
+                              cnpjStatus = 'inexistente';
+                            }
+                          }
+                          
+                          return <QuarantineCNPJStatusBadge cnpj={lead.cnpj} cnpjStatus={cnpjStatus} />;
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        {/* Badge de Status Análise com progresso 0-100% */}
+                        <QuarantineEnrichmentStatusBadge 
+                          rawAnalysis={lead.raw_data || {}}
+                          showProgress={true}
+                        />
                       </TableCell>
                       <TableCell>
                         {lead.uf ? (
