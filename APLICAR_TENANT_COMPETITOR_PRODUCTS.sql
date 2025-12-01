@@ -66,19 +66,17 @@ CREATE POLICY "tenant_competitor_products_policy" ON tenant_competitor_products
     SELECT tenant_id FROM users WHERE auth_id = auth.uid()
   ));
 
--- 4. TRIGGER para updated_at (verificar se função existe)
-DO $$
+-- 4. TRIGGER para updated_at (criar função se não existir)
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_updated_at_column') THEN
-    CREATE OR REPLACE FUNCTION update_updated_at_column()
-    RETURNS TRIGGER AS $$
-    BEGIN
-      NEW.updated_at = NOW();
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-  END IF;
-END $$;
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Remover trigger antigo se existir
+DROP TRIGGER IF EXISTS update_competitor_products_updated_at ON tenant_competitor_products;
 
 CREATE TRIGGER update_competitor_products_updated_at
   BEFORE UPDATE ON tenant_competitor_products
