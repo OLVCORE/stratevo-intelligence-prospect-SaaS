@@ -14,6 +14,7 @@ import { ArrowLeft, FileText, Download, Eye, Loader2, RefreshCw } from 'lucide-r
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function ICPReports() {
@@ -62,22 +63,17 @@ export default function ICPReports() {
       if (metaError) throw metaError;
       setProfile(metadata);
       
-      // Buscar dados completos do ICP no schema do tenant via RPC
-      if (metadata?.schema_name && metadata?.icp_profile_id) {
-        try {
-          const { data: icpData, error: icpError } = await supabase
-            .rpc('get_icp_profile_from_tenant', {
-              p_schema_name: metadata.schema_name,
-              p_icp_profile_id: metadata.icp_profile_id
-            });
+      // Buscar dados do onboarding para contexto adicional
+      const { data: onboardingSession } = await supabase
+        .from('onboarding_sessions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-          if (!icpError && icpData) {
-            // Armazenar dados do ICP para uso na geração de relatórios
-            setProfile({ ...metadata, icp_profile_data: icpData });
-          }
-        } catch (err) {
-          console.warn('[ICPReports] Erro ao buscar icp_profile via RPC:', err);
-        }
+      if (onboardingSession) {
+        setProfile({ ...metadata, onboarding_data: onboardingSession });
       }
 
       // Buscar relatórios existentes
@@ -199,11 +195,11 @@ export default function ICPReports() {
               <CardContent className="space-y-4">
                 {completeReport ? (
                   <div className="space-y-2">
-                    <Badge variant="default">Gerado</Badge>
+                    <Badge variant="default" className="bg-green-600">✓ Gerado</Badge>
                     <p className="text-sm text-muted-foreground">
                       Gerado em {new Date(completeReport.generated_at).toLocaleString('pt-BR')}
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant="default"
                         onClick={() => {
@@ -214,9 +210,21 @@ export default function ICPReports() {
                         <Eye className="h-4 w-4 mr-2" />
                         Visualizar
                       </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => handleGenerateReport('completo')}
+                        disabled={generating === 'completo'}
+                      >
+                        {generating === 'completo' ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                        )}
+                        Regenerar
+                      </Button>
                       <Button variant="outline" onClick={() => handleExportPDF(completeReport.id)}>
                         <Download className="h-4 w-4 mr-2" />
-                        Exportar PDF
+                        PDF
                       </Button>
                     </div>
                   </div>
@@ -255,11 +263,11 @@ export default function ICPReports() {
               <CardContent className="space-y-4">
                 {summaryReport ? (
                   <div className="space-y-2">
-                    <Badge variant="default">Gerado</Badge>
+                    <Badge variant="default" className="bg-green-600">✓ Gerado</Badge>
                     <p className="text-sm text-muted-foreground">
                       Gerado em {new Date(summaryReport.generated_at).toLocaleString('pt-BR')}
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant="default"
                         onClick={() => {
@@ -270,9 +278,21 @@ export default function ICPReports() {
                         <Eye className="h-4 w-4 mr-2" />
                         Visualizar
                       </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => handleGenerateReport('resumo')}
+                        disabled={generating === 'resumo'}
+                      >
+                        {generating === 'resumo' ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                        )}
+                        Regenerar
+                      </Button>
                       <Button variant="outline" onClick={() => handleExportPDF(summaryReport.id)}>
                         <Download className="h-4 w-4 mr-2" />
-                        Exportar PDF
+                        PDF
                       </Button>
                     </div>
                   </div>
@@ -334,8 +354,22 @@ export default function ICPReports() {
                     
                     if (analysis && typeof analysis === 'string' && analysis.trim().length > 0) {
                       return (
-                        <div className="prose max-w-none dark:prose-invert">
-                          <ReactMarkdown>{analysis}</ReactMarkdown>
+                        <div className="prose prose-slate dark:prose-invert max-w-none
+                          prose-headings:text-foreground prose-headings:font-bold
+                          prose-h1:text-2xl prose-h1:border-b prose-h1:pb-2 prose-h1:mb-4
+                          prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-h2:text-primary
+                          prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3
+                          prose-p:text-muted-foreground prose-p:leading-relaxed
+                          prose-li:text-muted-foreground prose-li:marker:text-primary
+                          prose-strong:text-foreground
+                          prose-table:border prose-table:border-border prose-table:text-sm
+                          prose-th:bg-muted prose-th:p-3 prose-th:text-left prose-th:font-semibold
+                          prose-td:p-3 prose-td:border prose-td:border-border
+                          prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+                          prose-blockquote:border-l-primary prose-blockquote:bg-muted/50 prose-blockquote:py-2 prose-blockquote:px-4
+                          prose-hr:border-border prose-hr:my-8
+                        ">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{analysis}</ReactMarkdown>
                         </div>
                       );
                     } else {
@@ -402,8 +436,22 @@ export default function ICPReports() {
                     
                     if (analysis && typeof analysis === 'string' && analysis.trim().length > 0) {
                       return (
-                        <div className="prose max-w-none dark:prose-invert">
-                          <ReactMarkdown>{analysis}</ReactMarkdown>
+                        <div className="prose prose-slate dark:prose-invert max-w-none
+                          prose-headings:text-foreground prose-headings:font-bold
+                          prose-h1:text-2xl prose-h1:border-b prose-h1:pb-2 prose-h1:mb-4
+                          prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-h2:text-primary
+                          prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3
+                          prose-p:text-muted-foreground prose-p:leading-relaxed
+                          prose-li:text-muted-foreground prose-li:marker:text-primary
+                          prose-strong:text-foreground
+                          prose-table:border prose-table:border-border prose-table:text-sm
+                          prose-th:bg-muted prose-th:p-3 prose-th:text-left prose-th:font-semibold
+                          prose-td:p-3 prose-td:border prose-td:border-border
+                          prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+                          prose-blockquote:border-l-primary prose-blockquote:bg-muted/50 prose-blockquote:py-2 prose-blockquote:px-4
+                          prose-hr:border-border prose-hr:my-8
+                        ">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{analysis}</ReactMarkdown>
                         </div>
                       );
                     } else {
