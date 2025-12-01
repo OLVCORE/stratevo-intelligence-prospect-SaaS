@@ -37,6 +37,8 @@ import { useTenant } from '@/contexts/TenantContext';
 import { toast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import QualificationWeightsConfig from '@/components/qualification/QualificationWeightsConfig';
+import { LeadsQualificationTable } from '@/components/qualification/LeadsQualificationTable';
+import { InlineCompanySearch } from '@/components/qualification/InlineCompanySearch';
 import { 
   createQualificationEngine, 
   QualificationResult,
@@ -77,9 +79,7 @@ export default function QualificationDashboard() {
   });
   const [leads, setLeads] = useState<LeadQuarantine[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterTemp, setFilterTemp] = useState<string>('all');
-  const [cnpjSearch, setCnpjSearch] = useState('');
+  // Estados removidos - agora no LeadsQualificationTable
 
   useEffect(() => {
     if (tenantId) {
@@ -456,122 +456,18 @@ export default function QualificationDashboard() {
           </Card>
         </TabsContent>
 
-        {/* Lista de Leads */}
-        <TabsContent value="leads" className="space-y-4">
-          {/* Filtros */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por nome ou CNPJ..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant={filterTemp === 'all' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilterTemp('all')}
-                  >
-                    Todos
-                  </Button>
-                  <Button
-                    variant={filterTemp === 'hot' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilterTemp('hot')}
-                    className={filterTemp === 'hot' ? 'bg-red-500 hover:bg-red-600' : ''}
-                  >
-                    🔥 HOT
-                  </Button>
-                  <Button
-                    variant={filterTemp === 'warm' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilterTemp('warm')}
-                    className={filterTemp === 'warm' ? 'bg-amber-500 hover:bg-amber-600' : ''}
-                  >
-                    🟡 WARM
-                  </Button>
-                  <Button
-                    variant={filterTemp === 'cold' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilterTemp('cold')}
-                    className={filterTemp === 'cold' ? 'bg-blue-500 hover:bg-blue-600' : ''}
-                  >
-                    ❄️ COLD
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Tabela de Leads */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-3">
-                {filteredLeads.map(lead => (
-                  <div 
-                    key={lead.id} 
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="text-center">
-                        <div className={`text-2xl font-bold ${
-                          lead.icp_score >= 70 ? 'text-red-600' :
-                          lead.icp_score >= 40 ? 'text-amber-600' : 'text-blue-600'
-                        }`}>
-                          {lead.icp_score}
-                        </div>
-                        <TempBadge temp={lead.temperatura} />
-                      </div>
-                      <div>
-                        <p className="font-medium">{lead.nome_fantasia || lead.name}</p>
-                        <p className="text-sm text-muted-foreground">{lead.cnpj}</p>
-                        {lead.icp_name && (
-                          <p className="text-xs text-primary">ICP: {lead.icp_name}</p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Badge variant={
-                        lead.validation_status === 'approved' ? 'default' :
-                        lead.validation_status === 'rejected' ? 'destructive' : 'secondary'
-                      }>
-                        {lead.validation_status === 'approved' ? '✅ Aprovado' :
-                         lead.validation_status === 'rejected' ? '❌ Rejeitado' : '⏳ Pendente'}
-                      </Badge>
-                      
-                      {lead.validation_status === 'pending' && (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => approveLead(lead.id)}>
-                            <CheckCircle2 className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => rejectLead(lead.id)}>
-                            <XCircle className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                      
-                      <Button size="sm" variant="ghost">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                
-                {filteredLeads.length === 0 && (
-                  <div className="text-center py-12">
-                    <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">Nenhum lead encontrado</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Lista de Leads - Tabela World-Class */}
+        <TabsContent value="leads">
+          <LeadsQualificationTable 
+            onLeadSelect={(lead) => {
+              // Abrir detalhes do lead
+              toast({
+                title: `Lead: ${lead.name}`,
+                description: `Score: ${lead.icp_score} | ${lead.temperatura?.toUpperCase()}`
+              });
+            }}
+            onRefresh={loadData}
+          />
         </TabsContent>
 
         {/* Configuração */}
@@ -579,7 +475,7 @@ export default function QualificationDashboard() {
           <QualificationWeightsConfig />
         </TabsContent>
 
-        {/* Upload - Busca Inteligente Integrada */}
+        {/* Upload - Busca Inteligente INLINE (não redireciona) */}
         <TabsContent value="upload" className="space-y-6">
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
             <CardHeader>
@@ -588,44 +484,13 @@ export default function QualificationDashboard() {
                 Busca Inteligente de Empresas
               </CardTitle>
               <CardDescription>
-                Busca unificada com detecção automática e enriquecimento 360°
+                Adicione empresas diretamente à qualificação - sem redirecionamento
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Busca Individual */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold flex items-center gap-2">
-                    <Search className="h-4 w-4" />
-                    Busca Unificada
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Digite CNPJ ou nome da empresa - detecção automática
-                  </p>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="00.000.000/0000-00 ou Nome da Empresa"
-                      value={cnpjSearch}
-                      onChange={(e) => setCnpjSearch(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button 
-                      onClick={() => {
-                        if (cnpjSearch.trim()) {
-                          navigate(`/search?q=${encodeURIComponent(cnpjSearch)}`);
-                        }
-                      }}
-                      disabled={!cnpjSearch.trim()}
-                    >
-                      <Search className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline">✓ Receita Federal</Badge>
-                    <Badge variant="outline">✓ Enriquecimento 360°</Badge>
-                    <Badge variant="outline">✓ Qualificação ICP</Badge>
-                  </div>
-                </div>
+                {/* Busca Individual INLINE */}
+                <InlineCompanySearch onCompanyAdded={loadData} />
 
                 {/* Upload em Massa */}
                 <div className="space-y-4">
@@ -667,22 +532,22 @@ export default function QualificationDashboard() {
                 <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
                   <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
                   <div>
-                    <p className="font-medium text-sm">Detecção Automática</p>
-                    <p className="text-xs text-muted-foreground">CNPJ ou Nome identificado automaticamente</p>
+                    <p className="font-medium text-sm">Receita Federal</p>
+                    <p className="text-xs text-muted-foreground">Consulta automática via BrasilAPI</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
                   <CheckCircle2 className="h-5 w-5 text-blue-600 mt-0.5" />
                   <div>
-                    <p className="font-medium text-sm">Enriquecimento 360°</p>
-                    <p className="text-xs text-muted-foreground">Dados de múltiplas fontes em tempo real</p>
+                    <p className="font-medium text-sm">Score ICP Automático</p>
+                    <p className="text-xs text-muted-foreground">Calculado na adição</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg">
                   <CheckCircle2 className="h-5 w-5 text-purple-600 mt-0.5" />
                   <div>
-                    <p className="font-medium text-sm">Qualificação ICP</p>
-                    <p className="text-xs text-muted-foreground">Score automático HOT/WARM/COLD</p>
+                    <p className="font-medium text-sm">Direto p/ Qualificação</p>
+                    <p className="text-xs text-muted-foreground">Sem passar pela Base de Empresas</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
