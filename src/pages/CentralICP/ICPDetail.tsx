@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import ICPAnalysisCriteriaConfig from '@/components/icp/ICPAnalysisCriteriaConfig';
 import BCGMatrix, { createBCGItemsFromICP } from '@/components/reports/BCGMatrix';
 import CompetitiveAnalysis from '@/components/icp/CompetitiveAnalysis';
+import StrategicActionPlan from '@/components/icp/StrategicActionPlan';
 
 export default function ICPDetail() {
   const navigate = useNavigate();
@@ -252,9 +253,10 @@ export default function ICPDetail() {
         <TabsList className="flex flex-wrap h-auto gap-1">
           <TabsTrigger value="resumo">Resumo Estratégico</TabsTrigger>
           <TabsTrigger value="configuracao">Configuração</TabsTrigger>
-          <TabsTrigger value="criterios">Critérios de Análise</TabsTrigger>
-          <TabsTrigger value="analise">Análise 360°</TabsTrigger>
+          <TabsTrigger value="criterios">Critérios</TabsTrigger>
+          <TabsTrigger value="analise">360°</TabsTrigger>
           <TabsTrigger value="competitiva" className="text-purple-600">🏆 Competitiva</TabsTrigger>
+          <TabsTrigger value="plano" className="text-indigo-600">📋 Plano</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
         </TabsList>
 
@@ -808,6 +810,17 @@ export default function ICPDetail() {
             companyCapitalSocial={icpData?.capital_social || (tenant as any)?.capital_social || 0}
             competitors={icpData?.concorrentes || []}
             diferenciais={icpData?.diferenciais || []}
+          />
+        </TabsContent>
+
+        {/* 📋 Aba de Plano Estratégico de Ação */}
+        <TabsContent value="plano">
+          <StrategicActionPlan
+            tenantId={tenantId!}
+            icpId={id}
+            companyName={(tenant as any)?.razao_social || (tenant as any)?.nome_fantasia || profile?.nome || 'Sua Empresa'}
+            companyCapitalSocial={icpData?.capital_social || (tenant as any)?.capital_social || 0}
+            onboardingData={icpData}
           />
         </TabsContent>
 
