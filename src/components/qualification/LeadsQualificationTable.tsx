@@ -625,6 +625,11 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
             ? tempValue 
             : 'cold'; // 'out' e outros valores vão para 'cold'
 
+          // APENAS campos que EXISTEM na tabela icp_analysis_results:
+          // cnpj, razao_social, nome_fantasia, uf, municipio, porte, cnae_principal,
+          // website, email, telefone, origem, icp_score, temperatura, is_cliente_totvs,
+          // totvs_check_date, totvs_evidences, motivo_descarte, moved_to_pool, reviewed,
+          // raw_data, analysis_data, created_at, analyzed_at, updated_at
           const quarantineRecord = {
             cnpj: lead.cnpj,
             razao_social: lead.name || lead.razao_social || 'Sem Nome',
@@ -632,12 +637,10 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
             icp_score: lead.icp_score || 0,
             temperatura: validTemperatura,
             origem: 'icp_individual',
-            // Campos opcionais
             uf: receita.uf || lead.uf || null,
             municipio: receita.municipio || lead.municipio || null,
             porte: receita.porte || lead.porte || null,
             cnae_principal: receita.atividade_principal?.[0]?.code?.toString() || lead.cnae_principal || null,
-            setor: lead.setor || receita.atividade_principal?.[0]?.text || null,
             is_cliente_totvs: false,
             moved_to_pool: false,
             reviewed: false,
@@ -647,10 +650,9 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               sent_at: new Date().toISOString(),
               original_company_id: leadId,
               qualification_score: lead.icp_score,
-              qualification_temp: lead.temperatura, // Guarda o valor original
-              original_temperatura: tempValue
-            },
-            analysis_data: {
+              qualification_temp: lead.temperatura,
+              original_temperatura: tempValue,
+              setor: lead.setor || receita.atividade_principal?.[0]?.text || null,
               breakdown: lead.qualification_breakdown || {},
               decision_reason: lead.decision_reason || null
             }
@@ -669,7 +671,6 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                 moved_to_pool: false,
                 reviewed: false,
                 raw_data: quarantineRecord.raw_data,
-                analysis_data: quarantineRecord.analysis_data,
                 updated_at: new Date().toISOString()
               })
               .eq('id', existingByCnpj.id);
