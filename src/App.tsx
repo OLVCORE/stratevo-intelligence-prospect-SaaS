@@ -59,6 +59,7 @@ const CreateNewICP = lazy(() => import("./pages/CentralICP/CreateNewICP"));
 const ICPDetail = lazy(() => import("./pages/CentralICP/ICPDetail"));
 const ICPReports = lazy(() => import("./pages/CentralICP/ICPReports"));
 const ResultsDashboard = lazy(() => import("./pages/CentralICP/ResultsDashboard"));
+const StrategicPlanPage = lazy(() => import("./pages/CentralICP/StrategicPlanPage"));
 const AuditCompliance = lazy(() => import("./pages/CentralICP/AuditCompliance"));
 const SalesIntelligenceFeed = lazy(() => import("./pages/SalesIntelligence/Feed"));
 const MonitoringConfig = lazy(() => import("./pages/SalesIntelligence/MonitoringConfig"));
@@ -724,6 +725,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <ResultsDashboard />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/strategic-plan"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <StrategicPlanPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

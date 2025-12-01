@@ -48,6 +48,7 @@ import {
   UserCog,
   Calculator,
   GraduationCap,
+  Briefcase,
   Play,
   Plus
 } from "lucide-react";
@@ -172,6 +173,7 @@ const menuGroups: MenuGroup[] = [
           { title: "Análise Individual", icon: Search, url: "/central-icp/individual", description: "Qualificar empresas uma por vez" },
           { title: "Análise em Massa", icon: Zap, url: "/central-icp/batch-analysis", description: "Processar múltiplas empresas automaticamente" },
           { title: "Dashboard", icon: BarChart3, url: "/central-icp/dashboard", description: "Resultados e métricas de qualificação" },
+          { title: "Plano Estratégico", icon: Briefcase, url: "/central-icp/strategic-plan", description: "Kanban, KPIs e ações com investimentos proporcionais" },
         ],
       },
       {
