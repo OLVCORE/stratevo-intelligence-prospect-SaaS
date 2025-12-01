@@ -157,9 +157,20 @@ export function OnboardingWizard() {
       const savedStep = localStorage.getItem(ONBOARDING_STEP_KEY);
       const savedData = localStorage.getItem(ONBOARDING_STORAGE_KEY);
       
+      let data = savedData ? JSON.parse(savedData) : {};
+      
+      // 🔥 COMPATIBILIDADE: Migrar dados salvos com nome antigo (sem E extra)
+      if (data.step5_HistoricoEnriquecimento && !data.step5_HistoricoEEnriquecimento) {
+        console.log('[OnboardingWizard] 🔄 Migrando dados do Step5 (nome antigo → novo)');
+        data.step5_HistoricoEEnriquecimento = data.step5_HistoricoEnriquecimento;
+        delete data.step5_HistoricoEnriquecimento;
+        // Salvar dados migrados
+        localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(data));
+      }
+      
       return {
         step: savedStep ? parseInt(savedStep, 10) : 1,
-        data: savedData ? JSON.parse(savedData) : {},
+        data,
       };
     } catch (error) {
       console.error('[OnboardingWizard] Erro ao carregar dados salvos:', error);
@@ -1797,7 +1808,7 @@ export function OnboardingWizard() {
       2: 'SetoresNichos',
       3: 'PerfilClienteIdeal',
       4: 'SituacaoAtual', // Mantém nome interno para compatibilidade
-      5: 'HistoricoEnriquecimento', // Mantém nome interno para compatibilidade
+      5: 'HistoricoEEnriquecimento', // 🔥 CORRIGIDO: Deve ter "E" extra para consistência com interface
       6: 'ResumoReview',
     };
     return names[step] || '';
