@@ -5,7 +5,48 @@
 -- Este script verifica quais tabelas existem e aplica apenas o que falta
 -- Execute no Supabase SQL Editor
 --
+-- IMPORTANTE: Este script também garante que a coluna 'destaque' existe
 -- =====================================================
+
+-- 0. GARANTIR QUE tenant_products TEM A COLUNA 'destaque' E 'ativo'
+DO $$
+BEGIN
+  -- Adicionar coluna 'destaque' se não existir
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_products' 
+    AND column_name = 'destaque'
+  ) THEN
+    ALTER TABLE tenant_products ADD COLUMN destaque BOOLEAN DEFAULT false;
+    COMMENT ON COLUMN tenant_products.destaque IS 'Produto carro-chefe';
+  END IF;
+  
+  -- Adicionar coluna 'ativo' se não existir
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_products' 
+    AND column_name = 'ativo'
+  ) THEN
+    ALTER TABLE tenant_products ADD COLUMN ativo BOOLEAN DEFAULT true;
+    COMMENT ON COLUMN tenant_products.ativo IS 'Produto ativo/inativo';
+  END IF;
+END $$;
+
+-- 0.1. GARANTIR QUE tenant_product_documents TEM A COLUNA 'uploaded_at'
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_product_documents' 
+    AND column_name = 'uploaded_at'
+  ) THEN
+    ALTER TABLE tenant_product_documents ADD COLUMN uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+    COMMENT ON COLUMN tenant_product_documents.uploaded_at IS 'Data de upload do documento';
+  END IF;
+END $$;
 
 -- 1. VERIFICAR QUAIS TABELAS EXISTEM
 SELECT 

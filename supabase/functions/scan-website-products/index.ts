@@ -61,8 +61,36 @@ serve(async (req) => {
     console.log(`[ScanWebsite] Iniciando scan de: ${domain}`);
 
     let pagesContent: string[] = [];
+    
+    // 🔥 CRÍTICO: SEMPRE acessar a HOMEPAGE primeiro (onde geralmente há produtos em destaque)
+    const baseUrl = website_url.startsWith('http') ? website_url : `https://${website_url}`;
+    try {
+      console.log(`[ScanWebsite] Acessando homepage: ${baseUrl}`);
+      const homepageResponse = await fetch(baseUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      });
+      
+      if (homepageResponse.ok) {
+        const html = await homepageResponse.text();
+        // Extrair texto básico (remover tags HTML) - AUMENTAR LIMITE
+        const textContent = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 15000); // Aumentado de 5000 para 15000
+        
+        pagesContent.push(`URL: ${baseUrl} (Homepage)\nConteúdo: ${textContent}`);
+        console.log(`[ScanWebsite] ✅ Homepage acessada com sucesso (${textContent.length} caracteres)`);
+      } else {
+        console.log(`[ScanWebsite] ⚠️ Homepage retornou status ${homepageResponse.status}`);
+      }
+    } catch (homepageError) {
+      console.error('[ScanWebsite] Erro ao acessar homepage:', homepageError);
+    }
 
-    // 1. Buscar páginas do site via SERPER
+    // 1. Buscar páginas do site via SERPER (com mais palavras-chave)
     if (serperKey) {
       try {
         const serperResponse = await fetch('https://google.serper.dev/search', {
@@ -72,8 +100,8 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            q: `site:${domain} produtos OR serviços OR catálogo OR soluções`,
-            num: 10,
+            q: `site:${domain} (produtos OR serviços OR catálogo OR soluções OR linha OR equipamentos OR EPI OR luvas OR produtos em destaque)`,
+            num: 15, // Aumentado de 10 para 15
             gl: 'br',
             hl: 'pt-br',
           }),
@@ -83,18 +111,22 @@ serve(async (req) => {
           const serperData = await serperResponse.json();
           const organicResults = serperData.organic || [];
           
-          pagesContent = organicResults.map((r: any) => 
-            `Página: ${r.title}\nURL: ${r.link}\nDescrição: ${r.snippet || ''}`
-          );
+          for (const result of organicResults) {
+            // Evitar duplicatas da homepage
+            if (!result.link.includes(domain) || result.link === baseUrl || result.link === `${baseUrl}/`) {
+              continue;
+            }
+            pagesContent.push(`Página: ${result.title}\nURL: ${result.link}\nDescrição: ${result.snippet || ''}`);
+          }
 
-          console.log(`[ScanWebsite] Encontradas ${organicResults.length} páginas`);
+          console.log(`[ScanWebsite] Encontradas ${organicResults.length} páginas via SERPER`);
         }
       } catch (serperError) {
         console.error('[ScanWebsite] Erro no SERPER:', serperError);
       }
     }
 
-    // 2. Tentar acessar diretamente a página de produtos
+    // 2. Tentar acessar diretamente páginas de produtos (com mais variações)
     const commonProductPages = [
       '/produtos',
       '/servicos',
@@ -102,25 +134,27 @@ serve(async (req) => {
       '/catalogo',
       '/products',
       '/services',
+      '/linha-produtos',
+      '/nossos-produtos',
+      '/produtos-em-destaque',
     ];
 
     for (const path of commonProductPages) {
       try {
         const fullUrl = `https://${domain}${path}`;
         const pageResponse = await fetch(fullUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ProductScanner/1.0)' },
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         });
         
         if (pageResponse.ok) {
           const html = await pageResponse.text();
-          // Extrair texto básico (remover tags HTML)
           const textContent = html
             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
             .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
             .replace(/<[^>]+>/g, ' ')
             .replace(/\s+/g, ' ')
             .trim()
-            .substring(0, 5000);
+            .substring(0, 10000); // Aumentado de 5000 para 10000
           
           pagesContent.push(`URL: ${fullUrl}\nConteúdo: ${textContent}`);
           console.log(`[ScanWebsite] Página encontrada: ${fullUrl}`);
@@ -153,40 +187,55 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é um especialista em identificar produtos e serviços em websites corporativos.
+            content: `Você é um especialista em identificar produtos e serviços em websites corporativos, especialmente produtos industriais, EPIs, equipamentos de proteção, luvas, e produtos físicos.
+
+IMPORTANTE: 
+- Procure por NOMES DE PRODUTOS específicos mencionados no site (ex: "Grip Defender", "Total Power", "Max Defender", etc.)
+- Procure por CATEGORIAS de produtos (ex: "Alta Temperatura", "Arco Elétrico", "Corte/Perfuração", etc.)
+- Procure por PRODUTOS EM DESTAQUE ou seções de produtos
+- NÃO ignore produtos mencionados na homepage ou em seções de "Produtos em Destaque"
+- Se houver categorias, liste os produtos de cada categoria
 
 Analise o conteúdo das páginas e identifique TODOS os produtos/serviços oferecidos pela empresa.
 
 Para cada produto/serviço encontrado, extraia:
-- nome: Nome do produto/serviço
-- descricao: Breve descrição
-- categoria: Categoria (Ex: Software, Consultoria, Hardware, etc)
-- setores_alvo: Setores que podem usar (baseado no contexto)
-- diferenciais: Diferenciais mencionados
+- nome: Nome EXATO do produto/serviço (ex: "Grip Defender Vulca", "Total Power", etc.)
+- descricao: Breve descrição do produto
+- categoria: Categoria do produto (ex: "Alta Temperatura e Solda", "Arco Elétrico", "Corte/Perfuração", "Proteção Mecânica", "Proteção Química", "EPI", "Luvas", etc.)
+- setores_alvo: Setores que podem usar (baseado no contexto, ex: "Indústria", "Construção", "Mineração", etc.)
+- diferenciais: Diferenciais mencionados (ex: "Alta performance", "Tecnologia de última geração", etc.)
 - confianca: Sua confiança (0.0 a 1.0)
+
+Se encontrar categorias sem produtos específicos, crie produtos genéricos para cada categoria.
 
 Responda APENAS com JSON válido:
 {
   "empresa": "Nome da empresa",
   "produtos": [
     {
-      "nome": "...",
-      "descricao": "...",
-      "categoria": "...",
-      "setores_alvo": [],
-      "diferenciais": [],
-      "confianca": 0.8
+      "nome": "Nome exato do produto",
+      "descricao": "Descrição do produto",
+      "categoria": "Categoria do produto",
+      "setores_alvo": ["Setor 1", "Setor 2"],
+      "diferenciais": ["Diferencial 1", "Diferencial 2"],
+      "confianca": 0.9
     }
   ]
 }`
           },
           {
             role: 'user',
-            content: `Extraia os produtos das seguintes páginas:\n\n${pagesContent.join('\n\n---\n\n').substring(0, 12000)}`
+            content: `Extraia TODOS os produtos e serviços mencionados nas seguintes páginas. Preste atenção especial a:
+- Produtos em destaque na homepage
+- Nomes de produtos específicos
+- Categorias de produtos
+- Seções de catálogo ou linha de produtos
+
+Conteúdo das páginas:\n\n${pagesContent.join('\n\n---\n\n').substring(0, 20000)}`
           }
         ],
-        temperature: 0.3,
-        max_tokens: 4000,
+        temperature: 0.2, // Reduzido para ser mais preciso
+        max_tokens: 6000, // Aumentado para extrair mais produtos
       }),
     });
 
@@ -196,14 +245,28 @@ Responda APENAS com JSON válido:
 
     const aiResult = await openaiResponse.json();
     const content = aiResult.choices?.[0]?.message?.content || '{"produtos":[]}';
+    
+    console.log('[ScanWebsite] 📥 Resposta da OpenAI recebida (tamanho):', content.length, 'caracteres');
+    console.log('[ScanWebsite] 📄 Preview da resposta (primeiros 500 chars):', content.substring(0, 500));
 
     // Parse do JSON
     let extractedProducts: any[] = [];
     try {
-      const parsed = JSON.parse(content.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
+      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      console.log('[ScanWebsite] 🧹 Conteúdo limpo (tamanho):', cleanContent.length, 'caracteres');
+      
+      const parsed = JSON.parse(cleanContent);
       extractedProducts = parsed.produtos || [];
+      
+      console.log('[ScanWebsite] ✅ Produtos parseados:', extractedProducts.length);
+      if (extractedProducts.length > 0) {
+        console.log('[ScanWebsite] 📦 Primeiro produto:', JSON.stringify(extractedProducts[0], null, 2));
+      } else {
+        console.log('[ScanWebsite] ⚠️ NENHUM PRODUTO ENCONTRADO! Resposta completa:', cleanContent.substring(0, 2000));
+      }
     } catch (parseError) {
-      console.error('Erro ao parsear resposta da IA:', parseError);
+      console.error('[ScanWebsite] ❌ Erro ao parsear resposta da IA:', parseError);
+      console.error('[ScanWebsite] 📄 Conteúdo que falhou (primeiros 1000 chars):', content.substring(0, 1000));
       extractedProducts = [];
     }
 
@@ -251,7 +314,16 @@ Responda APENAS com JSON válido:
       }
     }
 
-    console.log(`[ScanWebsite] Concluído: ${productsInserted} produtos inseridos`);
+    console.log(`[ScanWebsite] ✅ Concluído: ${productsInserted} produtos inseridos de ${extractedProducts.length} encontrados`);
+
+    // 🔥 LOG DETALHADO PARA DEBUG
+    console.log('[ScanWebsite] 📊 RESUMO FINAL:', {
+      domain,
+      pages_scanned: pagesContent.length,
+      products_found: extractedProducts.length,
+      products_inserted: productsInserted,
+      products_list: extractedProducts.map(p => ({ nome: p.nome, categoria: p.categoria }))
+    });
 
     return new Response(
       JSON.stringify({
@@ -259,7 +331,13 @@ Responda APENAS com JSON válido:
         domain,
         pages_scanned: pagesContent.length,
         products_found: extractedProducts.length,
+        products_extracted: extractedProducts.length, // 🔥 ADICIONADO: mesmo nome do concorrente
         products_inserted: productsInserted,
+        products: extractedProducts.map(p => ({ // 🔥 ADICIONADO: retornar lista de produtos
+          nome: p.nome,
+          categoria: p.categoria,
+          descricao: p.descricao
+        }))
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

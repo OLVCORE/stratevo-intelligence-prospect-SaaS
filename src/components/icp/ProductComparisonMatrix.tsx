@@ -68,10 +68,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       try {
         // Produtos do tenant
         const { data: tenantProds, error: tenantError } = await supabase
-          .from('tenant_products')
+          .from('tenant_products' as any)
           .select('id, nome, descricao, categoria, ticket_medio')
           .eq('tenant_id', tenant.id)
-          .eq('ativo', true)
           .order('nome');
 
         if (tenantError) throw tenantError;
@@ -81,7 +80,6 @@ export function ProductComparisonMatrix({ icpId }: Props) {
           .from('tenant_competitor_products' as any)
           .select('id, nome, descricao, categoria, competitor_name, competitor_cnpj, confianca_extracao')
           .eq('tenant_id', tenant.id)
-          .eq('ativo', true)
           .order('competitor_name', { ascending: true }) as any);
 
         if (compError) throw compError;

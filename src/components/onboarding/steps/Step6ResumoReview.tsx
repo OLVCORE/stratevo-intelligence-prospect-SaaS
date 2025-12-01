@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   CheckCircle2, 
   Building2, 
@@ -21,7 +22,9 @@ import {
   FileText,
   Sparkles,
   Info,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { OnboardingData } from '../OnboardingWizard';
@@ -43,6 +46,36 @@ interface Props {
 
 export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmitting, isGenerating = false, onGenerate, generatedCount = 0, isSaving = false, hasUnsavedChanges = false, createdIcpId, icpResult }: Props) {
   const navigate = useNavigate();
+  
+  // 🔥 NOVO: Estados para controlar os dropdowns de cada seção
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    step1: true,
+    step2: true,
+    step3: true,
+    step4: true,
+    step5: true,
+    step6: true,
+  });
+  
+  // 🔥 NOVO: Função para alternar seção
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+  
+  // 🔥 NOVO: Função para abrir/fechar todas as seções
+  const toggleAllSections = (open: boolean) => {
+    setExpandedSections({
+      step1: open,
+      step2: open,
+      step3: open,
+      step4: open,
+      step5: open,
+      step6: open,
+    });
+  };
   
   // Debug: log quando createdIcpId mudar
   useEffect(() => {
@@ -91,15 +124,50 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
         </AlertDescription>
       </Alert>
 
+      {/* 🔥 NOVO: Botões para abrir/fechar todas as seções */}
+      <div className="flex justify-end gap-2 mb-4">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => toggleAllSections(true)}
+          className="flex items-center gap-2"
+        >
+          <ChevronDown className="h-4 w-4" />
+          Abrir Todas
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => toggleAllSections(false)}
+          className="flex items-center gap-2"
+        >
+          <ChevronUp className="h-4 w-4" />
+          Fechar Todas
+        </Button>
+      </div>
+
       {/* Step 1: Dados Básicos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="w-5 h-5" />
-            <span className="text-lg">1. Dados Básicos da Empresa</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <Collapsible open={expandedSections.step1} onOpenChange={() => toggleSection('step1')}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  <span className="text-lg">1. Dados Básicos da Empresa</span>
+                </div>
+                {expandedSections.step1 ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-3">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-sm font-semibold text-muted-foreground">Razão Social:</span>
@@ -134,18 +202,31 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
               <p className="text-base">{initialData.step1_DadosBasicos?.porteEmpresa || 'Não informado'}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Step 2: Setores e Nichos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            <span className="text-lg">2. Setores e Nichos Alvo</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Collapsible open={expandedSections.step2} onOpenChange={() => toggleSection('step2')}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5" />
+                  <span className="text-lg">2. Setores e Nichos Alvo</span>
+                </div>
+                {expandedSections.step2 ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
           <div>
             <span className="text-sm font-semibold text-muted-foreground">Setores Selecionados ({initialData.step2_SetoresNichos?.setoresAlvo?.length || 0}):</span>
             <div className="flex flex-wrap gap-2 mt-2">
@@ -174,18 +255,31 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Step 3: Perfil Cliente Ideal */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="w-5 h-5" />
-            <span className="text-lg">3. Perfil do Cliente Ideal (ICP)</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Collapsible open={expandedSections.step3} onOpenChange={() => toggleSection('step3')}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5" />
+                  <span className="text-lg">3. Perfil do Cliente Ideal (ICP)</span>
+                </div>
+                {expandedSections.step3 ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1">
@@ -287,18 +381,31 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
               </div>
             </>
           ) : null}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Step 4: Diferenciais */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            <span className="text-lg">4. Diferenciais</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <Collapsible open={expandedSections.step4} onOpenChange={() => toggleSection('step4')}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  <span className="text-lg">4. Diferenciais</span>
+                </div>
+                {expandedSections.step4 ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-3">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-sm font-semibold text-muted-foreground">Categoria da Solução:</span>
@@ -355,89 +462,11 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
                 <p className="text-base mt-2">Não informado</p>
               )}
             </div>
-            <div>
-              <span className="text-sm font-semibold text-muted-foreground">Concorrentes Diretos:</span>
-              <p className="text-base">
-                {initialData.step1_DadosBasicos?.concorrentesDiretos?.length || 0} cadastrado(s)
-              </p>
-            </div>
           </div>
           
-          {/* Concorrentes Diretos - Exibir todos os campos (movidos do Step 4 para Step 1) */}
-          {initialData.step1_DadosBasicos?.concorrentesDiretos && initialData.step1_DadosBasicos.concorrentesDiretos.length > 0 && (
-            <div className="mt-4 space-y-3">
-              <span className="text-sm font-semibold text-muted-foreground">Concorrentes Diretos:</span>
-              {initialData.step1_DadosBasicos.concorrentesDiretos.map((concorrente: any, idx: number) => (
-                <Card key={idx} className="p-3 border-l-4 border-l-blue-500">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-blue-600" />
-                      <div className="font-semibold">{concorrente.razaoSocial || concorrente.nome}</div>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                      {concorrente.cnpj && (
-                        <div>
-                          <span className="text-muted-foreground">CNPJ:</span>
-                          <div className="font-mono text-xs">{concorrente.cnpj}</div>
-                        </div>
-                      )}
-                      {concorrente.nomeFantasia && (
-                        <div>
-                          <span className="text-muted-foreground">Nome Fantasia:</span>
-                          <div>{concorrente.nomeFantasia}</div>
-                        </div>
-                      )}
-                      {concorrente.setor && (
-                        <div>
-                          <span className="text-muted-foreground">Setor:</span>
-                          <div>{concorrente.setor}</div>
-                        </div>
-                      )}
-                      {(concorrente.cidade || concorrente.estado) && (
-                        <div>
-                          <span className="text-muted-foreground">Localização:</span>
-                          <div>{concorrente.cidade}{concorrente.cidade && concorrente.estado ? ', ' : ''}{concorrente.estado}</div>
-                        </div>
-                      )}
-                      {concorrente.capitalSocial > 0 && (
-                        <div>
-                          <span className="text-muted-foreground">Capital Social:</span>
-                          <div>R$ {concorrente.capitalSocial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        </div>
-                      )}
-                      {concorrente.cnaePrincipal && (
-                        <div>
-                          <span className="text-muted-foreground">CNAE Principal:</span>
-                          <div className="font-mono text-xs">{concorrente.cnaePrincipal}</div>
-                        </div>
-                      )}
-                      {concorrente.cnaePrincipalDescricao && (
-                        <div className="col-span-2 md:col-span-3">
-                          <span className="text-muted-foreground">Descrição CNAE:</span>
-                          <div className="text-xs">{concorrente.cnaePrincipalDescricao}</div>
-                        </div>
-                      )}
-                      {concorrente.website && (
-                        <div>
-                          <span className="text-muted-foreground">Website:</span>
-                          <div className="text-blue-600">{concorrente.website}</div>
-                        </div>
-                      )}
-                      {concorrente.diferencialDeles && (
-                        <div className="col-span-2 md:col-span-3">
-                          <span className="text-muted-foreground">Diferencial:</span>
-                          <div>{concorrente.diferencialDeles}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-          
+          {/* 🔥 NOVO: Diferenciais - LOGO APÓS TICKETS E CICLOS */}
           {initialData.step4_SituacaoAtual?.diferenciais && initialData.step4_SituacaoAtual.diferenciais.length > 0 && (
-            <div>
+            <div className="mt-4">
               <span className="text-sm font-semibold text-muted-foreground">Diferenciais:</span>
               <ul className="list-disc list-inside mt-1 space-y-1">
                 {initialData.step4_SituacaoAtual.diferenciais.map((diferencial, idx) => (
@@ -446,143 +475,262 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
               </ul>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Step 5: ICP Benchmarking */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5" />
-            <span className="text-lg">5. ICP Benchmarking</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Clientes Atuais */}
-          {initialData.step5_HistoricoEEnriquecimento?.clientesAtuais && initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Clientes Atuais Cadastrados:
-                </span>
-                <Badge variant="secondary">
-                  {initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length} cliente{initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length !== 1 ? 's' : ''}
-                </Badge>
-              </div>
-              <div className="space-y-2">
-                {initialData.step5_HistoricoEEnriquecimento.clientesAtuais.map((cliente: any, index: number) => (
-                  <div key={index} className="p-3 bg-muted/50 rounded-md border border-border">
-                    <div className="font-semibold text-foreground mb-2">{cliente.razaoSocial || cliente.nome}</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      {cliente.cnpj && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">CNPJ:</span>
-                          <span className="text-foreground font-mono">{cliente.cnpj}</span>
-                        </div>
-                      )}
-                      {cliente.setor && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">Setor:</span>
-                          <Badge variant="secondary" className="text-xs">{cliente.setor}</Badge>
-                        </div>
-                      )}
-                      {cliente.cidade && cliente.estado && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">Localização:</span>
-                          <span className="text-foreground">{cliente.cidade}, {cliente.estado}</span>
-                        </div>
-                      )}
-                      {cliente.cnaePrincipal && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">CNAE:</span>
-                          <span className="text-foreground font-mono text-xs">{cliente.cnaePrincipal}</span>
-                        </div>
-                      )}
-                      {cliente.capitalSocial && cliente.capitalSocial > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">Capital:</span>
-                          <span className="text-foreground">R$ {cliente.capitalSocial.toLocaleString('pt-BR')}</span>
-                        </div>
-                      )}
-                      {cliente.ticketMedio && cliente.ticketMedio > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">Ticket Médio:</span>
-                          <Badge variant="outline" className="text-xs">R$ {cliente.ticketMedio.toLocaleString('pt-BR')}</Badge>
-                        </div>
-                      )}
-                    </div>
-                    {cliente.cnaePrincipalDescricao && (
-                      <p className="text-xs text-muted-foreground italic mt-2">{cliente.cnaePrincipalDescricao}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
           
-          {/* 🔥 UNIFICADO: Empresas de Benchmarking */}
-          {initialData.step5_HistoricoEEnriquecimento?.empresasBenchmarking && initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.length > 0 && (
-            <div>
-              <Separator className="my-3" />
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                  <Target className="w-4 h-4" />
-                  Empresas Alvo para ICP Benchmarking:
-                </span>
-                <Badge variant="secondary">
-                  {initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.length} empresa{initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.length !== 1 ? 's' : ''}
-                </Badge>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Step 5: Concorrentes */}
+      <Collapsible open={expandedSections.step5} onOpenChange={() => toggleSection('step5')}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  <span className="text-lg">5. Concorrentes</span>
+                </div>
+                {expandedSections.step5 ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              {/* Concorrentes Diretos - Exibir todos os campos */}
+              <div>
+                <span className="text-sm font-semibold text-muted-foreground">Concorrentes Diretos:</span>
+                <p className="text-base mb-3">
+                  {initialData.step1_DadosBasicos?.concorrentesDiretos?.length || 0} cadastrado(s)
+                </p>
               </div>
-              <div className="space-y-2">
-                {initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.map((empresa: any, index: number) => (
-                  <div key={index} className="p-3 bg-muted/50 rounded-md border border-border">
-                    <div className="font-semibold text-foreground mb-2">{empresa.razaoSocial}</div>
-                    {empresa.nomeFantasia && (
-                      <div className="text-sm text-muted-foreground mb-2">{empresa.nomeFantasia}</div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      {empresa.cnpj && (
+              
+              {initialData.step1_DadosBasicos?.concorrentesDiretos && initialData.step1_DadosBasicos.concorrentesDiretos.length > 0 && (
+                <div className="space-y-3">
+                  {initialData.step1_DadosBasicos.concorrentesDiretos.map((concorrente: any, idx: number) => (
+                    <Card key={idx} className="p-3 border-l-4 border-l-blue-500">
+                      <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">CNPJ:</span>
-                          <span className="text-foreground font-mono">{empresa.cnpj}</span>
+                          <Building2 className="h-4 w-4 text-blue-600" />
+                          <div className="font-semibold">{concorrente.razaoSocial || concorrente.nome}</div>
                         </div>
-                      )}
-                      {empresa.setor && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">Setor:</span>
-                          <Badge variant="secondary" className="text-xs">{empresa.setor}</Badge>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                          {concorrente.cnpj && (
+                            <div>
+                              <span className="text-muted-foreground">CNPJ:</span>
+                              <div className="font-mono text-xs">{concorrente.cnpj}</div>
+                            </div>
+                          )}
+                          {concorrente.nomeFantasia && (
+                            <div>
+                              <span className="text-muted-foreground">Nome Fantasia:</span>
+                              <div>{concorrente.nomeFantasia}</div>
+                            </div>
+                          )}
+                          {concorrente.setor && (
+                            <div>
+                              <span className="text-muted-foreground">Setor:</span>
+                              <div>{concorrente.setor}</div>
+                            </div>
+                          )}
+                          {(concorrente.cidade || concorrente.estado) && (
+                            <div>
+                              <span className="text-muted-foreground">Localização:</span>
+                              <div>{concorrente.cidade}{concorrente.cidade && concorrente.estado ? ', ' : ''}{concorrente.estado}</div>
+                            </div>
+                          )}
+                          {concorrente.capitalSocial > 0 && (
+                            <div>
+                              <span className="text-muted-foreground">Capital Social:</span>
+                              <div>R$ {concorrente.capitalSocial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            </div>
+                          )}
+                          {concorrente.cnaePrincipal && (
+                            <div>
+                              <span className="text-muted-foreground">CNAE Principal:</span>
+                              <div className="font-mono text-xs">{concorrente.cnaePrincipal}</div>
+                            </div>
+                          )}
+                          {concorrente.cnaePrincipalDescricao && (
+                            <div className="col-span-2 md:col-span-3">
+                              <span className="text-muted-foreground">Descrição CNAE:</span>
+                              <div className="text-xs">{concorrente.cnaePrincipalDescricao}</div>
+                            </div>
+                          )}
+                          {concorrente.website && (
+                            <div>
+                              <span className="text-muted-foreground">Website:</span>
+                              <div className="text-blue-600">{concorrente.website}</div>
+                            </div>
+                          )}
+                          {concorrente.diferencialDeles && (
+                            <div className="col-span-2 md:col-span-3">
+                              <span className="text-muted-foreground">Diferencial:</span>
+                              <div>{concorrente.diferencialDeles}</div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {empresa.cidade && empresa.estado && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">Localização:</span>
-                          <span className="text-foreground">{empresa.cidade}, {empresa.estado}</span>
-                        </div>
-                      )}
-                      {empresa.cnaePrincipal && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">CNAE:</span>
-                          <span className="text-foreground font-mono text-xs">{empresa.cnaePrincipal}</span>
-                        </div>
-                      )}
-                      {empresa.capitalSocial && empresa.capitalSocial > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground font-medium">Capital:</span>
-                          <span className="text-foreground">R$ {empresa.capitalSocial.toLocaleString('pt-BR')}</span>
-                        </div>
-                      )}
-                    </div>
-                    {empresa.cnaePrincipalDescricao && (
-                      <p className="text-xs text-muted-foreground italic mt-2">{empresa.cnaePrincipalDescricao}</p>
-                    )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Step 6: ICP Benchmarking */}
+      <Collapsible open={expandedSections.step6} onOpenChange={() => toggleSection('step6')}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5" />
+                  <span className="text-lg">6. ICP Benchmarking</span>
+                </div>
+                {expandedSections.step6 ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              {/* Clientes Atuais */}
+              {initialData.step5_HistoricoEEnriquecimento?.clientesAtuais && initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      Clientes Atuais Cadastrados:
+                    </span>
+                    <Badge variant="secondary">
+                      {initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length} cliente{initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length !== 1 ? 's' : ''}
+                    </Badge>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  <div className="space-y-2">
+                    {initialData.step5_HistoricoEEnriquecimento.clientesAtuais.map((cliente: any, index: number) => (
+                      <div key={index} className="p-3 bg-muted/50 rounded-md border border-border">
+                        <div className="font-semibold text-foreground mb-2">{cliente.razaoSocial || cliente.nome}</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                          {cliente.cnpj && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">CNPJ:</span>
+                              <span className="text-foreground font-mono">{cliente.cnpj}</span>
+                            </div>
+                          )}
+                          {cliente.setor && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">Setor:</span>
+                              <Badge variant="secondary" className="text-xs">{cliente.setor}</Badge>
+                            </div>
+                          )}
+                          {cliente.cidade && cliente.estado && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">Localização:</span>
+                              <span className="text-foreground">{cliente.cidade}, {cliente.estado}</span>
+                            </div>
+                          )}
+                          {cliente.cnaePrincipal && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">CNAE:</span>
+                              <span className="text-foreground font-mono text-xs">{cliente.cnaePrincipal}</span>
+                            </div>
+                          )}
+                          {cliente.capitalSocial && cliente.capitalSocial > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">Capital:</span>
+                              <span className="text-foreground">R$ {cliente.capitalSocial.toLocaleString('pt-BR')}</span>
+                            </div>
+                          )}
+                          {cliente.ticketMedio && cliente.ticketMedio > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">Ticket Médio:</span>
+                              <Badge variant="outline" className="text-xs">R$ {cliente.ticketMedio.toLocaleString('pt-BR')}</Badge>
+                            </div>
+                          )}
+                        </div>
+                        {cliente.cnaePrincipalDescricao && (
+                          <p className="text-xs text-muted-foreground italic mt-2">{cliente.cnaePrincipalDescricao}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* 🔥 UNIFICADO: Empresas de Benchmarking */}
+              {initialData.step5_HistoricoEEnriquecimento?.empresasBenchmarking && initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.length > 0 && (
+                <div>
+                  <Separator className="my-3" />
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                      <Target className="w-4 h-4" />
+                      Empresas Alvo para ICP Benchmarking:
+                    </span>
+                    <Badge variant="secondary">
+                      {initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.length} empresa{initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.length !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.map((empresa: any, index: number) => (
+                      <div key={index} className="p-3 bg-muted/50 rounded-md border border-border">
+                        <div className="font-semibold text-foreground mb-2">{empresa.razaoSocial}</div>
+                        {empresa.nomeFantasia && (
+                          <div className="text-sm text-muted-foreground mb-2">{empresa.nomeFantasia}</div>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                          {empresa.cnpj && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">CNPJ:</span>
+                              <span className="text-foreground font-mono">{empresa.cnpj}</span>
+                            </div>
+                          )}
+                          {empresa.setor && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">Setor:</span>
+                              <Badge variant="secondary" className="text-xs">{empresa.setor}</Badge>
+                            </div>
+                          )}
+                          {empresa.cidade && empresa.estado && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">Localização:</span>
+                              <span className="text-foreground">{empresa.cidade}, {empresa.estado}</span>
+                            </div>
+                          )}
+                          {empresa.cnaePrincipal && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">CNAE:</span>
+                              <span className="text-foreground font-mono text-xs">{empresa.cnaePrincipal}</span>
+                            </div>
+                          )}
+                          {empresa.capitalSocial && empresa.capitalSocial > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">Capital:</span>
+                              <span className="text-foreground">R$ {empresa.capitalSocial.toLocaleString('pt-BR')}</span>
+                            </div>
+                          )}
+                        </div>
+                        {empresa.cnaePrincipalDescricao && (
+                          <p className="text-xs text-muted-foreground italic mt-2">{empresa.cnaePrincipalDescricao}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Card Explicativo sobre ICP */}
       <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">

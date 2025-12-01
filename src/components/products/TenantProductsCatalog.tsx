@@ -120,7 +120,8 @@ interface ProductDocument {
   tipo_arquivo: string;
   status: string;
   produtos_identificados: number;
-  uploaded_at: string;
+  uploaded_at?: string;
+  created_at?: string;
 }
 
 interface TenantProductsCatalogProps {
@@ -132,7 +133,7 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
   const tenantId = tenant?.id;
   
   // Usar websiteUrl da prop ou do tenant como fallback
-  const tenantWebsite = websiteUrl || tenant?.website;
+  const tenantWebsite = websiteUrl || (tenant as any)?.website;
 
   const [products, setProducts] = useState<TenantProduct[]>([]);
   const [documents, setDocuments] = useState<ProductDocument[]>([]);
@@ -149,7 +150,6 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
   // Upload
   const [uploading, setUploading] = useState(false);
   const [extracting, setExtracting] = useState(false);
-  const [scanningWebsite, setScanningWebsite] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -184,14 +184,13 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('tenant_products')
+        .from('tenant_products' as any)
         .select('*')
         .eq('tenant_id', tenantId)
-        .order('destaque', { ascending: false })
         .order('nome', { ascending: true });
 
       if (error) throw error;
-      setProducts(data || []);
+      setProducts((data || []) as unknown as TenantProduct[]);
     } catch (err: any) {
       console.error('Erro ao carregar produtos:', err);
       toast.error('Erro ao carregar produtos');
@@ -205,16 +204,51 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
     if (!tenantId) return;
 
     try {
-      const { data, error } = await supabase
-        .from('tenant_product_documents')
+      // Tentar ordenar por uploaded_at primeiro, fallback para created_at
+      let query = supabase
+        .from('tenant_product_documents' as any)
         .select('*')
-        .eq('tenant_id', tenantId)
-        .order('uploaded_at', { ascending: false });
-
-      if (error) throw error;
-      setDocuments(data || []);
+        .eq('tenant_id', tenantId);
+      
+      // Tentar ordenar por uploaded_at, se falhar usa created_at
+      try {
+        const { data, error } = await query.order('uploaded_at', { ascending: false });
+        if (!error && data) {
+          setDocuments((data || []) as unknown as ProductDocument[]);
+          return;
+        }
+      } catch {
+        // Se uploaded_at não existir, usar created_at
+      }
+      
+      // Fallback: ordenar por created_at
+      const { data, error } = await query.order('created_at', { ascending: false });
+      
+      if (error) {
+        // Se ainda falhar, tentar sem ordenação
+        const { data: dataNoOrder, error: errorNoOrder } = await supabase
+          .from('tenant_product_documents' as any)
+          .select('*')
+          .eq('tenant_id', tenantId);
+        
+        if (errorNoOrder) throw errorNoOrder;
+        setDocuments((dataNoOrder || []) as unknown as ProductDocument[]);
+        return;
+      }
+      
+      setDocuments((data || []) as unknown as ProductDocument[]);
     } catch (err: any) {
       console.error('Erro ao carregar documentos:', err);
+      // Em caso de erro, tentar carregar sem ordenação
+      try {
+        const { data } = await supabase
+          .from('tenant_product_documents' as any)
+          .select('*')
+          .eq('tenant_id', tenantId);
+        setDocuments((data || []) as unknown as ProductDocument[]);
+      } catch {
+        setDocuments([]);
+      }
     }
   }, [tenantId]);
 
@@ -290,7 +324,7 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
 
       if (editingProduct) {
         const { error } = await supabase
-          .from('tenant_products')
+          .from('tenant_products' as any)
           .update(productData)
           .eq('id', editingProduct.id);
 
@@ -298,7 +332,7 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
         toast.success('Produto atualizado!');
       } else {
         const { error } = await supabase
-          .from('tenant_products')
+          .from('tenant_products' as any)
           .insert(productData);
 
         if (error) throw error;
@@ -353,7 +387,7 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
 
         // Registrar no banco
         const { error: dbError } = await supabase
-          .from('tenant_product_documents')
+          .from('tenant_product_documents' as any)
           .insert({
             tenant_id: tenantId,
             nome_arquivo: file.name,
@@ -424,44 +458,13 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
     }
   };
 
-  // Escanear website do tenant
-  const handleScanWebsite = async () => {
-    if (!tenantId || !tenantWebsite) {
-      toast.error('Configure o website do tenant primeiro');
-      return;
-    }
-
-    setScanningWebsite(true);
-    toast.info(`Escaneando ${tenantWebsite}...`);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('scan-website-products', {
-        body: {
-          tenant_id: tenantId,
-          website_url: tenantWebsite,
-        },
-      });
-
-      if (error) throw error;
-
-      toast.success(`${data.products_found || 0} produtos encontrados no site!`, {
-        description: 'Revise os produtos na lista',
-      });
-
-      loadProducts();
-    } catch (err: any) {
-      console.error('Erro ao escanear website:', err);
-      toast.error('Erro ao escanear website', { description: err.message });
-    } finally {
-      setScanningWebsite(false);
-    }
-  };
+  // Removido: handleScanWebsite - O botão oficial está no Step1DadosBasicos
 
   // Toggle destaque
   const toggleDestaque = async (product: TenantProduct) => {
     try {
       const { error } = await supabase
-        .from('tenant_products')
+        .from('tenant_products' as any)
         .update({ destaque: !product.destaque })
         .eq('id', product.id);
 
@@ -483,7 +486,7 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
   const toggleAtivo = async (product: TenantProduct) => {
     try {
       const { error } = await supabase
-        .from('tenant_products')
+        .from('tenant_products' as any)
         .update({ ativo: !product.ativo })
         .eq('id', product.id);
 
@@ -507,7 +510,7 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
 
     try {
       const { error } = await supabase
-        .from('tenant_products')
+        .from('tenant_products' as any)
         .delete()
         .eq('id', product.id);
 
@@ -601,19 +604,6 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
             Atualizar
           </Button>
           
-          <Button
-            variant="outline"
-            onClick={handleScanWebsite}
-            disabled={scanningWebsite || !tenantWebsite}
-            title={tenantWebsite || 'Configure o website do tenant'}
-          >
-            {scanningWebsite ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Globe className="h-4 w-4 mr-2" />
-            )}
-            Escanear Website
-          </Button>
 
           <Button onClick={() => setShowNewProduct(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -912,48 +902,6 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
               </CardContent>
             </Card>
 
-            {/* Scan Website */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Escanear Website
-                </CardTitle>
-                <CardDescription>
-                  A IA varre seu site e identifica produtos/serviços automaticamente
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-muted rounded-lg p-4">
-                  <div className="flex items-center gap-2">
-                    <Link className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">
-                      {tenantWebsite || 'Nenhum website configurado'}
-                    </span>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleScanWebsite}
-                  disabled={scanningWebsite || !tenantWebsite}
-                  className="w-full"
-                >
-                  {scanningWebsite ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 mr-2" />
-                  )}
-                  Iniciar Varredura
-                </Button>
-
-                {!tenantWebsite && (
-                  <p className="text-sm text-amber-600 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    Configure o website do tenant primeiro
-                  </p>
-                )}
-              </CardContent>
-            </Card>
           </div>
 
           {/* Documentos Processados */}
@@ -1007,7 +955,11 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
                         </TableCell>
                         <TableCell>{doc.produtos_identificados || 0}</TableCell>
                         <TableCell>
-                          {new Date(doc.uploaded_at).toLocaleDateString('pt-BR')}
+                          {doc.uploaded_at 
+                            ? new Date(doc.uploaded_at).toLocaleDateString('pt-BR')
+                            : doc.created_at 
+                            ? new Date(doc.created_at).toLocaleDateString('pt-BR')
+                            : '-'}
                         </TableCell>
                       </TableRow>
                     ))}

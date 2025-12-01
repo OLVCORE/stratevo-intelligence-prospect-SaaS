@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { TenantProductsCatalog } from '@/components/products/TenantProductsCatalog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface Props {
   onNext: (data: any) => void;
@@ -44,7 +46,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   // 🔥 NOVO: Estados para scan de produtos do tenant
   const [scanningTenantWebsite, setScanningTenantWebsite] = useState(false);
   const [tenantProductsCount, setTenantProductsCount] = useState(0);
+  const [tenantProducts, setTenantProducts] = useState<Array<{ id: string; nome: string; descricao?: string; categoria?: string }>>([]);
   const [productsCatalogOpen, setProductsCatalogOpen] = useState(false);
+  const [tenantProductsViewMode, setTenantProductsViewMode] = useState<'cards' | 'table'>('cards');
+  const [tenantProductsOpen, setTenantProductsOpen] = useState(true); // 🔥 NOVO: Estado para abrir/fechar produtos do tenant
   
   // 🔥 NOVO: Estados para concorrentes
   interface ConcorrenteDireto {
@@ -67,6 +72,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     initialData?.concorrentesDiretos || []
   );
   
+  // 🔥 NOVO: Estados para cards colapsáveis
+  const [expandedCards, setExpandedCards] = useState<Record<number, boolean>>({});
+  const [allExpanded, setAllExpanded] = useState(false);
+  
   const [novoConcorrente, setNovoConcorrente] = useState<ConcorrenteDireto>({
     cnpj: '',
     razaoSocial: '',
@@ -86,13 +95,144 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   const [erroCNPJConcorrente, setErroCNPJConcorrente] = useState<string | null>(null);
   const [scanningConcorrente, setScanningConcorrente] = useState<Record<string, boolean>>({});
   const cnpjConcorrenteUltimoBuscadoRef = useRef<string>('');
+  const [bulkExtracting, setBulkExtracting] = useState(false); // 🔥 NOVO: Estado para extração em massa
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 }); // 🔥 NOVO: Progresso da extração em massa
+  const [extractionStatus, setExtractionStatus] = useState<Record<string, 'pending' | 'extracting' | 'success' | 'error'>>({}); // 🔥 NOVO: Status de extração por CNPJ/tenant
   
   const { tenant } = useTenant();
 
+  // 🔥 NOVO: Carregar produtos do tenant (BUSCA DE AMBAS AS TABELAS)
+  const loadTenantProducts = async () => {
+    if (!tenant?.id) {
+      console.warn('[Step1] ⚠️ Tenant não identificado para carregar produtos');
+      return;
+    }
+    
+    try {
+      console.log('[Step1] 🔍 Carregando produtos do tenant:', tenant.id);
+      
+      const tenantCnpj = formData.cnpj?.replace(/\D/g, '') || '';
+      let produtosData: any[] = [];
+      
+      // 🔥 CRÍTICO: Buscar de tenant_competitor_products primeiro (onde scan-competitor-url salva)
+      if (tenantCnpj && tenantCnpj.length === 14) {
+        try {
+          const { data: produtosConcorrente, error: produtosConcorrenteError } = await supabase
+            .from('tenant_competitor_products' as any)
+            .select('id, nome, descricao, categoria, created_at')
+            .eq('tenant_id', tenant.id)
+            .eq('competitor_cnpj', tenantCnpj)
+            .order('created_at', { ascending: false });
+          
+          if (!produtosConcorrenteError && produtosConcorrente) {
+            produtosData = [...produtosData, ...(produtosConcorrente || [])];
+            console.log('[Step1] ✅ Produtos encontrados em tenant_competitor_products:', produtosConcorrente.length);
+          }
+        } catch (err: any) {
+          console.warn('[Step1] ⚠️ Erro ao buscar de tenant_competitor_products:', err);
+        }
+      }
+      
+      // 🔥 CRÍTICO: Buscar também de tenant_products (tabela principal)
+      try {
+        const { data: produtosTenant, error: produtosTenantError } = await supabase
+          .from('tenant_products' as any)
+          .select('id, nome, descricao, categoria, created_at')
+          .eq('tenant_id', tenant.id)
+          .order('created_at', { ascending: false });
+        
+        if (!produtosTenantError && produtosTenant) {
+          // Combinar produtos, evitando duplicatas por nome
+          const nomesExistentes = new Set(produtosData.map((p: any) => p.nome?.toLowerCase()));
+          const produtosNovos = (produtosTenant || []).filter((p: any) => !nomesExistentes.has(p.nome?.toLowerCase()));
+          produtosData = [...produtosData, ...produtosNovos];
+          console.log('[Step1] ✅ Produtos encontrados em tenant_products:', produtosTenant.length);
+        } else if (produtosTenantError) {
+          console.warn('[Step1] ⚠️ Erro ao buscar de tenant_products:', produtosTenantError);
+          // Não falhar se tenant_products não existir, apenas usar tenant_competitor_products
+        }
+      } catch (err: any) {
+        console.warn('[Step1] ⚠️ Erro ao buscar de tenant_products:', err);
+        // Não falhar, apenas usar tenant_competitor_products
+      }
+      
+      // Remover duplicatas por nome (caso tenha buscado de ambas)
+      const produtosUnicos = produtosData.filter((produto: any, index: number, self: any[]) => 
+        index === self.findIndex((p: any) => p.nome?.toLowerCase() === produto.nome?.toLowerCase())
+      );
+      
+      const produtos = (produtosUnicos || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>;
+      console.log('[Step1] ✅ Produtos carregados do banco:', produtos.length);
+      console.log('[Step1] 📦 Dados brutos:', produtosData);
+      
+      if (produtos.length > 0) {
+        console.log('[Step1] 📦 Produtos encontrados:', produtos.map(p => ({ id: p.id, nome: p.nome, categoria: p.categoria })));
+      } else {
+        console.log('[Step1] ℹ️ Nenhum produto encontrado no banco para tenant:', tenant.id);
+        console.log('[Step1] 💡 Use "Extrair Produtos" para buscar produtos do website');
+      }
+      
+      // 🔥 CRÍTICO: Atualizar estado (FORÇAR NOVA REFERÊNCIA PARA RE-RENDER)
+      console.log('[Step1] 🔄 Atualizando estado com produtos:', produtos.length);
+      setTenantProducts([...produtos]); // Spread para forçar nova referência
+      setTenantProductsCount(produtos.length);
+      
+      console.log('[Step1] ✅ Estado atualizado:', {
+        tenantProductsCount: produtos.length,
+        tenantProductsArrayLength: produtos.length,
+        produtosNomes: produtos.map(p => p.nome)
+      });
+    } catch (err: any) {
+      console.error('[Step1] ❌ Erro ao carregar produtos do tenant:', err);
+      console.error('[Step1] ❌ Stack:', err.stack);
+      toast.error('Erro ao carregar produtos', {
+        description: err.message || 'Verifique o console para mais detalhes',
+        duration: 8000,
+      });
+      setTenantProductsCount(0);
+      setTenantProducts([]);
+    }
+  };
+
+  // 🔥 NOVO: Carregar produtos de um concorrente específico
+  const loadCompetitorProducts = async (competitorCnpj: string) => {
+    if (!tenant?.id || !competitorCnpj) return 0;
+    
+    try {
+      const { data: produtosData, error } = await supabase
+        .from('tenant_competitor_products' as any)
+        .select('id, nome, descricao, categoria')
+        .eq('tenant_id', tenant.id)
+        .eq('competitor_cnpj', competitorCnpj.replace(/\D/g, ''))
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        if (error.code === '42P01' || error.message?.includes('404')) {
+          console.warn('[Step1] Tabela tenant_competitor_products não existe. Aplique a migration.');
+          return 0;
+        }
+        throw error;
+      }
+      
+      return produtosData?.length || 0;
+    } catch (err) {
+      console.error('[Step1] Erro ao carregar produtos do concorrente:', err);
+      return 0;
+    }
+  };
+
   // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa)
+  // 🔥 CORRIGIDO: Usar useRef para evitar loops infinitos
+  const initialDataRef = useRef<any>(null);
+  const hasInitializedRef = useRef(false);
+  
   useEffect(() => {
-    if (initialData) {
+    // 🔥 CORRIGIDO: Só atualizar se initialData realmente mudou
+    if (initialData && initialData !== initialDataRef.current) {
       console.log('[Step1] 🔄 Atualizando dados do initialData:', initialData);
+      initialDataRef.current = initialData;
+      hasInitializedRef.current = true;
+      
       setFormData({
         cnpj: initialData.cnpj || '',
         email: initialData.email || '',
@@ -100,8 +240,48 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         telefone: initialData.telefone || '',
       });
       
+      // 🔥 CRÍTICO: Restaurar cnpjData PRIMEIRO (antes de carregar produtos)
+      // 🔥 CORRIGIDO: Sempre restaurar se houver cnpjData OU dados individuais
+      if (initialData.cnpjData) {
+        // Se tem cnpjData completo, usar diretamente
+        setCnpjData(initialData.cnpjData);
+        console.log('[Step1] ✅ cnpjData restaurado (completo):', initialData.cnpjData);
+      } else if (initialData.razaoSocial || initialData.nomeFantasia || initialData.situacaoCadastral) {
+        // Se não tem cnpjData mas tem dados individuais, reconstruir
+        const cnpjDataToSet = {
+          nome: initialData.razaoSocial || '',
+          fantasia: initialData.nomeFantasia || '',
+          situacao: initialData.situacaoCadastral || '',
+          abertura: initialData.dataAbertura || '',
+          natureza_juridica: initialData.naturezaJuridica || '',
+          capital_social: initialData.capitalSocial || null,
+          porte: initialData.porteEmpresa || '',
+          email: initialData.email || '',
+          telefone: initialData.telefone || '',
+          logradouro: initialData.endereco?.logradouro || '',
+          numero: initialData.endereco?.numero || '',
+          complemento: initialData.endereco?.complemento || '',
+          bairro: initialData.endereco?.bairro || '',
+          municipio: initialData.endereco?.municipio || '',
+          uf: initialData.endereco?.uf || '',
+          cep: initialData.endereco?.cep || '',
+          cnaes: initialData.cnaes || [],
+          atividade_principal: initialData.cnaes?.[0] ? [{ code: initialData.cnaes[0], text: '' }] : [],
+        };
+        setCnpjData(cnpjDataToSet);
+        console.log('[Step1] ✅ cnpjData restaurado (reconstruído):', cnpjDataToSet);
+      } else if (cnpjData) {
+        // Se já tem cnpjData no estado, manter (não resetar)
+        console.log('[Step1] ℹ️ Mantendo cnpjData existente no estado');
+      }
+      
+      // 🔥 NOVO: Carregar produtos do tenant ao montar
+      if (tenant?.id) {
+        loadTenantProducts();
+      }
+      
       // 🔥 NOVO: Carregar concorrentes e seus produtos
-      if (initialData.concorrentesDiretos) {
+      if (initialData.concorrentesDiretos && Array.isArray(initialData.concorrentesDiretos) && initialData.concorrentesDiretos.length > 0) {
         const loadConcorrentesComProdutos = async () => {
           const concorrentesComProdutos = await Promise.all(
             initialData.concorrentesDiretos.map(async (conc: ConcorrenteDireto) => {
@@ -113,7 +293,6 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                   .select('id, nome, descricao, categoria')
                   .eq('tenant_id', tenant.id)
                   .eq('competitor_cnpj', conc.cnpj.replace(/\D/g, ''))
-                  .eq('ativo', true)
                   .order('created_at', { ascending: false }));
                 
                 // Se erro 404, tabela não existe - retornar concorrente sem produtos
@@ -145,32 +324,81 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         };
         
         loadConcorrentesComProdutos();
+      } else if (initialData.concorrentesDiretos === undefined && !hasInitializedRef.current) {
+        // 🔥 CORRIGIDO: Só resetar se for a primeira inicialização E não tiver concorrentes
+        // Não resetar se já tiver concorrentes no estado
+        if (concorrentes.length === 0) {
+          setConcorrentes([]);
+        }
       }
-      
-      // Restaurar cnpjData se disponível
-      if (initialData.razaoSocial || initialData.nomeFantasia) {
-        setCnpjData({
-          nome: initialData.razaoSocial || '',
-          fantasia: initialData.nomeFantasia || '',
-          situacao: initialData.situacaoCadastral || '',
-          abertura: initialData.dataAbertura || '',
-          natureza_juridica: initialData.naturezaJuridica || '',
-          capital_social: initialData.capitalSocial || null,
-          porte: initialData.porteEmpresa || '',
-          email: initialData.email || '',
-          telefone: initialData.telefone || '',
-          logradouro: initialData.endereco?.logradouro || '',
-          numero: initialData.endereco?.numero || '',
-          complemento: initialData.endereco?.complemento || '',
-          bairro: initialData.endereco?.bairro || '',
-          municipio: initialData.endereco?.municipio || '',
-          uf: initialData.endereco?.uf || '',
-          cep: initialData.endereco?.cep || '',
-          cnaes: initialData.cnaes || [],
-        });
-      }
+    } else if (!initialData && hasInitializedRef.current) {
+      // Se initialData foi limpo, resetar
+      console.log('[Step1] ⚠️ initialData foi limpo, mantendo estado atual');
     }
-  }, [initialData]);
+  }, [initialData?.cnpj, initialData?.email, initialData?.website, initialData?.telefone, initialData?.razaoSocial, tenant?.id]);
+
+  // 🔥 NOVO: Carregar produtos do tenant quando tenant mudar
+  useEffect(() => {
+    if (tenant?.id) {
+      console.log('[Step1] 🔄 useEffect: Carregando produtos do tenant:', tenant.id);
+      loadTenantProducts();
+    }
+  }, [tenant?.id]);
+  
+  // 🔥 CRÍTICO: Forçar recarregamento quando tenantProductsCount mudar (para garantir sincronização)
+  useEffect(() => {
+    console.log('[Step1] 🔄 tenantProductsCount mudou para:', tenantProductsCount);
+    console.log('[Step1] 🔄 tenantProducts.length:', tenantProducts.length);
+  }, [tenantProductsCount, tenantProducts.length]);
+
+  // 🔥 CRÍTICO: Auto-save quando cnpjData ou formData mudarem (para garantir persistência)
+  useEffect(() => {
+    // Só salvar se já tiver sido inicializado e tiver dados relevantes
+    if (hasInitializedRef.current && (cnpjData || formData.cnpj || formData.email)) {
+      const timeoutId = setTimeout(async () => {
+        if (onSave) {
+          const concorrentesParaSalvar = concorrentes.length > 0 
+            ? concorrentes 
+            : (initialData?.concorrentesDiretos || []);
+          
+          const dataToSave = {
+            ...formData,
+            razaoSocial: cnpjData?.nome || initialData?.razaoSocial || '',
+            nomeFantasia: cnpjData?.fantasia || initialData?.nomeFantasia || '',
+            situacaoCadastral: cnpjData?.situacao || initialData?.situacaoCadastral || '',
+            dataAbertura: cnpjData?.abertura || initialData?.dataAbertura || '',
+            naturezaJuridica: cnpjData?.natureza_juridica || initialData?.naturezaJuridica || '',
+            capitalSocial: cnpjData?.capital_social || initialData?.capitalSocial || null,
+            porteEmpresa: cnpjData?.porte || initialData?.porteEmpresa || '',
+            endereco: cnpjData ? {
+              logradouro: cnpjData.logradouro || '',
+              numero: cnpjData.numero || '',
+              complemento: cnpjData.complemento || '',
+              bairro: cnpjData.bairro || '',
+              cep: cnpjData.cep || '',
+              cidade: cnpjData.municipio || '',
+              estado: cnpjData.uf || '',
+            } : (initialData?.endereco || null),
+            cnaes: cnpjData?.atividade_principal ? [
+              cnpjData.atividade_principal[0]?.code,
+              ...(cnpjData.atividades_secundarias || []).map((a: any) => a.code)
+            ].filter(Boolean) : (initialData?.cnaes || []),
+            cnpjData: cnpjData || initialData?.cnpjData || null,
+            concorrentesDiretos: concorrentesParaSalvar,
+          };
+          
+          try {
+            await onSave(dataToSave);
+            console.log('[Step1] ✅ Auto-save executado:', { cnpj: formData.cnpj, temCnpjData: !!cnpjData });
+          } catch (err) {
+            console.error('[Step1] ❌ Erro no auto-save:', err);
+          }
+        }
+      }, 1000); // Aguardar 1 segundo após última mudança
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [cnpjData, formData.cnpj, formData.email, formData.website, formData.telefone, concorrentes.length]);
 
   // Buscar dados automaticamente ao preencher CNPJ
   const handleCNPJSearch = async () => {
@@ -197,11 +425,47 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       setCnpjData(data);
       
       // Preencher campos automaticamente se disponíveis
+      const updatedFormData = { ...formData };
       if (data.email && !formData.email) {
-        setFormData(prev => ({ ...prev, email: data.email }));
+        updatedFormData.email = data.email;
       }
       if (data.telefone && !formData.telefone) {
-        setFormData(prev => ({ ...prev, telefone: data.telefone }));
+        updatedFormData.telefone = data.telefone;
+      }
+      if (data.website && !formData.website) {
+        updatedFormData.website = data.website;
+      }
+      setFormData(updatedFormData);
+      
+      // 🔥 CRÍTICO: Salvar IMEDIATAMENTE após buscar CNPJ para garantir persistência
+      if (onSave) {
+        const dataToSave = {
+          ...updatedFormData,
+          razaoSocial: data.nome || '',
+          nomeFantasia: data.fantasia || '',
+          situacaoCadastral: data.situacao || '',
+          dataAbertura: data.abertura || '',
+          naturezaJuridica: data.natureza_juridica || '',
+          capitalSocial: data.capital_social || null,
+          porteEmpresa: data.porte || '',
+          endereco: data.logradouro ? {
+            logradouro: data.logradouro || '',
+            numero: data.numero || '',
+            complemento: data.complemento || '',
+            bairro: data.bairro || '',
+            cep: data.cep || '',
+            cidade: data.municipio || '',
+            estado: data.uf || '',
+          } : null,
+          cnaes: data.atividade_principal ? [
+            data.atividade_principal[0]?.code,
+            ...(data.atividades_secundarias || []).map((a: any) => a.code)
+          ].filter(Boolean) : [],
+          cnpjData: data, // 🔥 CRÍTICO: Salvar cnpjData completo
+          concorrentesDiretos: concorrentes.length > 0 ? concorrentes : (initialData?.concorrentesDiretos || []),
+        };
+        await onSave(dataToSave);
+        console.log('[Step1] ✅ Dados salvos após buscar CNPJ:', dataToSave);
       }
     } catch (error: any) {
       setCnpjError(error.message || 'Erro ao buscar dados do CNPJ');
@@ -210,21 +474,33 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     }
   };
 
-  // 🔥 NOVO: Scan de produtos do website do tenant
+  // 🔥 COPIADO EXATAMENTE DA FUNÇÃO handleScanConcorrenteURL - MESMA LÓGICA
   const handleScanTenantWebsite = async () => {
     if (!formData.website || !tenant?.id) {
-      toast.error('Configure o website do tenant primeiro');
+      toast.error('Informe a URL para escanear');
       return;
     }
 
     setScanningTenantWebsite(true);
+    // 🔥 NOVO: Marcar como extraindo
+    setExtractionStatus(prev => ({ ...prev, tenant: 'extracting' }));
     toast.info(`Escaneando ${formData.website}...`);
 
     try {
-      const { data, error } = await supabase.functions.invoke('scan-website-products', {
+      // Detectar tipo de URL (MESMO DOS CONCORRENTES)
+      let sourceType = 'website';
+      if (formData.website.includes('instagram.com')) sourceType = 'instagram';
+      else if (formData.website.includes('linkedin.com')) sourceType = 'linkedin';
+      else if (formData.website.includes('facebook.com')) sourceType = 'facebook';
+
+      // Chamar Edge Function para extrair produtos (MESMA DOS CONCORRENTES)
+      const { data, error } = await supabase.functions.invoke('scan-competitor-url', {
         body: {
           tenant_id: tenant.id,
-          website_url: formData.website,
+          competitor_cnpj: formData.cnpj?.replace(/\D/g, '') || '00000000000000',
+          competitor_name: cnpjData?.nome || 'Tenant',
+          source_url: formData.website,
+          source_type: sourceType,
         },
       });
 
@@ -233,17 +509,40 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       const extracted = data?.products_extracted || 0;
       const inserted = data?.products_inserted || 0;
       
-      // Buscar total de produtos do tenant
-      const { data: produtosData } = await (supabase
-        .from('tenant_products' as any)
-        .select('id')
-        .eq('tenant_id', tenant.id)
-        .eq('ativo', true));
+      // 🔥 CRÍTICO: Buscar produtos de tenant_competitor_products (onde foram salvos)
+      // MESMA LÓGICA DOS CONCORRENTES - buscar diretamente de onde foi salvo
+      const tenantCnpj = formData.cnpj?.replace(/\D/g, '') || '';
       
-      const totalProdutos = produtosData?.length || 0;
-      setTenantProductsCount(totalProdutos);
+      // Aguardar um pouco para garantir que os dados foram salvos
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Toast mais informativo
+      // Buscar produtos de tenant_competitor_products (MESMO DOS CONCORRENTES)
+      await loadTenantProducts();
+      
+      // Buscar contador atualizado
+      const totalProdutos = tenantProductsCount;
+      
+      // 🔥 NOVO: Marcar como sucesso
+      setExtractionStatus(prev => ({ ...prev, tenant: 'success' }));
+      
+      // Limpar status após 3 segundos
+      setTimeout(() => {
+        setExtractionStatus(prev => {
+          const newStatus = { ...prev };
+          delete newStatus.tenant;
+          return newStatus;
+        });
+      }, 3000);
+      
+      // Salvar atualização
+      if (onSave) {
+        const dataToSave = {
+          ...formData,
+        };
+        onSave(dataToSave);
+      }
+
+      // Toast mais informativo (MESMO DOS CONCORRENTES)
       if (inserted > 0) {
         toast.success(`${inserted} novos produtos inseridos! Total: ${totalProdutos} produtos`, {
           description: `${extracted} produtos encontrados na URL`
@@ -256,12 +555,188 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         });
       }
     } catch (err: any) {
-      console.error('Erro ao escanear website:', err);
-      toast.error('Erro ao escanear website', { 
-        description: err.message || 'Verifique se a Edge Function está deployada'
-      });
+      console.error('Erro ao escanear URL:', err);
+      // 🔥 NOVO: Marcar como erro
+      setExtractionStatus(prev => ({ ...prev, tenant: 'error' }));
+      setTimeout(() => {
+        setExtractionStatus(prev => {
+          const newStatus = { ...prev };
+          delete newStatus.tenant;
+          return newStatus;
+        });
+      }, 5000);
+      toast.error('Erro ao escanear URL', { description: err.message });
     } finally {
       setScanningTenantWebsite(false);
+    }
+  };
+
+  // 🔥 NOVO: Extração em massa de produtos (tenant + todos os concorrentes)
+  const handleBulkExtractProducts = async () => {
+    if (!tenant?.id) {
+      toast.error('Tenant não identificado');
+      return;
+    }
+
+    setBulkExtracting(true);
+    
+    // Lista de tarefas de extração
+    const extractionTasks: Array<{ type: 'tenant' | 'competitor'; index?: number; name: string; url: string; cnpj?: string }> = [];
+    
+    // Adicionar tenant se tiver website
+    if (formData.website?.trim()) {
+      extractionTasks.push({
+        type: 'tenant',
+        name: cnpjData?.nome || 'Tenant',
+        url: formData.website.trim(),
+        cnpj: formData.cnpj?.replace(/\D/g, '') || '',
+      });
+    }
+    
+    // Adicionar concorrentes que têm URL para scan
+    concorrentes.forEach((conc, index) => {
+      if (conc.urlParaScan?.trim()) {
+        extractionTasks.push({
+          type: 'competitor',
+          index,
+          name: conc.razaoSocial || conc.nomeFantasia || 'Concorrente',
+          url: conc.urlParaScan.trim(),
+          cnpj: conc.cnpj.replace(/\D/g, ''),
+        });
+      }
+    });
+    
+    if (extractionTasks.length === 0) {
+      toast.warning('Nenhuma URL configurada para extração', {
+        description: 'Configure o website do tenant ou URLs dos concorrentes'
+      });
+      setBulkExtracting(false);
+      return;
+    }
+    
+    setBulkProgress({ current: 0, total: extractionTasks.length });
+    
+    // 🔥 NOVO: Inicializar status de todos como 'pending'
+    const initialStatus: Record<string, 'pending' | 'extracting' | 'success' | 'error'> = {};
+    extractionTasks.forEach(task => {
+      const key = task.type === 'tenant' ? 'tenant' : `competitor_${task.cnpj}`;
+      initialStatus[key] = 'pending';
+    });
+    setExtractionStatus(initialStatus);
+    
+    toast.info(`Iniciando extração em massa de ${extractionTasks.length} ${extractionTasks.length === 1 ? 'fonte' : 'fontes'}...`);
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    // Executar extrações em paralelo (mas limitado a 5 simultâneas para não sobrecarregar)
+    const batchSize = 5;
+    for (let i = 0; i < extractionTasks.length; i += batchSize) {
+      const batch = extractionTasks.slice(i, i + batchSize);
+      
+      await Promise.allSettled(
+        batch.map(async (task) => {
+          const statusKey = task.type === 'tenant' ? 'tenant' : `competitor_${task.cnpj}`;
+          
+          // Marcar como extraindo
+          setExtractionStatus(prev => ({ ...prev, [statusKey]: 'extracting' }));
+          
+          try {
+            // Detectar tipo de URL
+            let sourceType = 'website';
+            if (task.url.includes('instagram.com')) sourceType = 'instagram';
+            else if (task.url.includes('linkedin.com')) sourceType = 'linkedin';
+            else if (task.url.includes('facebook.com')) sourceType = 'facebook';
+            
+            // Chamar Edge Function
+            const { data, error } = await supabase.functions.invoke('scan-competitor-url', {
+              body: {
+                tenant_id: tenant.id,
+                competitor_cnpj: task.cnpj || '00000000000000',
+                competitor_name: task.name,
+                source_url: task.url,
+                source_type: sourceType,
+              },
+            });
+            
+            if (error) throw error;
+            
+            const extracted = data?.products_extracted || 0;
+            const inserted = data?.products_inserted || 0;
+            
+            // Atualizar produtos do concorrente específico
+            if (task.type === 'competitor' && task.index !== undefined) {
+              await loadCompetitorProducts(task.cnpj || '');
+              
+              // Buscar produtos atualizados
+              const { data: produtosData } = await supabase
+                .from('tenant_competitor_products' as any)
+                .select('id, nome, descricao, categoria')
+                .eq('tenant_id', tenant.id)
+                .eq('competitor_cnpj', task.cnpj)
+                .order('created_at', { ascending: false });
+              
+              const updated = [...concorrentes];
+              updated[task.index] = {
+                ...updated[task.index],
+                produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
+                produtosExtraidos: produtosData?.length || 0
+              };
+              setConcorrentes(updated);
+            } else if (task.type === 'tenant') {
+              // Atualizar produtos do tenant
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              await loadTenantProducts();
+            }
+            
+            successCount++;
+            setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+            
+            // 🔥 NOVO: Marcar como sucesso
+            setExtractionStatus(prev => ({ ...prev, [statusKey]: 'success' }));
+            
+            console.log(`[Step1] ✅ Extração concluída: ${task.name} - ${inserted} produtos inseridos`);
+          } catch (err: any) {
+            errorCount++;
+            setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+            
+            // 🔥 NOVO: Marcar como erro
+            setExtractionStatus(prev => ({ ...prev, [statusKey]: 'error' }));
+            
+            console.error(`[Step1] ❌ Erro ao extrair de ${task.name}:`, err);
+          }
+        })
+      );
+    }
+    
+    // Salvar atualização final
+    if (onSave) {
+      const dataToSave = {
+        ...formData,
+        cnpjData: cnpjData || initialData?.cnpjData || null,
+        concorrentesDiretos: concorrentes,
+      };
+      await onSave(dataToSave);
+    }
+    
+    setBulkExtracting(false);
+    setBulkProgress({ current: 0, total: 0 });
+    
+    // 🔥 NOVO: Limpar status após 5 segundos (para não ficar sempre visível)
+    setTimeout(() => {
+      setExtractionStatus({});
+    }, 5000);
+    
+    // Toast final
+    if (successCount > 0) {
+      toast.success(`Extração em massa concluída!`, {
+        description: `${successCount} ${successCount === 1 ? 'fonte processada' : 'fontes processadas'}${errorCount > 0 ? `, ${errorCount} ${errorCount === 1 ? 'erro' : 'erros'}` : ''}`,
+        duration: 5000,
+      });
+    } else {
+      toast.error('Nenhuma extração foi bem-sucedida', {
+        description: 'Verifique as URLs e tente novamente'
+      });
     }
   };
 
@@ -338,6 +813,9 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     }
 
     setScanningConcorrente(prev => ({ ...prev, [index]: true }));
+    // 🔥 NOVO: Marcar como extraindo
+    const competitorKey = `competitor_${concorrente.cnpj.replace(/\D/g, '')}`;
+    setExtractionStatus(prev => ({ ...prev, [competitorKey]: 'extracting' }));
     toast.info(`Escaneando ${concorrente.urlParaScan}...`);
 
     try {
@@ -364,17 +842,17 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       const inserted = data?.products_inserted || 0;
       
       // 🔥 CRÍTICO: Sempre buscar produtos do banco após extração (mesmo se não inseriu novos)
-      let produtosData: any[] = [];
-      let totalProdutos = 0;
+      const totalProdutos = await loadCompetitorProducts(concorrente.cnpj);
       
+      // Buscar dados completos dos produtos para exibição
+      let produtosData: any[] = [];
       try {
-        const { data, error } = await (supabase
+        const { data, error } = await supabase
           .from('tenant_competitor_products' as any)
           .select('id, nome, descricao, categoria')
           .eq('tenant_id', tenant.id)
           .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
-          .eq('ativo', true)
-          .order('created_at', { ascending: false }));
+          .order('created_at', { ascending: false });
         
         if (error && (error.code === '42P01' || error.message?.includes('404'))) {
           console.warn('[Step1] Tabela tenant_competitor_products não existe. Aplique a migration 20250201000002_tenant_competitor_products.sql');
@@ -383,7 +861,6 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           });
         } else if (!error) {
           produtosData = data || [];
-          totalProdutos = produtosData.length;
         }
       } catch (err: any) {
         console.error('[Step1] Erro ao buscar produtos:', err);
@@ -402,6 +879,18 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>
       };
       setConcorrentes(updated);
+      
+      // 🔥 NOVO: Marcar como sucesso
+      setExtractionStatus(prev => ({ ...prev, [competitorKey]: 'success' }));
+      
+      // Limpar status após 3 segundos
+      setTimeout(() => {
+        setExtractionStatus(prev => {
+          const newStatus = { ...prev };
+          delete newStatus[competitorKey];
+          return newStatus;
+        });
+      }, 3000);
       
       // Salvar atualização
       if (onSave) {
@@ -426,6 +915,15 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       }
     } catch (err: any) {
       console.error('Erro ao escanear URL:', err);
+      // 🔥 NOVO: Marcar como erro
+      setExtractionStatus(prev => ({ ...prev, [competitorKey]: 'error' }));
+      setTimeout(() => {
+        setExtractionStatus(prev => {
+          const newStatus = { ...prev };
+          delete newStatus[competitorKey];
+          return newStatus;
+        });
+      }, 5000);
       toast.error('Erro ao escanear URL', { description: err.message });
     } finally {
       setScanningConcorrente(prev => ({ ...prev, [index]: false }));
@@ -493,7 +991,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     }
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
     }
@@ -503,22 +1001,28 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       return;
     }
 
-    if (!cnpjData) {
+    // 🔥 CORRIGIDO: Não bloquear se já tiver dados salvos (initialData)
+    if (!cnpjData && !initialData?.razaoSocial && !initialData?.cnpjData) {
       alert('Por favor, busque os dados do CNPJ antes de continuar');
       return;
     }
 
-    // Incluir dados encontrados no CNPJ + concorrentes
-    onNext({
+    // 🔥 CRÍTICO: Salvar antes de avançar
+    // 🔥 CRÍTICO: Preservar concorrentes existentes se não houver novos
+    const concorrentesParaSalvar = concorrentes.length > 0 
+      ? concorrentes 
+      : (initialData?.concorrentesDiretos || []);
+    
+    const dataToSave = {
       ...formData,
       // Dados administrativos (buscados automaticamente)
-      razaoSocial: cnpjData.nome || formData.cnpj,
-      nomeFantasia: cnpjData.fantasia || '',
-      situacaoCadastral: cnpjData.situacao || '',
-      dataAbertura: cnpjData.abertura || '',
-      naturezaJuridica: cnpjData.natureza_juridica || '',
-      capitalSocial: cnpjData.capital_social || null,
-      porteEmpresa: cnpjData.porte || '',
+      razaoSocial: cnpjData?.nome || initialData?.razaoSocial || formData.cnpj,
+      nomeFantasia: cnpjData?.fantasia || initialData?.nomeFantasia || '',
+      situacaoCadastral: cnpjData?.situacao || initialData?.situacaoCadastral || '',
+      dataAbertura: cnpjData?.abertura || initialData?.dataAbertura || '',
+      naturezaJuridica: cnpjData?.natureza_juridica || initialData?.naturezaJuridica || '',
+      capitalSocial: cnpjData?.capital_social || initialData?.capitalSocial || null,
+      porteEmpresa: cnpjData?.porte || initialData?.porteEmpresa || '',
       endereco: cnpjData ? {
         logradouro: cnpjData.logradouro || '',
         numero: cnpjData.numero || '',
@@ -527,14 +1031,24 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         cep: cnpjData.cep || '',
         cidade: cnpjData.municipio || '',
         estado: cnpjData.uf || '',
-      } : null,
+      } : (initialData?.endereco || null),
       cnaes: cnpjData?.atividade_principal ? [
         cnpjData.atividade_principal[0]?.code,
         ...(cnpjData.atividades_secundarias || []).map((a: any) => a.code)
-      ].filter(Boolean) : [],
-      // 🔥 NOVO: Incluir concorrentes
-      concorrentesDiretos: concorrentes,
-    });
+      ].filter(Boolean) : (initialData?.cnaes || []),
+      // 🔥 CRÍTICO: Incluir cnpjData para persistência
+      cnpjData: cnpjData || initialData?.cnpjData || null,
+      // 🔥 CRÍTICO: Incluir concorrentes (preservar existentes se não houver novos)
+      concorrentesDiretos: concorrentesParaSalvar,
+    };
+    
+    // Salvar antes de avançar
+    if (onSave) {
+      await onSave(dataToSave);
+    }
+    
+    // Avançar para próximo step
+    onNext(dataToSave);
   };
 
   return (
@@ -688,20 +1202,22 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
             />
             <Button
               type="button"
-              variant="outline"
+              variant="default"
+              size="sm"
               onClick={handleScanTenantWebsite}
               disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
-              title={!formData.website?.trim() ? 'Informe o website primeiro' : !tenant?.id ? 'Tenant não identificado' : 'Escanear produtos do website'}
+              className="flex items-center gap-2"
+              title={!formData.website?.trim() ? 'Informe o website primeiro' : !tenant?.id ? 'Tenant não identificado' : 'Extrair produtos do website'}
             >
               {scanningTenantWebsite ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Escaneando...
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Escanear
+                  <Sparkles className="h-4 w-4" />
+                  Extrair Produtos
                 </>
               )}
             </Button>
@@ -729,7 +1245,155 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         </div>
       </div>
 
-      {/* 🔥 NOVO: Catálogo de Produtos do Tenant */}
+      {/* 🔥 NOVO: Card de Produtos do Tenant com Collapsible (IGUAL AO CATÁLOGO) */}
+      <Separator className="my-6" />
+      
+      <Collapsible open={tenantProductsOpen} onOpenChange={setTenantProductsOpen}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Package className="h-5 w-5 text-green-600" />
+              Seus Produtos ({tenantProductsCount})
+              {/* 🔥 NOVO: Indicador de status de extração - MAIOR E MAIS VISÍVEL */}
+              {extractionStatus.tenant && (
+                <div 
+                  className={`h-4 w-4 rounded-full border-2 border-background shadow-lg ${
+                    extractionStatus.tenant === 'extracting' ? 'bg-yellow-500 animate-pulse' :
+                    extractionStatus.tenant === 'success' ? 'bg-green-500' :
+                    extractionStatus.tenant === 'error' ? 'bg-red-500' :
+                    'bg-gray-400'
+                  }`} 
+                  title={
+                    extractionStatus.tenant === 'extracting' ? 'Extraindo produtos...' :
+                    extractionStatus.tenant === 'success' ? 'Produtos extraídos com sucesso!' :
+                    extractionStatus.tenant === 'error' ? 'Erro ao extrair produtos' :
+                    'Aguardando extração'
+                  }
+                />
+              )}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {tenantProductsCount > 0 
+                ? `${tenantProductsCount} produtos extraídos do website`
+                : 'Nenhum produto encontrado ainda. Clique em "Extrair Produtos" para buscar produtos.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (!tenant?.id) {
+                  toast.error('Tenant não identificado para recarregar produtos');
+                  return;
+                }
+                console.log('[Step1] 🔄 Botão Recarregar clicado. Tenant:', tenant.id);
+                toast.info('Recarregando seus produtos...');
+                await loadTenantProducts();
+                await new Promise(resolve => setTimeout(resolve, 300));
+                console.log('[Step1] ✅ Após recarregar - tenantProducts.length:', tenantProducts.length);
+                console.log('[Step1] ✅ Após recarregar - tenantProductsCount:', tenantProductsCount);
+                toast.success(`${tenantProducts.length} produtos carregados!`);
+              }}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Recarregar
+            </Button>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="flex items-center gap-2">
+                {tenantProductsOpen ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" />
+                    Ocultar Produtos
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Mostrar Produtos
+                  </>
+                )}
+              </Button>
+            </CollapsibleTrigger>
+          </div>
+        </div>
+
+        <CollapsibleContent>
+          <Card className="mt-4 border-l-4 border-l-green-500">
+            <CardContent className="pt-4">
+              {/* Abas: Cards / Tabela - SÓ MOSTRAR SE HOUVER PRODUTOS */}
+              {tenantProducts.length > 0 ? (
+                <Tabs value={tenantProductsViewMode} onValueChange={(v) => setTenantProductsViewMode(v as 'cards' | 'table')}>
+                  <TabsList className="grid w-full grid-cols-2 h-8 bg-muted/50">
+                    <TabsTrigger value="cards" className="text-xs py-1 px-2 data-[state=active]:bg-background data-[state=active]:text-foreground">Cards</TabsTrigger>
+                    <TabsTrigger value="table" className="text-xs py-1 px-2 data-[state=active]:bg-background data-[state=active]:text-foreground">Tabela</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="cards" className="mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto pr-2">
+                      {tenantProducts.map((produto, prodIdx) => (
+                        <Card key={produto.id || prodIdx} className="p-3 border-l-2 border-l-green-500">
+                          <div className="space-y-1">
+                            <div className="font-medium text-sm">{produto.nome}</div>
+                            {produto.categoria && (
+                              <Badge variant="outline" className="text-xs">
+                                {produto.categoria}
+                              </Badge>
+                            )}
+                            {produto.descricao && (
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {produto.descricao}
+                              </p>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="table" className="mt-4">
+                    <div className="max-h-96 overflow-y-auto border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nome</TableHead>
+                            <TableHead>Categoria</TableHead>
+                            <TableHead>Descrição</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {tenantProducts.map((produto, prodIdx) => (
+                            <TableRow key={produto.id || prodIdx}>
+                              <TableCell className="font-medium">{produto.nome}</TableCell>
+                              <TableCell>
+                                {produto.categoria && (
+                                  <Badge variant="outline">{produto.categoria}</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {produto.descricao || '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <div className="mt-4 p-4 border border-dashed rounded-md text-center text-muted-foreground">
+                  <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Nenhum produto encontrado ainda.</p>
+                  <p className="text-xs mt-1">Use o botão "Extrair Produtos" ao lado do campo Website para buscar produtos automaticamente.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* 🔥 NOVO: Catálogo Completo de Produtos do Tenant (Avançado) */}
       <Separator className="my-6" />
       
       <Collapsible open={productsCatalogOpen} onOpenChange={setProductsCatalogOpen}>
@@ -773,23 +1437,79 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       <Separator className="my-6" />
       
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex-1 min-w-[200px]">
             <h3 className="text-lg font-semibold text-foreground">🏆 Meus Concorrentes</h3>
             <p className="text-sm text-muted-foreground">
               Cadastre seus concorrentes para análise competitiva. O CNPJ busca dados automaticamente.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={adicionarConcorrente}
-            disabled={!cnpjConcorrenteEncontrado}
-            className="flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar Concorrente
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 🔥 NOVO: Botão de Extração em Massa */}
+            {(formData.website?.trim() || concorrentes.some(c => c.urlParaScan?.trim())) && (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleBulkExtractProducts}
+                disabled={bulkExtracting}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+              >
+                {bulkExtracting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {bulkProgress.total > 0 
+                      ? `Extraindo... (${bulkProgress.current}/${bulkProgress.total})`
+                      : 'Extraindo...'}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Extrair Produtos em Massa
+                  </>
+                )}
+              </Button>
+            )}
+            {concorrentes.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newState = !allExpanded;
+                  setAllExpanded(newState);
+                  const newExpanded: Record<number, boolean> = {};
+                  concorrentes.forEach((_, idx) => {
+                    newExpanded[idx] = newState;
+                  });
+                  setExpandedCards(newExpanded);
+                }}
+                className="flex items-center gap-2"
+              >
+                {allExpanded ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" />
+                    Fechar Todos
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Abrir Todos
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={adicionarConcorrente}
+              disabled={!cnpjConcorrenteEncontrado}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar Concorrente
+            </Button>
+          </div>
         </div>
 
         {/* Formulário de Novo Concorrente */}
@@ -908,25 +1628,84 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         {/* Lista de Concorrentes Cadastrados */}
         {concorrentes.length > 0 && (
           <div className="space-y-3">
-            {concorrentes.map((concorrente, index) => (
-              <Card key={index} className="border-l-4 border-l-blue-500">
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      {/* Nome da Empresa */}
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-5 w-5 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-foreground text-lg">
-                            {concorrente.razaoSocial}
+            {concorrentes.map((concorrente, index) => {
+              const isExpanded = expandedCards[index] ?? false;
+              return (
+                <Card key={index} className="border-l-4 border-l-blue-500">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        {/* Cabeçalho com Nome e Botão Dropdown */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1">
+                            <Building2 className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                            <div className="flex flex-col gap-1 flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div className="font-semibold text-foreground text-lg truncate">
+                                  {concorrente.razaoSocial}
+                                </div>
+                                {/* 🔥 NOVO: Indicador de status de extração - AO LADO DO NOME (MAIS VISÍVEL) */}
+                                {extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] && (
+                                  <div 
+                                    className={`h-4 w-4 rounded-full border-2 border-background shadow-lg flex-shrink-0 ${
+                                      extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] === 'extracting' ? 'bg-yellow-500 animate-pulse' :
+                                      extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] === 'success' ? 'bg-green-500' :
+                                      extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] === 'error' ? 'bg-red-500' :
+                                      'bg-gray-400'
+                                    }`} 
+                                    title={
+                                      extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] === 'extracting' ? 'Extraindo produtos...' :
+                                      extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] === 'success' ? 'Produtos extraídos com sucesso!' :
+                                      extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] === 'error' ? 'Erro ao extrair produtos' :
+                                      'Aguardando extração'
+                                    }
+                                  />
+                                )}
+                                {/* 🔥 NOVO: Indicador permanente se tiver produtos extraídos (só mostra se não estiver em processo) */}
+                                {!extractionStatus[`competitor_${concorrente.cnpj.replace(/\D/g, '')}`] && concorrente.produtosExtraidos && concorrente.produtosExtraidos > 0 && (
+                                  <div 
+                                    className="h-4 w-4 rounded-full bg-green-500 border-2 border-background shadow-lg flex-shrink-0" 
+                                    title={`${concorrente.produtosExtraidos} produtos extraídos`}
+                                  />
+                                )}
+                              </div>
+                              {concorrente.nomeFantasia && (
+                                <div className="text-sm text-muted-foreground">{concorrente.nomeFantasia}</div>
+                              )}
+                            </div>
                           </div>
-                          {concorrente.nomeFantasia && (
-                            <div className="text-sm text-muted-foreground">{concorrente.nomeFantasia}</div>
-                          )}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                            onClick={() => {
+                              setExpandedCards(prev => ({
+                                ...prev,
+                                [index]: !prev[index]
+                              }));
+                              setAllExpanded(false);
+                            }}
+                            className="flex items-center gap-1"
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp className="h-4 w-4" />
+                                Fechar
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-4 w-4" />
+                                Abrir
+                              </>
+                            )}
+                          </Button>
+                          </div>
                         </div>
-                      </div>
                       
-                      {/* Dados Completos - Grid */}
+                      {/* Dados Completos - Grid (Colapsável) */}
+                      {isExpanded && (
+                        <>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                         <div>
                           <span className="font-medium text-muted-foreground">CNPJ:</span>
@@ -1035,7 +1814,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                         </p>
                       </div>
                       
-                      {/* 🔥 NOVO: Lista de Produtos Extraídos */}
+                      {/* 🔥 NOVO: Lista de Produtos Extraídos com ABAS */}
                       <div className="mt-4 space-y-2">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-semibold flex items-center gap-2">
@@ -1060,7 +1839,6 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                                   .select('id, nome, descricao, categoria')
                                   .eq('tenant_id', tenant.id)
                                   .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
-                                  .eq('ativo', true)
                                   .order('created_at', { ascending: false }));
                                 
                                 if (error && (error.code === '42P01' || error.message?.includes('404'))) {
@@ -1106,31 +1884,71 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                           </Button>
                         </div>
                         {concorrente.produtos && concorrente.produtos.length > 0 ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                            {concorrente.produtos.map((produto, prodIdx) => (
-                              <Card key={produto.id || prodIdx} className="p-2 border-l-2 border-l-green-500">
-                                <div className="space-y-1">
-                                  <div className="font-medium text-sm">{produto.nome}</div>
-                                  {produto.categoria && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {produto.categoria}
-                                    </Badge>
-                                  )}
-                                  {produto.descricao && (
-                                    <p className="text-xs text-muted-foreground line-clamp-2">
-                                      {produto.descricao}
-                                    </p>
-                                  )}
-                                </div>
-                              </Card>
-                            ))}
-                          </div>
+                          <Tabs defaultValue="cards" className="w-full">
+                            <TabsList className="grid w-full grid-cols-2 h-8 bg-muted/50">
+                              <TabsTrigger value="cards" className="text-xs py-1 px-2 data-[state=active]:bg-background data-[state=active]:text-foreground">Cards</TabsTrigger>
+                              <TabsTrigger value="table" className="text-xs py-1 px-2 data-[state=active]:bg-background data-[state=active]:text-foreground">Tabela</TabsTrigger>
+                            </TabsList>
+                            
+                            <TabsContent value="cards" className="mt-2">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto pr-2">
+                                {concorrente.produtos.map((produto, prodIdx) => (
+                                  <Card key={produto.id || prodIdx} className="p-2 border-l-2 border-l-green-500">
+                                    <div className="space-y-1">
+                                      <div className="font-medium text-sm">{produto.nome}</div>
+                                      {produto.categoria && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {produto.categoria}
+                                        </Badge>
+                                      )}
+                                      {produto.descricao && (
+                                        <p className="text-xs text-muted-foreground line-clamp-2">
+                                          {produto.descricao}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </Card>
+                                ))}
+                              </div>
+                            </TabsContent>
+                            
+                            <TabsContent value="table" className="mt-2">
+                              <div className="max-h-96 overflow-y-auto border rounded-md">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Nome</TableHead>
+                                      <TableHead>Categoria</TableHead>
+                                      <TableHead>Descrição</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {concorrente.produtos.map((produto, prodIdx) => (
+                                      <TableRow key={produto.id || prodIdx}>
+                                        <TableCell className="font-medium">{produto.nome}</TableCell>
+                                        <TableCell>
+                                          {produto.categoria && (
+                                            <Badge variant="outline">{produto.categoria}</Badge>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">
+                                          {produto.descricao || '-'}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </TabsContent>
+                          </Tabs>
                         ) : (
                           <div className="text-center py-4 text-sm text-muted-foreground">
                             Nenhum produto extraído ainda. Use o botão "Extrair Produtos" acima.
                           </div>
                         )}
                       </div>
+                        </>
+                      )}
                     </div>
                     <Button
                       type="button"
@@ -1144,7 +1962,8 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
