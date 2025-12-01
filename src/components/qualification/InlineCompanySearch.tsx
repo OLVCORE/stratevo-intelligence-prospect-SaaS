@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { 
   Search, Loader2, Building2, CheckCircle2, MapPin, 
-  Briefcase, DollarSign, Calendar, AlertTriangle, Plus, X
+  Briefcase, DollarSign, Calendar, AlertTriangle, Plus, X,
+  FileText, Scale, Users, Globe, CheckCircle, XCircle, BarChart
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import LocationMap from '@/components/map/LocationMap';
 
 interface InlineCompanySearchProps {
   onCompanyAdded?: () => void;
@@ -341,125 +343,399 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
         </div>
       </div>
 
-      {/* Preview Dialog */}
+      {/* Preview Dialog COMPLETO - Idêntico à SearchPage */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              Preview da Empresa
+            <DialogTitle className="text-2xl flex items-center gap-3">
+              <Building2 className="h-6 w-6 text-primary" />
+              Preview Completo dos Dados
+              {/* Badge de Status do CNPJ */}
+              {previewData?.situacao?.toUpperCase().includes('ATIVA') && (
+                <Badge className="ml-2 bg-green-500 hover:bg-green-600 text-white border-green-600 gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  CNPJ ATIVO
+                </Badge>
+              )}
+              {previewData?.situacao && !previewData?.situacao?.toUpperCase().includes('ATIVA') && (
+                <Badge className="ml-2 bg-orange-500 hover:bg-orange-600 text-white border-orange-600 gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  CNPJ INATIVO
+                </Badge>
+              )}
             </DialogTitle>
             <DialogDescription>
-              Revise os dados antes de adicionar à qualificação
+              Revise as informações completas antes de confirmar o cadastro no funil de vendas
             </DialogDescription>
           </DialogHeader>
-
+          
           {previewData && (
-            <div className="space-y-4">
-              {/* Header com situação */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                <div>
-                  <h3 className="font-semibold text-lg">{previewData.razao_social}</h3>
-                  {previewData.nome_fantasia && (
-                    <p className="text-sm text-muted-foreground">{previewData.nome_fantasia}</p>
-                  )}
-                  <Badge variant="outline" className="mt-1 font-mono">
-                    {previewData.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
-                  </Badge>
-                </div>
-                <Badge 
-                  variant={previewData.situacao?.toUpperCase().includes('ATIVA') ? 'default' : 'destructive'}
-                  className="text-sm"
-                >
-                  {previewData.situacao || 'N/A'}
-                </Badge>
-              </div>
+            <div className="space-y-6">
+              {/* Header com dados principais */}
+              <Card className="border-l-4 border-l-primary">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <CardTitle className="text-xl">{previewData.razao_social}</CardTitle>
+                      {previewData.nome_fantasia && previewData.nome_fantasia !== previewData.razao_social && (
+                        <p className="text-sm text-muted-foreground">Nome Fantasia: {previewData.nome_fantasia}</p>
+                      )}
+                    </div>
+                  </div>
+                  <CardDescription className="space-y-1 pt-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">CNPJ:</span>
+                      <span className="text-sm font-mono font-semibold">
+                        {previewData.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
+                      </span>
+                    </div>
+                  </CardDescription>
+                </CardHeader>
+              </Card>
 
-              {/* Grid de informações */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="flex items-start gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Localização</p>
-                    <p className="font-medium">{previewData.municipio}/{previewData.uf}</p>
-                  </div>
+              {/* Grid com 3 colunas */}
+              <div className="grid md:grid-cols-3 gap-6">
+                {/* Coluna 1 - Dados Cadastrais */}
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <FileText className="h-4 w-4" />
+                        Dados Cadastrais
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      {previewData.porte && (
+                        <div>
+                          <span className="text-muted-foreground">Porte:</span>
+                          <p className="font-medium">{previewData.porte}</p>
+                        </div>
+                      )}
+                      {previewData.raw_data?.tipo && (
+                        <div>
+                          <span className="text-muted-foreground">Tipo:</span>
+                          <p className="font-medium">{previewData.raw_data.tipo}</p>
+                        </div>
+                      )}
+                      {previewData.data_abertura && (
+                        <div>
+                          <span className="text-muted-foreground">Abertura:</span>
+                          <p className="font-medium">{previewData.data_abertura}</p>
+                        </div>
+                      )}
+                      {previewData.raw_data?.natureza_juridica && (
+                        <div>
+                          <span className="text-muted-foreground">Natureza Jurídica:</span>
+                          <p className="font-medium text-[10px]">{previewData.raw_data.natureza_juridica}</p>
+                        </div>
+                      )}
+                      {previewData.capital_social && (
+                        <div>
+                          <span className="text-muted-foreground">Capital Social:</span>
+                          <p className="font-medium text-green-600">
+                            R$ {Number(previewData.capital_social).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Situação Cadastral */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Situação Cadastral</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      {previewData.situacao && (
+                        <div>
+                          <span className="text-muted-foreground">Status:</span>
+                          <Badge 
+                            className={`ml-2 ${
+                              previewData.situacao.toUpperCase().includes('ATIVA')
+                                ? 'bg-green-500 hover:bg-green-600 text-white border-green-600' 
+                                : 'bg-red-500 hover:bg-red-600 text-white border-red-600'
+                            }`}
+                          >
+                            {previewData.situacao}
+                          </Badge>
+                        </div>
+                      )}
+                      {previewData.raw_data?.data_situacao && (
+                        <div>
+                          <span className="text-muted-foreground">Data:</span>
+                          <p className="font-medium">{previewData.raw_data.data_situacao}</p>
+                        </div>
+                      )}
+                      {previewData.raw_data?.motivo_situacao && (
+                        <div>
+                          <span className="text-muted-foreground">Motivo:</span>
+                          <p className="font-medium text-[10px]">{previewData.raw_data.motivo_situacao}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Regimes Especiais */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Regimes Especiais</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      {previewData.raw_data?.simples !== undefined && (
+                        <div>
+                          <span className="text-muted-foreground">Simples Nacional:</span>
+                          <Badge variant={previewData.raw_data?.simples?.optante || previewData.raw_data?.opcao_pelo_simples ? 'default' : 'secondary'} className="ml-2 text-[10px]">
+                            {previewData.raw_data?.simples?.optante || previewData.raw_data?.opcao_pelo_simples ? 'Optante' : 'Não Optante'}
+                          </Badge>
+                        </div>
+                      )}
+                      {previewData.raw_data?.simei !== undefined && (
+                        <div>
+                          <span className="text-muted-foreground">MEI (Simei):</span>
+                          <Badge variant={previewData.raw_data?.simei?.optante || previewData.raw_data?.opcao_pelo_mei ? 'default' : 'secondary'} className="ml-2 text-[10px]">
+                            {previewData.raw_data?.simei?.optante || previewData.raw_data?.opcao_pelo_mei ? 'Optante' : 'Não Optante'}
+                          </Badge>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
-                
-                <div className="flex items-start gap-2">
-                  <DollarSign className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Capital Social</p>
-                    <p className="font-medium">
-                      {previewData.capital_social 
-                        ? `R$ ${Number(previewData.capital_social).toLocaleString('pt-BR')}`
-                        : 'N/A'}
-                    </p>
-                  </div>
+
+                {/* Coluna 2 - Localização e Mapa */}
+                <div className="space-y-4">
+                  {/* Localização + Mapa */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <MapPin className="h-4 w-4" />
+                        Localização
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="text-xs space-y-1">
+                        {previewData.raw_data?.logradouro && (
+                          <p>{previewData.raw_data.logradouro}, {previewData.raw_data.numero || 'S/N'}</p>
+                        )}
+                        {previewData.raw_data?.complemento && (
+                          <p className="text-muted-foreground">{previewData.raw_data.complemento}</p>
+                        )}
+                        {previewData.raw_data?.bairro && <p>{previewData.raw_data.bairro}</p>}
+                        <p className="font-semibold">
+                          {previewData.municipio}/{previewData.uf}
+                        </p>
+                        {previewData.raw_data?.cep && (
+                          <p className="text-muted-foreground">CEP: {previewData.raw_data.cep}</p>
+                        )}
+                      </div>
+                      
+                      {/* Mapa */}
+                      {(previewData.raw_data?.cep || previewData.municipio) && (
+                        <div className="h-[180px] rounded-lg overflow-hidden">
+                          <LocationMap
+                            address={previewData.raw_data?.logradouro}
+                            municipio={previewData.municipio}
+                            estado={previewData.uf}
+                            cep={previewData.raw_data?.cep}
+                            pais="Brasil"
+                          />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Contato */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Contato</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      {previewData.raw_data?.email && (
+                        <div>
+                          <span className="text-muted-foreground">Email:</span>
+                          <p className="font-mono text-[10px]">{previewData.raw_data.email}</p>
+                        </div>
+                      )}
+                      {previewData.raw_data?.telefone && (
+                        <div>
+                          <span className="text-muted-foreground">Telefone:</span>
+                          <p className="font-medium">{previewData.raw_data.telefone}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* QSA - Quadro de Sócios */}
+                  {previewData.raw_data?.qsa && previewData.raw_data.qsa.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <Users className="h-4 w-4" />
+                          Quadro de Sócios ({previewData.raw_data.qsa.length})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                          {previewData.raw_data.qsa.map((socio: any, idx: number) => (
+                            <div key={idx} className="p-2 rounded border bg-muted/30">
+                              <p className="font-medium text-xs">{socio.nome}</p>
+                              <Badge variant="outline" className="text-[10px] mt-1">{socio.qual}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
-                
-                <div className="flex items-start gap-2">
-                  <Briefcase className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Porte</p>
-                    <p className="font-medium">{previewData.porte || 'N/A'}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Abertura</p>
-                    <p className="font-medium">
-                      {previewData.data_abertura 
-                        ? new Date(previewData.data_abertura).toLocaleDateString('pt-BR')
-                        : 'N/A'}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="col-span-2 flex items-start gap-2">
-                  <Building2 className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">CNAE Principal</p>
-                    <p className="font-medium text-sm">
-                      {previewData.cnae_principal} - {previewData.cnae_descricao || 'N/A'}
-                    </p>
-                  </div>
+
+                {/* Coluna 3 - Atividades e Scores */}
+                <div className="space-y-4">
+                  {/* Atividade Principal */}
+                  {(previewData.raw_data?.atividade_principal || previewData.cnae_descricao) && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <Briefcase className="h-4 w-4" />
+                          Atividade Principal
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {previewData.raw_data?.atividade_principal?.map((ativ: any, idx: number) => (
+                            <div key={idx} className="text-xs">
+                              <Badge variant="outline" className="text-[10px] mb-1">{ativ.code}</Badge>
+                              <p className="text-[10px] leading-relaxed">{ativ.text}</p>
+                            </div>
+                          )) || (
+                            <div className="text-xs">
+                              <Badge variant="outline" className="text-[10px] mb-1">{previewData.cnae_principal}</Badge>
+                              <p className="text-[10px] leading-relaxed">{previewData.cnae_descricao}</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Atividades Secundárias */}
+                  {previewData.raw_data?.atividades_secundarias && previewData.raw_data.atividades_secundarias.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">
+                          Atividades Secundárias ({previewData.raw_data.atividades_secundarias.length})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-1 max-h-[180px] overflow-y-auto text-[10px]">
+                          {previewData.raw_data.atividades_secundarias.slice(0, 5).map((ativ: any, idx: number) => (
+                            <div key={idx} className="pb-1 border-b last:border-0">
+                              <Badge variant="secondary" className="text-[9px]">{ativ.code}</Badge>
+                              <p className="mt-0.5 leading-tight">{ativ.text}</p>
+                            </div>
+                          ))}
+                          {previewData.raw_data.atividades_secundarias.length > 5 && (
+                            <p className="text-muted-foreground text-center py-1">
+                              +{previewData.raw_data.atividades_secundarias.length - 5} atividades adicionais
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Score Financeiro */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <DollarSign className="h-4 w-4" />
+                        Score Financeiro
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium">Classificação</span>
+                        <Badge variant="default" className="bg-gray-500">N/A</Badge>
+                      </div>
+                      <div className="space-y-1.5 text-[10px]">
+                        <div className="flex justify-between">
+                          <span>Score de Crédito</span>
+                          <span className="font-bold text-muted-foreground">N/A</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Risco Preditivo</span>
+                          <span className="font-medium text-muted-foreground">N/A/100</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Score Jurídico */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <Scale className="h-4 w-4" />
+                        Score Jurídico
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium">Nível de Risco</span>
+                        <Badge className="bg-gray-500">N/A</Badge>
+                      </div>
+                      <div className="space-y-1.5 text-[10px]">
+                        <div className="flex justify-between">
+                          <span>Processos Ativos</span>
+                          <span className="font-bold text-muted-foreground">0</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Total de Processos</span>
+                          <span className="font-medium text-muted-foreground">0</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Saúde Jurídica</span>
+                          <span className="font-bold text-muted-foreground">0/100</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
 
               {/* Aviso se não ativa */}
               {previewData.situacao && !previewData.situacao.toUpperCase().includes('ATIVA') && (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                <div className="flex items-center gap-2 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
                   <AlertTriangle className="h-5 w-5" />
                   <div>
                     <p className="font-medium">Atenção: CNPJ não está ATIVO</p>
-                    <p className="text-sm">A empresa pode ter restrições ou estar inativa.</p>
+                    <p className="text-sm">A empresa pode ter restrições ou estar inativa. Considere antes de adicionar.</p>
                   </div>
                 </div>
               )}
 
-              {/* Fonte */}
-              <p className="text-xs text-muted-foreground text-right">
-                Fonte: {previewData.source === 'brasilapi' ? 'Brasil API' : 'ReceitaWS'}
+              {/* Botões de ação */}
+              <div className="flex gap-3 pt-4 border-t">
+                <Button onClick={handleSaveToQualification} disabled={isSaving} className="flex-1">
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Qualificando e Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Confirmar e Salvar no Funil
+                    </>
+                  )}
+                </Button>
+                <Button variant="outline" onClick={() => setShowPreview(false)} disabled={isSaving}>
+                  Cancelar
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center">
+                💡 Esta busca será registrada no histórico mesmo que você não salve a empresa no funil de vendas
               </p>
             </div>
           )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowPreview(false)}>
-              <X className="h-4 w-4 mr-2" />
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveToQualification} disabled={isSaving}>
-              {isSaving ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4 mr-2" />
-              )}
-              Adicionar à Qualificação
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
