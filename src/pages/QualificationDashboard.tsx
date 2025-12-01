@@ -79,7 +79,8 @@ export default function QualificationDashboard() {
   });
   const [leads, setLeads] = useState<LeadQuarantine[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
-  // Estados removidos - agora no LeadsQualificationTable
+  const [searchTerm] = useState(''); // Usado para filtrar na visão geral
+  const [filterTemp] = useState<string>('all');
 
   useEffect(() => {
     if (tenantId) {
