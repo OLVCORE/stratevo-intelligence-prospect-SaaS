@@ -182,22 +182,22 @@ ALTER TABLE product_fit_analysis ENABLE ROW LEVEL SECURITY;
 -- Políticas: Tenant só vê seus próprios dados
 CREATE POLICY "tenant_products_policy" ON tenant_products
   FOR ALL USING (tenant_id IN (
-    SELECT tenant_id FROM users WHERE auth_id = auth.uid()
+    SELECT tenant_id FROM users WHERE auth_user_id = auth.uid()
   ));
 
 CREATE POLICY "tenant_product_documents_policy" ON tenant_product_documents
   FOR ALL USING (tenant_id IN (
-    SELECT tenant_id FROM users WHERE auth_id = auth.uid()
+    SELECT tenant_id FROM users WHERE auth_user_id = auth.uid()
   ));
 
 CREATE POLICY "tenant_fit_config_policy" ON tenant_fit_config
   FOR ALL USING (tenant_id IN (
-    SELECT tenant_id FROM users WHERE auth_id = auth.uid()
+    SELECT tenant_id FROM users WHERE auth_user_id = auth.uid()
   ));
 
 CREATE POLICY "product_fit_analysis_policy" ON product_fit_analysis
   FOR ALL USING (tenant_id IN (
-    SELECT tenant_id FROM users WHERE auth_id = auth.uid()
+    SELECT tenant_id FROM users WHERE auth_user_id = auth.uid()
   ));
 
 -- 7. TRIGGERS para updated_at

@@ -57,7 +57,7 @@ ALTER TABLE tenant_competitor_products ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "tenant_competitor_products_policy" ON tenant_competitor_products
   FOR ALL USING (tenant_id IN (
-    SELECT tenant_id FROM users WHERE auth_id = auth.uid()
+    SELECT tenant_id FROM users WHERE auth_user_id = auth.uid()
   ));
 
 -- 4. TRIGGER para updated_at
