@@ -170,7 +170,6 @@ const menuGroups: MenuGroup[] = [
         submenu: [
           { title: "Home", icon: LayoutDashboard, url: "/central-icp", description: "Visão geral da Central ICP" },
           { title: "Meus ICPs", icon: FileText, url: "/central-icp/profiles", description: "Visualizar e gerenciar ICPs configurados" },
-          { title: "Dashboard", icon: BarChart3, url: "/central-icp/dashboard", description: "Resultados e métricas de qualificação" },
           { title: "Qualificação", icon: Filter, url: "/central-icp/qualification", description: "Motor Go/No-Go: Upload, Busca e Qualificação automática" },
           { title: "Plano Estratégico", icon: Briefcase, url: "/central-icp/strategic-plan", description: "Kanban, KPIs e ações com investimentos proporcionais" },
         ],
