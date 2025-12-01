@@ -230,15 +230,36 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
 
       if (error) throw error;
 
-      const count = data?.products_inserted || 0;
-      setTenantProductsCount(count);
+      const extracted = data?.products_extracted || 0;
+      const inserted = data?.products_inserted || 0;
       
-      toast.success(`${count} produtos encontrados no site!`, {
-        description: 'Revise os produtos no catálogo',
-      });
+      // Buscar total de produtos do tenant
+      const { data: produtosData } = await (supabase
+        .from('tenant_products' as any)
+        .select('id')
+        .eq('tenant_id', tenant.id)
+        .eq('ativo', true));
+      
+      const totalProdutos = produtosData?.length || 0;
+      setTenantProductsCount(totalProdutos);
+      
+      // Toast mais informativo
+      if (inserted > 0) {
+        toast.success(`${inserted} novos produtos inseridos! Total: ${totalProdutos} produtos`, {
+          description: `${extracted} produtos encontrados na URL`
+        });
+      } else if (extracted > 0) {
+        toast.info(`${extracted} produtos encontrados, mas já estavam cadastrados. Total: ${totalProdutos} produtos`);
+      } else {
+        toast.warning('Nenhum produto encontrado na URL', {
+          description: 'Tente uma URL diferente ou verifique se o site contém informações de produtos'
+        });
+      }
     } catch (err: any) {
       console.error('Erro ao escanear website:', err);
-      toast.error('Erro ao escanear website', { description: err.message });
+      toast.error('Erro ao escanear website', { 
+        description: err.message || 'Verifique se a Edge Function está deployada'
+      });
     } finally {
       setScanningTenantWebsite(false);
     }
@@ -669,13 +690,19 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
               type="button"
               variant="outline"
               onClick={handleScanTenantWebsite}
-              disabled={scanningTenantWebsite || !formData.website || !tenant?.id}
-              title="Escanear produtos do website"
+              disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
+              title={!formData.website?.trim() ? 'Informe o website primeiro' : !tenant?.id ? 'Tenant não identificado' : 'Escanear produtos do website'}
             >
               {scanningTenantWebsite ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Escaneando...
+                </>
               ) : (
-                <Sparkles className="h-4 w-4" />
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Escanear
+                </>
               )}
             </Button>
           </div>
@@ -736,7 +763,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         <CollapsibleContent>
           <Card className="mt-4">
             <CardContent className="pt-6">
-              <TenantProductsCatalog />
+              <TenantProductsCatalog websiteUrl={formData.website} />
             </CardContent>
           </Card>
         </CollapsibleContent>

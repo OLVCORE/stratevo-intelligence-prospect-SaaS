@@ -123,9 +123,16 @@ interface ProductDocument {
   uploaded_at: string;
 }
 
-export function TenantProductsCatalog() {
+interface TenantProductsCatalogProps {
+  websiteUrl?: string;
+}
+
+export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps = {}) {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
+  
+  // Usar websiteUrl da prop ou do tenant como fallback
+  const tenantWebsite = websiteUrl || tenant?.website;
 
   const [products, setProducts] = useState<TenantProduct[]>([]);
   const [documents, setDocuments] = useState<ProductDocument[]>([]);
@@ -419,19 +426,19 @@ export function TenantProductsCatalog() {
 
   // Escanear website do tenant
   const handleScanWebsite = async () => {
-    if (!tenantId || !tenant?.website) {
+    if (!tenantId || !tenantWebsite) {
       toast.error('Configure o website do tenant primeiro');
       return;
     }
 
     setScanningWebsite(true);
-    toast.info(`Escaneando ${tenant.website}...`);
+    toast.info(`Escaneando ${tenantWebsite}...`);
 
     try {
       const { data, error } = await supabase.functions.invoke('scan-website-products', {
         body: {
           tenant_id: tenantId,
-          website_url: tenant.website,
+          website_url: tenantWebsite,
         },
       });
 
@@ -597,8 +604,8 @@ export function TenantProductsCatalog() {
           <Button
             variant="outline"
             onClick={handleScanWebsite}
-            disabled={scanningWebsite || !tenant?.website}
-            title={tenant?.website || 'Configure o website do tenant'}
+            disabled={scanningWebsite || !tenantWebsite}
+            title={tenantWebsite || 'Configure o website do tenant'}
           >
             {scanningWebsite ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -921,14 +928,14 @@ export function TenantProductsCatalog() {
                   <div className="flex items-center gap-2">
                     <Link className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">
-                      {tenant?.website || 'Nenhum website configurado'}
+                      {tenantWebsite || 'Nenhum website configurado'}
                     </span>
                   </div>
                 </div>
 
                 <Button
                   onClick={handleScanWebsite}
-                  disabled={scanningWebsite || !tenant?.website}
+                  disabled={scanningWebsite || !tenantWebsite}
                   className="w-full"
                 >
                   {scanningWebsite ? (
@@ -939,7 +946,7 @@ export function TenantProductsCatalog() {
                   Iniciar Varredura
                 </Button>
 
-                {!tenant?.website && (
+                {!tenantWebsite && (
                   <p className="text-sm text-amber-600 flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4" />
                     Configure o website do tenant primeiro
