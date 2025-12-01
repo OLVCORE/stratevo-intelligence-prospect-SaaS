@@ -158,72 +158,194 @@ export default function CompetitiveAnalysis({
   // Buscar dados enriquecidos de um concorrente
   const enrichCompetitor = async (competitor: ConcorrenteDireto): Promise<CompetitorEnriched> => {
     try {
-      // Busca específica usando razão social
-      const searchQuery = `"${competitor.razaoSocial}" ${competitor.setor || 'empresa'} Brasil`;
+      // Extrair primeiro nome significativo da razão social
+      const nomeSimplificado = competitor.razaoSocial
+        .replace(/LTDA\.?|S\.?A\.?|EIRELI|ME|EPP|COMERCIO|IMPORTACAO|EXPORTACAO|E\s|DE\s|DO\s|DA\s/gi, '')
+        .split(' ')
+        .filter(p => p.length > 2)
+        .slice(0, 2)
+        .join(' ')
+        .trim();
       
-      const { data: searchData, error } = await supabase.functions.invoke('serper-search', {
+      // Usar nome fantasia se disponível, senão nome simplificado
+      const nomeParaBusca = competitor.nomeFantasia || nomeSimplificado || competitor.razaoSocial.split(' ')[0];
+      
+      // Contexto específico do setor (EPIs/segurança do trabalho)
+      const setorContexto = 'EPIs equipamentos proteção segurança trabalho';
+      const cidadeEstado = `${competitor.cidade} ${competitor.estado}`;
+      
+      console.log(`[SERPER] 🔍 Buscando: ${nomeParaBusca} | CNPJ: ${competitor.cnpj}`);
+
+      // BUSCA 1: Website oficial - muito específica
+      const { data: siteData } = await supabase.functions.invoke('serper-search', {
         body: {
-          query: searchQuery,
-          num: 5
+          query: `"${nomeParaBusca}" ${setorContexto} site oficial ${cidadeEstado}`,
+          num: 5,
+          gl: 'br',
+          hl: 'pt-br'
         }
       });
 
-      if (error) {
-        console.warn(`[SERPER] Erro ao buscar ${competitor.razaoSocial}:`, error);
-      }
-
-      // Buscar LinkedIn específico
+      // BUSCA 2: LinkedIn da empresa (não pessoa)
       const { data: linkedinData } = await supabase.functions.invoke('serper-search', {
         body: {
-          query: `"${competitor.razaoSocial}" site:linkedin.com/company`,
-          num: 3
+          query: `"${nomeParaBusca}" empresa ${setorContexto} site:linkedin.com/company`,
+          num: 3,
+          gl: 'br'
         }
       });
 
-      // Buscar notícias específicas
-      const { data: newsData } = await supabase.functions.invoke('serper-search', {
+      // BUSCA 3: Instagram corporativo
+      const { data: instaData } = await supabase.functions.invoke('serper-search', {
         body: {
-          query: `"${competitor.razaoSocial}" OR "${competitor.nomeFantasia || competitor.razaoSocial}" notícias 2024`,
-          type: 'news',
-          num: 5
+          query: `"${nomeParaBusca}" ${setorContexto} site:instagram.com`,
+          num: 3,
+          gl: 'br'
         }
       });
+
+      // BUSCA 4: Notícias específicas do setor
+      const { data: newsData } = await supabase.functions.invoke('serper-search', {
+        body: {
+          query: `"${nomeParaBusca}" (EPIs OR "equipamentos de proteção" OR "segurança do trabalho") -ator -filme -série`,
+          type: 'news',
+          num: 5,
+          gl: 'br',
+          hl: 'pt-br'
+        }
+      });
+
+      // BUSCA 5: Buscar por CNPJ para validar
+      const { data: cnpjData } = await supabase.functions.invoke('serper-search', {
+        body: {
+          query: `CNPJ ${competitor.cnpj.replace(/\D/g, '')} ${nomeParaBusca}`,
+          num: 3,
+          gl: 'br'
+        }
+      });
+
+      // Filtrar resultados relevantes (excluir ruído)
+      const filterRelevant = (results: any[], keywords: string[]) => {
+        if (!results) return [];
+        return results.filter((r: any) => {
+          const text = `${r.title || ''} ${r.snippet || ''} ${r.link || ''}`.toLowerCase();
+          // Excluir se contiver palavras de ruído
+          const noiseWords = ['ator', 'atriz', 'filme', 'série', 'show', 'netflix', 'hollywood', 'masterson', 'woodhead'];
+          if (noiseWords.some(noise => text.includes(noise))) return false;
+          // Incluir se contiver palavras relevantes
+          const relevantWords = ['epi', 'luva', 'proteção', 'segurança', 'trabalho', 'industrial', 'equipamento', competitor.cidade?.toLowerCase()];
+          return relevantWords.some(word => text.includes(word)) || text.includes(nomeParaBusca.toLowerCase());
+        });
+      };
+
+      const relevantSiteResults = filterRelevant(siteData?.organic, ['epi', 'proteção']);
+      const relevantNewsResults = filterRelevant(newsData?.news, ['epi', 'proteção']);
+
+      // Encontrar website oficial
+      let websiteEncontrado = competitor.website;
+      if (!websiteEncontrado && relevantSiteResults.length > 0) {
+        const possibleSite = relevantSiteResults.find((r: any) => 
+          !r.link?.includes('linkedin.com') && 
+          !r.link?.includes('instagram.com') &&
+          !r.link?.includes('facebook.com') &&
+          !r.link?.includes('youtube.com')
+        );
+        if (possibleSite) {
+          websiteEncontrado = possibleSite.link;
+        }
+      }
+
+      // Encontrar LinkedIn válido
+      let linkedinUrl = linkedinData?.organic?.find((r: any) => 
+        r.link?.includes('linkedin.com/company') && 
+        !r.link?.includes('/in/') // Excluir perfis pessoais
+      )?.link;
+
+      // Encontrar Instagram válido
+      let instagramUrl = instaData?.organic?.find((r: any) => 
+        r.link?.includes('instagram.com') && 
+        !r.link?.includes('/p/') // Excluir posts individuais
+      )?.link;
 
       // Processar resultados
       const enriched: CompetitorEnriched = {
         ...competitor,
-        descricaoWeb: searchData?.organic?.[0]?.snippet || '',
-        linkedinUrl: linkedinData?.organic?.find((r: any) => r.link?.includes('linkedin.com/company'))?.link,
-        noticias: newsData?.news?.slice(0, 3).map((n: any) => ({
+        website: websiteEncontrado,
+        descricaoWeb: relevantSiteResults[0]?.snippet || cnpjData?.organic?.[0]?.snippet || '',
+        linkedinUrl,
+        instagramUrl,
+        noticias: relevantNewsResults.slice(0, 3).map((n: any) => ({
           titulo: n.title,
           url: n.link,
           data: n.date
-        })) || [],
-        presencaDigitalScore: calculateDigitalScore(searchData, linkedinData),
-        ameacaPotencial: classifyThreat(competitor.capitalSocial || 0),
+        })),
+        presencaDigitalScore: calculateDigitalScoreImproved(websiteEncontrado, linkedinUrl, instagramUrl, relevantNewsResults.length),
+        ameacaPotencial: classifyThreat(competitor.capitalSocial || 0, companyCapitalSocial || 1000000),
         pontosFortesIdentificados: [],
         pontosFrageisIdentificados: []
       };
 
-      // Identificar pontos fortes baseado no capital
+      // Identificar pontos fortes
       if (competitor.capitalSocial > 50000000) {
         enriched.pontosFortesIdentificados?.push('Grande capacidade de investimento');
       }
-      if (enriched.linkedinUrl) {
-        enriched.pontosFortesIdentificados?.push('Presença forte no LinkedIn');
+      if (linkedinUrl) {
+        enriched.pontosFortesIdentificados?.push('Presença no LinkedIn');
       }
-      if ((enriched.noticias?.length || 0) > 0) {
-        enriched.pontosFortesIdentificados?.push('Visibilidade na mídia');
+      if (instagramUrl) {
+        enriched.pontosFortesIdentificados?.push('Presença no Instagram');
       }
+      if (websiteEncontrado && !competitor.website) {
+        enriched.pontosFortesIdentificados?.push('Website encontrado');
+      }
+      if (relevantNewsResults.length > 0) {
+        enriched.pontosFortesIdentificados?.push('Visibilidade na mídia especializada');
+      }
+
+      // Identificar pontos fracos
+      if (!linkedinUrl) {
+        enriched.pontosFrageisIdentificados?.push('Sem presença no LinkedIn');
+      }
+      if (!websiteEncontrado) {
+        enriched.pontosFrageisIdentificados?.push('Website não encontrado');
+      }
+      if (enriched.presencaDigitalScore && enriched.presencaDigitalScore < 50) {
+        enriched.pontosFrageisIdentificados?.push('Baixa presença digital');
+      }
+
+      console.log(`[SERPER] ✅ ${nomeParaBusca}:`, {
+        website: !!websiteEncontrado,
+        linkedin: !!linkedinUrl,
+        instagram: !!instagramUrl,
+        noticias: relevantNewsResults.length,
+        score: enriched.presencaDigitalScore
+      });
 
       return enriched;
     } catch (err) {
       console.error(`Erro ao enriquecer ${competitor.razaoSocial}:`, err);
       return {
         ...competitor,
-        ameacaPotencial: classifyThreat(competitor.capitalSocial || 0)
+        ameacaPotencial: classifyThreat(competitor.capitalSocial || 0, companyCapitalSocial || 1000000),
+        presencaDigitalScore: 30 // Score base quando não consegue buscar
       };
     }
+  };
+
+  // Calcular score de presença digital melhorado
+  const calculateDigitalScoreImproved = (
+    website: string | undefined, 
+    linkedin: string | undefined, 
+    instagram: string | undefined,
+    newsCount: number
+  ): number => {
+    let score = 20; // Base
+    if (website) score += 25;
+    if (linkedin) score += 25;
+    if (instagram) score += 15;
+    if (newsCount > 0) score += 10;
+    if (newsCount > 2) score += 5;
+    return Math.min(score, 100);
   };
 
   // Calcular score de presença digital
@@ -785,15 +907,58 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                       {competitor.presencaDigitalScore !== undefined ? (
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <Progress value={competitor.presencaDigitalScore} className="h-2 flex-1" />
-                            <span className="text-sm font-medium">{competitor.presencaDigitalScore}%</span>
+                            <Progress 
+                              value={competitor.presencaDigitalScore} 
+                              className={cn(
+                                "h-2 flex-1",
+                                competitor.presencaDigitalScore >= 70 && "[&>div]:bg-green-500",
+                                competitor.presencaDigitalScore >= 40 && competitor.presencaDigitalScore < 70 && "[&>div]:bg-amber-500",
+                                competitor.presencaDigitalScore < 40 && "[&>div]:bg-red-500"
+                              )} 
+                            />
+                            <span className={cn(
+                              "text-sm font-medium",
+                              competitor.presencaDigitalScore >= 70 && "text-green-600",
+                              competitor.presencaDigitalScore >= 40 && competitor.presencaDigitalScore < 70 && "text-amber-600",
+                              competitor.presencaDigitalScore < 40 && "text-red-600"
+                            )}>
+                              {competitor.presencaDigitalScore}%
+                            </span>
                           </div>
+                          
+                          {/* Website */}
+                          {competitor.website && (
+                            <a href={competitor.website} target="_blank" rel="noopener noreferrer" 
+                               className="flex items-center gap-2 text-green-600 hover:underline text-sm">
+                              <Globe className="h-4 w-4" /> Website
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          
+                          {/* LinkedIn */}
                           {competitor.linkedinUrl && (
                             <a href={competitor.linkedinUrl} target="_blank" rel="noopener noreferrer" 
                                className="flex items-center gap-2 text-blue-600 hover:underline text-sm">
                               <Linkedin className="h-4 w-4" /> LinkedIn
                               <ExternalLink className="h-3 w-3" />
                             </a>
+                          )}
+                          
+                          {/* Instagram */}
+                          {competitor.instagramUrl && (
+                            <a href={competitor.instagramUrl} target="_blank" rel="noopener noreferrer" 
+                               className="flex items-center gap-2 text-pink-600 hover:underline text-sm">
+                              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                              </svg> 
+                              Instagram
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          
+                          {/* Sem redes encontradas */}
+                          {!competitor.website && !competitor.linkedinUrl && !competitor.instagramUrl && (
+                            <p className="text-xs text-muted-foreground italic">Nenhuma rede social encontrada</p>
                           )}
                           {competitor.website && (
                             <a href={competitor.website.startsWith('http') ? competitor.website : `https://${competitor.website}`} 
