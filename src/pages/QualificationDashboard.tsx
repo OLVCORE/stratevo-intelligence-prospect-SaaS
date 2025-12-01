@@ -92,33 +92,47 @@ export default function QualificationDashboard() {
     try {
       // Tentar buscar leads da quarentena com scores
       // A tabela pode não existir ainda se a migration não foi aplicada
-      const { data, error } = await (supabase as any)
+      const { data, error, status } = await (supabase as any)
         .from('leads_quarantine')
         .select('*')
         .eq('tenant_id', tenantId)
         .order('icp_score', { ascending: false });
 
       // Se a tabela não existe ou erro de coluna, usar dados vazios
-      if (error) {
-        const errorMsg = error.message?.toLowerCase() || '';
-        const errorCode = error.code || '';
+      if (error || status === 404) {
+        const errorMsg = (error?.message || '').toLowerCase();
+        const errorCode = error?.code || '';
+        const errorDetails = JSON.stringify(error || {}).toLowerCase();
         
         // Erros esperados se migration não foi aplicada
-        if (errorCode === '42P01' || // relation does not exist
-            errorCode === '42703' || // column does not exist
-            errorCode === 'PGRST116' || // not found
-            errorMsg.includes('does not exist') ||
-            errorMsg.includes('404')) {
-          console.warn('[QualificationDashboard] ⚠️ Tabela leads_quarantine não configurada. Aplique a migration.');
+        const isTableMissing = 
+          status === 404 ||
+          errorCode === '42P01' || // relation does not exist
+          errorCode === '42703' || // column does not exist  
+          errorCode === 'PGRST116' || // not found
+          errorCode === 'PGRST204' || // no rows
+          errorMsg.includes('does not exist') ||
+          errorMsg.includes('relation') ||
+          errorMsg.includes('404') ||
+          errorDetails.includes('not found') ||
+          errorDetails.includes('does not exist');
+        
+        if (isTableMissing) {
+          console.warn('[QualificationDashboard] ⚠️ Tabela/coluna não configurada. Aplique a migration.');
           setLeads([]);
           setStats({ total: 0, hot: 0, warm: 0, cold: 0, approved: 0, pending: 0, avgScore: 0 });
           setMigrationNeeded(true);
           setLoading(false);
           return;
         }
-        throw error;
+        
+        // Outro tipo de erro
+        if (error) throw error;
       }
 
+      // Sucesso - resetar flag de migration
+      setMigrationNeeded(false);
+      
       const leadsData = data || [];
       setLeads(leadsData);
 
@@ -144,8 +158,14 @@ export default function QualificationDashboard() {
 
     } catch (err: any) {
       console.error('Erro ao carregar dados:', err);
-      // Não mostrar toast para erros de tabela inexistente
-      if (!err.message?.includes('does not exist')) {
+      
+      // Verificar se é erro de tabela inexistente no catch
+      const errStr = JSON.stringify(err || {}).toLowerCase();
+      if (errStr.includes('404') || errStr.includes('not found') || errStr.includes('does not exist')) {
+        setMigrationNeeded(true);
+        setLeads([]);
+        setStats({ total: 0, hot: 0, warm: 0, cold: 0, approved: 0, pending: 0, avgScore: 0 });
+      } else {
         toast({
           title: 'Erro ao carregar dados',
           description: 'Tente novamente.',
