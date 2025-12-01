@@ -91,57 +91,44 @@ export default function QualificationDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Tentar buscar de companies (tabela principal que já existe)
-      // com dados de qualificação se disponíveis
+      // Buscar diretamente de companies (tabela principal que já existe)
+      // com dados de qualificação extraídos de raw_data
       let leadsData: any[] = [];
       
-      // Primeiro, tentar tabela leads_quarantine se existir
-      try {
-        const { data: quarantineData, error: qError } = await (supabase as any)
-          .from('leads_quarantine')
-          .select('id, cnpj, name, nome_fantasia, validation_status, captured_at, icp_score, icp_name, temperatura, qualification_data')
-          .order('captured_at', { ascending: false })
-          .limit(100);
-        
-        if (!qError && quarantineData) {
-          leadsData = quarantineData.map((l: any) => ({
-            ...l,
-            icp_score: l.icp_score || 0,
-            temperatura: l.temperatura || (l.icp_score >= 70 ? 'hot' : l.icp_score >= 40 ? 'warm' : 'cold')
-          }));
-        }
-      } catch (e) {
-        // Tabela não existe, usar alternativa
-        console.log('[QualificationDashboard] leads_quarantine não disponível, usando companies');
-      }
+      const { data: companiesData, error: cError } = await supabase
+        .from('companies')
+        .select('id, cnpj, company_name, industry, raw_data, headquarters_state, created_at, tenant_id')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(200);
       
-      // Se não tem dados de quarentena, buscar de companies
-      if (leadsData.length === 0) {
-        try {
-          const { data: companiesData, error: cError } = await (supabase as any)
-            .from('companies')
-            .select('id, cnpj, company_name, industry, raw_data, created_at')
-            .order('created_at', { ascending: false })
-            .limit(100);
+      if (!cError && companiesData) {
+        leadsData = companiesData.map((c: any) => {
+          // Extrair dados de qualificação de raw_data
+          const icpScore = c.raw_data?.icp_score ?? 30;
+          const temperatura = c.raw_data?.temperatura || 
+            (icpScore >= 70 ? 'hot' : icpScore >= 40 ? 'warm' : 'cold');
           
-          if (!cError && companiesData) {
-            leadsData = companiesData.map((c: any) => {
-              const icpScore = c.raw_data?.icp_score || 50;
-              return {
-                id: c.id,
-                cnpj: c.cnpj,
-                name: c.company_name,
-                nome_fantasia: c.raw_data?.nome_fantasia || c.raw_data?.fantasia,
-                icp_score: icpScore,
-                validation_status: 'pending',
-                temperatura: icpScore >= 70 ? 'hot' : icpScore >= 40 ? 'warm' : 'cold',
-                captured_at: c.created_at
-              };
-            });
-          }
-        } catch (e) {
-          console.log('[QualificationDashboard] Erro ao buscar companies:', e);
-        }
+          return {
+            id: c.id,
+            cnpj: c.cnpj,
+            name: c.company_name,
+            nome_fantasia: c.raw_data?.nome_fantasia || c.raw_data?.fantasia,
+            icp_score: icpScore,
+            icp_name: c.raw_data?.best_icp_name,
+            validation_status: c.raw_data?.decision || 'pending',
+            temperatura: temperatura,
+            qualification_breakdown: c.raw_data?.qualification_breakdown,
+            decision_reason: c.raw_data?.decision_reason,
+            setor: c.industry,
+            uf: c.headquarters_state,
+            captured_at: c.created_at
+          };
+        });
+        
+        console.log('[QualificationDashboard] ✅ Carregado:', leadsData.length, 'empresas');
+      } else if (cError) {
+        console.error('[QualificationDashboard] ❌ Erro:', cError);
       }
       
       setLeads(leadsData);

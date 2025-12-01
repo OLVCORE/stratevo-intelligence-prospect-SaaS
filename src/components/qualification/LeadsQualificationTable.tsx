@@ -55,6 +55,9 @@ interface Lead {
   porte?: string;
   cnae_principal?: string;
   situacao_cadastral?: string;
+  best_icp_name?: string;
+  decision_reason?: string;
+  qualification_breakdown?: any;
   raw_data?: any;
 }
 
@@ -87,87 +90,58 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
   const [sortBy, setSortBy] = useState<'icp_score' | 'name' | 'captured_at'>('icp_score');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Carregar dados
+  // Carregar dados diretamente de companies
   const loadLeads = async () => {
     if (!tenantId) return;
     
     setLoading(true);
     try {
-      let leadsData: Lead[] = [];
+      const { data: companiesData, error: cError } = await supabase
+        .from('companies')
+        .select('id, company_name, cnpj, industry, raw_data, created_at, headquarters_state, headquarters_city, tenant_id')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(500);
       
-      // Tentar leads_quarantine primeiro (pode não existir)
-      try {
-        const { data: quarantineData, error: qError } = await supabase
-          .from('leads_quarantine')
-          .select('*')
-          .eq('tenant_id', tenantId)
-          .order(sortBy === 'name' ? 'name' : sortBy, { ascending: sortOrder === 'asc' })
-          .limit(500);
-        
-        if (!qError && quarantineData && quarantineData.length > 0) {
-          leadsData = quarantineData.map((l: any) => ({
-            id: l.id,
-            cnpj: l.cnpj,
-            name: l.name || l.razao_social,
-            nome_fantasia: l.nome_fantasia,
-            razao_social: l.razao_social,
-            icp_score: l.icp_score || 50,
-            temperatura: l.temperatura || (l.icp_score >= 70 ? 'hot' : l.icp_score >= 40 ? 'warm' : 'cold'),
-            validation_status: l.validation_status || 'pending',
-            captured_at: l.captured_at,
-            uf: l.uf || l.raw_data?.uf,
-            municipio: l.municipio || l.raw_data?.municipio,
-            setor: l.setor || l.raw_data?.atividade_principal?.[0]?.text,
-            capital_social: l.capital_social || l.raw_data?.capital_social,
-            porte: l.porte || l.raw_data?.porte,
-            cnae_principal: l.cnae_principal || l.raw_data?.cnae_fiscal,
-            situacao_cadastral: l.situacao_cadastral || l.raw_data?.situacao,
-            raw_data: l.raw_data
-          }));
-        }
-      } catch (e) {
-        console.log('[LeadsTable] leads_quarantine não disponível, usando companies');
-      }
-      
-      // Fallback para companies se não tem dados
-      if (leadsData.length === 0) {
-        try {
-          const { data: companiesData, error: cError } = await supabase
-            .from('companies')
-            .select('id, company_name, cnpj, industry, raw_data, created_at, location')
-            .order('created_at', { ascending: false })
-            .limit(100);
+      if (!cError && companiesData) {
+        const leadsData: Lead[] = companiesData.map((c: any) => {
+          // Extrair dados de qualificação de raw_data
+          const icpScore = c.raw_data?.icp_score ?? 30;
+          const temperatura = c.raw_data?.temperatura || 
+            (icpScore >= 70 ? 'hot' : icpScore >= 40 ? 'warm' : 'cold');
           
-          if (!cError && companiesData) {
-            leadsData = companiesData.map((c: any) => ({
-              id: c.id,
-              cnpj: c.cnpj,
-              name: c.company_name,
-              nome_fantasia: c.raw_data?.fantasia || c.raw_data?.nome_fantasia,
-              razao_social: c.company_name,
-              icp_score: 50,
-              temperatura: 'warm' as const,
-              validation_status: 'pending',
-              captured_at: c.created_at,
-              uf: c.raw_data?.uf || (c.location as any)?.state,
-              municipio: c.raw_data?.municipio || (c.location as any)?.city,
-              setor: c.industry || c.raw_data?.atividade_principal?.[0]?.text,
-              capital_social: c.raw_data?.capital_social,
-              porte: c.raw_data?.porte,
-              cnae_principal: c.raw_data?.cnae_fiscal,
-              situacao_cadastral: c.raw_data?.situacao,
-              raw_data: c.raw_data
-            }));
-          }
-        } catch (e) {
-          console.log('[LeadsTable] Erro ao buscar companies:', e);
-        }
+          return {
+            id: c.id,
+            cnpj: c.cnpj,
+            name: c.company_name,
+            nome_fantasia: c.raw_data?.fantasia || c.raw_data?.nome_fantasia,
+            razao_social: c.company_name,
+            icp_score: icpScore,
+            temperatura: temperatura as 'hot' | 'warm' | 'cold',
+            validation_status: c.raw_data?.decision || 'pending',
+            captured_at: c.created_at,
+            uf: c.headquarters_state || c.raw_data?.uf,
+            municipio: c.headquarters_city || c.raw_data?.municipio,
+            setor: c.industry || c.raw_data?.atividade_principal?.[0]?.text || c.raw_data?.cnae_descricao,
+            capital_social: c.raw_data?.capital_social,
+            porte: c.raw_data?.porte,
+            cnae_principal: c.raw_data?.cnae_fiscal || c.raw_data?.cnae_principal,
+            situacao_cadastral: c.raw_data?.situacao || c.raw_data?.situacao_cadastral,
+            best_icp_name: c.raw_data?.best_icp_name,
+            decision_reason: c.raw_data?.decision_reason,
+            qualification_breakdown: c.raw_data?.qualification_breakdown,
+            raw_data: c.raw_data
+          };
+        });
+        
+        console.log('[LeadsTable] ✅ Carregado:', leadsData.length, 'leads do tenant');
+        setLeads(leadsData);
+      } else if (cError) {
+        console.error('[LeadsTable] ❌ Erro:', cError);
+        setLeads([]);
       }
-      
-      setLeads(leadsData);
     } catch (err) {
       console.error('Erro ao carregar leads:', err);
-      // Silenciar erro - mostrar tabela vazia
       setLeads([]);
     } finally {
       setLoading(false);
@@ -246,19 +220,33 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     );
   };
 
+  // Helper para atualizar status em raw_data
+  const updateLeadStatus = async (leadIds: string[], newStatus: string) => {
+    // Para cada lead, atualizar o raw_data com o novo status
+    for (const leadId of leadIds) {
+      const lead = leads.find(l => l.id === leadId);
+      if (!lead) continue;
+      
+      const updatedRawData = {
+        ...(lead.raw_data || {}),
+        decision: newStatus,
+        decision_updated_at: new Date().toISOString()
+      };
+      
+      await supabase
+        .from('companies')
+        .update({ raw_data: updatedRawData })
+        .eq('id', leadId);
+    }
+  };
+
   // Ações em lote
   const handleBulkApprove = async () => {
     if (selectedLeads.length === 0) return;
     
     setIsProcessing(true);
     try {
-      // Mover para pipeline (aprovados)
-      const { error } = await supabase
-        .from('leads_quarantine')
-        .update({ validation_status: 'approved' })
-        .in('id', selectedLeads);
-      
-      if (error) throw error;
+      await updateLeadStatus(selectedLeads, 'approved');
       
       toast.success(`✅ ${selectedLeads.length} lead(s) aprovado(s)!`);
       setSelectedLeads([]);
@@ -276,12 +264,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     
     setIsProcessing(true);
     try {
-      const { error } = await supabase
-        .from('leads_quarantine')
-        .update({ validation_status: 'rejected' })
-        .in('id', selectedLeads);
-      
-      if (error) throw error;
+      await updateLeadStatus(selectedLeads, 'rejected');
       
       toast.success(`❌ ${selectedLeads.length} lead(s) rejeitado(s)`);
       setSelectedLeads([]);
@@ -299,12 +282,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     
     setIsProcessing(true);
     try {
-      const { error } = await supabase
-        .from('leads_quarantine')
-        .update({ validation_status: 'quarantine' })
-        .in('id', selectedLeads);
-      
-      if (error) throw error;
+      await updateLeadStatus(selectedLeads, 'quarantine');
       
       toast.success(`🔄 ${selectedLeads.length} lead(s) enviado(s) para quarentena`);
       setSelectedLeads([]);
@@ -325,7 +303,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     setIsProcessing(true);
     try {
       const { error } = await supabase
-        .from('leads_quarantine')
+        .from('companies')
         .delete()
         .in('id', selectedLeads);
       
