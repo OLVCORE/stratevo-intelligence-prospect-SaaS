@@ -598,76 +598,123 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     try {
       toast.info(`🎯 Enviando ${leadIds.length} lead(s) para Quarentena ICP...`);
       
+      let successCount = 0;
+      let errorCount = 0;
+      
       for (const leadId of leadIds) {
         const lead = leads.find(l => l.id === leadId);
-        if (!lead) continue;
+        if (!lead) {
+          errorCount++;
+          continue;
+        }
 
-        const updatedRawData = {
-          ...(lead.raw_data || {}),
-          sent_to_icp_quarantine: true,
-          icp_quarantine_date: new Date().toISOString(),
-          validation_status: 'quarantine'
-        };
+        try {
+          // 1. Verificar se já existe na quarentena (por CNPJ)
+          const { data: existingByCnpj } = await (supabase as any)
+            .from('icp_analysis_results')
+            .select('id')
+            .eq('cnpj', lead.cnpj)
+            .maybeSingle();
 
-        // 1. Atualizar na tabela companies
-        await (supabase as any)
-          .from('companies')
-          .update({ 
-            raw_data: updatedRawData,
-            pipeline_status: 'icp_quarantine'
-          })
-          .eq('id', leadId);
-
-        // 2. Inserir na tabela icp_analysis_results (usada pela página Quarentena ICP)
-        // Verificar se já existe para evitar duplicação
-        const { data: existing } = await (supabase as any)
-          .from('icp_analysis_results')
-          .select('id')
-          .eq('company_id', leadId)
-          .maybeSingle();
-
-        if (!existing) {
           const receita = lead.raw_data?.receita_federal || lead.raw_data?.receita || {};
+          
+          // Dados para inserir/atualizar - usando EXATAMENTE os mesmos campos que useSaveToQuarantine
+          const quarantineRecord = {
+            company_id: leadId,
+            cnpj: lead.cnpj,
+            razao_social: lead.name || lead.razao_social,
+            nome_fantasia: lead.nome_fantasia || receita.fantasia,
+            icp_score: lead.icp_score || 0,
+            temperatura: lead.temperatura || 'cold',
+            status: 'pendente',
+            motivo_descarte: null,
+            evidencias_totvs: [],
+            breakdown: lead.qualification_breakdown || {},
+            motivos: lead.decision_reason ? [lead.decision_reason] : [],
+            raw_analysis: {
+              ...lead.raw_data,
+              source: 'qualification_engine',
+              sent_at: new Date().toISOString(),
+              original_lead_id: leadId
+            },
+            // Campos adicionais da tabela
+            uf: receita.uf || lead.uf,
+            municipio: receita.municipio || lead.municipio,
+            porte: receita.porte || lead.porte,
+            cnae_principal: receita.atividade_principal?.[0]?.code || lead.cnae_principal,
+          };
+
+          if (existingByCnpj) {
+            // Atualizar registro existente para pendente
+            console.log('[Quarentena] Atualizando registro existente:', existingByCnpj.id);
+            const { error: updateError } = await (supabase as any)
+              .from('icp_analysis_results')
+              .update({ 
+                status: 'pendente',
+                icp_score: quarantineRecord.icp_score,
+                temperatura: quarantineRecord.temperatura,
+                breakdown: quarantineRecord.breakdown,
+                motivos: quarantineRecord.motivos,
+                raw_analysis: quarantineRecord.raw_analysis
+              })
+              .eq('id', existingByCnpj.id);
+            
+            if (updateError) {
+              console.error('[Quarentena] Erro ao atualizar:', updateError);
+              throw updateError;
+            }
+          } else {
+            // Inserir novo registro
+            console.log('[Quarentena] Inserindo novo registro para CNPJ:', lead.cnpj);
+            const { error: insertError } = await (supabase as any)
+              .from('icp_analysis_results')
+              .insert(quarantineRecord);
+            
+            if (insertError) {
+              console.error('[Quarentena] Erro ao inserir:', insertError);
+              throw insertError;
+            }
+          }
+
+          // 2. Atualizar na tabela companies
+          const updatedRawData = {
+            ...(lead.raw_data || {}),
+            sent_to_icp_quarantine: true,
+            icp_quarantine_date: new Date().toISOString(),
+            validation_status: 'quarantine'
+          };
+
           await (supabase as any)
-            .from('icp_analysis_results')
-            .insert({
-              company_id: leadId,
-              cnpj: lead.cnpj,
-              razao_social: lead.name,
-              nome_fantasia: lead.nome_fantasia,
-              icp_score: lead.icp_score || 0,
-              temperatura: lead.temperatura || 'cold',
-              status: 'pendente',
-              breakdown: lead.qualification_breakdown || {},
-              motivos: lead.decision_reason ? [lead.decision_reason] : [],
-              capital_social: receita.capital_social || lead.capital_social,
-              porte: receita.porte || lead.porte,
-              cnae_principal: receita.atividade_principal?.[0]?.code || lead.cnae_principal,
-              uf: receita.uf || lead.uf,
-              municipio: receita.municipio || lead.municipio,
-              setor: lead.setor || receita.atividade_principal?.[0]?.text,
-              raw_analysis: {
-                ...lead.raw_data,
-                source: 'qualification_engine',
-                sent_at: new Date().toISOString()
-              }
-            });
-        } else {
-          // Atualizar registro existente para pendente
-          await (supabase as any)
-            .from('icp_analysis_results')
-            .update({ status: 'pendente' })
-            .eq('id', existing.id);
+            .from('companies')
+            .update({ 
+              raw_data: updatedRawData,
+              pipeline_status: 'icp_quarantine'
+            })
+            .eq('id', leadId);
+
+          successCount++;
+        } catch (err: any) {
+          console.error(`[Quarentena] Erro ao processar lead ${leadId}:`, err);
+          errorCount++;
         }
       }
 
-      toast.success(`✅ ${leadIds.length} lead(s) enviado(s) para Quarentena ICP!`, {
-        description: 'Acesse a página Quarentena ICP para as 9 abas de validação',
-        action: {
-          label: 'Ir para Quarentena',
-          onClick: () => navigate('/leads/icp-quarantine')
-        }
-      });
+      if (successCount > 0) {
+        toast.success(`✅ ${successCount} lead(s) enviado(s) para Quarentena ICP!`, {
+          description: errorCount > 0 
+            ? `${errorCount} erro(s) ocorreram. Acesse a Quarentena ICP para validação.`
+            : 'Acesse a página Quarentena ICP para as 9 abas de validação',
+          action: {
+            label: 'Ir para Quarentena',
+            onClick: () => navigate('/leads/icp-quarantine')
+          }
+        });
+      } else {
+        toast.error('Nenhum lead foi enviado para quarentena', {
+          description: 'Verifique se os leads possuem CNPJ válido'
+        });
+      }
+      
       setSelectedLeads([]);
       loadLeads();
     } catch (error: any) {
