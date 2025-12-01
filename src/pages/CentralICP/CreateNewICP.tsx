@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, Save, Building2, MapPin, FileText, Info, Target, Sparkles } from 'lucide-react';
 import { Step2SetoresNichos } from '@/components/onboarding/steps/Step2SetoresNichos';
 import { Step3PerfilClienteIdeal } from '@/components/onboarding/steps/Step3PerfilClienteIdeal';
 import { Step4SituacaoAtual } from '@/components/onboarding/steps/Step4SituacaoAtual';
@@ -13,6 +14,7 @@ import { StepNavigation } from '@/components/onboarding/StepNavigation';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 type ICPFormData = {
   icpName?: string;
@@ -23,6 +25,16 @@ type ICPFormData = {
   step5_HistoricoEEnriquecimento?: any;
 };
 
+interface CompanyData {
+  razaoSocial?: string;
+  nomeFantasia?: string;
+  cnpj?: string;
+  cidade?: string;
+  estado?: string;
+  setor?: string;
+  anoFundacao?: number;
+}
+
 export default function CreateNewICP() {
   const navigate = useNavigate();
   const { tenant } = useTenant();
@@ -32,15 +44,48 @@ export default function CreateNewICP() {
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [icpNumber, setIcpNumber] = useState<string>('');
+  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
+  const [existingICPCount, setExistingICPCount] = useState(0);
 
   const totalSteps = 5; // 0 = Nome, 1 = Step2, 2 = Step3, 3 = Step4, 4 = Step5
 
-  // Buscar próximo número de ICP ao carregar
+  // Buscar dados da empresa e próximo número de ICP ao carregar
   useEffect(() => {
     if (tenantId) {
       loadNextICPNumber();
+      loadCompanyData();
     }
   }, [tenantId]);
+
+  // Carregar dados da empresa do onboarding existente
+  const loadCompanyData = async () => {
+    if (!tenantId) return;
+    
+    try {
+      const { data: session, error } = await (supabase as any)
+        .from('onboarding_sessions')
+        .select('step1_data')
+        .eq('tenant_id', tenantId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && session?.step1_data) {
+        const step1 = session.step1_data;
+        setCompanyData({
+          razaoSocial: step1.razaoSocial,
+          nomeFantasia: step1.nomeFantasia,
+          cnpj: step1.cnpj,
+          cidade: step1.cidade,
+          estado: step1.estado,
+          setor: step1.setor,
+          anoFundacao: step1.anoFundacao,
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados da empresa:', error);
+    }
+  };
 
   const loadNextICPNumber = async () => {
     if (!tenantId) return;
@@ -53,13 +98,15 @@ export default function CreateNewICP() {
 
       if (error) throw error;
       
-      const nextNumber = (count || 0) + 1;
+      const currentCount = count || 0;
+      setExistingICPCount(currentCount);
+      
+      const nextNumber = currentCount + 1;
       const formattedNumber = String(nextNumber).padStart(3, '0');
       setIcpNumber(`ICP-${formattedNumber}`);
       setFormData(prev => ({ ...prev, icpNumber: `ICP-${formattedNumber}` }));
     } catch (error: any) {
       console.error('Erro ao buscar número do ICP:', error);
-      // Fallback: usar data atual
       const fallbackNumber = `ICP-${new Date().getTime().toString().slice(-3)}`;
       setIcpNumber(fallbackNumber);
       setFormData(prev => ({ ...prev, icpNumber: fallbackNumber }));
@@ -215,17 +262,61 @@ export default function CreateNewICP() {
     if (currentStep === 0) {
       return (
         <div className="space-y-6">
+          {/* Card da Empresa (Step 1 Base) */}
+          {companyData && (
+            <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-primary" />
+                  Empresa Base
+                </CardTitle>
+                <CardDescription>
+                  Este ICP será criado para a empresa abaixo (dados do Step 1)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Razão Social</p>
+                    <p className="font-semibold text-sm">{companyData.razaoSocial || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">CNPJ</p>
+                    <p className="font-mono text-sm">{companyData.cnpj || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Localização</p>
+                    <p className="text-sm flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {companyData.cidade}, {companyData.estado}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Setor</p>
+                    <Badge variant="outline">{companyData.setor || 'N/A'}</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Alerta informativo */}
+          <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+            <Info className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800 dark:text-blue-200">
+              <strong>Criando ICP #{existingICPCount + 1}</strong> - Os dados da empresa (Step 1) serão mantidos.
+              Você configurará novos setores, nichos e perfis a partir da Step 2.
+            </AlertDescription>
+          </Alert>
+
           <div className="space-y-2">
             <Label htmlFor="icpNumber">Número do ICP (Automático)</Label>
             <Input
               id="icpNumber"
               value={icpNumber}
               disabled
-              className="bg-muted"
+              className="bg-muted font-mono"
             />
-            <p className="text-sm text-muted-foreground">
-              Este número é gerado automaticamente para identificar seu ICP
-            </p>
           </div>
           
           <div className="space-y-2">
@@ -234,12 +325,31 @@ export default function CreateNewICP() {
               id="icpName"
               value={formData.icpName || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, icpName: e.target.value }))}
-              placeholder="Ex: ICP Manufatura SP, ICP Agronegócio MG..."
+              placeholder="Ex: ICP Manufatura SP, ICP Agronegócio MG, ICP Exportação..."
               className="text-lg"
             />
             <p className="text-sm text-muted-foreground">
-              Dê um nome descritivo para identificar este perfil de cliente ideal
+              Dê um nome descritivo para identificar este perfil de cliente ideal.
+              Sugestão: inclua o setor ou nicho alvo no nome.
             </p>
+          </div>
+
+          {/* Sugestões de nomes */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Sugestões de nomes:</p>
+            <div className="flex flex-wrap gap-2">
+              {['Manufatura Nacional', 'Indústria Automotiva', 'Agronegócio Sul', 'Tech Startups', 'Varejo Premium'].map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFormData(prev => ({ ...prev, icpName: suggestion }))}
+                  className="text-xs"
+                >
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
@@ -247,7 +357,8 @@ export default function CreateNewICP() {
               Cancelar
             </Button>
             <Button onClick={() => handleNext()}>
-              Continuar
+              <Target className="h-4 w-4 mr-2" />
+              Continuar para Step 2
             </Button>
           </div>
         </div>
