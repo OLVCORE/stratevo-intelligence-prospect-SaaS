@@ -619,18 +619,24 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
           const receita = lead.raw_data?.receita_federal || lead.raw_data?.receita || {};
           
           // Dados para inserir/atualizar - usando os campos REAIS da tabela icp_analysis_results
+          // IMPORTANTE: temperatura só pode ser 'hot', 'warm', 'cold' (CHECK constraint)
+          const tempValue = lead.temperatura;
+          const validTemperatura = (tempValue === 'hot' || tempValue === 'warm' || tempValue === 'cold') 
+            ? tempValue 
+            : 'cold'; // 'out' e outros valores vão para 'cold'
+
           const quarantineRecord = {
             cnpj: lead.cnpj,
             razao_social: lead.name || lead.razao_social || 'Sem Nome',
             nome_fantasia: lead.nome_fantasia || receita.fantasia || null,
             icp_score: lead.icp_score || 0,
-            temperatura: lead.temperatura || 'cold',
+            temperatura: validTemperatura,
             origem: 'icp_individual',
             // Campos opcionais
             uf: receita.uf || lead.uf || null,
             municipio: receita.municipio || lead.municipio || null,
             porte: receita.porte || lead.porte || null,
-            cnae_principal: receita.atividade_principal?.[0]?.code || lead.cnae_principal || null,
+            cnae_principal: receita.atividade_principal?.[0]?.code?.toString() || lead.cnae_principal || null,
             setor: lead.setor || receita.atividade_principal?.[0]?.text || null,
             is_cliente_totvs: false,
             moved_to_pool: false,
@@ -641,7 +647,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               sent_at: new Date().toISOString(),
               original_company_id: leadId,
               qualification_score: lead.icp_score,
-              qualification_temp: lead.temperatura
+              qualification_temp: lead.temperatura, // Guarda o valor original
+              original_temperatura: tempValue
             },
             analysis_data: {
               breakdown: lead.qualification_breakdown || {},
