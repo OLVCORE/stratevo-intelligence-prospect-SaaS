@@ -618,44 +618,52 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
 
           const receita = lead.raw_data?.receita_federal || lead.raw_data?.receita || {};
           
-          // Dados para inserir/atualizar - usando EXATAMENTE os mesmos campos que useSaveToQuarantine
+          // Dados para inserir/atualizar - usando os campos REAIS da tabela icp_analysis_results
           const quarantineRecord = {
-            company_id: leadId,
             cnpj: lead.cnpj,
-            razao_social: lead.name || lead.razao_social,
-            nome_fantasia: lead.nome_fantasia || receita.fantasia,
+            razao_social: lead.name || lead.razao_social || 'Sem Nome',
+            nome_fantasia: lead.nome_fantasia || receita.fantasia || null,
             icp_score: lead.icp_score || 0,
             temperatura: lead.temperatura || 'cold',
-            status: 'pendente',
-            motivo_descarte: null,
-            evidencias_totvs: [],
-            breakdown: lead.qualification_breakdown || {},
-            motivos: lead.decision_reason ? [lead.decision_reason] : [],
-            raw_analysis: {
+            origem: 'icp_individual',
+            // Campos opcionais
+            uf: receita.uf || lead.uf || null,
+            municipio: receita.municipio || lead.municipio || null,
+            porte: receita.porte || lead.porte || null,
+            cnae_principal: receita.atividade_principal?.[0]?.code || lead.cnae_principal || null,
+            setor: lead.setor || receita.atividade_principal?.[0]?.text || null,
+            is_cliente_totvs: false,
+            moved_to_pool: false,
+            reviewed: false,
+            raw_data: {
               ...lead.raw_data,
               source: 'qualification_engine',
               sent_at: new Date().toISOString(),
-              original_lead_id: leadId
+              original_company_id: leadId,
+              qualification_score: lead.icp_score,
+              qualification_temp: lead.temperatura
             },
-            // Campos adicionais da tabela
-            uf: receita.uf || lead.uf,
-            municipio: receita.municipio || lead.municipio,
-            porte: receita.porte || lead.porte,
-            cnae_principal: receita.atividade_principal?.[0]?.code || lead.cnae_principal,
+            analysis_data: {
+              breakdown: lead.qualification_breakdown || {},
+              decision_reason: lead.decision_reason || null
+            }
           };
 
+          console.log('[Quarentena] Record a inserir:', JSON.stringify(quarantineRecord, null, 2));
+
           if (existingByCnpj) {
-            // Atualizar registro existente para pendente
+            // Atualizar registro existente
             console.log('[Quarentena] Atualizando registro existente:', existingByCnpj.id);
             const { error: updateError } = await (supabase as any)
               .from('icp_analysis_results')
               .update({ 
-                status: 'pendente',
                 icp_score: quarantineRecord.icp_score,
                 temperatura: quarantineRecord.temperatura,
-                breakdown: quarantineRecord.breakdown,
-                motivos: quarantineRecord.motivos,
-                raw_analysis: quarantineRecord.raw_analysis
+                moved_to_pool: false,
+                reviewed: false,
+                raw_data: quarantineRecord.raw_data,
+                analysis_data: quarantineRecord.analysis_data,
+                updated_at: new Date().toISOString()
               })
               .eq('id', existingByCnpj.id);
             
@@ -663,17 +671,20 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               console.error('[Quarentena] Erro ao atualizar:', updateError);
               throw updateError;
             }
+            console.log('[Quarentena] ✅ Registro atualizado com sucesso!');
           } else {
             // Inserir novo registro
             console.log('[Quarentena] Inserindo novo registro para CNPJ:', lead.cnpj);
-            const { error: insertError } = await (supabase as any)
+            const { data: insertedData, error: insertError } = await (supabase as any)
               .from('icp_analysis_results')
-              .insert(quarantineRecord);
+              .insert(quarantineRecord)
+              .select();
             
             if (insertError) {
               console.error('[Quarentena] Erro ao inserir:', insertError);
               throw insertError;
             }
+            console.log('[Quarentena] ✅ Registro inserido com sucesso:', insertedData);
           }
 
           // 2. Atualizar na tabela companies
