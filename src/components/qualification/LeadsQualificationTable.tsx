@@ -471,8 +471,14 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     }
   };
 
-  // Enviar para quarentena ICP (página de quarentena)
+  // Enviar para quarentena ICP (página de quarentena com 9 abas)
   const handleSendToICPQuarantine = async (leadIds: string[]) => {
+    if (leadIds.length === 0) {
+      toast.error('Selecione pelo menos um lead');
+      return;
+    }
+    
+    setIsProcessing(true);
     try {
       toast.info(`🎯 Enviando ${leadIds.length} lead(s) para Quarentena ICP...`);
       
@@ -483,7 +489,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
         const updatedRawData = {
           ...(lead.raw_data || {}),
           sent_to_icp_quarantine: true,
-          icp_quarantine_date: new Date().toISOString()
+          icp_quarantine_date: new Date().toISOString(),
+          validation_status: 'quarantine'
         };
 
         await supabase
@@ -495,11 +502,28 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
           .eq('id', leadId);
       }
 
-      toast.success(`✅ ${leadIds.length} lead(s) enviado(s) para Quarentena ICP!`);
+      toast.success(`✅ ${leadIds.length} lead(s) enviado(s) para Quarentena ICP!`, {
+        description: 'Acesse a página Quarentena ICP para as 9 abas de validação',
+        action: {
+          label: 'Ir para Quarentena',
+          onClick: () => navigate('/central-icp/quarantine')
+        }
+      });
       setSelectedLeads([]);
       loadLeads();
     } catch (error: any) {
       toast.error('Erro ao enviar para quarentena', { description: error.message });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Navegar diretamente para Quarentena ICP
+  const handleGoToQuarantine = (leadId?: string) => {
+    if (leadId) {
+      navigate(`/central-icp/quarantine?company=${leadId}`);
+    } else {
+      navigate('/central-icp/quarantine');
     }
   };
 
@@ -1163,7 +1187,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                                 <Settings className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuContent align="end" className="w-64">
                               <DropdownMenuLabel>Ações da Empresa</DropdownMenuLabel>
                               
                               <DropdownMenuGroup>
@@ -1175,10 +1199,20 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                                   <FileBarChart className="h-4 w-4 mr-2" />
                                   Relatório Executivo
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleGoToQuarantine(lead.id)}>
+                                  <ExternalLink className="h-4 w-4 mr-2 text-purple-500" />
+                                  Abrir na Quarentena (9 abas)
+                                </DropdownMenuItem>
                               </DropdownMenuGroup>
 
                               <DropdownMenuSeparator />
-                              <DropdownMenuLabel>Enriquecimento</DropdownMenuLabel>
+                              <DropdownMenuLabel className="flex items-center gap-2">
+                                <Database className="h-3 w-3" />
+                                Enriquecimento
+                                {lead.raw_data?.enriched_receita && (
+                                  <Badge className="ml-auto bg-green-500 text-white text-[9px] px-1">RF ✓</Badge>
+                                )}
+                              </DropdownMenuLabel>
                               
                               <DropdownMenuGroup>
                                 <DropdownMenuItem 
@@ -1186,7 +1220,12 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                                   disabled={enrichingId === lead.id}
                                 >
                                   <Database className="h-4 w-4 mr-2 text-blue-500" />
-                                  Receita Federal
+                                  <div className="flex-1">
+                                    <span>Receita Federal</span>
+                                    {lead.raw_data?.enriched_receita && (
+                                      <span className="ml-2 text-green-500 text-xs">✓ Atualizado</span>
+                                    )}
+                                  </div>
                                   {enrichingId === lead.id && <Loader2 className="h-3 w-3 ml-auto animate-spin" />}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
@@ -1194,35 +1233,60 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                                   disabled={enrichingId === lead.id}
                                 >
                                   <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
-                                  360° Completo + IA
+                                  <div className="flex-1">
+                                    <span>360° Completo + IA</span>
+                                    {lead.raw_data?.enrichment_360 && (
+                                      <span className="ml-2 text-green-500 text-xs">✓</span>
+                                    )}
+                                  </div>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleRequalify(lead.id)}>
+                                <DropdownMenuItem 
+                                  onClick={() => handleRequalify(lead.id)}
+                                  disabled={qualifyingId === lead.id}
+                                >
                                   <Target className="h-4 w-4 mr-2 text-amber-500" />
                                   Requalificar ICP
+                                  {qualifyingId === lead.id && <Loader2 className="h-3 w-3 ml-auto animate-spin" />}
                                 </DropdownMenuItem>
                               </DropdownMenuGroup>
 
                               <DropdownMenuSeparator />
-                              <DropdownMenuLabel>Decisão</DropdownMenuLabel>
+                              <DropdownMenuLabel>Fluxo de Decisão</DropdownMenuLabel>
                               
                               <DropdownMenuGroup>
-                                <DropdownMenuItem onClick={() => {
-                                  setSelectedLeads([lead.id]);
-                                  handleBulkApprove();
-                                }}>
-                                  <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-                                  Aprovar para Pipeline
+                                <DropdownMenuItem 
+                                  onClick={() => {
+                                    setSelectedLeads([lead.id]);
+                                    handleBulkApprove();
+                                  }}
+                                  className="text-green-600"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  ✅ Aprovar para Pipeline
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleSendToICPQuarantine([lead.id])}>
-                                  <AlertTriangle className="h-4 w-4 mr-2 text-amber-600" />
-                                  Enviar p/ Quarentena ICP
+                                <DropdownMenuItem 
+                                  onClick={() => handleSendToICPQuarantine([lead.id])}
+                                  className="text-amber-600"
+                                >
+                                  <AlertTriangle className="h-4 w-4 mr-2" />
+                                  ⏳ Enviar p/ Quarentena ICP
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => {
-                                  setSelectedLeads([lead.id]);
-                                  handleBulkReject();
-                                }}>
-                                  <XCircle className="h-4 w-4 mr-2 text-red-600" />
-                                  Rejeitar / Descartar
+                                <DropdownMenuItem 
+                                  onClick={() => handleGoToQuarantine(lead.id)}
+                                  className="text-purple-600"
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  🔍 Validar nas 9 Abas
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => {
+                                    setSelectedLeads([lead.id]);
+                                    handleBulkReject();
+                                  }}
+                                  className="text-red-600"
+                                >
+                                  <XCircle className="h-4 w-4 mr-2" />
+                                  ❌ Rejeitar / Descartar
                                 </DropdownMenuItem>
                               </DropdownMenuGroup>
 
