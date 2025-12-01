@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import ICPAnalysisCriteriaConfig from '@/components/icp/ICPAnalysisCriteriaConfig';
 import BCGMatrix, { createBCGItemsFromICP } from '@/components/reports/BCGMatrix';
+import CompetitiveAnalysis from '@/components/icp/CompetitiveAnalysis';
 
 export default function ICPDetail() {
   const navigate = useNavigate();
@@ -235,11 +236,12 @@ export default function ICPDetail() {
       </div>
 
       <Tabs defaultValue="resumo" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex flex-wrap h-auto gap-1">
           <TabsTrigger value="resumo">Resumo Estratégico</TabsTrigger>
           <TabsTrigger value="configuracao">Configuração</TabsTrigger>
           <TabsTrigger value="criterios">Critérios de Análise</TabsTrigger>
           <TabsTrigger value="analise">Análise 360°</TabsTrigger>
+          <TabsTrigger value="competitiva" className="text-purple-600">🏆 Competitiva</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
         </TabsList>
 
@@ -782,6 +784,17 @@ export default function ICPDetail() {
 
         <TabsContent value="criterios">
           <ICPAnalysisCriteriaConfig icpId={id!} onSave={() => loadProfile()} />
+        </TabsContent>
+
+        {/* 🏆 Aba de Análise Competitiva */}
+        <TabsContent value="competitiva">
+          <CompetitiveAnalysis
+            tenantId={tenantId!}
+            icpId={id}
+            companyName={(tenant as any)?.razao_social || (tenant as any)?.nome_fantasia || profile?.nome || 'Sua Empresa'}
+            competitors={icpData?.concorrentes || []}
+            diferenciais={icpData?.diferenciais || []}
+          />
         </TabsContent>
 
         <TabsContent value="relatorios">
