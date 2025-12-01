@@ -1,0 +1,326 @@
+/**
+ * 📊 StrategicReportRenderer
+ * Componente para renderizar relatórios estratégicos de forma elegante e profissional
+ */
+
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  Target, 
+  AlertTriangle, 
+  CheckCircle2, 
+  Lightbulb,
+  BarChart3,
+  Building2,
+  Users,
+  DollarSign,
+  Globe,
+  Shield,
+  Zap,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface StrategicReportRendererProps {
+  content: string;
+  type: 'completo' | 'resumo';
+  className?: string;
+}
+
+// Componente para seções colapsáveis
+function CollapsibleSection({ 
+  title, 
+  icon: Icon, 
+  children, 
+  defaultOpen = true,
+  variant = 'default'
+}: { 
+  title: string; 
+  icon?: any; 
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  
+  const variantStyles = {
+    default: 'border-border bg-card',
+    success: 'border-green-500/30 bg-green-50/50 dark:bg-green-950/20',
+    warning: 'border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20',
+    danger: 'border-red-500/30 bg-red-50/50 dark:bg-red-950/20',
+    info: 'border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20',
+  };
+
+  const iconColors = {
+    default: 'text-primary',
+    success: 'text-green-600 dark:text-green-400',
+    warning: 'text-amber-600 dark:text-amber-400',
+    danger: 'text-red-600 dark:text-red-400',
+    info: 'text-blue-600 dark:text-blue-400',
+  };
+
+  return (
+    <Card className={cn('overflow-hidden transition-all', variantStyles[variant])}>
+      <CardHeader 
+        className="cursor-pointer hover:bg-muted/50 transition-colors py-4"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-3 text-lg">
+            {Icon && <Icon className={cn('h-5 w-5', iconColors[variant])} />}
+            {title}
+          </CardTitle>
+          {isOpen ? (
+            <ChevronUp className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+          )}
+        </div>
+      </CardHeader>
+      {isOpen && (
+        <CardContent className="pt-0">
+          {children}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// Componente para KPIs
+function KPICard({ 
+  label, 
+  value, 
+  trend, 
+  trendValue,
+  icon: Icon 
+}: { 
+  label: string; 
+  value: string; 
+  trend?: 'up' | 'down' | 'neutral';
+  trendValue?: string;
+  icon?: any;
+}) {
+  return (
+    <div className="bg-gradient-to-br from-muted/50 to-muted rounded-xl p-4 border">
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold">{value}</p>
+          {trendValue && (
+            <div className={cn(
+              'flex items-center gap-1 text-sm',
+              trend === 'up' && 'text-green-600',
+              trend === 'down' && 'text-red-600',
+              trend === 'neutral' && 'text-muted-foreground'
+            )}>
+              {trend === 'up' && <TrendingUp className="h-4 w-4" />}
+              {trend === 'down' && <TrendingDown className="h-4 w-4" />}
+              {trendValue}
+            </div>
+          )}
+        </div>
+        {Icon && <Icon className="h-8 w-8 text-primary/40" />}
+      </div>
+    </div>
+  );
+}
+
+// Parser para identificar seções do relatório
+function parseReportSections(content: string) {
+  const sections: { type: string; title: string; content: string }[] = [];
+  
+  // Regex para encontrar seções (##, ###, etc.)
+  const sectionRegex = /^(#{1,3})\s+(.+?)$/gm;
+  let lastIndex = 0;
+  let currentSection: { type: string; title: string; content: string } | null = null;
+  let match;
+
+  while ((match = sectionRegex.exec(content)) !== null) {
+    if (currentSection) {
+      currentSection.content = content.slice(lastIndex, match.index).trim();
+      if (currentSection.content) {
+        sections.push(currentSection);
+      }
+    }
+    
+    const level = match[1].length;
+    const title = match[2].trim();
+    
+    currentSection = {
+      type: level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3',
+      title: title.replace(/[📊📈📋🎯⚠️💡🔮📌✅❌🏢👥💰🌍🛡️⚡]/g, '').trim(),
+      content: ''
+    };
+    
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Última seção
+  if (currentSection) {
+    currentSection.content = content.slice(lastIndex).trim();
+    if (currentSection.content) {
+      sections.push(currentSection);
+    }
+  }
+
+  return sections;
+}
+
+// Determinar variante e ícone baseado no título da seção
+function getSectionMeta(title: string): { variant: 'default' | 'success' | 'warning' | 'danger' | 'info'; icon: any } {
+  const titleLower = title.toLowerCase();
+  
+  if (titleLower.includes('risco') || titleLower.includes('ameaça')) {
+    return { variant: 'danger', icon: AlertTriangle };
+  }
+  if (titleLower.includes('oportunidade') || titleLower.includes('recomendação')) {
+    return { variant: 'success', icon: Lightbulb };
+  }
+  if (titleLower.includes('análise') || titleLower.includes('mercado')) {
+    return { variant: 'info', icon: BarChart3 };
+  }
+  if (titleLower.includes('competitiv') || titleLower.includes('concorrent')) {
+    return { variant: 'warning', icon: Target };
+  }
+  if (titleLower.includes('icp') || titleLower.includes('cliente ideal')) {
+    return { variant: 'default', icon: Users };
+  }
+  if (titleLower.includes('financ') || titleLower.includes('faturamento')) {
+    return { variant: 'default', icon: DollarSign };
+  }
+  if (titleLower.includes('estratégi') || titleLower.includes('expansão')) {
+    return { variant: 'success', icon: Zap };
+  }
+  if (titleLower.includes('sumário') || titleLower.includes('executivo') || titleLower.includes('resumo')) {
+    return { variant: 'info', icon: Target };
+  }
+  
+  return { variant: 'default', icon: CheckCircle2 };
+}
+
+export default function StrategicReportRenderer({ content, type, className }: StrategicReportRendererProps) {
+  // Se o conteúdo for muito curto ou vazio
+  if (!content || content.trim().length < 50) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <p>Conteúdo do relatório não disponível ou ainda não foi gerado.</p>
+      </div>
+    );
+  }
+
+  // Tentar parsear seções
+  const sections = parseReportSections(content);
+
+  // Se não conseguiu parsear seções, renderizar como markdown simples mas estilizado
+  if (sections.length === 0) {
+    return (
+      <div className={cn('space-y-6', className)}>
+        <Card className="border-primary/20">
+          <CardContent className="pt-6">
+            <div className="prose prose-slate dark:prose-invert max-w-none
+              prose-headings:text-foreground prose-headings:font-bold
+              prose-h1:text-3xl prose-h1:border-b-2 prose-h1:border-primary/20 prose-h1:pb-4 prose-h1:mb-6
+              prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-h2:text-primary prose-h2:flex prose-h2:items-center prose-h2:gap-2
+              prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-4 prose-h3:text-foreground/90
+              prose-h4:text-lg prose-h4:mt-6 prose-h4:mb-3 prose-h4:font-semibold
+              prose-p:text-foreground/80 prose-p:leading-7 prose-p:mb-4
+              prose-li:text-foreground/80 prose-li:marker:text-primary prose-li:mb-2
+              prose-strong:text-foreground prose-strong:font-semibold
+              prose-ul:my-4 prose-ol:my-4
+              prose-table:border prose-table:border-border prose-table:rounded-lg prose-table:overflow-hidden
+              prose-th:bg-primary/10 prose-th:p-4 prose-th:text-left prose-th:font-semibold prose-th:text-foreground
+              prose-td:p-4 prose-td:border-t prose-td:border-border
+              prose-code:bg-muted prose-code:px-2 prose-code:py-1 prose-code:rounded-md prose-code:text-sm prose-code:font-mono
+              prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:bg-muted/30 prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:rounded-r-lg prose-blockquote:italic
+              prose-hr:border-border prose-hr:my-10
+              prose-a:text-primary prose-a:underline prose-a:underline-offset-4
+            ">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Renderizar com seções em cards
+  return (
+    <div className={cn('space-y-4', className)}>
+      {/* Header do Relatório */}
+      <div className="mb-8 text-center">
+        <Badge variant="outline" className="mb-4">
+          {type === 'completo' ? '📊 Relatório Estratégico Completo' : '📋 Resumo Executivo'}
+        </Badge>
+      </div>
+
+      {/* Seções do Relatório */}
+      {sections.map((section, index) => {
+        const { variant, icon } = getSectionMeta(section.title);
+        const isH1 = section.type === 'h1';
+        
+        // H1 = Seção principal (maior destaque)
+        if (isH1) {
+          return (
+            <div key={index} className="mb-8">
+              <h1 className="text-3xl font-bold mb-6 flex items-center gap-3 text-foreground border-b-2 border-primary/20 pb-4">
+                <Target className="h-8 w-8 text-primary" />
+                {section.title}
+              </h1>
+              {section.content && (
+                <div className="prose prose-slate dark:prose-invert max-w-none
+                  prose-p:text-foreground/80 prose-p:leading-7
+                  prose-li:text-foreground/80
+                  prose-strong:text-foreground
+                ">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // H2/H3 = Seções colapsáveis em cards
+        return (
+          <CollapsibleSection
+            key={index}
+            title={section.title}
+            icon={icon}
+            variant={variant}
+            defaultOpen={index < 5} // Primeiras 5 seções abertas
+          >
+            <div className="prose prose-slate dark:prose-invert max-w-none
+              prose-headings:text-foreground
+              prose-h3:text-lg prose-h3:mt-4 prose-h3:mb-2
+              prose-h4:text-base prose-h4:mt-3 prose-h4:mb-2
+              prose-p:text-foreground/80 prose-p:leading-7 prose-p:mb-3
+              prose-li:text-foreground/80 prose-li:mb-1.5
+              prose-strong:text-foreground
+              prose-ul:my-3 prose-ol:my-3
+              prose-table:text-sm prose-table:border prose-table:rounded-lg prose-table:overflow-hidden
+              prose-th:bg-muted prose-th:p-3 prose-th:text-left prose-th:font-medium
+              prose-td:p-3 prose-td:border-t
+            ">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+            </div>
+          </CollapsibleSection>
+        );
+      })}
+
+      {/* Footer */}
+      <div className="pt-8 border-t text-center">
+        <p className="text-sm text-muted-foreground">
+          📊 Relatório gerado por STRATEVO Intelligence • Análise de CEO/Estrategista de Mercado
+        </p>
+      </div>
+    </div>
+  );
+}
+

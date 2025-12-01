@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import StrategicReportRenderer from '@/components/reports/StrategicReportRenderer';
 
 export default function ICPReports() {
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ export default function ICPReports() {
     setLoading(true);
     try {
       // Buscar perfil do ICP
-      const { data: metadata, error: metaError } = await supabase
+      const { data: metadata, error: metaError } = await (supabase as any)
         .from('icp_profiles_metadata')
         .select('*')
         .eq('id', icpId)
@@ -64,7 +65,7 @@ export default function ICPReports() {
       setProfile(metadata);
       
       // Buscar dados do onboarding para contexto adicional
-      const { data: onboardingSession } = await supabase
+      const { data: onboardingSession } = await (supabase as any)
         .from('onboarding_sessions')
         .select('*')
         .eq('tenant_id', tenantId)
@@ -77,7 +78,7 @@ export default function ICPReports() {
       }
 
       // Buscar relatórios existentes
-      const { data: reportsData, error: reportsError } = await supabase
+      const { data: reportsData, error: reportsError } = await (supabase as any)
         .from('icp_reports')
         .select('*')
         .eq('icp_profile_metadata_id', icpId)
@@ -335,60 +336,30 @@ export default function ICPReports() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="prose max-w-none dark:prose-invert">
-                  {(() => {
-                    // 🔥 CRÍTICO: A estrutura correta é report_data.analysis
-                    // report_data é um JSONB que contém: { analysis: string, icp_metadata: {}, ... }
-                    const reportData = completeReport.report_data || {};
-                    const analysis = typeof reportData === 'object' 
-                      ? (reportData.analysis || reportData.report_data?.analysis)
-                      : (typeof reportData === 'string' ? reportData : null);
-                    
-                    console.log('[ICPReports] Relatório Completo:', {
-                      hasReportData: !!completeReport.report_data,
-                      reportDataType: typeof completeReport.report_data,
-                      hasAnalysis: !!analysis,
-                      analysisType: typeof analysis,
-                      analysisLength: typeof analysis === 'string' ? analysis.length : 0,
-                    });
-                    
-                    if (analysis && typeof analysis === 'string' && analysis.trim().length > 0) {
-                      return (
-                        <div className="prose prose-slate dark:prose-invert max-w-none
-                          prose-headings:text-foreground prose-headings:font-bold
-                          prose-h1:text-2xl prose-h1:border-b prose-h1:pb-2 prose-h1:mb-4
-                          prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-h2:text-primary
-                          prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3
-                          prose-p:text-muted-foreground prose-p:leading-relaxed
-                          prose-li:text-muted-foreground prose-li:marker:text-primary
-                          prose-strong:text-foreground
-                          prose-table:border prose-table:border-border prose-table:text-sm
-                          prose-th:bg-muted prose-th:p-3 prose-th:text-left prose-th:font-semibold
-                          prose-td:p-3 prose-td:border prose-td:border-border
-                          prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
-                          prose-blockquote:border-l-primary prose-blockquote:bg-muted/50 prose-blockquote:py-2 prose-blockquote:px-4
-                          prose-hr:border-border prose-hr:my-8
-                        ">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{analysis}</ReactMarkdown>
-                        </div>
-                      );
-                    } else {
-                      // Se não encontrar análise, mostrar mensagem útil
-                      return (
-                        <div className="space-y-4">
-                          <Alert>
-                            <AlertDescription>
-                              O relatório ainda não possui análise gerada. Os dados técnicos estão abaixo.
-                            </AlertDescription>
-                          </Alert>
-                          <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm max-h-[600px]">
-                            {JSON.stringify(completeReport.report_data || completeReport, null, 2)}
-                          </pre>
-                        </div>
-                      );
-                    }
-                  })()}
-                </div>
+                {(() => {
+                  // Extrair análise do relatório
+                  const reportData = completeReport.report_data || {};
+                  const analysis = typeof reportData === 'object' 
+                    ? (reportData.analysis || reportData.report_data?.analysis)
+                    : (typeof reportData === 'string' ? reportData : null);
+                  
+                  if (analysis && typeof analysis === 'string' && analysis.trim().length > 0) {
+                    return <StrategicReportRenderer content={analysis} type="completo" />;
+                  } else {
+                    return (
+                      <div className="space-y-4">
+                        <Alert>
+                          <AlertDescription>
+                            O relatório ainda não possui análise gerada. Os dados técnicos estão abaixo.
+                          </AlertDescription>
+                        </Alert>
+                        <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm max-h-[600px]">
+                          {JSON.stringify(completeReport.report_data || completeReport, null, 2)}
+                        </pre>
+                      </div>
+                    );
+                  }
+                })()}
               </CardContent>
             </Card>
           ) : (
@@ -420,56 +391,29 @@ export default function ICPReports() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="prose max-w-none dark:prose-invert">
-                  {(() => {
-                    // 🔥 CRÍTICO: A estrutura correta é report_data.analysis
-                    const reportData = summaryReport.report_data || {};
-                    const analysis = typeof reportData === 'object' 
-                      ? (reportData.analysis || reportData.report_data?.analysis)
-                      : (typeof reportData === 'string' ? reportData : null);
-                    
-                    console.log('[ICPReports] Resumo:', {
-                      hasReportData: !!summaryReport.report_data,
-                      hasAnalysis: !!analysis,
-                      analysisType: typeof analysis,
-                    });
-                    
-                    if (analysis && typeof analysis === 'string' && analysis.trim().length > 0) {
-                      return (
-                        <div className="prose prose-slate dark:prose-invert max-w-none
-                          prose-headings:text-foreground prose-headings:font-bold
-                          prose-h1:text-2xl prose-h1:border-b prose-h1:pb-2 prose-h1:mb-4
-                          prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-h2:text-primary
-                          prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3
-                          prose-p:text-muted-foreground prose-p:leading-relaxed
-                          prose-li:text-muted-foreground prose-li:marker:text-primary
-                          prose-strong:text-foreground
-                          prose-table:border prose-table:border-border prose-table:text-sm
-                          prose-th:bg-muted prose-th:p-3 prose-th:text-left prose-th:font-semibold
-                          prose-td:p-3 prose-td:border prose-td:border-border
-                          prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
-                          prose-blockquote:border-l-primary prose-blockquote:bg-muted/50 prose-blockquote:py-2 prose-blockquote:px-4
-                          prose-hr:border-border prose-hr:my-8
-                        ">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{analysis}</ReactMarkdown>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <div className="space-y-4">
-                          <Alert>
-                            <AlertDescription>
-                              O resumo ainda não possui análise gerada. Os dados técnicos estão abaixo.
-                            </AlertDescription>
-                          </Alert>
-                          <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm max-h-[600px]">
-                            {JSON.stringify(summaryReport.report_data || summaryReport, null, 2)}
-                          </pre>
-                        </div>
-                      );
-                    }
-                  })()}
-                </div>
+                {(() => {
+                  const reportData = summaryReport.report_data || {};
+                  const analysis = typeof reportData === 'object' 
+                    ? (reportData.analysis || reportData.report_data?.analysis)
+                    : (typeof reportData === 'string' ? reportData : null);
+                  
+                  if (analysis && typeof analysis === 'string' && analysis.trim().length > 0) {
+                    return <StrategicReportRenderer content={analysis} type="resumo" />;
+                  } else {
+                    return (
+                      <div className="space-y-4">
+                        <Alert>
+                          <AlertDescription>
+                            O resumo ainda não possui análise gerada. Os dados técnicos estão abaixo.
+                          </AlertDescription>
+                        </Alert>
+                        <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm max-h-[600px]">
+                          {JSON.stringify(summaryReport.report_data || summaryReport, null, 2)}
+                        </pre>
+                      </div>
+                    );
+                  }
+                })()}
               </CardContent>
             </Card>
           ) : (

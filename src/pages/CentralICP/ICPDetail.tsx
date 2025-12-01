@@ -5,11 +5,12 @@ import { useTenant } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp, Users, DollarSign, MapPin, AlertTriangle, Lightbulb, TrendingDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import ICPAnalysisCriteriaConfig from '@/components/icp/ICPAnalysisCriteriaConfig';
+import BCGMatrix, { createBCGItemsFromICP } from '@/components/reports/BCGMatrix';
 
 export default function ICPDetail() {
   const navigate = useNavigate();
@@ -532,125 +533,251 @@ export default function ICPDetail() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="analise">
-          <Card>
-            <CardHeader>
-              <CardTitle>Análise 360° Estratégica</CardTitle>
-              <CardDescription>Análise completa baseada nos dados do ICP</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {icpData ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Setores e Nichos</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Setores Alvo</p>
-                            <div className="flex flex-wrap gap-2 mt-1">
-                              {(icpData.setores_alvo || []).map((setor: string, idx: number) => (
-                                <Badge key={idx} variant="outline">{setor}</Badge>
-                              ))}
-                            </div>
+        <TabsContent value="analise" className="space-y-6">
+          {icpData ? (
+            <>
+              {/* KPIs Principais */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">Nichos Alvo</p>
+                        <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                          {(icpData.setores_alvo || icpData.nichos_alvo || []).length}
+                        </p>
+                      </div>
+                      <Target className="h-8 w-8 text-blue-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-green-700 dark:text-green-300">Clientes Base</p>
+                        <p className="text-3xl font-bold text-green-900 dark:text-green-100">
+                          {(icpData.clientes_atuais || []).length}
+                        </p>
+                      </div>
+                      <Users className="h-8 w-8 text-green-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-purple-700 dark:text-purple-300">Benchmarking</p>
+                        <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                          {(icpData.empresas_benchmarking || []).length}
+                        </p>
+                      </div>
+                      <BarChart3 className="h-8 w-8 text-purple-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-amber-700 dark:text-amber-300">CNAEs Alvo</p>
+                        <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">
+                          {(icpData.cnaes_alvo || []).length}
+                        </p>
+                      </div>
+                      <FileText className="h-8 w-8 text-amber-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Matriz BCG */}
+              <BCGMatrix 
+                items={createBCGItemsFromICP(icpData)}
+                title="Matriz BCG - Priorização de Nichos e Clientes"
+                description="Análise estratégica de portfólio baseada em crescimento de mercado e participação"
+              />
+
+              {/* Grid de Análises */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Perfil Financeiro */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <DollarSign className="h-5 w-5 text-green-500" />
+                      Perfil Financeiro Alvo
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {icpData.faturamento_min || icpData.faturamento_max ? (
+                      <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Faixa de Faturamento</p>
+                        <p className="text-xl font-bold text-green-700 dark:text-green-400">
+                          R$ {(icpData.faturamento_min || 0).toLocaleString('pt-BR')} - R$ {(icpData.faturamento_max || 0).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    ) : null}
+                    {icpData.tickets_ciclos && icpData.tickets_ciclos.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Tickets e Ciclos de Venda</p>
+                        {icpData.tickets_ciclos.slice(0, 3).map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between text-sm p-2 bg-muted rounded">
+                            <span>{item.criterio || `Ticket ${idx + 1}`}</span>
+                            <span className="font-medium">
+                              R$ {(item.ticketMedio || item.ticketMedioMin || 0).toLocaleString('pt-BR')}
+                            </span>
                           </div>
-                          {icpData.nichos_alvo && icpData.nichos_alvo.length > 0 && (
-                            <div>
-                              <p className="text-sm text-muted-foreground">Nichos Alvo</p>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                {(icpData.nichos_alvo || []).map((nicho: string, idx: number) => (
-                                  <Badge key={idx} variant="secondary">{nicho}</Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Perfil Demográfico</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {icpData.porte_alvo && icpData.porte_alvo.length > 0 && (
-                            <div>
-                              <p className="text-sm text-muted-foreground">Porte</p>
-                              <p className="font-semibold">
-                                {icpData.porte_alvo.map((p: any) => 
-                                  `${p.minimo || 'N/A'} - ${p.maximo || 'N/A'} funcionários`
-                                ).join(', ')}
-                              </p>
-                            </div>
-                          )}
-                          {icpData.localizacao_alvo && (
-                            <div>
-                              <p className="text-sm text-muted-foreground">Localização</p>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                {(icpData.localizacao_alvo.estados || []).map((estado: string, idx: number) => (
-                                  <Badge key={idx} variant="outline">{estado}</Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">CNAEs Alvo</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {icpData.cnaes_alvo && icpData.cnaes_alvo.length > 0 ? (
+                {/* Localização Geográfica */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <MapPin className="h-5 w-5 text-blue-500" />
+                      Cobertura Geográfica
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {icpData.localizacao_alvo?.estados && icpData.localizacao_alvo.estados.length > 0 && (
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-2">Estados Alvo</p>
                         <div className="flex flex-wrap gap-2">
-                          {icpData.cnaes_alvo.slice(0, 20).map((cnae: string, idx: number) => (
-                            <Badge key={idx} variant="secondary" className="font-mono text-xs">{cnae}</Badge>
+                          {icpData.localizacao_alvo.estados.map((estado: string, idx: number) => (
+                            <Badge key={idx} variant="outline" className="bg-blue-50 dark:bg-blue-950">
+                              {estado}
+                            </Badge>
                           ))}
-                          {icpData.cnaes_alvo.length > 20 && (
-                            <Badge variant="secondary">+{icpData.cnaes_alvo.length - 20} mais</Badge>
-                          )}
                         </div>
-                      ) : (
-                        <p className="text-muted-foreground">Nenhum CNAE configurado</p>
-                      )}
-                    </CardContent>
-                  </Card>
+                      </div>
+                    )}
+                    {icpData.localizacao_alvo?.cidades && icpData.localizacao_alvo.cidades.length > 0 && (
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-2">Cidades Prioritárias</p>
+                        <div className="flex flex-wrap gap-2">
+                          {icpData.localizacao_alvo.cidades.slice(0, 8).map((cidade: string, idx: number) => (
+                            <Badge key={idx} variant="secondary">{cidade}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Análise Estratégica</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-muted-foreground">
-                        Para gerar uma análise 360° completa com insights e recomendações baseadas em IA,
-                        acesse a aba "Relatórios" e gere um relatório completo do ICP.
+                {/* Diferenciais Competitivos */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Lightbulb className="h-5 w-5 text-amber-500" />
+                      Diferenciais Competitivos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {icpData.diferenciais && icpData.diferenciais.length > 0 ? (
+                      <ul className="space-y-2">
+                        {icpData.diferenciais.slice(0, 5).map((dif: string, idx: number) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                            <span className="text-sm">{dif}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">Nenhum diferencial registrado</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Concorrentes */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <AlertTriangle className="h-5 w-5 text-red-500" />
+                      Concorrentes Diretos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {icpData.concorrentes && icpData.concorrentes.length > 0 ? (
+                      <div className="space-y-2">
+                        {icpData.concorrentes.slice(0, 5).map((conc: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-950/30 rounded">
+                            <span className="text-sm font-medium">
+                              {typeof conc === 'string' ? conc : conc.nome || conc.razaoSocial}
+                            </span>
+                            <Badge variant="destructive" className="text-xs">Monitorar</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">Nenhum concorrente registrado</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* CNAEs Detalhados */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <FileText className="h-5 w-5 text-primary" />
+                    CNAEs Alvo ({(icpData.cnaes_alvo || []).length})
+                  </CardTitle>
+                  <CardDescription>
+                    Códigos de Atividade Econômica prioritários para prospecção
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {icpData.cnaes_alvo && icpData.cnaes_alvo.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {icpData.cnaes_alvo.map((cnae: string, idx: number) => (
+                        <Badge key={idx} variant="secondary" className="font-mono text-xs">
+                          {cnae}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">Nenhum CNAE configurado</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* CTA para Relatório Completo */}
+              <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold">Quer uma análise ainda mais profunda?</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Gere um relatório completo com análise de CEO, previsões e recomendações estratégicas.
                       </p>
-                      <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={() => navigate(`/central-icp/reports/${id}`)}
-                      >
-                        <FileText className="w-4 h-4 mr-2" />
-                        Gerar Relatório Completo
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : (
+                    </div>
+                    <Button onClick={() => navigate(`/central-icp/reports/${id}`)}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Gerar Relatório Completo
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
                 <div className="text-center py-12">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground animate-pulse" />
                   <p className="text-muted-foreground">
                     Carregando dados do ICP para análise 360°...
                   </p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="criterios">
