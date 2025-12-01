@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -171,9 +171,9 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
   const uniqueCnpjStatus = useMemo(() => {
     const statuses = leads.map(l => {
       const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
-      const situacao = receita?.situacao || l.situacao_cadastral;
-      if (!situacao) return 'Pendente';
-      const s = situacao.toUpperCase();
+      const situacao = receita?.situacao || receita?.descricao_situacao_cadastral || l.situacao_cadastral;
+      if (!situacao || typeof situacao !== 'string') return 'Pendente';
+      const s = String(situacao).toUpperCase();
       if (s.includes('ATIVA')) return 'Ativa';
       if (s.includes('BAIXA') || s.includes('INATIV')) return 'Inativa';
       if (s.includes('INAPTA') || s.includes('SUSPENS')) return 'Inapta';
@@ -229,8 +229,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     if (filterCnpjStatus.length > 0) {
       filtered = filtered.filter(l => {
         const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
-        const situacao = receita?.situacao || l.situacao_cadastral || '';
-        const s = situacao.toUpperCase();
+        const situacao = receita?.situacao || receita?.descricao_situacao_cadastral || l.situacao_cadastral || '';
+        const s = typeof situacao === 'string' ? situacao.toUpperCase() : String(situacao || '').toUpperCase();
         let status = 'Pendente';
         if (s.includes('ATIVA')) status = 'Ativa';
         else if (s.includes('BAIXA') || s.includes('INATIV')) status = 'Inativa';
@@ -1133,8 +1133,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       title="Status CNPJ"
                       values={leads.map(l => {
                         const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
-                        const situacao = receita?.situacao || l.situacao_cadastral || '';
-                        const s = situacao.toUpperCase();
+                        const situacao = receita?.situacao || receita?.descricao_situacao_cadastral || l.situacao_cadastral || '';
+                        const s = typeof situacao === 'string' ? situacao.toUpperCase() : String(situacao || '').toUpperCase();
                         if (s.includes('ATIVA')) return 'Ativa';
                         if (s.includes('BAIXA') || s.includes('INATIV')) return 'Inativa';
                         if (s.includes('INAPTA') || s.includes('SUSPENS')) return 'Inapta';
@@ -1176,9 +1176,8 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               </TableHeader>
               <TableBody>
                 {filteredLeads.slice(0, pageSize).map((lead) => (
-                  <>
+                  <React.Fragment key={lead.id}>
                     <TableRow 
-                      key={lead.id} 
                       className={`${expandedRow === lead.id ? 'bg-muted/30' : ''} ${selectedLeads.includes(lead.id) ? 'bg-primary/5' : ''}`}
                     >
                       <TableCell>
@@ -1594,7 +1593,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
