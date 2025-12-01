@@ -43,23 +43,50 @@ export default function ICPDetail() {
       if (metaError) throw metaError;
       setProfile(metadata);
 
-      // Buscar dados completos do ICP no schema do tenant via RPC
-      if (metadata?.schema_name && metadata?.icp_profile_id) {
-        try {
-          const { data: icpData, error: icpError } = await supabase
-            .rpc('get_icp_profile_from_tenant', {
-              p_schema_name: metadata.schema_name,
-              p_icp_profile_id: metadata.icp_profile_id
-            });
+      // 🔥 Buscar dados completos do onboarding_sessions para obter benchmarking e clientes
+      const { data: sessionData, error: sessionError } = await (supabase as any)
+        .from('onboarding_sessions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('updated_at', { ascending: false })
+        .limit(1);
 
-          if (!icpError && icpData) {
-            setIcpData(icpData);
-          } else if (icpError) {
-            console.warn('[ICPDetail] Erro ao buscar icp_profile via RPC:', icpError);
-          }
-        } catch (err) {
-          console.error('[ICPDetail] Erro ao buscar icp_profile:', err);
-        }
+      if (!sessionError && sessionData && sessionData.length > 0) {
+        const session = sessionData[0];
+        
+        // Construir icpData a partir dos dados do onboarding + metadata
+        const enrichedIcpData = {
+          ...(metadata?.icp_recommendation?.icp_profile || {}),
+          setores_alvo: session.step2_data?.setoresAlvo || session.step3_data?.setoresAlvo || [],
+          nichos_alvo: session.step2_data?.nichosAlvo || session.step3_data?.nichosAlvo || [],
+          cnaes_alvo: session.step2_data?.cnaesAlvo || session.step3_data?.cnaesAlvo || [],
+          faturamento_min: session.step3_data?.faturamentoAlvo?.minimo,
+          faturamento_max: session.step3_data?.faturamentoAlvo?.maximo,
+          funcionarios_min: session.step3_data?.funcionariosAlvo?.minimo,
+          funcionarios_max: session.step3_data?.funcionariosAlvo?.maximo,
+          porte_alvo: session.step3_data?.porteAlvo || [],
+          localizacao_alvo: session.step3_data?.localizacaoAlvo || {},
+          diferenciais: session.step4_data?.diferenciais || [],
+          casos_de_uso: session.step4_data?.casosDeUso || [],
+          concorrentes: session.step4_data?.concorrentesDiretos || [],
+          tickets_ciclos: session.step4_data?.ticketsECiclos || [],
+          clientes_atuais: session.step5_data?.clientesAtuais || [],
+          empresas_benchmarking: session.step5_data?.empresasBenchmarking || [],
+          analise_detalhada: metadata?.icp_recommendation?.analise_detalhada || {},
+          score_confianca: metadata?.icp_recommendation?.score_confianca || 0,
+        };
+        
+        console.log('[ICPDetail] 📊 Dados enriquecidos:', {
+          setores: enrichedIcpData.setores_alvo?.length,
+          cnaes: enrichedIcpData.cnaes_alvo?.length,
+          clientes: enrichedIcpData.clientes_atuais?.length,
+          benchmarking: enrichedIcpData.empresas_benchmarking?.length,
+        });
+        
+        setIcpData(enrichedIcpData);
+      } else if (metadata?.icp_recommendation) {
+        console.warn('[ICPDetail] ⚠️ Usando apenas metadata');
+        setIcpData(metadata.icp_recommendation.icp_profile || {});
       }
     } catch (error: any) {
       console.error('Erro ao carregar ICP:', error);
@@ -210,8 +237,8 @@ export default function ICPDetail() {
         <TabsList>
           <TabsTrigger value="resumo">Resumo Estratégico</TabsTrigger>
           <TabsTrigger value="configuracao">Configuração</TabsTrigger>
-          <TabsTrigger value="analise">Análise 360°</TabsTrigger>
           <TabsTrigger value="criterios">Critérios de Análise</TabsTrigger>
+          <TabsTrigger value="analise">Análise 360°</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
         </TabsList>
 
@@ -248,22 +275,30 @@ export default function ICPDetail() {
               </div>
 
               {icpData && (
-                <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-6 pt-4 border-t">
+                  {/* Nichos Alvo (dentro do setor foco) */}
                   <div>
-                    <h3 className="font-semibold mb-2">Setores Alvo</h3>
+                    <h3 className="font-semibold mb-2 flex items-center gap-2">
+                      <Target className="w-4 h-4 text-primary" />
+                      Nichos Alvo (dentro do setor {profile.setor_foco || 'Manufatura'})
+                    </h3>
                     <div className="flex flex-wrap gap-2">
-                      {(icpData.setores_alvo || []).map((setor: string, idx: number) => (
-                        <Badge key={idx} variant="outline">{setor}</Badge>
+                      {(icpData.setores_alvo || icpData.nichos_alvo || []).map((nicho: string, idx: number) => (
+                        <Badge key={idx} variant="outline">{nicho}</Badge>
                       ))}
                     </div>
                   </div>
 
+                  {/* CNAEs Alvo */}
                   {icpData.cnaes_alvo && icpData.cnaes_alvo.length > 0 && (
                     <div>
-                      <h3 className="font-semibold mb-2">CNAEs Alvo</h3>
+                      <h3 className="font-semibold mb-2 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-primary" />
+                        CNAEs Alvo
+                      </h3>
                       <div className="flex flex-wrap gap-2">
                         {(icpData.cnaes_alvo || []).slice(0, 10).map((cnae: string, idx: number) => (
-                          <Badge key={idx} variant="secondary">{cnae}</Badge>
+                          <Badge key={idx} variant="secondary" className="font-mono">{cnae}</Badge>
                         ))}
                         {icpData.cnaes_alvo.length > 10 && (
                           <Badge variant="secondary">+{icpData.cnaes_alvo.length - 10} mais</Badge>
@@ -272,24 +307,80 @@ export default function ICPDetail() {
                     </div>
                   )}
 
+                  {/* Perfil Financeiro */}
                   <div className="grid grid-cols-2 gap-4">
                     {icpData.faturamento_min && icpData.faturamento_max && (
                       <div>
-                        <h3 className="font-semibold mb-2">Faturamento</h3>
-                        <p className="text-muted-foreground">
+                        <h3 className="font-semibold mb-2">💰 Faturamento Alvo</h3>
+                        <p className="text-lg font-medium text-primary">
                           R$ {icpData.faturamento_min.toLocaleString('pt-BR')} - R$ {icpData.faturamento_max.toLocaleString('pt-BR')}
                         </p>
                       </div>
                     )}
                     {icpData.funcionarios_min && icpData.funcionarios_max && (
                       <div>
-                        <h3 className="font-semibold mb-2">Funcionários</h3>
-                        <p className="text-muted-foreground">
+                        <h3 className="font-semibold mb-2">👥 Funcionários</h3>
+                        <p className="text-lg font-medium text-primary">
                           {icpData.funcionarios_min} - {icpData.funcionarios_max}
                         </p>
                       </div>
                     )}
                   </div>
+
+                  {/* Empresas de Benchmarking */}
+                  {icpData.empresas_benchmarking && icpData.empresas_benchmarking.length > 0 && (
+                    <div className="pt-4 border-t">
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4 text-primary" />
+                        🎯 Empresas de Benchmarking (Clientes Desejados)
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {icpData.empresas_benchmarking.slice(0, 6).map((empresa: any, idx: number) => (
+                          <Card key={idx} className="bg-muted/50">
+                            <CardContent className="p-3">
+                              <p className="font-semibold text-sm">{empresa.nome || empresa.razaoSocial}</p>
+                              <p className="text-xs text-muted-foreground">{empresa.setor || 'Setor não identificado'}</p>
+                              {empresa.capitalSocial && (
+                                <p className="text-xs text-primary mt-1">
+                                  Capital: R$ {empresa.capitalSocial.toLocaleString('pt-BR')}
+                                </p>
+                              )}
+                              {empresa.motivoReferencia && (
+                                <p className="text-xs text-muted-foreground mt-1 italic">
+                                  "{empresa.motivoReferencia}"
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                      {icpData.empresas_benchmarking.length > 6 && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          +{icpData.empresas_benchmarking.length - 6} empresas adicionais analisadas
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Clientes Atuais (Base de Análise) */}
+                  {icpData.clientes_atuais && icpData.clientes_atuais.length > 0 && (
+                    <div className="pt-4 border-t">
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ✅ Clientes Atuais (Base de Análise)
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {icpData.clientes_atuais.slice(0, 5).map((cliente: any, idx: number) => (
+                          <Badge key={idx} variant="outline" className="bg-green-50 dark:bg-green-950">
+                            {cliente.nome || cliente.razaoSocial}
+                          </Badge>
+                        ))}
+                        {icpData.clientes_atuais.length > 5 && (
+                          <Badge variant="secondary">+{icpData.clientes_atuais.length - 5} mais</Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
