@@ -16,6 +16,9 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
+import { TenantProductsCatalog } from '@/components/products/TenantProductsCatalog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Props {
   onNext: (data: any) => void;
@@ -41,6 +44,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   // 🔥 NOVO: Estados para scan de produtos do tenant
   const [scanningTenantWebsite, setScanningTenantWebsite] = useState(false);
   const [tenantProductsCount, setTenantProductsCount] = useState(0);
+  const [productsCatalogOpen, setProductsCatalogOpen] = useState(false);
   
   // 🔥 NOVO: Estados para concorrentes
   interface ConcorrenteDireto {
@@ -598,6 +602,46 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           />
         </div>
       </div>
+
+      {/* 🔥 NOVO: Catálogo de Produtos do Tenant */}
+      <Separator className="my-6" />
+      
+      <Collapsible open={productsCatalogOpen} onOpenChange={setProductsCatalogOpen}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Catálogo de Produtos
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Gerencie seus produtos para cálculo de FIT com prospects. Cadastre manualmente ou extraia do website.
+            </p>
+          </div>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="flex items-center gap-2">
+              {productsCatalogOpen ? (
+                <>
+                  <ChevronUp className="h-4 w-4" />
+                  Ocultar Catálogo
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-4 w-4" />
+                  Abrir Catálogo
+                </>
+              )}
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+
+        <CollapsibleContent>
+          <Card className="mt-4">
+            <CardContent className="pt-6">
+              <TenantProductsCatalog />
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* 🔥 NOVO: Seção de Concorrentes */}
       <Separator className="my-6" />
