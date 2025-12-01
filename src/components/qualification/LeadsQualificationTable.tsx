@@ -1067,73 +1067,50 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto w-full">
-            <Table className="min-w-[1200px]">
+            <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10 sticky left-0 bg-background z-10">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpandedRow(null)}>
-                      {expandedRow ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-12 sticky left-10 bg-background z-10">
+                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-12">
                     <Checkbox
                       checked={selectedLeads.length === filteredLeads.length && filteredLeads.length > 0}
                       onCheckedChange={toggleSelectAll}
                     />
                   </TableHead>
-                  <TableHead className="min-w-[220px]">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('name')} className="h-8 gap-1">
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('name')} className="h-8 flex items-center gap-1">
                       Empresa <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead className="min-w-[140px]">
-                    <div className="flex items-center gap-1">
-                      CNPJ
-                      <ArrowUpDown className="h-3 w-3 opacity-50" />
-                    </div>
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('cnpj')} className="h-8 flex items-center gap-1">
+                      CNPJ <ArrowUpDown className="h-3 w-3" />
+                    </Button>
                   </TableHead>
-                  <TableHead className="min-w-[100px]">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('icp_score')} className="h-8 gap-1">
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('icp_score')} className="h-8 flex items-center gap-1">
                       Score ICP <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead className="min-w-[110px]">
-                    <div className="flex items-center gap-1">
-                      <Filter className="h-3 w-3 opacity-50" />
-                      Temperatura
-                    </div>
+                  <TableHead>Temperatura</TableHead>
+                  <TableHead>Status CNPJ</TableHead>
+                  <TableHead>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="flex items-center gap-1">
+                          Status Análise
+                          <AlertTriangle className="h-3 w-3 opacity-50" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">0-100% baseado em:</p>
+                          <p className="text-xs">Receita Federal, Apollo, 360°, TOTVS</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableHead>
-                  <TableHead className="min-w-[120px]">
-                    <div className="flex items-center gap-1">
-                      <Filter className="h-3 w-3 opacity-50" />
-                      Status CNPJ
-                    </div>
-                  </TableHead>
-                  <TableHead className="min-w-[130px]">
-                    <div className="flex items-center gap-1">
-                      Status Análise
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <AlertTriangle className="h-3 w-3 opacity-50" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">0-100% baseado em:</p>
-                            <p className="text-xs">Receita Federal, Apollo, 360°, TOTVS</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableHead>
-                  <TableHead className="min-w-[60px]">
-                    <div className="flex items-center gap-1">
-                      <Filter className="h-3 w-3 opacity-50" />
-                      UF
-                    </div>
-                  </TableHead>
-                  <TableHead className="min-w-[180px]">Setor</TableHead>
-                  <TableHead className="text-right min-w-[150px] sticky right-0 bg-background z-10">Ações</TableHead>
+                  <TableHead>UF</TableHead>
+                  <TableHead>Setor</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1560,7 +1537,6 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                 ))}
               </TableBody>
             </Table>
-            </div>
           )}
         </CardContent>
       </Card>
