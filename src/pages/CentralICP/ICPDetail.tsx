@@ -5,9 +5,10 @@ import { useTenant } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import ICPAnalysisCriteriaConfig from '@/components/icp/ICPAnalysisCriteriaConfig';
 
 export default function ICPDetail() {
@@ -298,13 +299,144 @@ export default function ICPDetail() {
         <TabsContent value="configuracao">
           <Card>
             <CardHeader>
-              <CardTitle>Configuração Completa</CardTitle>
-              <CardDescription>Detalhes técnicos do ICP</CardDescription>
+              <CardTitle>Configuração do ICP</CardTitle>
+              <CardDescription>Dados técnicos e metadados do perfil</CardDescription>
             </CardHeader>
-            <CardContent>
-              <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm">
-                {JSON.stringify({ profile, icpData }, null, 2)}
-              </pre>
+            <CardContent className="space-y-6">
+              {/* Informações do Perfil */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-primary" />
+                    Identificação
+                  </h3>
+                  <div className="space-y-3 pl-7">
+                    <div>
+                      <p className="text-sm text-muted-foreground">ID do Perfil</p>
+                      <p className="font-mono text-sm">{profile?.id || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Nome</p>
+                      <p className="font-semibold">{profile?.nome || icpData?.nome || 'ICP Principal'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Tipo</p>
+                      <Badge variant={profile?.tipo === 'core' ? 'default' : 'secondary'}>
+                        {profile?.tipo || 'core'}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Status</p>
+                      <Badge variant={profile?.ativo ? 'default' : 'destructive'}>
+                        {profile?.ativo ? '✓ Ativo' : '✗ Inativo'}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <Target className="w-5 h-5 text-primary" />
+                    Foco Estratégico
+                  </h3>
+                  <div className="space-y-3 pl-7">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Setor Principal</p>
+                      <p className="font-semibold">{profile?.setor_foco || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Nicho Principal</p>
+                      <p className="font-semibold">{profile?.nicho_foco || 'Não definido'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Prioridade</p>
+                      <Badge variant="outline">Nível {profile?.prioridade || 1}</Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">ICP Principal</p>
+                      <Badge variant={profile?.icp_principal ? 'default' : 'secondary'}>
+                        {profile?.icp_principal ? '★ Sim' : 'Não'}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* CNAEs Alvo */}
+              {icpData?.cnaes_alvo && icpData.cnaes_alvo.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    CNAEs Alvo ({icpData.cnaes_alvo.length})
+                  </h3>
+                  <div className="flex flex-wrap gap-2 pl-7">
+                    {icpData.cnaes_alvo.map((cnae: string, idx: number) => (
+                      <Badge key={idx} variant="outline" className="font-mono">
+                        {cnae}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Timestamps */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  Histórico
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-7">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Criado em</p>
+                    <p className="font-semibold">
+                      {profile?.created_at 
+                        ? new Date(profile.created_at).toLocaleDateString('pt-BR', { 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }) 
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Última atualização</p>
+                    <p className="font-semibold">
+                      {profile?.updated_at 
+                        ? new Date(profile.updated_at).toLocaleDateString('pt-BR', { 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }) 
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">ICPs gerados</p>
+                    <p className="font-semibold">{profile?.generated_count || 0}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Descrição */}
+              {(profile?.descricao || icpData?.descricao) && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg">Descrição</h3>
+                    <p className="text-muted-foreground pl-7">
+                      {profile?.descricao || icpData?.descricao}
+                    </p>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
