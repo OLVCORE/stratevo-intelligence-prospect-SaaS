@@ -609,6 +609,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
           validation_status: 'quarantine'
         };
 
+        // 1. Atualizar na tabela companies
         await (supabase as any)
           .from('companies')
           .update({ 
@@ -616,18 +617,61 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
             pipeline_status: 'icp_quarantine'
           })
           .eq('id', leadId);
+
+        // 2. Inserir na tabela icp_analysis_results (usada pela página Quarentena ICP)
+        // Verificar se já existe para evitar duplicação
+        const { data: existing } = await (supabase as any)
+          .from('icp_analysis_results')
+          .select('id')
+          .eq('company_id', leadId)
+          .maybeSingle();
+
+        if (!existing) {
+          const receita = lead.raw_data?.receita_federal || lead.raw_data?.receita || {};
+          await (supabase as any)
+            .from('icp_analysis_results')
+            .insert({
+              company_id: leadId,
+              cnpj: lead.cnpj,
+              razao_social: lead.name,
+              nome_fantasia: lead.nome_fantasia,
+              icp_score: lead.icp_score || 0,
+              temperatura: lead.temperatura || 'cold',
+              status: 'pendente',
+              breakdown: lead.qualification_breakdown || {},
+              motivos: lead.decision_reason ? [lead.decision_reason] : [],
+              capital_social: receita.capital_social || lead.capital_social,
+              porte: receita.porte || lead.porte,
+              cnae_principal: receita.atividade_principal?.[0]?.code || lead.cnae_principal,
+              uf: receita.uf || lead.uf,
+              municipio: receita.municipio || lead.municipio,
+              setor: lead.setor || receita.atividade_principal?.[0]?.text,
+              raw_analysis: {
+                ...lead.raw_data,
+                source: 'qualification_engine',
+                sent_at: new Date().toISOString()
+              }
+            });
+        } else {
+          // Atualizar registro existente para pendente
+          await (supabase as any)
+            .from('icp_analysis_results')
+            .update({ status: 'pendente' })
+            .eq('id', existing.id);
+        }
       }
 
       toast.success(`✅ ${leadIds.length} lead(s) enviado(s) para Quarentena ICP!`, {
         description: 'Acesse a página Quarentena ICP para as 9 abas de validação',
         action: {
           label: 'Ir para Quarentena',
-          onClick: () => navigate('/central-icp/quarantine')
+          onClick: () => navigate('/leads/icp-quarantine')
         }
       });
       setSelectedLeads([]);
       loadLeads();
     } catch (error: any) {
+      console.error('Erro ao enviar para quarentena:', error);
       toast.error('Erro ao enviar para quarentena', { description: error.message });
     } finally {
       setIsProcessing(false);
