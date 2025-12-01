@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
-import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2 } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -117,7 +117,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
               
               return {
                 ...conc,
-                produtos: (produtos || []) as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
+                produtos: (produtos || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
                 produtosExtraidos: produtos?.length || 0
               };
             })
@@ -320,9 +320,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
 
       if (error) throw error;
 
-      const count = data?.products_inserted || 0;
+      const extracted = data?.products_extracted || 0;
+      const inserted = data?.products_inserted || 0;
       
-      // Buscar produtos extraídos do banco
+      // 🔥 CRÍTICO: Sempre buscar produtos do banco após extração (mesmo se não inseriu novos)
       const { data: produtosData } = await (supabase
         .from('tenant_competitor_products' as any)
         .select('id, nome, descricao, categoria')
@@ -331,12 +332,14 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         .eq('ativo', true)
         .order('created_at', { ascending: false }));
       
+      const totalProdutos = produtosData?.length || 0;
+      
       // Atualizar contador e produtos no concorrente
       const updated = [...concorrentes];
       updated[index] = { 
         ...updated[index], 
-        produtosExtraidos: count,
-        produtos: (produtosData || []) as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>
+        produtosExtraidos: totalProdutos, // Usar total do banco, não apenas os inseridos agora
+        produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>
       };
       setConcorrentes(updated);
       
@@ -349,7 +352,18 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         onSave(dataToSave);
       }
 
-      toast.success(`${count} produtos extraídos de ${concorrente.razaoSocial}!`);
+      // Toast mais informativo
+      if (inserted > 0) {
+        toast.success(`${inserted} novos produtos inseridos! Total: ${totalProdutos} produtos`, {
+          description: `${extracted} produtos encontrados na URL`
+        });
+      } else if (extracted > 0) {
+        toast.info(`${extracted} produtos encontrados, mas já estavam cadastrados. Total: ${totalProdutos} produtos`);
+      } else {
+        toast.warning('Nenhum produto encontrado na URL', {
+          description: 'Tente uma URL diferente ou verifique se o site contém informações de produtos'
+        });
+      }
     } catch (err: any) {
       console.error('Erro ao escanear URL:', err);
       toast.error('Erro ao escanear URL', { description: err.message });
@@ -956,14 +970,44 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                       </div>
                       
                       {/* 🔥 NOVO: Lista de Produtos Extraídos */}
-                      {concorrente.produtos && concorrente.produtos.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-semibold flex items-center gap-2">
-                              <Package className="h-4 w-4" />
-                              Produtos Extraídos ({concorrente.produtos.length})
-                            </Label>
-                          </div>
+                      <div className="mt-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-semibold flex items-center gap-2">
+                            <Package className="h-4 w-4" />
+                            Produtos Extraídos ({concorrente.produtos?.length || 0})
+                          </Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              if (!tenant?.id || !concorrente.cnpj) return;
+                              
+                              const { data: produtosData } = await (supabase
+                                .from('tenant_competitor_products' as any)
+                                .select('id, nome, descricao, categoria')
+                                .eq('tenant_id', tenant.id)
+                                .eq('competitor_cnpj', concorrente.cnpj.replace(/\D/g, ''))
+                                .eq('ativo', true)
+                                .order('created_at', { ascending: false }));
+                              
+                              const updated = [...concorrentes];
+                              updated[index] = {
+                                ...updated[index],
+                                produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
+                                produtosExtraidos: produtosData?.length || 0
+                              };
+                              setConcorrentes(updated);
+                              
+                              toast.success(`${produtosData?.length || 0} produtos carregados!`);
+                            }}
+                            className="text-xs"
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Atualizar
+                          </Button>
+                        </div>
+                        {concorrente.produtos && concorrente.produtos.length > 0 ? (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                             {concorrente.produtos.map((produto, prodIdx) => (
                               <Card key={produto.id || prodIdx} className="p-2 border-l-2 border-l-green-500">
@@ -983,8 +1027,12 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                               </Card>
                             ))}
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <div className="text-center py-4 text-sm text-muted-foreground">
+                            Nenhum produto extraído ainda. Use o botão "Extrair Produtos" acima.
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <Button
                       type="button"
