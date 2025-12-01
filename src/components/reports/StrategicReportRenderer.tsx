@@ -3,11 +3,12 @@
  * Componente para renderizar relatórios estratégicos de forma elegante e profissional
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { 
   TrendingUp, 
@@ -25,7 +26,10 @@ import {
   Zap,
   ArrowRight,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronsUpDown,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -35,22 +39,22 @@ interface StrategicReportRendererProps {
   className?: string;
 }
 
-// Componente para seções colapsáveis
+// Componente para seções colapsáveis (controlado externamente)
 function CollapsibleSection({ 
   title, 
   icon: Icon, 
   children, 
-  defaultOpen = true,
+  isOpen,
+  onToggle,
   variant = 'default'
 }: { 
   title: string; 
   icon?: any; 
   children: React.ReactNode;
-  defaultOpen?: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
   variant?: 'default' | 'success' | 'warning' | 'danger' | 'info';
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
   const variantStyles = {
     default: 'border-border bg-card',
     success: 'border-green-500/30 bg-green-50/50 dark:bg-green-950/20',
@@ -71,7 +75,7 @@ function CollapsibleSection({
     <Card className={cn('overflow-hidden transition-all', variantStyles[variant])}>
       <CardHeader 
         className="cursor-pointer hover:bg-muted/50 transition-colors py-4"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={onToggle}
       >
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-3 text-lg">
@@ -207,6 +211,48 @@ function getSectionMeta(title: string): { variant: 'default' | 'success' | 'warn
 }
 
 export default function StrategicReportRenderer({ content, type, className }: StrategicReportRendererProps) {
+  // Parsear seções para determinar quantas existem
+  const sections = parseReportSections(content);
+  const collapsibleSections = sections.filter(s => s.type !== 'h1');
+  
+  // Estado para controlar abertura/fechamento de cada seção
+  const [openSections, setOpenSections] = useState<Record<number, boolean>>(() => {
+    // Por padrão, primeiras 5 seções abertas
+    const initial: Record<number, boolean> = {};
+    collapsibleSections.forEach((_, idx) => {
+      initial[idx] = idx < 5;
+    });
+    return initial;
+  });
+
+  // Verificar se todas estão abertas ou fechadas
+  const allOpen = collapsibleSections.length > 0 && collapsibleSections.every((_, idx) => openSections[idx]);
+  const allClosed = collapsibleSections.length > 0 && collapsibleSections.every((_, idx) => !openSections[idx]);
+
+  // Funções para abrir/fechar todas
+  const openAll = () => {
+    const newState: Record<number, boolean> = {};
+    collapsibleSections.forEach((_, idx) => {
+      newState[idx] = true;
+    });
+    setOpenSections(newState);
+  };
+
+  const closeAll = () => {
+    const newState: Record<number, boolean> = {};
+    collapsibleSections.forEach((_, idx) => {
+      newState[idx] = false;
+    });
+    setOpenSections(newState);
+  };
+
+  const toggleSection = (index: number) => {
+    setOpenSections(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+
   // Se o conteúdo for muito curto ou vazio
   if (!content || content.trim().length < 50) {
     return (
@@ -215,9 +261,6 @@ export default function StrategicReportRenderer({ content, type, className }: St
       </div>
     );
   }
-
-  // Tentar parsear seções
-  const sections = parseReportSections(content);
 
   // Se não conseguiu parsear seções, renderizar como markdown simples mas estilizado
   if (sections.length === 0) {
@@ -251,14 +294,42 @@ export default function StrategicReportRenderer({ content, type, className }: St
     );
   }
 
+  // Contador para seções colapsáveis (H2/H3)
+  let collapsibleIndex = 0;
+
   // Renderizar com seções em cards
   return (
     <div className={cn('space-y-4', className)}>
-      {/* Header do Relatório */}
-      <div className="mb-8 text-center">
-        <Badge variant="outline" className="mb-4">
+      {/* Header do Relatório com botões Abrir/Fechar Todos */}
+      <div className="flex items-center justify-between mb-6">
+        <Badge variant="outline" className="text-sm">
           {type === 'completo' ? '📊 Relatório Estratégico Completo' : '📋 Resumo Executivo'}
         </Badge>
+        
+        {collapsibleSections.length > 0 && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openAll}
+              disabled={allOpen}
+              className="text-xs"
+            >
+              <Maximize2 className="h-3 w-3 mr-1" />
+              Abrir Todos
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={closeAll}
+              disabled={allClosed}
+              className="text-xs"
+            >
+              <Minimize2 className="h-3 w-3 mr-1" />
+              Fechar Todos
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Seções do Relatório */}
@@ -266,7 +337,7 @@ export default function StrategicReportRenderer({ content, type, className }: St
         const { variant, icon } = getSectionMeta(section.title);
         const isH1 = section.type === 'h1';
         
-        // H1 = Seção principal (maior destaque)
+        // H1 = Seção principal (maior destaque) - não colapsável
         if (isH1) {
           return (
             <div key={index} className="mb-8">
@@ -288,13 +359,17 @@ export default function StrategicReportRenderer({ content, type, className }: St
         }
 
         // H2/H3 = Seções colapsáveis em cards
+        const currentCollapsibleIndex = collapsibleIndex;
+        collapsibleIndex++;
+
         return (
           <CollapsibleSection
             key={index}
             title={section.title}
             icon={icon}
             variant={variant}
-            defaultOpen={index < 5} // Primeiras 5 seções abertas
+            isOpen={openSections[currentCollapsibleIndex] ?? true}
+            onToggle={() => toggleSection(currentCollapsibleIndex)}
           >
             <div className="prose prose-slate dark:prose-invert max-w-none
               prose-headings:text-foreground
