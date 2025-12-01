@@ -88,6 +88,10 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
     criterio: '',
   });
   
+  // 🆕 Estados para entrada manual com suporte a ranges (texto)
+  const [ticketInput, setTicketInput] = useState('');
+  const [cicloInput, setCicloInput] = useState('');
+  
   // 🔥 NOVO: Estados para concorrentes com busca por CNPJ
   const [novoConcorrente, setNovoConcorrente] = useState<ConcorrenteDireto>({
     cnpj: '',
@@ -361,24 +365,36 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
 
   // 🔥 NOVO: Funções para gerenciar tickets e ciclos na mesma linha
   const adicionarTicketECiclo = () => {
-    if (novoTicketECiclo.ticketMedio > 0 && novoTicketECiclo.cicloVenda > 0 && novoTicketECiclo.criterio.trim()) {
+    // 🆕 Parsear os inputs de texto para suportar ranges
+    const ticketInfo = parseValorMonetario(ticketInput || String(novoTicketECiclo.ticketMedio));
+    const cicloInfo = parseDias(cicloInput || String(novoTicketECiclo.cicloVenda));
+    const criterio = novoTicketECiclo.criterio.trim();
+    
+    if (ticketInfo.media > 0 && cicloInfo.media > 0 && criterio) {
+      const novoItem: TicketECiclo = {
+        ticketMedio: ticketInfo.media,
+        ticketMin: ticketInfo.min,
+        ticketMax: ticketInfo.max,
+        cicloVenda: cicloInfo.media,
+        cicloMin: cicloInfo.min,
+        cicloMax: cicloInfo.max,
+        criterio,
+      };
+      
+      const updatedTickets = [...formData.ticketsECiclos, novoItem];
       setFormData({
         ...formData,
-        ticketsECiclos: [...formData.ticketsECiclos, { ...novoTicketECiclo }],
+        ticketsECiclos: updatedTickets,
       });
-      setNovoTicketECiclo({
-        ticketMedio: 0,
-        cicloVenda: 0,
-        criterio: '',
-      });
+      
+      // Limpar inputs
+      setNovoTicketECiclo({ ticketMedio: 0, cicloVenda: 0, criterio: '' });
+      setTicketInput('');
+      setCicloInput('');
       
       // 🔥 CRÍTICO: Salvar após adicionar
       if (onSave) {
-        const updatedFormData = {
-          ...formData,
-          ticketsECiclos: [...formData.ticketsECiclos, { ...novoTicketECiclo }],
-        };
-        onSave(updatedFormData);
+        onSave({ ...formData, ticketsECiclos: updatedTickets });
       }
     } else {
       alert('Por favor, preencha todos os campos: Ticket Médio, Ciclo de Venda e Critério.');
@@ -802,22 +818,20 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
               <div className="col-span-4 space-y-1">
                 <Label className="text-xs text-muted-foreground">Ticket Médio (R$)</Label>
                 <Input
-                  type="number"
-                  value={novoTicketECiclo.ticketMedio || ''}
-                  onChange={(e) => setNovoTicketECiclo({ ...novoTicketECiclo, ticketMedio: Number(e.target.value) || 0 })}
-                  placeholder="0"
-                  min="0"
+                  type="text"
+                  value={ticketInput}
+                  onChange={(e) => setTicketInput(e.target.value)}
+                  placeholder="Ex: 50000 ou 10000-80000"
                   className="w-full"
                 />
               </div>
               <div className="col-span-3 space-y-1">
                 <Label className="text-xs text-muted-foreground">Ciclo (dias)</Label>
                 <Input
-                  type="number"
-                  value={novoTicketECiclo.cicloVenda || ''}
-                  onChange={(e) => setNovoTicketECiclo({ ...novoTicketECiclo, cicloVenda: Number(e.target.value) || 0 })}
-                  placeholder="0"
-                  min="0"
+                  type="text"
+                  value={cicloInput}
+                  onChange={(e) => setCicloInput(e.target.value)}
+                  placeholder="Ex: 30 ou 15-45"
                   className="w-full"
                 />
               </div>
