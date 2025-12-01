@@ -21,6 +21,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -28,7 +30,9 @@ import {
   CheckCircle, XCircle, Clock, RefreshCw, FileText, Download, 
   FileSpreadsheet, Image, Target, ChevronDown, ChevronUp,
   MoreHorizontal, Flame, Snowflake, ThermometerSun, 
-  ArrowRight, Filter, Zap
+  ArrowRight, Filter, Zap, Database, Sparkles, Settings,
+  Users, Globe, Upload, Bot, ExternalLink, Edit, FileBarChart,
+  Lightbulb, AlertTriangle
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
@@ -37,6 +41,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useTenant } from '@/contexts/TenantContext';
+import { STCAgent } from '@/components/intelligence/STCAgent';
+import { createQualificationEngine } from '@/services/icpQualificationEngine';
 
 interface Lead {
   id: string;
@@ -320,6 +326,226 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     }
   };
 
+  // Estado de enriquecimento
+  const [enrichingId, setEnrichingId] = useState<string | null>(null);
+  const [qualifyingId, setQualifyingId] = useState<string | null>(null);
+  const [isBatchEnriching, setIsBatchEnriching] = useState(false);
+
+  // Enriquecer com Receita Federal
+  const handleEnrichReceita = async (leadId: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead?.cnpj) {
+      toast.error('CNPJ não disponível');
+      return;
+    }
+
+    setEnrichingId(leadId);
+    try {
+      const clean = lead.cnpj.replace(/\D/g, '');
+      
+      // Tentar API Brasil primeiro
+      let receita: any = null;
+      try {
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
+        if (response.ok) {
+          receita = await response.json();
+        }
+      } catch (e) {
+        // Fallback para ReceitaWS
+        try {
+          const response = await fetch(`https://www.receitaws.com.br/v1/cnpj/${clean}`);
+          if (response.ok) {
+            receita = await response.json();
+          }
+        } catch (e2) {
+          throw new Error('Todas as APIs falharam');
+        }
+      }
+
+      if (receita) {
+        const updatedRawData = {
+          ...(lead.raw_data || {}),
+          receita_federal: receita,
+          enriched_receita: true,
+          situacao: receita.situacao,
+          capital_social: receita.capital_social,
+          porte: receita.porte,
+          nome_fantasia: receita.fantasia || receita.nome_fantasia,
+          uf: receita.uf,
+          municipio: receita.municipio,
+          cnae_fiscal: receita.atividade_principal?.[0]?.code,
+          cnae_descricao: receita.atividade_principal?.[0]?.text,
+          enriched_at: new Date().toISOString()
+        };
+
+        await supabase
+          .from('companies')
+          .update({ 
+            raw_data: updatedRawData,
+            industry: receita.atividade_principal?.[0]?.text,
+            headquarters_city: receita.municipio,
+            headquarters_state: receita.uf
+          })
+          .eq('id', leadId);
+
+        toast.success('✅ Dados da Receita Federal atualizados!');
+        loadLeads();
+      }
+    } catch (error: any) {
+      toast.error('Erro ao buscar Receita Federal', { description: error.message });
+    } finally {
+      setEnrichingId(null);
+    }
+  };
+
+  // Enriquecimento 360° via Edge Function
+  const handleEnrich360 = async (leadId: string) => {
+    setEnrichingId(leadId);
+    try {
+      toast.info('🚀 Iniciando análise 360°...');
+      
+      const { data, error } = await supabase.functions.invoke('enrich-company-360', {
+        body: { company_id: leadId }
+      });
+
+      if (error) throw error;
+
+      toast.success('✅ Análise 360° concluída!');
+      loadLeads();
+    } catch (error: any) {
+      toast.error('Erro na análise 360°', { description: error.message });
+    } finally {
+      setEnrichingId(null);
+    }
+  };
+
+  // Requalificar com motor ICP
+  const handleRequalify = async (leadId: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead || !tenantId) return;
+
+    setQualifyingId(leadId);
+    try {
+      toast.info('🎯 Requalificando lead...');
+      
+      const engine = await createQualificationEngine(tenantId);
+      const result = await engine.qualifyCompany({
+        cnpj: lead.cnpj,
+        razao_social: lead.name,
+        nome_fantasia: lead.nome_fantasia,
+        cnae_principal: lead.cnae_principal,
+        capital_social: lead.capital_social,
+        porte: lead.porte,
+        uf: lead.uf,
+        cidade: lead.municipio,
+        situacao_cadastral: lead.situacao_cadastral
+      });
+
+      const updatedRawData = {
+        ...(lead.raw_data || {}),
+        icp_score: result.best_icp_score,
+        temperatura: result.best_temperatura,
+        decision: result.decision,
+        decision_reason: result.decision_reason,
+        best_icp_name: result.best_icp_name,
+        qualification_breakdown: result.icp_scores?.[0]?.breakdown,
+        requalified_at: new Date().toISOString()
+      };
+
+      await supabase
+        .from('companies')
+        .update({ raw_data: updatedRawData })
+        .eq('id', leadId);
+
+      const tempEmoji = result.best_temperatura === 'hot' ? '🔥' : 
+                        result.best_temperatura === 'warm' ? '🌡️' : '❄️';
+      
+      toast.success(`${tempEmoji} Requalificado: Score ${result.best_icp_score}`, {
+        description: result.decision_reason
+      });
+      loadLeads();
+    } catch (error: any) {
+      toast.error('Erro ao requalificar', { description: error.message });
+    } finally {
+      setQualifyingId(null);
+    }
+  };
+
+  // Enviar para quarentena ICP (página de quarentena)
+  const handleSendToICPQuarantine = async (leadIds: string[]) => {
+    try {
+      toast.info(`🎯 Enviando ${leadIds.length} lead(s) para Quarentena ICP...`);
+      
+      for (const leadId of leadIds) {
+        const lead = leads.find(l => l.id === leadId);
+        if (!lead) continue;
+
+        const updatedRawData = {
+          ...(lead.raw_data || {}),
+          sent_to_icp_quarantine: true,
+          icp_quarantine_date: new Date().toISOString()
+        };
+
+        await supabase
+          .from('companies')
+          .update({ 
+            raw_data: updatedRawData,
+            pipeline_status: 'icp_quarantine'
+          })
+          .eq('id', leadId);
+      }
+
+      toast.success(`✅ ${leadIds.length} lead(s) enviado(s) para Quarentena ICP!`);
+      setSelectedLeads([]);
+      loadLeads();
+    } catch (error: any) {
+      toast.error('Erro ao enviar para quarentena', { description: error.message });
+    }
+  };
+
+  // Enriquecimento em lote
+  const handleBatchEnrichReceita = async () => {
+    if (selectedLeads.length === 0) return;
+    
+    setIsBatchEnriching(true);
+    toast.info(`📡 Enriquecendo ${selectedLeads.length} empresas com Receita Federal...`);
+
+    let success = 0;
+    let errors = 0;
+
+    for (const leadId of selectedLeads) {
+      try {
+        await handleEnrichReceita(leadId);
+        success++;
+      } catch (e) {
+        errors++;
+      }
+    }
+
+    setIsBatchEnriching(false);
+    toast.success(`✅ Concluído: ${success} sucesso, ${errors} erros`);
+  };
+
+  const handleBatchRequalify = async () => {
+    if (selectedLeads.length === 0) return;
+    
+    setIsBatchEnriching(true);
+    toast.info(`🎯 Requalificando ${selectedLeads.length} empresas...`);
+
+    let success = 0;
+    for (const leadId of selectedLeads) {
+      try {
+        await handleRequalify(leadId);
+        success++;
+      } catch (e) {
+        // Continue
+      }
+    }
+
+    setIsBatchEnriching(false);
+    toast.success(`✅ ${success} empresas requalificadas!`);
+  };
+
   // Exportação
   const handleExportCSV = () => {
     const BOM = '\uFEFF';
@@ -520,6 +746,86 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               <Button variant="outline" onClick={() => { loadLeads(); onRefresh?.(); }}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
+
+              {/* Menu de Ações em Massa */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Ações em Massa
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Enriquecimento em Lote</DropdownMenuLabel>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem 
+                      onClick={handleBatchEnrichReceita}
+                      disabled={selectedLeads.length === 0 || isBatchEnriching}
+                    >
+                      <Database className="h-4 w-4 mr-2 text-blue-500" />
+                      <div className="flex flex-col">
+                        <span>Receita Federal (Lote)</span>
+                        <span className="text-xs text-muted-foreground">Dados cadastrais oficiais</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleBatchRequalify}
+                      disabled={selectedLeads.length === 0 || isBatchEnriching}
+                    >
+                      <Target className="h-4 w-4 mr-2 text-purple-500" />
+                      <div className="flex flex-col">
+                        <span>Requalificar ICP (Lote)</span>
+                        <span className="text-xs text-muted-foreground">Recalcular score de todos</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Fluxo ICP</DropdownMenuLabel>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem 
+                      onClick={() => handleSendToICPQuarantine(selectedLeads)}
+                      disabled={selectedLeads.length === 0}
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2 text-amber-500" />
+                      <div className="flex flex-col">
+                        <span>Enviar para Quarentena ICP</span>
+                        <span className="text-xs text-muted-foreground">Análise manual detalhada</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => {
+                        handleBulkApprove();
+                      }}
+                      disabled={selectedLeads.length === 0}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                      <div className="flex flex-col">
+                        <span>Aprovar e Integrar</span>
+                        <span className="text-xs text-muted-foreground">Mover para Pipeline</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Exportação</DropdownMenuLabel>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={handleExportCSV}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Exportar CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportXLS}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Exportar Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportPDF}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Relatório PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardContent>
@@ -799,50 +1105,127 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {/* Barra de Score Visual */}
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => onLeadSelect?.(lead)}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
+                                <div className={`w-10 h-6 rounded flex items-center justify-center text-xs font-bold cursor-help ${
+                                  lead.icp_score && lead.icp_score >= 70 ? 'bg-green-500/20 text-green-600' :
+                                  lead.icp_score && lead.icp_score >= 40 ? 'bg-amber-500/20 text-amber-600' :
+                                  'bg-red-500/20 text-red-600'
+                                }`}>
+                                  {lead.icp_score || 0}%
+                                </div>
                               </TooltipTrigger>
-                              <TooltipContent>Ver detalhes</TooltipContent>
+                              <TooltipContent>
+                                <div className="text-xs">
+                                  <p className="font-bold">Score ICP: {lead.icp_score || 0}</p>
+                                  {lead.best_icp_name && <p>ICP: {lead.best_icp_name}</p>}
+                                  {lead.decision_reason && <p>{lead.decision_reason}</p>}
+                                </div>
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+
+                          {/* Botão Requalificar */}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleRequalify(lead.id)}
+                                  disabled={qualifyingId === lead.id || enrichingId === lead.id}
+                                >
+                                  {qualifyingId === lead.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Target className="h-4 w-4 text-purple-500" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Requalificar ICP</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+
+                          {/* STC Agent Bot */}
+                          <STCAgent
+                            companyId={lead.id}
+                            companyName={lead.name || 'Empresa'}
+                            cnpj={lead.cnpj}
+                          />
                           
+                          {/* Menu de Ações */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="h-4 w-4" />
+                                <Settings className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedLeads([lead.id]);
-                                handleBulkApprove();
-                              }}>
-                                <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-                                Aprovar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedLeads([lead.id]);
-                                handleBulkSendToQuarantine();
-                              }}>
-                                <Clock className="h-4 w-4 mr-2 text-amber-600" />
-                                Enviar p/ Quarentena
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedLeads([lead.id]);
-                                handleBulkReject();
-                              }}>
-                                <XCircle className="h-4 w-4 mr-2 text-red-600" />
-                                Rejeitar
-                              </DropdownMenuItem>
+                            <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuLabel>Ações da Empresa</DropdownMenuLabel>
+                              
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem onClick={() => onLeadSelect?.(lead)}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  Ver Detalhes
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/companies/${lead.id}`)}>
+                                  <FileBarChart className="h-4 w-4 mr-2" />
+                                  Relatório Executivo
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel>Enriquecimento</DropdownMenuLabel>
+                              
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem 
+                                  onClick={() => handleEnrichReceita(lead.id)}
+                                  disabled={enrichingId === lead.id}
+                                >
+                                  <Database className="h-4 w-4 mr-2 text-blue-500" />
+                                  Receita Federal
+                                  {enrichingId === lead.id && <Loader2 className="h-3 w-3 ml-auto animate-spin" />}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleEnrich360(lead.id)}
+                                  disabled={enrichingId === lead.id}
+                                >
+                                  <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+                                  360° Completo + IA
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleRequalify(lead.id)}>
+                                  <Target className="h-4 w-4 mr-2 text-amber-500" />
+                                  Requalificar ICP
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel>Decisão</DropdownMenuLabel>
+                              
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedLeads([lead.id]);
+                                  handleBulkApprove();
+                                }}>
+                                  <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                                  Aprovar para Pipeline
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleSendToICPQuarantine([lead.id])}>
+                                  <AlertTriangle className="h-4 w-4 mr-2 text-amber-600" />
+                                  Enviar p/ Quarentena ICP
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedLeads([lead.id]);
+                                  handleBulkReject();
+                                }}>
+                                  <XCircle className="h-4 w-4 mr-2 text-red-600" />
+                                  Rejeitar / Descartar
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
                                 onClick={() => {
@@ -852,7 +1235,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                                 className="text-destructive"
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
-                                Excluir
+                                Excluir Permanentemente
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -862,49 +1245,136 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                     
                     {/* Linha expandida */}
                     {expandedRow === lead.id && (
-                      <TableRow>
+                      <TableRow key={`${lead.id}-expanded`}>
                         <TableCell colSpan={10} className="bg-muted/20 p-4">
-                          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            <div>
-                              <p className="text-xs text-muted-foreground">Município</p>
-                              <p className="font-medium">{lead.municipio || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Capital Social</p>
-                              <p className="font-medium">
-                                {lead.capital_social 
-                                  ? `R$ ${Number(lead.capital_social).toLocaleString('pt-BR')}`
-                                  : 'N/A'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Porte</p>
-                              <p className="font-medium">{lead.porte || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">CNAE Principal</p>
-                              <p className="font-medium text-xs">{lead.cnae_principal || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Situação Cadastral</p>
-                              <Badge variant={lead.situacao_cadastral?.toUpperCase().includes('ATIVA') ? 'default' : 'destructive'}>
-                                {lead.situacao_cadastral || 'N/A'}
-                              </Badge>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Capturado em</p>
-                              <p className="font-medium">
-                                {lead.captured_at 
-                                  ? new Date(lead.captured_at).toLocaleDateString('pt-BR')
-                                  : 'N/A'}
-                              </p>
-                            </div>
-                            {lead.setor && (
-                              <div className="col-span-2">
-                                <p className="text-xs text-muted-foreground">Atividade Econômica</p>
-                                <p className="font-medium text-sm">{lead.setor}</p>
+                          <div className="space-y-4">
+                            {/* Seção ICP Score */}
+                            {(lead.best_icp_name || lead.decision_reason || lead.qualification_breakdown) && (
+                              <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg p-4 border border-purple-500/20">
+                                <h4 className="font-semibold text-purple-400 mb-2 flex items-center gap-2">
+                                  <Target className="h-4 w-4" />
+                                  Análise ICP
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">ICP Match</p>
+                                    <p className="font-medium text-purple-300">{lead.best_icp_name || 'Não qualificado'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Decisão</p>
+                                    <Badge variant={
+                                      lead.validation_status === 'approved' ? 'default' :
+                                      lead.validation_status === 'rejected' ? 'destructive' : 'secondary'
+                                    }>
+                                      {lead.validation_status === 'approved' ? '✓ Aprovado' :
+                                       lead.validation_status === 'rejected' ? '✗ Rejeitado' :
+                                       '⏳ Pendente'}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Motivo</p>
+                                    <p className="text-sm">{lead.decision_reason || 'Aguardando qualificação'}</p>
+                                  </div>
+                                </div>
+                                
+                                {/* Breakdown de Score */}
+                                {lead.qualification_breakdown && (
+                                  <div className="mt-3 pt-3 border-t border-purple-500/20">
+                                    <p className="text-xs text-muted-foreground mb-2">Breakdown do Score</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {Object.entries(lead.qualification_breakdown as Record<string, number>).map(([key, value]) => (
+                                        <Badge key={key} variant="outline" className="text-xs">
+                                          {key}: {value}pts
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
+                            
+                            {/* Dados Cadastrais */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground">Município</p>
+                                <p className="font-medium">{lead.municipio || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Capital Social</p>
+                                <p className="font-medium">
+                                  {lead.capital_social 
+                                    ? `R$ ${Number(lead.capital_social).toLocaleString('pt-BR')}`
+                                    : 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Porte</p>
+                                <p className="font-medium">{lead.porte || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">CNAE Principal</p>
+                                <p className="font-medium text-xs">{lead.cnae_principal || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Situação Cadastral</p>
+                                <Badge variant={lead.situacao_cadastral?.toUpperCase().includes('ATIVA') ? 'default' : 'destructive'}>
+                                  {lead.situacao_cadastral || 'N/A'}
+                                </Badge>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Capturado em</p>
+                                <p className="font-medium">
+                                  {lead.captured_at 
+                                    ? new Date(lead.captured_at).toLocaleDateString('pt-BR')
+                                    : 'N/A'}
+                                </p>
+                              </div>
+                              {lead.setor && (
+                                <div className="col-span-2">
+                                  <p className="text-xs text-muted-foreground">Atividade Econômica</p>
+                                  <p className="font-medium text-sm">{lead.setor}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Ações Rápidas */}
+                            <div className="flex gap-2 pt-2 border-t">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEnrichReceita(lead.id)}
+                                disabled={enrichingId === lead.id}
+                                className="gap-2"
+                              >
+                                <Database className="h-4 w-4 text-blue-500" />
+                                Receita Federal
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEnrich360(lead.id)}
+                                disabled={enrichingId === lead.id}
+                                className="gap-2"
+                              >
+                                <Sparkles className="h-4 w-4 text-purple-500" />
+                                360° + IA
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRequalify(lead.id)}
+                                disabled={qualifyingId === lead.id}
+                                className="gap-2"
+                              >
+                                <Target className="h-4 w-4 text-amber-500" />
+                                Requalificar
+                              </Button>
+                              <STCAgent
+                                companyId={lead.id}
+                                companyName={lead.name || 'Empresa'}
+                                cnpj={lead.cnpj}
+                              />
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
