@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
+import { createQualificationEngine, CompanyToQualify } from '@/services/icpQualificationEngine';
 import {
   Dialog,
   DialogContent,
@@ -134,7 +135,7 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
     }
   };
 
-  // Salvar empresa na tabela companies (base principal)
+  // Salvar empresa na tabela companies com qualificação REAL baseada no ICP
   const handleSaveToQualification = async () => {
     if (!previewData) return;
 
@@ -155,27 +156,89 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
         return;
       }
 
-      // Calcular score ICP básico
-      let icpScore = 50;
-      if (previewData.situacao?.toUpperCase().includes('ATIVA')) icpScore += 15;
-      if (previewData.capital_social > 100000) icpScore += 10;
-      if (previewData.capital_social > 1000000) icpScore += 10;
-      if (previewData.porte?.toUpperCase().includes('MEDIO') || previewData.porte?.toUpperCase().includes('GRANDE')) icpScore += 10;
-      icpScore = Math.min(100, icpScore);
+      // ========== QUALIFICAÇÃO REAL BASEADA NO ICP ==========
+      let icpScore = 0;
+      let temperatura: 'hot' | 'warm' | 'cold' | 'out' = 'out';
+      let decision = 'discard';
+      let decisionReason = 'Não encontrou ICPs configurados';
+      let bestIcpName = null;
+      let qualificationBreakdown = null;
 
-      const temperatura = icpScore >= 70 ? 'hot' : icpScore >= 40 ? 'warm' : 'cold';
+      if (tenantId) {
+        try {
+          // Criar motor de qualificação
+          const engine = await createQualificationEngine(tenantId);
+          
+          // Preparar dados da empresa para qualificação
+          const companyToQualify: CompanyToQualify = {
+            cnpj: previewData.cnpj,
+            razao_social: previewData.razao_social,
+            nome_fantasia: previewData.nome_fantasia,
+            cnae_principal: previewData.cnae_principal,
+            cnae_principal_descricao: previewData.cnae_descricao,
+            capital_social: previewData.capital_social,
+            porte: previewData.porte,
+            uf: previewData.uf,
+            cidade: previewData.municipio,
+            situacao_cadastral: previewData.situacao
+          };
+          
+          // Executar qualificação real
+          const result = await engine.qualifyCompany(companyToQualify);
+          
+          icpScore = result.best_icp_score;
+          temperatura = result.best_temperatura;
+          decision = result.decision;
+          decisionReason = result.decision_reason;
+          bestIcpName = result.best_icp_name;
+          
+          // Guardar breakdown para análise
+          if (result.icp_scores && result.icp_scores.length > 0) {
+            qualificationBreakdown = {
+              best_icp: result.best_icp_name,
+              score: result.best_icp_score,
+              motivos: result.icp_scores[0]?.motivos || [],
+              breakdown: result.icp_scores[0]?.breakdown
+            };
+          }
+          
+          console.log('[InlineSearch] ✅ Qualificação real:', {
+            empresa: previewData.razao_social,
+            score: icpScore,
+            temperatura,
+            decision,
+            bestIcp: bestIcpName,
+            breakdown: qualificationBreakdown
+          });
+          
+        } catch (qualErr) {
+          console.warn('[InlineSearch] ⚠️ Erro na qualificação, usando padrão:', qualErr);
+          // Fallback para score básico se qualificação falhar
+          icpScore = 30; // Score baixo por padrão
+          temperatura = 'cold';
+          decision = 'quarantine';
+          decisionReason = 'Erro na qualificação - enviado para análise manual';
+        }
+      } else {
+        // Sem tenant, usar score neutro
+        icpScore = 30;
+        temperatura = 'cold';
+        decision = 'quarantine';
+        decisionReason = 'Tenant não identificado';
+      }
 
-      // Salvar em companies (tabela que já existe)
+      // Salvar em companies com dados de qualificação
       const { error } = await supabase
         .from('companies')
         .insert({
-          name: previewData.razao_social, // Campo obrigatório
+          name: previewData.razao_social,
           cnpj: previewData.cnpj,
           company_name: previewData.razao_social,
           industry: previewData.cnae_descricao,
           headquarters_city: previewData.municipio,
           headquarters_state: previewData.uf,
           headquarters_country: 'Brasil',
+          tenant_id: tenantId,
           location: {
             city: previewData.municipio,
             state: previewData.uf,
@@ -185,16 +248,29 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
             ...previewData.raw_data,
             icp_score: icpScore,
             temperatura: temperatura,
+            decision: decision,
+            decision_reason: decisionReason,
+            best_icp_name: bestIcpName,
+            qualification_breakdown: qualificationBreakdown,
             qualification_source: 'inline_search',
-            source_name: 'Busca Qualificação'
+            qualified_at: new Date().toISOString()
           }
         });
 
       if (error) throw error;
 
-      toast.success('✅ Empresa adicionada para qualificação!', {
-        description: `Score ICP: ${icpScore} | Temperatura: ${temperatura.toUpperCase()}`
+      // Toast com resultado real da qualificação
+      const tempEmoji = temperatura === 'hot' ? '🔥' : temperatura === 'warm' ? '🌡️' : '❄️';
+      const decisionEmoji = decision === 'approve' ? '✅' : decision === 'quarantine' ? '⏳' : decision === 'nurturing' ? '📈' : '❌';
+      
+      toast.success(`${decisionEmoji} Empresa qualificada!`, {
+        description: `${tempEmoji} ${temperatura.toUpperCase()} | Score: ${icpScore}${bestIcpName ? ` | ICP: ${bestIcpName}` : ''}`
       });
+      
+      // Mostrar motivos se for COLD ou OUT
+      if (temperatura === 'cold' || temperatura === 'out') {
+        toast.info(`📋 Motivo: ${decisionReason}`, { duration: 5000 });
+      }
 
       setShowPreview(false);
       setPreviewData(null);
