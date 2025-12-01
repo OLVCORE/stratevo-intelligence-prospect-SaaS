@@ -116,22 +116,30 @@ export default function QualificationDashboard() {
       
       // Se não tem dados de quarentena, buscar de companies
       if (leadsData.length === 0) {
-        const { data: companiesData, error: cError } = await (supabase as any)
-          .from('companies')
-          .select('id, cnpj, name, icp_score, pipeline_status, created_at')
-          .order('created_at', { ascending: false })
-          .limit(100);
-        
-        if (!cError && companiesData) {
-          leadsData = companiesData.map((c: any) => ({
-            id: c.id,
-            cnpj: c.cnpj,
-            name: c.name,
-            icp_score: c.icp_score || 50, // Score padrão
-            validation_status: c.pipeline_status === 'ativo' ? 'approved' : 'pending',
-            temperatura: c.icp_score >= 70 ? 'hot' : c.icp_score >= 40 ? 'warm' : 'cold',
-            captured_at: c.created_at
-          }));
+        try {
+          const { data: companiesData, error: cError } = await (supabase as any)
+            .from('companies')
+            .select('id, cnpj, company_name, industry, raw_data, created_at')
+            .order('created_at', { ascending: false })
+            .limit(100);
+          
+          if (!cError && companiesData) {
+            leadsData = companiesData.map((c: any) => {
+              const icpScore = c.raw_data?.icp_score || 50;
+              return {
+                id: c.id,
+                cnpj: c.cnpj,
+                name: c.company_name,
+                nome_fantasia: c.raw_data?.nome_fantasia || c.raw_data?.fantasia,
+                icp_score: icpScore,
+                validation_status: 'pending',
+                temperatura: icpScore >= 70 ? 'hot' : icpScore >= 40 ? 'warm' : 'cold',
+                captured_at: c.created_at
+              };
+            });
+          }
+        } catch (e) {
+          console.log('[QualificationDashboard] Erro ao buscar companies:', e);
         }
       }
       

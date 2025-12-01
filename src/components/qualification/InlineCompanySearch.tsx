@@ -169,11 +169,13 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
       const { error } = await supabase
         .from('companies')
         .insert({
+          name: previewData.razao_social, // Campo obrigatório
           cnpj: previewData.cnpj,
           company_name: previewData.razao_social,
           industry: previewData.cnae_descricao,
-          source_name: 'Busca Qualificação',
-          source_type: 'manual',
+          headquarters_city: previewData.municipio,
+          headquarters_state: previewData.uf,
+          headquarters_country: 'Brasil',
           location: {
             city: previewData.municipio,
             state: previewData.uf,
@@ -183,7 +185,8 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
             ...previewData.raw_data,
             icp_score: icpScore,
             temperatura: temperatura,
-            qualification_source: 'inline_search'
+            qualification_source: 'inline_search',
+            source_name: 'Busca Qualificação'
           }
         });
 
