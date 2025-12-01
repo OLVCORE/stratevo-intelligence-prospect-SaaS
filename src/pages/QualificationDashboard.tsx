@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Target, 
   TrendingUp, 
@@ -28,7 +29,8 @@ import {
   Zap,
   ThermometerSun,
   Building2,
-  Eye
+  Eye,
+  Database
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -77,6 +79,7 @@ export default function QualificationDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTemp, setFilterTemp] = useState<string>('all');
+  const [migrationNeeded, setMigrationNeeded] = useState(false);
 
   useEffect(() => {
     if (tenantId) {
@@ -87,14 +90,34 @@ export default function QualificationDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Buscar leads da quarentena com scores
+      // Tentar buscar leads da quarentena com scores
+      // A tabela pode não existir ainda se a migration não foi aplicada
       const { data, error } = await (supabase as any)
         .from('leads_quarantine')
         .select('*')
         .eq('tenant_id', tenantId)
         .order('icp_score', { ascending: false });
 
-      if (error) throw error;
+      // Se a tabela não existe ou erro de coluna, usar dados vazios
+      if (error) {
+        const errorMsg = error.message?.toLowerCase() || '';
+        const errorCode = error.code || '';
+        
+        // Erros esperados se migration não foi aplicada
+        if (errorCode === '42P01' || // relation does not exist
+            errorCode === '42703' || // column does not exist
+            errorCode === 'PGRST116' || // not found
+            errorMsg.includes('does not exist') ||
+            errorMsg.includes('404')) {
+          console.warn('[QualificationDashboard] ⚠️ Tabela leads_quarantine não configurada. Aplique a migration.');
+          setLeads([]);
+          setStats({ total: 0, hot: 0, warm: 0, cold: 0, approved: 0, pending: 0, avgScore: 0 });
+          setMigrationNeeded(true);
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
 
       const leadsData = data || [];
       setLeads(leadsData);
@@ -119,13 +142,16 @@ export default function QualificationDashboard() {
         avgScore
       });
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao carregar dados:', err);
-      toast({
-        title: 'Erro ao carregar dados',
-        description: 'Tente novamente.',
-        variant: 'destructive'
-      });
+      // Não mostrar toast para erros de tabela inexistente
+      if (!err.message?.includes('does not exist')) {
+        toast({
+          title: 'Erro ao carregar dados',
+          description: 'Tente novamente.',
+          variant: 'destructive'
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -229,6 +255,25 @@ export default function QualificationDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Alerta de Migration */}
+      {migrationNeeded && (
+        <Alert variant="destructive" className="border-amber-500 bg-amber-50 dark:bg-amber-950/30">
+          <Database className="h-4 w-4" />
+          <AlertTitle>Migration Necessária</AlertTitle>
+          <AlertDescription>
+            <p className="mb-2">
+              A tabela de qualificação não está configurada. Execute a migration no Supabase:
+            </p>
+            <code className="text-xs bg-muted p-2 rounded block">
+              supabase/migrations/20250130000005_qualification_engine.sql
+            </code>
+            <p className="mt-2 text-sm">
+              Após aplicar, recarregue a página.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
