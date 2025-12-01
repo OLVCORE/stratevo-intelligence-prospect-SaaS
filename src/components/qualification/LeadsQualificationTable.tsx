@@ -93,71 +93,82 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
     
     setLoading(true);
     try {
-      // Tentar leads_quarantine primeiro
       let leadsData: Lead[] = [];
       
-      const { data: quarantineData, error: qError } = await supabase
-        .from('leads_quarantine')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order(sortBy === 'name' ? 'name' : sortBy, { ascending: sortOrder === 'asc' })
-        .limit(500);
-      
-      if (!qError && quarantineData && quarantineData.length > 0) {
-        leadsData = quarantineData.map((l: any) => ({
-          id: l.id,
-          cnpj: l.cnpj,
-          name: l.name || l.razao_social,
-          nome_fantasia: l.nome_fantasia,
-          razao_social: l.razao_social,
-          icp_score: l.icp_score || 50,
-          temperatura: l.temperatura || (l.icp_score >= 70 ? 'hot' : l.icp_score >= 40 ? 'warm' : 'cold'),
-          validation_status: l.validation_status || 'pending',
-          captured_at: l.captured_at,
-          uf: l.uf || l.raw_data?.uf,
-          municipio: l.municipio || l.raw_data?.municipio,
-          setor: l.setor || l.raw_data?.atividade_principal?.[0]?.text,
-          capital_social: l.capital_social || l.raw_data?.capital_social,
-          porte: l.porte || l.raw_data?.porte,
-          cnae_principal: l.cnae_principal || l.raw_data?.cnae_fiscal,
-          situacao_cadastral: l.situacao_cadastral || l.raw_data?.situacao,
-          raw_data: l.raw_data
-        }));
-      } else {
-        // Fallback para companies
-        const { data: companiesData, error: cError } = await supabase
-          .from('companies')
+      // Tentar leads_quarantine primeiro (pode não existir)
+      try {
+        const { data: quarantineData, error: qError } = await supabase
+          .from('leads_quarantine')
           .select('*')
-          .order('created_at', { ascending: false })
+          .eq('tenant_id', tenantId)
+          .order(sortBy === 'name' ? 'name' : sortBy, { ascending: sortOrder === 'asc' })
           .limit(500);
         
-        if (!cError && companiesData) {
-          leadsData = companiesData.map((c: any) => ({
-            id: c.id,
-            cnpj: c.cnpj,
-            name: c.company_name || c.name,
-            nome_fantasia: c.raw_data?.fantasia,
-            razao_social: c.company_name,
-            icp_score: c.icp_score || 50,
-            temperatura: c.icp_score >= 70 ? 'hot' : c.icp_score >= 40 ? 'warm' : 'cold',
-            validation_status: 'pending',
-            captured_at: c.created_at,
-            uf: c.raw_data?.uf || c.location?.state,
-            municipio: c.raw_data?.municipio || c.location?.city,
-            setor: c.industry || c.raw_data?.atividade_principal?.[0]?.text,
-            capital_social: c.raw_data?.capital_social,
-            porte: c.raw_data?.porte,
-            cnae_principal: c.raw_data?.cnae_fiscal,
-            situacao_cadastral: c.raw_data?.situacao,
-            raw_data: c.raw_data
+        if (!qError && quarantineData && quarantineData.length > 0) {
+          leadsData = quarantineData.map((l: any) => ({
+            id: l.id,
+            cnpj: l.cnpj,
+            name: l.name || l.razao_social,
+            nome_fantasia: l.nome_fantasia,
+            razao_social: l.razao_social,
+            icp_score: l.icp_score || 50,
+            temperatura: l.temperatura || (l.icp_score >= 70 ? 'hot' : l.icp_score >= 40 ? 'warm' : 'cold'),
+            validation_status: l.validation_status || 'pending',
+            captured_at: l.captured_at,
+            uf: l.uf || l.raw_data?.uf,
+            municipio: l.municipio || l.raw_data?.municipio,
+            setor: l.setor || l.raw_data?.atividade_principal?.[0]?.text,
+            capital_social: l.capital_social || l.raw_data?.capital_social,
+            porte: l.porte || l.raw_data?.porte,
+            cnae_principal: l.cnae_principal || l.raw_data?.cnae_fiscal,
+            situacao_cadastral: l.situacao_cadastral || l.raw_data?.situacao,
+            raw_data: l.raw_data
           }));
+        }
+      } catch (e) {
+        console.log('[LeadsTable] leads_quarantine não disponível, usando companies');
+      }
+      
+      // Fallback para companies se não tem dados
+      if (leadsData.length === 0) {
+        try {
+          const { data: companiesData, error: cError } = await supabase
+            .from('companies')
+            .select('id, company_name, cnpj, industry, raw_data, created_at, location')
+            .order('created_at', { ascending: false })
+            .limit(100);
+          
+          if (!cError && companiesData) {
+            leadsData = companiesData.map((c: any) => ({
+              id: c.id,
+              cnpj: c.cnpj,
+              name: c.company_name,
+              nome_fantasia: c.raw_data?.fantasia || c.raw_data?.nome_fantasia,
+              razao_social: c.company_name,
+              icp_score: 50,
+              temperatura: 'warm' as const,
+              validation_status: 'pending',
+              captured_at: c.created_at,
+              uf: c.raw_data?.uf || (c.location as any)?.state,
+              municipio: c.raw_data?.municipio || (c.location as any)?.city,
+              setor: c.industry || c.raw_data?.atividade_principal?.[0]?.text,
+              capital_social: c.raw_data?.capital_social,
+              porte: c.raw_data?.porte,
+              cnae_principal: c.raw_data?.cnae_fiscal,
+              situacao_cadastral: c.raw_data?.situacao,
+              raw_data: c.raw_data
+            }));
+          }
+        } catch (e) {
+          console.log('[LeadsTable] Erro ao buscar companies:', e);
         }
       }
       
       setLeads(leadsData);
     } catch (err) {
       console.error('Erro ao carregar leads:', err);
-      toast.error('Erro ao carregar leads');
+      // Silenciar erro - mostrar tabela vazia
+      setLeads([]);
     } finally {
       setLoading(false);
     }

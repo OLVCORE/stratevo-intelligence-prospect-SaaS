@@ -59,15 +59,15 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
           return;
         }
 
-        // Verificar se já existe
+        // Verificar se já existe em companies
         const { data: existing } = await supabase
-          .from('leads_quarantine')
-          .select('id, name')
+          .from('companies')
+          .select('id, company_name')
           .eq('cnpj', cleanCnpj)
           .maybeSingle();
 
         if (existing) {
-          toast.info(`Empresa já existe: ${existing.name}`);
+          toast.info(`Empresa já existe: ${existing.company_name}`);
           return;
         }
 
@@ -134,45 +134,57 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
     }
   };
 
-  // Salvar empresa na tabela de qualificação
+  // Salvar empresa na tabela companies (base principal)
   const handleSaveToQualification = async () => {
-    if (!previewData || !tenantId) return;
+    if (!previewData) return;
 
     setIsSaving(true);
     try {
+      // Verificar se já existe
+      const { data: existing } = await supabase
+        .from('companies')
+        .select('id, company_name')
+        .eq('cnpj', previewData.cnpj)
+        .maybeSingle();
+
+      if (existing) {
+        toast.info(`Empresa já existe: ${existing.company_name}`);
+        setShowPreview(false);
+        setPreviewData(null);
+        setSearchQuery('');
+        return;
+      }
+
       // Calcular score ICP básico
-      let icpScore = 50; // Base
-      
-      // Ajustes baseados em dados
+      let icpScore = 50;
       if (previewData.situacao?.toUpperCase().includes('ATIVA')) icpScore += 15;
       if (previewData.capital_social > 100000) icpScore += 10;
       if (previewData.capital_social > 1000000) icpScore += 10;
       if (previewData.porte?.toUpperCase().includes('MEDIO') || previewData.porte?.toUpperCase().includes('GRANDE')) icpScore += 10;
-      
       icpScore = Math.min(100, icpScore);
 
       const temperatura = icpScore >= 70 ? 'hot' : icpScore >= 40 ? 'warm' : 'cold';
 
+      // Salvar em companies (tabela que já existe)
       const { error } = await supabase
-        .from('leads_quarantine')
+        .from('companies')
         .insert({
-          tenant_id: tenantId,
           cnpj: previewData.cnpj,
-          name: previewData.razao_social,
-          razao_social: previewData.razao_social,
-          nome_fantasia: previewData.nome_fantasia,
-          uf: previewData.uf,
-          municipio: previewData.municipio,
-          capital_social: previewData.capital_social,
-          porte: previewData.porte,
-          cnae_principal: previewData.cnae_principal,
-          situacao_cadastral: previewData.situacao,
-          icp_score: icpScore,
-          temperatura: temperatura,
-          validation_status: 'pending',
-          source_type: 'manual',
+          company_name: previewData.razao_social,
+          industry: previewData.cnae_descricao,
           source_name: 'Busca Qualificação',
-          raw_data: previewData.raw_data
+          source_type: 'manual',
+          location: {
+            city: previewData.municipio,
+            state: previewData.uf,
+            country: 'Brasil'
+          },
+          raw_data: {
+            ...previewData.raw_data,
+            icp_score: icpScore,
+            temperatura: temperatura,
+            qualification_source: 'inline_search'
+          }
         });
 
       if (error) throw error;
