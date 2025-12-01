@@ -4,24 +4,46 @@ import { OpenAI } from 'https://deno.land/x/openai@v4.24.0/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, accept, x-requested-with',
   'Access-Control-Max-Age': '86400',
 };
 
 serve(async (req) => {
+  // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA)
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    console.log('[GENERATE-ICP-REPORT] ✅ Respondendo ao preflight OPTIONS');
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
   }
 
+  console.log('[GENERATE-ICP-REPORT] 🚀 Requisição recebida:', req.method);
+
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
 
-    if (!openaiKey) {
+    console.log('[GENERATE-ICP-REPORT] 📋 Variáveis de ambiente:', {
+      hasSupabaseUrl: !!supabaseUrl,
+      hasSupabaseKey: !!supabaseKey,
+      hasOpenaiKey: !!openaiKey,
+    });
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('[GENERATE-ICP-REPORT] ❌ Variáveis Supabase não configuradas');
       return new Response(
-        JSON.stringify({ error: 'OPENAI_API_KEY não configurada' }),
+        JSON.stringify({ error: 'Variáveis de ambiente do Supabase não configuradas' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!openaiKey) {
+      console.error('[GENERATE-ICP-REPORT] ❌ OPENAI_API_KEY não configurada');
+      return new Response(
+        JSON.stringify({ error: 'OPENAI_API_KEY não configurada no Supabase. Configure em: Dashboard > Edge Functions > Secrets' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -187,9 +209,14 @@ Responda em formato Markdown estruturado e profissional, pronto para visualizaç
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
-    console.error('Erro na geração de relatório:', error);
+    console.error('[GENERATE-ICP-REPORT] ❌ Erro na geração de relatório:', error);
+    console.error('[GENERATE-ICP-REPORT] Stack:', error.stack);
     return new Response(
-      JSON.stringify({ error: 'Erro interno', details: error.message }),
+      JSON.stringify({ 
+        error: 'Erro interno na geração do relatório', 
+        details: error.message,
+        hint: 'Verifique se a OPENAI_API_KEY está configurada em: Supabase Dashboard > Edge Functions > Secrets'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

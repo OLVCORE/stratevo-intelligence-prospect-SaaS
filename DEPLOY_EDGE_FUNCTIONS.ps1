@@ -1,59 +1,131 @@
-# ============================================================================
-# SCRIPT: Deploy Edge Functions - CICLO 3
-# ============================================================================
-# Descrição: Faz deploy das Edge Functions criadas para CICLO 3
-# ============================================================================
+# =============================================================================
+# 🚀 DEPLOY EDGE FUNCTIONS - Stratevo Intelligence Prospect
+# =============================================================================
+# Este script faz o deploy das Edge Functions essenciais para o Supabase
+# Autor: Stratevo AI
+# Data: 2025-12-01
+# =============================================================================
 
-$projectRef = "vkdvezuivlovzqxmnohk"
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "   SUPABASE EDGE FUNCTIONS DEPLOY" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
 
-Write-Host "`n🚀 DEPLOY EDGE FUNCTIONS - CICLO 3" -ForegroundColor Yellow
-Write-Host "====================================" -ForegroundColor Yellow
-
-# Verificar se está na raiz do projeto
-if (-Not (Test-Path "supabase/functions")) {
-    Write-Host "❌ Erro: Execute este script na raiz do projeto!" -ForegroundColor Red
+# Verificar se está no diretório correto
+if (-not (Test-Path "supabase/functions")) {
+    Write-Host "❌ ERRO: Execute este script na raiz do projeto!" -ForegroundColor Red
+    Write-Host "   Diretório esperado: C:\Projects\stratevo-intelligence-prospect" -ForegroundColor Yellow
     exit 1
 }
 
-# ============================================
-# 1. DEPLOY: crm-analyze-call-recording
-# ============================================
-Write-Host "`n📦 Deployando crm-analyze-call-recording..." -ForegroundColor Cyan
-try {
-    npx supabase functions deploy crm-analyze-call-recording `
-        --project-ref $projectRef `
-        --no-verify-jwt
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ crm-analyze-call-recording deployado com sucesso!" -ForegroundColor Green
-    } else {
-        Write-Host "❌ Erro ao fazer deploy de crm-analyze-call-recording" -ForegroundColor Red
-    }
-} catch {
-    Write-Host "❌ Erro: $_" -ForegroundColor Red
+Write-Host "✅ Diretório correto detectado" -ForegroundColor Green
+Write-Host ""
+
+# Funções ESSENCIAIS para o ICP funcionar
+$essentialFunctions = @(
+    "analyze-onboarding-icp",
+    "generate-icp-report",
+    "icp-refresh-report",
+    "enrich-company-360",
+    "enrich-receita-federal",
+    "enrich-receitaws",
+    "web-search",
+    "serper-search",
+    "generate-embeddings",
+    "chat-ai"
+)
+
+# Funções IMPORTANTES para CRM/SDR
+$crmFunctions = @(
+    "crm-ai-assistant",
+    "crm-ai-lead-scoring",
+    "crm-leads",
+    "sdr-send-message",
+    "sdr-sequence-runner"
+)
+
+# Todas as funções combinadas para deploy
+$allFunctions = $essentialFunctions + $crmFunctions
+
+Write-Host "📋 Funções a serem deployadas:" -ForegroundColor Yellow
+Write-Host ""
+
+foreach ($func in $allFunctions) {
+    Write-Host "   • $func" -ForegroundColor White
 }
 
-# ============================================
-# 2. DEPLOY: whatsapp-status-webhook
-# ============================================
-Write-Host "`n📦 Deployando whatsapp-status-webhook..." -ForegroundColor Cyan
-try {
-    npx supabase functions deploy whatsapp-status-webhook `
-        --project-ref $projectRef `
-        --no-verify-jwt
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "   INICIANDO DEPLOY..." -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+$successCount = 0
+$failCount = 0
+$failedFunctions = @()
+
+foreach ($func in $allFunctions) {
+    Write-Host "🚀 Deployando: $func..." -ForegroundColor Yellow
     
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ whatsapp-status-webhook deployado com sucesso!" -ForegroundColor Green
-    } else {
-        Write-Host "❌ Erro ao fazer deploy de whatsapp-status-webhook" -ForegroundColor Red
+    # Verificar se a pasta existe
+    if (-not (Test-Path "supabase/functions/$func")) {
+        Write-Host "   ⚠️ Pasta não encontrada, pulando..." -ForegroundColor DarkYellow
+        continue
     }
-} catch {
-    Write-Host "❌ Erro: $_" -ForegroundColor Red
+    
+    try {
+        # Deploy da função
+        $result = supabase functions deploy $func --no-verify-jwt 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "   ✅ $func deployado com sucesso!" -ForegroundColor Green
+            $successCount++
+        } else {
+            Write-Host "   ❌ Erro ao deployar $func" -ForegroundColor Red
+            Write-Host "   $result" -ForegroundColor DarkRed
+            $failCount++
+            $failedFunctions += $func
+        }
+    }
+    catch {
+        Write-Host "   ❌ Exceção ao deployar $func : $_" -ForegroundColor Red
+        $failCount++
+        $failedFunctions += $func
+    }
+    
+    Write-Host ""
 }
 
-Write-Host "`n✅ Deploy concluído!" -ForegroundColor Green
-Write-Host "`nPróximos passos:" -ForegroundColor Cyan
-Write-Host "  1. Verifique as Edge Functions no Dashboard do Supabase" -ForegroundColor White
-Write-Host "  2. Configure webhook do Twilio (se usar WhatsApp via Twilio)" -ForegroundColor White
-Write-Host "  3. Teste as funcionalidades no CRM - Comunicacoes" -ForegroundColor White
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "   RESUMO DO DEPLOY" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "✅ Sucesso: $successCount funções" -ForegroundColor Green
+Write-Host "❌ Falhas: $failCount funções" -ForegroundColor $(if ($failCount -gt 0) { "Red" } else { "Green" })
 
+if ($failedFunctions.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Funções que falharam:" -ForegroundColor Red
+    foreach ($func in $failedFunctions) {
+        Write-Host "   • $func" -ForegroundColor Red
+    }
+}
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "   PRÓXIMOS PASSOS" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "1. Verifique as funções no Dashboard:" -ForegroundColor Yellow
+Write-Host "   https://supabase.com/dashboard/project/vkdvezuivlovzqxmnohk/functions" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "2. Configure os Secrets (se ainda não fez):" -ForegroundColor Yellow
+Write-Host "   supabase secrets set OPENAI_API_KEY=sua-chave" -ForegroundColor White
+Write-Host "   supabase secrets set SERPER_API_KEY=sua-chave" -ForegroundColor White
+Write-Host ""
+Write-Host "3. Teste o ICP na aplicação:" -ForegroundColor Yellow
+Write-Host "   http://localhost:5173/tenant-onboarding" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "   DEPLOY COMPLETO! 🎉" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Cyan
