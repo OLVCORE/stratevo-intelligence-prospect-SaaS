@@ -816,19 +816,19 @@ export default function ICPDetail() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800 cursor-help">
+                      <Card className="bg-gradient-to-br from-slate-50 to-blue-50/50 dark:from-slate-900 dark:to-blue-950/30 border-slate-300 dark:border-slate-700 cursor-help shadow-sm hover:shadow-md transition-shadow">
                         <CardContent className="pt-6">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm text-blue-700 dark:text-blue-300">Nichos Alvo</p>
-                                <Info className="h-3 w-3 text-blue-500 opacity-60" />
+                                <p className="text-sm text-slate-700 dark:text-slate-300 font-medium">Nichos Alvo</p>
+                                <Info className="h-3 w-3 text-blue-600 dark:text-blue-400 opacity-60" />
                               </div>
-                              <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                              <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">
                                 {(icpData.setores_alvo || icpData.nichos_alvo || []).length}
                               </p>
                             </div>
-                            <Target className="h-8 w-8 text-blue-400" />
+                            <Target className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                           </div>
                         </CardContent>
                       </Card>
@@ -843,19 +843,19 @@ export default function ICPDetail() {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800 cursor-help">
+                      <Card className="bg-gradient-to-br from-slate-50 to-emerald-50/50 dark:from-slate-900 dark:to-emerald-950/30 border-slate-300 dark:border-slate-700 cursor-help shadow-sm hover:shadow-md transition-shadow">
                         <CardContent className="pt-6">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm text-green-700 dark:text-green-300">Clientes Base</p>
-                                <Info className="h-3 w-3 text-green-500 opacity-60" />
+                                <p className="text-sm text-slate-700 dark:text-slate-300 font-medium">Clientes Base</p>
+                                <Info className="h-3 w-3 text-emerald-600 dark:text-emerald-400 opacity-60" />
                               </div>
-                              <p className="text-3xl font-bold text-green-900 dark:text-green-100">
+                              <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">
                                 {(icpData.clientes_atuais || []).length}
                               </p>
                             </div>
-                            <Users className="h-8 w-8 text-green-400" />
+                            <Users className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
                           </div>
                         </CardContent>
                       </Card>
@@ -870,19 +870,19 @@ export default function ICPDetail() {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800 cursor-help">
+                      <Card className="bg-gradient-to-br from-slate-50 to-indigo-50/50 dark:from-slate-900 dark:to-indigo-950/30 border-slate-300 dark:border-slate-700 cursor-help shadow-sm hover:shadow-md transition-shadow">
                         <CardContent className="pt-6">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm text-purple-700 dark:text-purple-300">Benchmarking</p>
-                                <Info className="h-3 w-3 text-purple-500 opacity-60" />
+                                <p className="text-sm text-slate-700 dark:text-slate-300 font-medium">Benchmarking</p>
+                                <Info className="h-3 w-3 text-indigo-600 dark:text-indigo-400 opacity-60" />
                               </div>
-                              <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                              <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">
                                 {(icpData.empresas_benchmarking || []).length}
                               </p>
                             </div>
-                            <BarChart3 className="h-8 w-8 text-purple-400" />
+                            <BarChart3 className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
                           </div>
                         </CardContent>
                       </Card>
@@ -897,19 +897,19 @@ export default function ICPDetail() {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800 cursor-help">
+                      <Card className="bg-gradient-to-br from-slate-50 to-amber-50/50 dark:from-slate-900 dark:to-amber-950/30 border-slate-300 dark:border-slate-700 cursor-help shadow-sm hover:shadow-md transition-shadow">
                         <CardContent className="pt-6">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm text-amber-700 dark:text-amber-300">CNAEs Alvo</p>
-                                <Info className="h-3 w-3 text-amber-500 opacity-60" />
+                                <p className="text-sm text-slate-700 dark:text-slate-300 font-medium">CNAEs Alvo</p>
+                                <Info className="h-3 w-3 text-amber-600 dark:text-amber-400 opacity-60" />
                               </div>
-                              <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">
+                              <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">
                                 {(icpData.cnaes_alvo || []).length}
                               </p>
                             </div>
-                            <FileText className="h-8 w-8 text-amber-400" />
+                            <FileText className="h-8 w-8 text-amber-600 dark:text-amber-400" />
                           </div>
                         </CardContent>
                       </Card>

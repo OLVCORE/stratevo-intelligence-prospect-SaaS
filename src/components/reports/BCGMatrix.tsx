@@ -50,32 +50,32 @@ function getQuadrantInfo(type: 'star' | 'question' | 'cash' | 'dog') {
     star: {
       label: 'Estrelas',
       description: 'Alto crescimento + Alta participação',
-      color: 'bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-400',
-      bgColor: 'bg-amber-50 dark:bg-amber-950/30',
+      color: 'bg-amber-500/10 border-amber-600 text-amber-800 dark:text-amber-400',
+      bgColor: 'bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-slate-900/50 dark:to-amber-950/20 border border-amber-200 dark:border-amber-800/50',
       icon: Star,
       strategy: 'Investir para manter liderança'
     },
     question: {
       label: 'Interrogações',
       description: 'Alto crescimento + Baixa participação',
-      color: 'bg-blue-500/20 border-blue-500 text-blue-700 dark:text-blue-400',
-      bgColor: 'bg-blue-50 dark:bg-blue-950/30',
+      color: 'bg-blue-500/10 border-blue-600 text-blue-800 dark:text-blue-400',
+      bgColor: 'bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-slate-900/50 dark:to-blue-950/20 border border-blue-200 dark:border-blue-800/50',
       icon: HelpCircle,
       strategy: 'Analisar potencial e decidir investir ou abandonar'
     },
     cash: {
       label: 'Vacas Leiteiras',
       description: 'Baixo crescimento + Alta participação',
-      color: 'bg-green-500/20 border-green-500 text-green-700 dark:text-green-400',
-      bgColor: 'bg-green-50 dark:bg-green-950/30',
+      color: 'bg-emerald-500/10 border-emerald-600 text-emerald-800 dark:text-emerald-400',
+      bgColor: 'bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-slate-900/50 dark:to-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50',
       icon: TrendingUp,
       strategy: 'Maximizar lucros e manter posição'
     },
     dog: {
       label: 'Abacaxis',
       description: 'Baixo crescimento + Baixa participação',
-      color: 'bg-red-500/20 border-red-500 text-red-700 dark:text-red-400',
-      bgColor: 'bg-red-50 dark:bg-red-950/30',
+      color: 'bg-orange-500/10 border-orange-600 text-orange-800 dark:text-orange-400',
+      bgColor: 'bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-slate-900/50 dark:to-orange-950/20 border border-orange-200 dark:border-orange-800/50',
       icon: X,
       strategy: 'Considerar desinvestimento ou reposicionamento'
     }
@@ -528,30 +528,30 @@ export default function BCGMatrix({
 
         {/* 🔥 NOVO: Explicação da Matriz BCG baseada em IA */}
         {aiAnalysis?.explanation && (
-          <Alert className="mb-6 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
-            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <AlertTitle className="text-blue-900 dark:text-blue-100">Explicação da Matriz BCG</AlertTitle>
-            <AlertDescription className="text-blue-800 dark:text-blue-200 text-sm mt-2">
+          <Alert className="mb-6 bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-slate-900/50 dark:to-blue-950/20 border-slate-300 dark:border-slate-700">
+            <Info className="h-4 w-4 text-blue-700 dark:text-blue-400" />
+            <AlertTitle className="text-slate-800 dark:text-slate-100">Explicação da Matriz BCG</AlertTitle>
+            <AlertDescription className="text-slate-700 dark:text-slate-300 text-sm mt-2">
               {aiAnalysis.explanation}
             </AlertDescription>
           </Alert>
         )}
 
         {aiAnalysis?.tenant_specific_insights && (
-          <Alert className="mb-6 bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800">
-            <Target className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-            <AlertTitle className="text-purple-900 dark:text-purple-100">Insights Específicos</AlertTitle>
-            <AlertDescription className="text-purple-800 dark:text-purple-200 text-sm mt-2">
+          <Alert className="mb-6 bg-gradient-to-r from-slate-50 to-indigo-50/30 dark:from-slate-900/50 dark:to-indigo-950/20 border-slate-300 dark:border-slate-700">
+            <Target className="h-4 w-4 text-indigo-700 dark:text-indigo-400" />
+            <AlertTitle className="text-slate-800 dark:text-slate-100">Insights Específicos</AlertTitle>
+            <AlertDescription className="text-slate-700 dark:text-slate-300 text-sm mt-2">
               {aiAnalysis.tenant_specific_insights}
             </AlertDescription>
           </Alert>
         )}
 
         {/* 🔥 NOVO: Alerta sobre dados faltantes */}
-        <Alert className="mb-6 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="text-amber-900 dark:text-amber-100">⚠️ Dados Necessários para Análise BCG Precisa</AlertTitle>
-          <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm mt-2 space-y-2">
+        <Alert className="mb-6 bg-gradient-to-r from-slate-50 to-amber-50/30 dark:from-slate-900/50 dark:to-amber-950/20 border-slate-300 dark:border-slate-700">
+          <AlertCircle className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+          <AlertTitle className="text-slate-800 dark:text-slate-100">⚠️ Dados Necessários para Análise BCG Precisa</AlertTitle>
+          <AlertDescription className="text-slate-700 dark:text-slate-300 text-sm mt-2 space-y-2">
             <p>
               <strong>Para uma análise BCG precisa, é necessário cadastrar:</strong>
             </p>
@@ -562,7 +562,7 @@ export default function BCGMatrix({
             </ul>
             <p className="text-xs mt-2 italic">
               A análise atual usa valores estimados conservadores quando dados estão faltando. 
-              Consulte o documento <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">INFORMACOES_NECESSARIAS_BCG.md</code> para mais detalhes.
+              Consulte o documento <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">INFORMACOES_NECESSARIAS_BCG.md</code> para mais detalhes.
             </p>
           </AlertDescription>
         </Alert>
