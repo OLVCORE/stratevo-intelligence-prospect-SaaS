@@ -217,12 +217,27 @@ serve(async (req) => {
     }
 
     // Extrair dados do onboarding
+    // 🔥 CORRIGIDO: Mesclar clientesAtuais de Step1 e Step5 (evitar duplicatas por CNPJ)
+    const clientesStep1 = session?.step1_data?.clientesAtuais || [];
+    const clientesStep5 = session?.step5_data?.clientesAtuais || [];
+    const clientesUnicos = new Map<string, any>();
+    [...clientesStep1, ...clientesStep5].forEach((cliente: any) => {
+      const cnpjClean = cliente.cnpj?.replace(/\D/g, '') || '';
+      if (cnpjClean && !clientesUnicos.has(cnpjClean)) {
+        clientesUnicos.set(cnpjClean, cliente);
+      }
+    });
+    const todosClientes = Array.from(clientesUnicos.values());
+    
     const onboardingData: OnboardingData = {
       step1_DadosBasicos: session?.step1_data || {},
       step2_SetoresNichos: session?.step2_data || {},
       step3_PerfilClienteIdeal: session?.step3_data || {},
       step4_SituacaoAtual: session?.step4_data || {},
-      step5_HistoricoEEnriquecimento: session?.step5_data || {},
+      step5_HistoricoEEnriquecimento: {
+        ...(session?.step5_data || {}),
+        clientesAtuais: todosClientes, // 🔥 CORRIGIDO: Usar clientes mesclados
+      },
     };
 
     console.log('[GENERATE-ICP-REPORT] 📊 Dados do onboarding carregados:', {

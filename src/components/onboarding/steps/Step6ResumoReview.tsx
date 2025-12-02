@@ -604,20 +604,36 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
           </CollapsibleTrigger>
           <CollapsibleContent>
             <CardContent className="space-y-4">
-              {/* Clientes Atuais */}
-              {initialData.step5_HistoricoEEnriquecimento?.clientesAtuais && initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      Clientes Atuais Cadastrados:
-                    </span>
-                    <Badge variant="secondary">
-                      {initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length} cliente{initialData.step5_HistoricoEEnriquecimento.clientesAtuais.length !== 1 ? 's' : ''}
-                    </Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {initialData.step5_HistoricoEEnriquecimento.clientesAtuais.map((cliente: any, index: number) => (
+              {/* Clientes Atuais - 🔥 CORRIGIDO: Mesclar de Step1 e Step5 */}
+              {(() => {
+                // 🔥 NOVO: Mesclar clientes de Step1 e Step5 (evitar duplicatas por CNPJ)
+                const clientesStep1 = initialData.step1_DadosBasicos?.clientesAtuais || [];
+                const clientesStep5 = initialData.step5_HistoricoEEnriquecimento?.clientesAtuais || [];
+                
+                // Mesclar evitando duplicatas (por CNPJ)
+                const clientesUnicos = new Map<string, any>();
+                [...clientesStep1, ...clientesStep5].forEach((cliente: any) => {
+                  const cnpjClean = cliente.cnpj?.replace(/\D/g, '') || '';
+                  if (cnpjClean && !clientesUnicos.has(cnpjClean)) {
+                    clientesUnicos.set(cnpjClean, cliente);
+                  }
+                });
+                
+                const todosClientes = Array.from(clientesUnicos.values());
+                
+                return todosClientes.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        Clientes Atuais Cadastrados:
+                      </span>
+                      <Badge variant="secondary">
+                        {todosClientes.length} cliente{todosClientes.length !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      {todosClientes.map((cliente: any, index: number) => (
                       <div key={index} className="p-3 bg-muted/50 rounded-md border border-border">
                         <div className="font-semibold text-foreground mb-2">{cliente.razaoSocial || cliente.nome}</div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
@@ -662,10 +678,11 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
                           <p className="text-xs text-muted-foreground italic mt-2">{cliente.cnaePrincipalDescricao}</p>
                         )}
                       </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               
               {/* 🔥 UNIFICADO: Empresas de Benchmarking */}
               {initialData.step5_HistoricoEEnriquecimento?.empresasBenchmarking && initialData.step5_HistoricoEEnriquecimento.empresasBenchmarking.length > 0 && (

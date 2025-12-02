@@ -51,6 +51,42 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   const [tenantProductsViewMode, setTenantProductsViewMode] = useState<'cards' | 'table'>('cards');
   const [tenantProductsOpen, setTenantProductsOpen] = useState(true); // 🔥 NOVO: Estado para abrir/fechar produtos do tenant
   
+  // 🔥 NOVO: Estados para clientes atuais
+  interface ClienteAtual {
+    cnpj: string;
+    razaoSocial: string;
+    nome?: string; // Alias para compatibilidade
+    setor: string;
+    ticketMedio: number;
+    cidade: string;
+    estado: string;
+    capitalSocial: number;
+    cnaePrincipal: string;
+    cnaePrincipalDescricao?: string;
+  }
+  
+  const [clientesAtuais, setClientesAtuais] = useState<ClienteAtual[]>(
+    initialData?.clientesAtuais || []
+  );
+  
+  const [novoCliente, setNovoCliente] = useState<ClienteAtual>({
+    cnpj: '',
+    razaoSocial: '',
+    nome: '',
+    setor: '',
+    ticketMedio: 0,
+    cidade: '',
+    estado: '',
+    capitalSocial: 0,
+    cnaePrincipal: '',
+    cnaePrincipalDescricao: '',
+  });
+  
+  const [buscandoCNPJCliente, setBuscandoCNPJCliente] = useState(false);
+  const [cnpjClienteEncontrado, setCnpjClienteEncontrado] = useState(false);
+  const [erroCNPJCliente, setErroCNPJCliente] = useState<string | null>(null);
+  const cnpjClienteUltimoBuscadoRef = useRef<string>('');
+  
   // 🔥 NOVO: Estados para concorrentes
   interface ConcorrenteDireto {
     cnpj: string;
@@ -280,6 +316,15 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         loadTenantProducts();
       }
       
+      // 🔥 NOVO: Carregar clientes atuais
+      if (initialData.clientesAtuais && Array.isArray(initialData.clientesAtuais) && initialData.clientesAtuais.length > 0) {
+        setClientesAtuais(initialData.clientesAtuais);
+      } else if (initialData.clientesAtuais === undefined && !hasInitializedRef.current) {
+        if (clientesAtuais.length === 0) {
+          setClientesAtuais([]);
+        }
+      }
+      
       // 🔥 NOVO: Carregar concorrentes e seus produtos
       if (initialData.concorrentesDiretos && Array.isArray(initialData.concorrentesDiretos) && initialData.concorrentesDiretos.length > 0) {
         const loadConcorrentesComProdutos = async () => {
@@ -383,7 +428,9 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
               cnpjData.atividade_principal[0]?.code,
               ...(cnpjData.atividades_secundarias || []).map((a: any) => a.code)
             ].filter(Boolean) : (initialData?.cnaes || []),
-            cnpjData: cnpjData || initialData?.cnpjData || null,
+      cnpjData: cnpjData || initialData?.cnpjData || null,
+      clientesAtuais: clientesParaSalvar,
+            clientesAtuais: clientesParaSalvar,
             concorrentesDiretos: concorrentesParaSalvar,
           };
           
@@ -741,6 +788,140 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   };
 
   // 🔥 NOVO: Buscar dados do CNPJ do concorrente
+  // 🔥 NOVO: Buscar dados CNPJ para cliente atual
+  useEffect(() => {
+    const cnpjClean = novoCliente.cnpj.replace(/\D/g, '');
+    if (cnpjClean.length === 14 && !buscandoCNPJCliente && cnpjClean !== cnpjClienteUltimoBuscadoRef.current) {
+      console.log('[Step1] 🔍 CNPJ de cliente completo detectado, iniciando busca automática:', cnpjClean);
+      cnpjClienteUltimoBuscadoRef.current = cnpjClean;
+      buscarDadosCNPJCliente(cnpjClean);
+    } else if (cnpjClean.length < 14) {
+      setCnpjClienteEncontrado(false);
+      cnpjClienteUltimoBuscadoRef.current = '';
+      setNovoCliente({
+        cnpj: '',
+        razaoSocial: '',
+        nome: '',
+        setor: '',
+        ticketMedio: 0,
+        cidade: '',
+        estado: '',
+        capitalSocial: 0,
+        cnaePrincipal: '',
+        cnaePrincipalDescricao: '',
+      });
+    }
+  }, [novoCliente.cnpj, buscandoCNPJCliente]);
+
+  const buscarDadosCNPJCliente = async (cnpjClean: string) => {
+    setBuscandoCNPJCliente(true);
+    setErroCNPJCliente(null);
+    setCnpjClienteEncontrado(false);
+
+    try {
+      const result = await consultarReceitaFederal(cnpjClean);
+      
+      if (!result.success || !result.data) {
+        setErroCNPJCliente(result.error || 'Erro ao buscar dados do CNPJ');
+        return;
+      }
+
+      const data = result.data;
+      
+      // Extrair setor do CNAE
+      let setorExtraido = '';
+      if (data.atividade_principal?.[0]?.code) {
+        const cnaeCode = data.atividade_principal[0].code.replace(/\D/g, '');
+        const secao = cnaeCode.substring(0, 1);
+        const setores: Record<string, string> = {
+          '1': 'Agricultura', '2': 'Indústria', '3': 'Indústria',
+          '4': 'Energia', '5': 'Construção', '6': 'Comércio',
+          '7': 'Transporte', '8': 'Serviços', '9': 'Serviços'
+        };
+        setorExtraido = setores[secao] || 'Outros';
+      }
+
+      setNovoCliente({
+        cnpj: novoCliente.cnpj,
+        razaoSocial: data.nome || data.fantasia || '',
+        nome: data.nome || data.fantasia || '',
+        setor: setorExtraido,
+        ticketMedio: 0,
+        cidade: data.municipio || '',
+        estado: data.uf || '',
+        capitalSocial: data.capital_social || 0,
+        cnaePrincipal: data.atividade_principal?.[0]?.code || '',
+        cnaePrincipalDescricao: data.atividade_principal?.[0]?.text || '',
+      });
+      
+      setCnpjClienteEncontrado(true);
+      toast.success('Dados do cliente encontrados!');
+    } catch (error: any) {
+      console.error('[Step1] Erro ao buscar CNPJ do cliente:', error);
+      setErroCNPJCliente(error.message || 'Erro ao buscar dados do CNPJ');
+    } finally {
+      setBuscandoCNPJCliente(false);
+    }
+  };
+
+  const adicionarCliente = () => {
+    const cnpjClean = novoCliente.cnpj.replace(/\D/g, '');
+    
+    if (!cnpjClean || cnpjClean.length !== 14 || !novoCliente.razaoSocial.trim()) {
+      toast.error('Preencha o CNPJ e aguarde a busca automática dos dados');
+      return;
+    }
+
+    if (clientesAtuais.some(c => c.cnpj.replace(/\D/g, '') === cnpjClean)) {
+      toast.error('Este cliente já foi adicionado');
+      return;
+    }
+
+    const updatedClientes = [...clientesAtuais, { ...novoCliente }];
+    setClientesAtuais(updatedClientes);
+    
+    // 🔥 CRÍTICO: Salvar imediatamente para persistência
+    if (onSave) {
+      const dataToSave = {
+        ...formData,
+        clientesAtuais: updatedClientes,
+      };
+      onSave(dataToSave);
+    }
+    
+    // Limpar formulário
+    setNovoCliente({
+      cnpj: '',
+      razaoSocial: '',
+      nome: '',
+      setor: '',
+      ticketMedio: 0,
+      cidade: '',
+      estado: '',
+      capitalSocial: 0,
+      cnaePrincipal: '',
+      cnaePrincipalDescricao: '',
+    });
+    setCnpjClienteEncontrado(false);
+    cnpjClienteUltimoBuscadoRef.current = '';
+    
+    toast.success('Cliente adicionado com sucesso!');
+  };
+
+  const removerCliente = (index: number) => {
+    const updatedClientes = clientesAtuais.filter((_, i) => i !== index);
+    setClientesAtuais(updatedClientes);
+    
+    // 🔥 CRÍTICO: Salvar imediatamente para persistência
+    if (onSave) {
+      const dataToSave = {
+        ...formData,
+        clientesAtuais: updatedClientes,
+      };
+      onSave(dataToSave);
+    }
+  };
+
   const buscarDadosCNPJConcorrente = async (cnpjClean: string) => {
     setBuscandoCNPJConcorrente(true);
     setErroCNPJConcorrente(null);
@@ -1012,6 +1193,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     const concorrentesParaSalvar = concorrentes.length > 0 
       ? concorrentes 
       : (initialData?.concorrentesDiretos || []);
+    
+    const clientesParaSalvar = clientesAtuais.length > 0 
+      ? clientesAtuais 
+      : (initialData?.clientesAtuais || []);
     
     const dataToSave = {
       ...formData,
@@ -1432,6 +1617,181 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           </Card>
         </CollapsibleContent>
       </Collapsible>
+
+      {/* 🔥 NOVO: Seção de Clientes Atuais */}
+      <Separator className="my-6" />
+      
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-blue-500" />
+              Clientes Atuais
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Cadastre seus clientes atuais para identificar padrões e melhorar o ICP. O CNPJ busca dados automaticamente.
+            </p>
+          </div>
+          <Badge variant="default" className="text-base px-3 py-1">
+            {clientesAtuais.length} {clientesAtuais.length === 1 ? 'cliente' : 'clientes'}
+          </Badge>
+        </div>
+
+        {/* Formulário de Novo Cliente */}
+        <Card className="mb-4 border-dashed">
+          <CardContent className="pt-6 space-y-4">
+            <div>
+              <Label>CNPJ do Cliente</Label>
+              <Input
+                value={novoCliente.cnpj}
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/\D/g, '');
+                  let formatted = clean;
+                  if (clean.length > 2) formatted = clean.substring(0, 2) + '.' + clean.substring(2);
+                  if (clean.length > 5) formatted = formatted.substring(0, 6) + '.' + clean.substring(5);
+                  if (clean.length > 8) formatted = formatted.substring(0, 10) + '/' + clean.substring(8);
+                  if (clean.length > 12) formatted = formatted.substring(0, 15) + '-' + clean.substring(12);
+                  setNovoCliente({ ...novoCliente, cnpj: formatted });
+                }}
+                placeholder="00.000.000/0000-00"
+                className="w-full"
+              />
+              {buscandoCNPJCliente && (
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Buscando dados...
+                </p>
+              )}
+              {cnpjClienteEncontrado && (
+                <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Dados encontrados! Preencha o ticket médio e clique em "Adicionar Cliente"
+                </p>
+              )}
+              {erroCNPJCliente && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{erroCNPJCliente}</p>
+              )}
+            </div>
+
+            {/* Dados Encontrados */}
+            {cnpjClienteEncontrado && (
+              <Card className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <CardTitle className="text-green-900 dark:text-green-100 text-base">
+                      Dados Encontrados Automaticamente
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Razão Social:</span>
+                      <p className="font-medium text-foreground">{novoCliente.razaoSocial}</p>
+                    </div>
+                    {novoCliente.setor && (
+                      <div>
+                        <span className="text-muted-foreground">Setor:</span>
+                        <p className="font-medium text-foreground">{novoCliente.setor}</p>
+                      </div>
+                    )}
+                    {(novoCliente.cidade || novoCliente.estado) && (
+                      <div>
+                        <span className="text-muted-foreground">Localização:</span>
+                        <p className="font-medium text-foreground">
+                          {novoCliente.cidade}{novoCliente.cidade && novoCliente.estado ? ', ' : ''}{novoCliente.estado}
+                        </p>
+                      </div>
+                    )}
+                    {novoCliente.capitalSocial > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Capital Social:</span>
+                        <p className="font-medium text-foreground">
+                          R$ {novoCliente.capitalSocial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    )}
+                    {novoCliente.cnaePrincipal && (
+                      <div>
+                        <span className="text-muted-foreground">CNAE Principal:</span>
+                        <p className="font-mono text-xs text-foreground">{novoCliente.cnaePrincipal}</p>
+                        {novoCliente.cnaePrincipalDescricao && (
+                          <p className="text-xs text-muted-foreground">{novoCliente.cnaePrincipalDescricao}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="mt-4">
+                    <Label htmlFor="ticketMedio">Ticket Médio R$</Label>
+                    <Input
+                      id="ticketMedio"
+                      type="text"
+                      value={novoCliente.ticketMedio || ''}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        setNovoCliente({ ...novoCliente, ticketMedio: value ? parseFloat(value) : 0 });
+                      }}
+                      placeholder="Ex: 25000"
+                      className="mt-1"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Button
+              type="button"
+              onClick={adicionarCliente}
+              disabled={!cnpjClienteEncontrado || buscandoCNPJCliente}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Cliente
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Lista de Clientes Adicionados */}
+        {clientesAtuais.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              Clientes Cadastrados ({clientesAtuais.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {clientesAtuais.map((cliente, index) => (
+                <Card key={index} className="relative group">
+                  <CardContent className="p-4 space-y-2">
+                    <div className="font-semibold text-foreground">{cliente.razaoSocial || cliente.nome}</div>
+                    <div className="text-xs text-muted-foreground">
+                      <p>CNPJ: <span className="font-mono">{cliente.cnpj}</span></p>
+                      <p>Setor: <Badge variant="secondary" className="text-xs">{cliente.setor}</Badge></p>
+                      {cliente.ticketMedio > 0 && (
+                        <p>Ticket Médio: R$ {cliente.ticketMedio.toLocaleString('pt-BR')}</p>
+                      )}
+                      <p>Localização: {cliente.cidade}/{cliente.estado}</p>
+                      {cliente.capitalSocial > 0 && (
+                        <p>Capital: R$ {cliente.capitalSocial.toLocaleString('pt-BR')}</p>
+                      )}
+                    </div>
+                  </CardContent>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removerCliente(index)}
+                    className="absolute top-2 right-2 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 🔥 NOVO: Seção de Concorrentes */}
       <Separator className="my-6" />

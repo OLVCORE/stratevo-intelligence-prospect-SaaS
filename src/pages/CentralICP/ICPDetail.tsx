@@ -104,7 +104,19 @@ export default function ICPDetail() {
           concorrentes: session.step4_data?.concorrentesDiretos || [], // 🔥 SEMPRE do onboarding mais recente
           tickets_ciclos: session.step4_data?.ticketsECiclos || [],
           // Histórico (Step 5) - 🔥 CRÍTICO: Benchmarking e clientes devem vir sempre do onboarding
-          clientes_atuais: session.step5_data?.clientesAtuais || [], // 🔥 SEMPRE do onboarding mais recente
+          // 🔥 CORRIGIDO: Mesclar clientes de Step1 e Step5 (evitar duplicatas por CNPJ)
+          clientes_atuais: (() => {
+            const clientesStep1 = session.step1_data?.clientesAtuais || [];
+            const clientesStep5 = session.step5_data?.clientesAtuais || [];
+            const clientesUnicos = new Map<string, any>();
+            [...clientesStep1, ...clientesStep5].forEach((cliente: any) => {
+              const cnpjClean = cliente.cnpj?.replace(/\D/g, '') || '';
+              if (cnpjClean && !clientesUnicos.has(cnpjClean)) {
+                clientesUnicos.set(cnpjClean, cliente);
+              }
+            });
+            return Array.from(clientesUnicos.values());
+          })(),
           empresas_benchmarking: session.step5_data?.empresasBenchmarking || [], // 🔥 SEMPRE do onboarding mais recente
           // Análise IA
           analise_detalhada: metadata?.icp_recommendation?.analise_detalhada || {},
@@ -114,8 +126,11 @@ export default function ICPDetail() {
         console.log('[ICPDetail] ✅ Dados enriquecidos carregados:', {
           setores: enrichedIcpData.setores_alvo?.length || 0,
           cnaes: enrichedIcpData.cnaes_alvo?.length || 0,
-          concorrentes: enrichedIcpData.concorrentes?.length || 0, // 🔥 NOVO: Log de concorrentes
+          concorrentes: enrichedIcpData.concorrentes?.length || 0,
+          concorrentes_detalhes: enrichedIcpData.concorrentes?.map((c: any) => ({ cnpj: c.cnpj, razao: c.razaoSocial })), // 🔥 NOVO: Log detalhado de concorrentes
           clientes: enrichedIcpData.clientes_atuais?.length || 0,
+          clientes_step1: session.step1_data?.clientesAtuais?.length || 0,
+          clientes_step5: session.step5_data?.clientesAtuais?.length || 0,
           benchmarking: enrichedIcpData.empresas_benchmarking?.length || 0,
         });
         
