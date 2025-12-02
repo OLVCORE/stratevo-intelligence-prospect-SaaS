@@ -26,8 +26,8 @@ import {
   Lightbulb,
   BarChart3,
   PieChart,
-  RefreshCw,
   Loader2,
+  RefreshCw,
   ExternalLink,
   Shield,
   Zap,
@@ -49,6 +49,7 @@ import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ProductComparisonMatrix } from './ProductComparisonMatrix';
+import { useICPDataSyncHook } from '@/hooks/useICPDataSync';
 
 // Interface com TODOS os dados do concorrente da Aba 4
 interface ConcorrenteDireto {
@@ -121,6 +122,20 @@ export default function CompetitiveAnalysis({
   competitors = [], 
   diferenciais = [] 
 }: CompetitiveAnalysisProps) {
+  const { refreshTrigger, forceRefresh } = useICPDataSyncHook({
+    icpId,
+    autoRefresh: true,
+    onRefresh: async () => {
+      // Recarregar concorrentes quando houver mudanças
+      if (competitors.length > 0) {
+        const initial: CompetitorEnriched[] = competitors.map(c => ({
+          ...c,
+          ameacaPotencial: classifyThreat(c.capitalSocial || 0, companyCapitalSocial || 1000000)
+        }));
+        setEnrichedCompetitors(initial);
+      }
+    },
+  });
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [enrichedCompetitors, setEnrichedCompetitors] = useState<CompetitorEnriched[]>([]);
@@ -128,10 +143,10 @@ export default function CompetitiveAnalysis({
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
 
-  // Inicializar com dados dos concorrentes
+  // Inicializar com dados dos concorrentes (incluindo refreshTrigger para detectar mudanças)
   useEffect(() => {
     if (competitors.length > 0) {
-      console.log('[CompetitiveAnalysis] 📊 Concorrentes recebidos:', competitors);
+      console.log('[CompetitiveAnalysis] 📊 Concorrentes recebidos:', competitors.length, 'concorrentes');
       // Converter concorrentes para formato enriquecido
       const initial: CompetitorEnriched[] = competitors.map(c => ({
         ...c,
@@ -139,7 +154,7 @@ export default function CompetitiveAnalysis({
       }));
       setEnrichedCompetitors(initial);
     }
-  }, [competitors, companyCapitalSocial]);
+  }, [competitors, companyCapitalSocial, refreshTrigger]); // 🔥 Adicionar refreshTrigger
 
   // Calcular totais
   const totalCapitalConcorrentes = enrichedCompetitors.reduce((sum, c) => sum + (c.capitalSocial || 0), 0);
@@ -550,23 +565,39 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                 </p>
               )}
             </div>
-            <Button
-              onClick={runFullAnalysis}
-              disabled={analyzing || competitors.length === 0}
-              className="bg-purple-600 hover:bg-purple-700"
-            >
-              {analyzing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Analisando...
-                </>
-              ) : (
-                <>
-                  <Search className="h-4 w-4 mr-2" />
-                  {ceoAnalysis ? 'Atualizar Análise' : 'Iniciar Análise'}
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  await forceRefresh();
+                  toast({
+                    title: '✅ Dados Atualizados',
+                    description: 'Concorrentes atualizados com os dados mais recentes do onboarding.',
+                  });
+                }}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Atualizar
+              </Button>
+              <Button
+                onClick={runFullAnalysis}
+                disabled={analyzing || competitors.length === 0}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {analyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Analisando...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 mr-2" />
+                    {ceoAnalysis ? 'Atualizar Análise' : 'Iniciar Análise'}
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>

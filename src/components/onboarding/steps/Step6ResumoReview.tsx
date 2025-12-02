@@ -829,62 +829,67 @@ export function Step6ResumoReview({ onNext, onBack, onSave, initialData, isSubmi
               </div>
               
               {/* Linha 1: Ações principais do ICP */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    if (onGenerate) {
-                      await onGenerate();
-                    }
-                  }}
-                  disabled={isGenerating}
-                  className="flex-1 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Regenerando...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Regenerar ICP
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => navigate(`/central-icp/profile/${createdIcpId}`)}
-                  className="flex-1"
-                >
-                  <Target className="w-4 h-4 mr-2" />
-                  Ver Detalhes do ICP
-                </Button>
-              </div>
-
-              {/* Linha 2: Relatórios (após gerar ICP) */}
-              <div className="pt-3 border-t">
-                <p className="text-xs text-muted-foreground mb-3 text-center">
-                  📊 Gere relatórios estratégicos com análise de CEO/Estrategista de Mercado:
-                </p>
+              <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Button
-                    variant="secondary"
+                    variant="default"
+                    size="lg"
+                    onClick={() => navigate(`/central-icp/profile/${createdIcpId}`)}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                  >
+                    <Target className="w-4 h-4 mr-2" />
+                    Ver ICP Gerado
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
                     onClick={() => navigate(`/central-icp/reports/${createdIcpId}?type=completo`)}
                     className="flex-1"
                   >
                     <FileText className="w-4 h-4 mr-2" />
-                    Ver Relatório Completo
+                    Gerar Relatório Completo
+                  </Button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (onGenerate) {
+                        await onGenerate();
+                      }
+                    }}
+                    disabled={isGenerating}
+                    className="flex-1 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Regenerando...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Regenerar ICP com Dados Atualizados
+                      </>
+                    )}
                   </Button>
                   <Button
                     variant="ghost"
-                    onClick={() => navigate(`/central-icp/reports/${createdIcpId}?type=resumo`)}
+                    onClick={() => navigate('/tenant-onboarding')}
                     className="flex-1"
                   >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Ver Resumo
+                    <ChevronUp className="w-4 h-4 mr-2" />
+                    Continuar Editando Onboarding
                   </Button>
                 </div>
+              </div>
+              <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg mt-3">
+                <p className="font-medium mb-1">💡 Dica:</p>
+                <ul className="space-y-1 ml-4 list-disc">
+                  <li><strong>Ver ICP Gerado</strong>: Visualize o resumo estratégico completo com todos os dados</li>
+                  <li><strong>Gerar Relatório Completo</strong>: Crie um relatório detalhado com análise de CEO/Estrategista</li>
+                  <li><strong>Regenerar ICP</strong>: Atualize o ICP se você editou dados nas etapas anteriores</li>
+                </ul>
               </div>
             </div>
           )}

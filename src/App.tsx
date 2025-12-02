@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
 import { AuthProvider } from "./contexts/AuthContext";
 import { TenantProvider } from "./contexts/TenantContext";
+import { ICPDataSyncProvider } from "./contexts/ICPDataSyncContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { TenantGuard } from "./components/TenantGuard";
 import UsageVerificationReport from "@/pages/Leads/UsageVerificationReport";
@@ -199,6 +200,7 @@ const App = () => (
             <BrowserRouter>
             <AuthProvider>
             <TenantProvider>
+            <ICPDataSyncProvider>
             <AuthTokenGuard />
             <PageViewTracker />
             <ProductTour runOnMount={true} />
@@ -1035,6 +1037,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          </ICPDataSyncProvider>
           </TenantProvider>
           </AuthProvider>
         </BrowserRouter>

@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
+import { useICPDataSync } from '@/contexts/ICPDataSyncContext';
+import { useICPDataSyncHook } from '@/hooks/useICPDataSync';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,30 +26,13 @@ export default function ICPReports() {
   const [searchParams] = useSearchParams();
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
+  const { triggerRefresh } = useICPDataSync();
   const [profile, setProfile] = useState<any>(null);
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('gerar');
   
-  // Determinar tab inicial baseado na URL
-  useEffect(() => {
-    const type = searchParams.get('type');
-    if (type === 'completo') {
-      setActiveTab('completo');
-    } else if (type === 'resumo') {
-      setActiveTab('resumo');
-    } else {
-      setActiveTab('gerar');
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (tenantId && icpId) {
-      loadData();
-    }
-  }, [tenantId, icpId]);
-
   const loadData = async () => {
     if (!tenantId || !icpId) return;
 
@@ -98,6 +83,31 @@ export default function ICPReports() {
       setLoading(false);
     }
   };
+  
+  // Hook de sincronização (depois de loadData estar definido)
+  const { refreshTrigger, forceRefresh } = useICPDataSyncHook({
+    icpId,
+    autoRefresh: true,
+    onRefresh: loadData,
+  });
+  
+  // Determinar tab inicial baseado na URL
+  useEffect(() => {
+    const type = searchParams.get('type');
+    if (type === 'completo') {
+      setActiveTab('completo');
+    } else if (type === 'resumo') {
+      setActiveTab('resumo');
+    } else {
+      setActiveTab('gerar');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (tenantId && icpId) {
+      loadData();
+    }
+  }, [tenantId, icpId, refreshTrigger]); // 🔥 Adicionar refreshTrigger para recarregar quando houver mudanças
 
   const handleGenerateReport = async (type: 'completo' | 'resumo') => {
     if (!tenantId || !icpId) return;
@@ -172,6 +182,21 @@ export default function ICPReports() {
             {profile?.nome || 'ICP'} - Gerar e visualizar relatórios completos
           </p>
         </div>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            await forceRefresh();
+            await loadData();
+            toast({
+              title: '✅ Dados Atualizados',
+              description: 'Todos os relatórios foram atualizados com os dados mais recentes.',
+            });
+          }}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Atualizar Dados
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

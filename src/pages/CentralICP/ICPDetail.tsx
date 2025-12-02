@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
+import { useICPDataSync } from '@/contexts/ICPDataSyncContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,10 +20,18 @@ export default function ICPDetail() {
   const { id } = useParams<{ id: string }>();
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
+  const { triggerRefresh, setCurrentIcpId } = useICPDataSync();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [icpData, setIcpData] = useState<any>(null);
   const [regenerating, setRegenerating] = useState(false);
+  
+  // Registrar ICP atual no contexto
+  useEffect(() => {
+    if (id) {
+      setCurrentIcpId(id);
+    }
+  }, [id, setCurrentIcpId]);
 
   useEffect(() => {
     if (tenantId && id) {
@@ -46,7 +55,8 @@ export default function ICPDetail() {
       if (metaError) throw metaError;
       setProfile(metadata);
 
-      // 🔥 Buscar dados completos do onboarding_sessions para obter benchmarking e clientes
+      // 🔥 Buscar dados completos do onboarding_sessions para obter benchmarking, clientes E CONCORRENTES
+      // 🔥 CRÍTICO: Sempre buscar a sessão mais recente (sem cache) para garantir dados atualizados
       const { data: sessionData, error: sessionError } = await (supabase as any)
         .from('onboarding_sessions')
         .select('*')
@@ -56,6 +66,15 @@ export default function ICPDetail() {
 
       if (!sessionError && sessionData && sessionData.length > 0) {
         const session = sessionData[0];
+        
+        // 🔥 Log detalhado para debug
+        console.log('[ICPDetail] 📊 Dados da sessão de onboarding:', {
+          session_id: session.id,
+          updated_at: session.updated_at,
+          concorrentes_count: session.step4_data?.concorrentesDiretos?.length || 0,
+          benchmarking_count: session.step5_data?.empresasBenchmarking?.length || 0,
+          clientes_count: session.step5_data?.clientesAtuais?.length || 0,
+        });
         
         // Construir icpData a partir dos dados do onboarding + metadata
         const enrichedIcpData = {
@@ -79,30 +98,42 @@ export default function ICPDetail() {
           funcionarios_max: session.step3_data?.funcionariosAlvo?.maximo,
           porte_alvo: session.step3_data?.porteAlvo || [],
           localizacao_alvo: session.step3_data?.localizacaoAlvo || {},
-          // Situação atual (Step 4)
+          // Situação atual (Step 4) - 🔥 CRÍTICO: Concorrentes devem vir sempre do onboarding
           diferenciais: session.step4_data?.diferenciais || [],
           casos_de_uso: session.step4_data?.casosDeUso || [],
-          concorrentes: session.step4_data?.concorrentesDiretos || [],
+          concorrentes: session.step4_data?.concorrentesDiretos || [], // 🔥 SEMPRE do onboarding mais recente
           tickets_ciclos: session.step4_data?.ticketsECiclos || [],
-          // Histórico (Step 5)
-          clientes_atuais: session.step5_data?.clientesAtuais || [],
-          empresas_benchmarking: session.step5_data?.empresasBenchmarking || [],
+          // Histórico (Step 5) - 🔥 CRÍTICO: Benchmarking e clientes devem vir sempre do onboarding
+          clientes_atuais: session.step5_data?.clientesAtuais || [], // 🔥 SEMPRE do onboarding mais recente
+          empresas_benchmarking: session.step5_data?.empresasBenchmarking || [], // 🔥 SEMPRE do onboarding mais recente
           // Análise IA
           analise_detalhada: metadata?.icp_recommendation?.analise_detalhada || {},
           score_confianca: metadata?.icp_recommendation?.score_confianca || 0,
         };
         
-        console.log('[ICPDetail] 📊 Dados enriquecidos:', {
-          setores: enrichedIcpData.setores_alvo?.length,
-          cnaes: enrichedIcpData.cnaes_alvo?.length,
-          clientes: enrichedIcpData.clientes_atuais?.length,
-          benchmarking: enrichedIcpData.empresas_benchmarking?.length,
+        console.log('[ICPDetail] ✅ Dados enriquecidos carregados:', {
+          setores: enrichedIcpData.setores_alvo?.length || 0,
+          cnaes: enrichedIcpData.cnaes_alvo?.length || 0,
+          concorrentes: enrichedIcpData.concorrentes?.length || 0, // 🔥 NOVO: Log de concorrentes
+          clientes: enrichedIcpData.clientes_atuais?.length || 0,
+          benchmarking: enrichedIcpData.empresas_benchmarking?.length || 0,
         });
         
         setIcpData(enrichedIcpData);
       } else if (metadata?.icp_recommendation) {
-        console.warn('[ICPDetail] ⚠️ Usando apenas metadata');
-        setIcpData(metadata.icp_recommendation.icp_profile || {});
+        console.warn('[ICPDetail] ⚠️ Usando apenas metadata (sem sessão de onboarding)');
+        // Mesmo sem sessão, tentar extrair dados da metadata se disponível
+        const metadataProfile = metadata.icp_recommendation.icp_profile || {};
+        setIcpData({
+          ...metadataProfile,
+          // Tentar preservar concorrentes e benchmarking se estiverem na metadata
+          concorrentes: metadataProfile.concorrentes || [],
+          empresas_benchmarking: metadataProfile.empresas_benchmarking || [],
+          clientes_atuais: metadataProfile.clientes_atuais || [],
+        });
+      } else {
+        console.warn('[ICPDetail] ⚠️ Nenhum dado disponível');
+        setIcpData({});
       }
     } catch (error: any) {
       console.error('Erro ao carregar ICP:', error);
@@ -127,12 +158,33 @@ export default function ICPDetail() {
         description: 'Analisando dados atualizados do onboarding com IA.',
       });
 
+      // 🔥 CRÍTICO: Forçar reload dos dados do onboarding ANTES de regenerar
+      // Buscar sessão mais recente para garantir dados atualizados
+      const { data: latestSession, error: sessionError } = await (supabase as any)
+        .from('onboarding_sessions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sessionError) {
+        console.warn('[ICPDetail] ⚠️ Erro ao buscar sessão atualizada:', sessionError);
+      } else if (latestSession) {
+        console.log('[ICPDetail] 📊 Sessão atualizada encontrada:', {
+          updated_at: latestSession.updated_at,
+          concorrentes: latestSession.step4_data?.concorrentesDiretos?.length || 0,
+          benchmarking: latestSession.step5_data?.empresasBenchmarking?.length || 0,
+        });
+      }
+
       // Chamar Edge Function para regenerar análise
       const { data, error } = await supabase.functions.invoke('analyze-onboarding-icp', {
         body: {
           tenant_id: tenantId,
           icp_id: id,
           regenerate: true, // Flag para indicar regeneração
+          force_refresh: true, // 🔥 NOVO: Forçar refresh dos dados
         },
       });
 
@@ -143,7 +195,7 @@ export default function ICPDetail() {
         const { error: updateError } = await (supabase as any)
           .from('icp_profiles_metadata')
           .update({
-            recommendation_data: data.recommendation,
+            icp_recommendation: data.recommendation, // 🔥 CORRIGIDO: Coluna correta é icp_recommendation
             updated_at: new Date().toISOString(),
           })
           .eq('id', id)
@@ -159,7 +211,11 @@ export default function ICPDetail() {
         description: 'A análise foi atualizada com os dados mais recentes do onboarding.',
       });
 
-      // Recarregar dados
+      // 🔥 CRÍTICO: Aguardar um pouco antes de recarregar para garantir que o banco foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Recarregar dados FORÇANDO refresh (sem cache)
+      setLoading(true);
       await loadProfile();
 
     } catch (error: any) {
@@ -171,6 +227,7 @@ export default function ICPDetail() {
       });
     } finally {
       setRegenerating(false);
+      setLoading(false);
     }
   };
 
@@ -375,6 +432,46 @@ export default function ICPDetail() {
                       {icpData.empresas_benchmarking.length > 6 && (
                         <p className="text-sm text-muted-foreground mt-2">
                           +{icpData.empresas_benchmarking.length - 6} empresas adicionais analisadas
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Concorrentes Diretos */}
+                  {icpData.concorrentes && icpData.concorrentes.length > 0 && (
+                    <div className="pt-4 border-t">
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        ⚠️ Concorrentes Diretos ({icpData.concorrentes.length} cadastrado{icpData.concorrentes.length !== 1 ? 's' : ''})
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {icpData.concorrentes.slice(0, 6).map((conc: any, idx: number) => (
+                          <Card key={idx} className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                            <CardContent className="p-3">
+                              <p className="font-semibold text-sm">{conc.razaoSocial || conc.nome || 'Concorrente'}</p>
+                              {conc.cnpj && (
+                                <p className="text-xs text-muted-foreground font-mono mt-1">CNPJ: {conc.cnpj}</p>
+                              )}
+                              {conc.setor && (
+                                <p className="text-xs text-muted-foreground mt-1">Setor: {conc.setor}</p>
+                              )}
+                              {conc.capitalSocial && conc.capitalSocial > 0 && (
+                                <p className="text-xs text-primary mt-1 font-medium">
+                                  Capital: R$ {conc.capitalSocial.toLocaleString('pt-BR')}
+                                </p>
+                              )}
+                              {conc.localizacao && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  📍 {conc.localizacao}
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                      {icpData.concorrentes.length > 6 && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          +{icpData.concorrentes.length - 6} concorrente{icpData.concorrentes.length - 6 !== 1 ? 's' : ''} adicional{icpData.concorrentes.length - 6 !== 1 ? 'is' : ''} cadastrado{icpData.concorrentes.length - 6 !== 1 ? 's' : ''}
                         </p>
                       )}
                     </div>
