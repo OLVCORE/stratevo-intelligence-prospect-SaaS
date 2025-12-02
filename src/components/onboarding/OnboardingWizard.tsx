@@ -263,25 +263,50 @@ export function OnboardingWizard() {
         }
         
         // 🔥 CRÍTICO: Sempre carregar step5_data completo
+        // 🔥 NOVO: Recuperar clientes que foram salvos em step1_data (migração)
+        let clientesRecuperados: any[] = [];
+        if (sessionData.step1_data?.clientesAtuais && Array.isArray(sessionData.step1_data.clientesAtuais)) {
+          clientesRecuperados = sessionData.step1_data.clientesAtuais;
+          console.log('[OnboardingWizard] 🔄 Clientes encontrados em step1_data, recuperando:', clientesRecuperados.length);
+        }
+        
         if (sessionData.step5_data) {
           // Garantir que arrays sejam sempre arrays e não undefined/null
-          const clientesAtuais = Array.isArray(sessionData.step5_data?.clientesAtuais) 
+          const clientesAtuaisStep5 = Array.isArray(sessionData.step5_data?.clientesAtuais) 
             ? sessionData.step5_data.clientesAtuais 
             : [];
           const empresasBenchmarking = Array.isArray(sessionData.step5_data?.empresasBenchmarking)
             ? sessionData.step5_data.empresasBenchmarking
             : [];
           
+          // 🔥 NOVO: Mesclar clientes recuperados de step1 com step5 (evitar duplicatas por CNPJ)
+          const clientesUnicos = new Map<string, any>();
+          [...clientesRecuperados, ...clientesAtuaisStep5].forEach((cliente: any) => {
+            const cnpjClean = cliente.cnpj?.replace(/\D/g, '') || '';
+            if (cnpjClean && !clientesUnicos.has(cnpjClean)) {
+              clientesUnicos.set(cnpjClean, cliente);
+            }
+          });
+          const todosClientes = Array.from(clientesUnicos.values());
+          
+          if (clientesRecuperados.length > 0 && todosClientes.length > clientesAtuaisStep5.length) {
+            console.log('[OnboardingWizard] ✅ Clientes recuperados e mesclados:', {
+              recuperados: clientesRecuperados.length,
+              step5: clientesAtuaisStep5.length,
+              total: todosClientes.length
+            });
+          }
+          
           loadedData.step5_HistoricoEEnriquecimento = {
             ...sessionData.step5_data,
-            clientesAtuais,
+            clientesAtuais: todosClientes, // 🔥 NOVO: Usar clientes mesclados
             empresasBenchmarking,
           };
-        } else if (sessionData.step4_data?.empresasBenchmarking) {
-          // Se não há step5_data, mas há empresasBenchmarking no step4 (migração)
+        } else if (sessionData.step4_data?.empresasBenchmarking || clientesRecuperados.length > 0) {
+          // Se não há step5_data, mas há empresasBenchmarking no step4 ou clientes recuperados (migração)
           loadedData.step5_HistoricoEEnriquecimento = {
-            clientesAtuais: [],
-            empresasBenchmarking: Array.isArray(sessionData.step4_data.empresasBenchmarking)
+            clientesAtuais: clientesRecuperados, // 🔥 NOVO: Incluir clientes recuperados
+            empresasBenchmarking: Array.isArray(sessionData.step4_data?.empresasBenchmarking)
               ? sessionData.step4_data.empresasBenchmarking
               : [],
           } as any;
@@ -294,6 +319,62 @@ export function OnboardingWizard() {
         });
         
         setFormData(prev => ({ ...prev, ...loadedData }));
+        
+        // 🔥 NOVO: Se houver clientes recuperados de step1, salvar automaticamente em step5
+        if (clientesRecuperados.length > 0 && loadedData.step5_HistoricoEEnriquecimento) {
+          // Aguardar um pouco para garantir que o estado foi atualizado
+          setTimeout(async () => {
+            try {
+              const { data: { user: authUser } } = await supabase.auth.getUser();
+              if (!authUser) return;
+              
+              const publicUserId = await getPublicUserId(authUser.id, tenantId);
+              if (!publicUserId) return;
+              
+              // Buscar sessão atual
+              const { data: currentSession } = await (supabase as any)
+                .from('onboarding_sessions')
+                .select('*')
+                .eq('user_id', publicUserId)
+                .eq('tenant_id', tenantId)
+                .maybeSingle();
+              
+              if (currentSession) {
+                // Atualizar step5_data com clientes mesclados
+                const updatedStep5 = {
+                  ...(currentSession.step5_data || {}),
+                  clientesAtuais: loadedData.step5_HistoricoEEnriquecimento.clientesAtuais,
+                };
+                
+                // Remover clientesAtuais de step1_data
+                const updatedStep1 = { ...currentSession.step1_data };
+                if (updatedStep1) {
+                  delete updatedStep1.clientesAtuais;
+                }
+                
+                const { error: updateError } = await (supabase as any)
+                  .from('onboarding_sessions')
+                  .update({
+                    step1_data: updatedStep1,
+                    step5_data: updatedStep5,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', currentSession.id);
+                
+                if (!updateError) {
+                  console.log('[OnboardingWizard] ✅ Clientes migrados de step1 para step5 com sucesso');
+                  toast.success(`${clientesRecuperados.length} cliente(s) recuperado(s) e migrado(s) para a etapa correta!`, {
+                    duration: 5000,
+                  });
+                } else {
+                  console.error('[OnboardingWizard] Erro ao migrar clientes:', updateError);
+                }
+              }
+            } catch (error) {
+              console.error('[OnboardingWizard] Erro ao migrar clientes automaticamente:', error);
+            }
+          }, 1000);
+        }
       }
     } catch (error) {
       console.error('[OnboardingWizard] Erro ao recarregar dados:', error);
