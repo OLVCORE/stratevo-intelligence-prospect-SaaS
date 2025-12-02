@@ -61,7 +61,7 @@ export default function CompaniesMapWithGeocoding({
   const [loading, setLoading] = useState(true);
   const [geocodingProgress, setGeocodingProgress] = useState({ current: 0, total: 0 });
 
-  // Geocodificar empresas usando Nominatim (gratuito)
+  // Geocodificar empresas usando coordenadas fixas por cidade (fallback para evitar CORS)
   useEffect(() => {
     const geocodeCompanies = async () => {
       if (companies.length === 0) {
@@ -72,50 +72,80 @@ export default function CompaniesMapWithGeocoding({
       setGeocodingProgress({ current: 0, total: companies.length });
       const geocoded: Company[] = [];
 
+      // Mapa de coordenadas de cidades brasileiras (fallback para evitar CORS do Nominatim)
+      const cityCoordinates: Record<string, { lat: number; lng: number }> = {
+        // São Paulo
+        'SAO PAULO-SP': { lat: -23.5505, lng: -46.6333 },
+        'GUARULHOS-SP': { lat: -23.4538, lng: -46.5333 },
+        'SANTO ANDRE-SP': { lat: -23.6636, lng: -46.5341 },
+        'SAO JOSE DOS CAMPOS-SP': { lat: -23.1791, lng: -45.8872 },
+        'SUZANO-SP': { lat: -23.5425, lng: -46.3108 },
+        'BOCAINA-SP': { lat: -22.1386, lng: -48.5108 },
+        // Santa Catarina
+        'ITAJAI-SC': { lat: -26.9077, lng: -48.6611 },
+        'JARAGUA DO SUL-SC': { lat: -26.4847, lng: -49.0661 },
+        // Rio de Janeiro
+        'RIO DE JANEIRO-RJ': { lat: -22.9068, lng: -43.1729 },
+        // Paraná
+        'SAO JOSE DOS PINHAIS-PR': { lat: -25.5347, lng: -49.2064 },
+        'ARAUCARIA-PR': { lat: -25.5928, lng: -49.4103 },
+        // Minas Gerais
+        'CRISTINA-MG': { lat: -22.2133, lng: -45.2722 },
+      };
+
       for (let i = 0; i < companies.length; i++) {
         const company = companies[i];
+        const cityKey = `${company.cidade}-${company.estado}`.toUpperCase();
         
-        try {
-          // Geocodificar cidade + estado usando Nominatim
-          const query = `${company.cidade}, ${company.estado}, Brasil`;
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`,
-            {
-              headers: {
-                'User-Agent': 'Stratevo Intelligence Prospect'
+        // Usar coordenadas do mapa ou tentar geocodificar (com delay)
+        if (cityCoordinates[cityKey]) {
+          geocoded.push({
+            ...company,
+            location: cityCoordinates[cityKey],
+          });
+        } else {
+          // Tentar geocodificar (com delay maior para evitar rate limit)
+          try {
+            const query = `${company.cidade}, ${company.estado}, Brasil`;
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`,
+              {
+                headers: {
+                  'User-Agent': 'Stratevo Intelligence Prospect',
+                  'Accept': 'application/json',
+                }
               }
-            }
-          );
+            );
 
-          if (response.ok) {
-            const data = await response.json();
-            if (data && data.length > 0) {
-              const { lat, lon } = data[0];
-              geocoded.push({
-                ...company,
-                location: {
-                  lat: parseFloat(lat),
-                  lng: parseFloat(lon),
-                },
-              });
+            if (response.ok) {
+              const data = await response.json();
+              if (data && data.length > 0) {
+                const { lat, lon } = data[0];
+                geocoded.push({
+                  ...company,
+                  location: {
+                    lat: parseFloat(lat),
+                    lng: parseFloat(lon),
+                  },
+                });
+              } else {
+                geocoded.push(company);
+              }
             } else {
-              // Se não encontrou, adicionar sem coordenadas
               geocoded.push(company);
             }
-          } else {
+
+            // Delay de 2 segundos entre requisições para respeitar rate limit
+            if (i < companies.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          } catch (error) {
+            console.warn(`[Map] Erro ao geocodificar ${company.name}:`, error);
             geocoded.push(company);
           }
-
-          setGeocodingProgress({ current: i + 1, total: companies.length });
-          
-          // Delay para respeitar rate limit do Nominatim (1 req/segundo)
-          if (i < companies.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        } catch (error) {
-          console.error(`Erro ao geocodificar ${company.name}:`, error);
-          geocoded.push(company);
         }
+
+        setGeocodingProgress({ current: i + 1, total: companies.length });
       }
 
       setCompaniesWithLocation(geocoded);

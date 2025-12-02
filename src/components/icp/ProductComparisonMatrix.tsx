@@ -21,7 +21,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
-import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award } from 'lucide-react';
+import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';

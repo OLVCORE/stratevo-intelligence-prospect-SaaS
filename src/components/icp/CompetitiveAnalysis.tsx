@@ -125,17 +125,7 @@ export default function CompetitiveAnalysis({
 }: CompetitiveAnalysisProps) {
   const { refreshTrigger, forceRefresh } = useICPDataSyncHook({
     icpId,
-    autoRefresh: true,
-    onRefresh: async () => {
-      // Recarregar concorrentes quando houver mudanças
-      if (competitors.length > 0) {
-        const initial: CompetitorEnriched[] = competitors.map(c => ({
-          ...c,
-          ameacaPotencial: classifyThreat(c.capitalSocial || 0, companyCapitalSocial || 1000000)
-        }));
-        setEnrichedCompetitors(initial);
-      }
-    },
+    autoRefresh: false, // 🔥 DESABILITADO: estava causando loop infinito
   });
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
