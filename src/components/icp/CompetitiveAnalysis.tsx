@@ -50,6 +50,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ProductComparisonMatrix } from './ProductComparisonMatrix';
 import { useICPDataSyncHook } from '@/hooks/useICPDataSync';
+import CompetitorDiscovery from './CompetitorDiscovery';
 
 // Interface com TODOS os dados do concorrente da Aba 4
 interface ConcorrenteDireto {
@@ -616,10 +617,11 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
       ) : (
         <TooltipProvider>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-5 w-full">
+          <TabsList className="grid grid-cols-6 w-full">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="competitors">Concorrentes ({competitors.length})</TabsTrigger>
             <TabsTrigger value="products">Comparação Produtos</TabsTrigger>
+            <TabsTrigger value="discovery">🔍 Descobrir Novos</TabsTrigger>
             <TabsTrigger value="swot">SWOT</TabsTrigger>
             <TabsTrigger value="ceo" className={ceoAnalysis ? 'text-purple-600' : ''}>
               {ceoAnalysis && '✓ '}Análise CEO
@@ -1046,6 +1048,28 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
           {/* Comparação de Produtos */}
           <TabsContent value="products" className="space-y-4">
             <ProductComparisonMatrix icpId={icpId} />
+          </TabsContent>
+
+          {/* Descoberta de Concorrentes via SERPER */}
+          <TabsContent value="discovery" className="space-y-4">
+            <CompetitorDiscovery 
+              industry={competitors[0]?.setor || 'Manufatura'}
+              products={[]} // Produtos virão do tenant
+              location={competitors[0]?.cidade}
+              excludeWebsites={competitors.map(c => {
+                try {
+                  return new URL(c.website || '').hostname.replace('www.', '');
+                } catch {
+                  return '';
+                }
+              }).filter(Boolean)}
+              onCompetitorSelected={(candidate) => {
+                toast({
+                  title: 'Concorrente identificado',
+                  description: `${candidate.nome} - Adicione manualmente na Step 1 do onboarding`,
+                });
+              }}
+            />
           </TabsContent>
 
           {/* SWOT */}
