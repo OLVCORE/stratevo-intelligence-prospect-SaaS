@@ -215,7 +215,7 @@ export default function BCGMatrix({
       const tipoRelacionamento = cliente.tipoRelacionamento; // Classificação manual do usuário
 
       // 🔥 CRÍTICO: Participação = (Faturamento do cliente / Faturamento total) * 100
-      const marketShare = temFaturamento && faturamentoTotalClientes > 0
+      let marketShare = temFaturamento && faturamentoTotalClientes > 0
         ? Math.min(100, Math.max(5, (faturamentoAtual / faturamentoTotalClientes) * 100))
         : 35; // Fallback se não tem faturamento
 
@@ -311,7 +311,7 @@ export default function BCGMatrix({
 
       // 🔥 CRÍTICO: Participação = (Expectativa da empresa / Expectativa total) * 100
       // Benchmarking sempre tem baixa participação (ainda não são clientes)
-      const marketShare = temExpectativa && expectativaTotalFaturamento > 0
+      let marketShare = temExpectativa && expectativaTotalFaturamento > 0
         ? Math.min(30, Math.max(5, (expectativaFaturamento / expectativaTotalFaturamento) * 100)) // Max 30% (baixa participação)
         : 20; // Fallback se não tem expectativa
 
