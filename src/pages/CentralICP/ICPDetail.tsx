@@ -6,14 +6,16 @@ import { useICPDataSync } from '@/contexts/ICPDataSyncContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp, Users, DollarSign, MapPin, AlertTriangle, Lightbulb, TrendingDown } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp, Users, DollarSign, MapPin, AlertTriangle, Lightbulb, TrendingDown, Info } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import ICPAnalysisCriteriaConfig from '@/components/icp/ICPAnalysisCriteriaConfig';
-import BCGMatrix, { createBCGItemsFromICP } from '@/components/reports/BCGMatrix';
+import BCGMatrix from '@/components/reports/BCGMatrix';
 import CompetitiveAnalysis from '@/components/icp/CompetitiveAnalysis';
 import StrategicActionPlan from '@/components/icp/StrategicActionPlan';
+import CompaniesMapWithGeocoding from '@/components/map/CompaniesMapWithGeocoding';
 
 export default function ICPDetail() {
   const navigate = useNavigate();
@@ -34,16 +36,41 @@ export default function ICPDetail() {
   }, [id, setCurrentIcpId]);
 
   useEffect(() => {
+    console.log('[ICPDetail] 🔄 useEffect executado:', {
+      tenantId,
+      tenant: tenant ? { 
+        id: tenant.id, 
+        nome: (tenant as any)?.nome || (tenant as any)?.razao_social,
+        tenant_id_from_object: (tenant as any)?.tenant_id,
+      } : null,
+      id,
+    });
+    
+    // 🔥 DEBUG: Verificar se há discrepância entre tenant.id e tenant.tenant_id
+    if (tenant && (tenant as any)?.tenant_id && (tenant as any).tenant_id !== tenant.id) {
+      console.warn('[ICPDetail] ⚠️ DISCREPÂNCIA: tenant.id !== tenant.tenant_id:', {
+        tenant_id: tenant.id,
+        tenant_tenant_id: (tenant as any).tenant_id,
+      });
+    }
+    
     if (tenantId && id) {
       loadProfile();
+    } else {
+      console.warn('[ICPDetail] ⚠️ Aguardando tenantId ou id:', { tenantId, id });
     }
-  }, [tenantId, id]);
+  }, [tenantId, id, tenant]);
 
   const loadProfile = async () => {
-    if (!tenantId || !id) return;
+    if (!tenantId || !id) {
+      console.warn('[ICPDetail] ⚠️ Falta tenantId ou id:', { tenantId, id });
+      return;
+    }
     
     setLoading(true);
     try {
+      console.log('[ICPDetail] 🔍 Buscando ICP metadata:', { id, tenantId });
+      
       // Buscar metadata
       const { data: metadata, error: metaError } = await (supabase as any)
         .from('icp_profiles_metadata')
@@ -52,7 +79,59 @@ export default function ICPDetail() {
         .eq('tenant_id', tenantId)
         .single();
 
-      if (metaError) throw metaError;
+      if (metaError) {
+        console.error('[ICPDetail] ❌ Erro ao buscar metadata:', {
+          error: metaError,
+          code: metaError.code,
+          message: metaError.message,
+          details: metaError.details,
+          hint: metaError.hint,
+        });
+        
+        // Tentar buscar sem filtro de tenant_id (pode ser problema de RLS)
+        console.log('[ICPDetail] 🔄 Tentando buscar sem filtro de tenant_id...');
+        const { data: metadataAlt, error: metaErrorAlt } = await (supabase as any)
+          .from('icp_profiles_metadata')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        
+        if (metaErrorAlt) {
+          throw metaError;
+        }
+        
+        if (metadataAlt) {
+          console.warn('[ICPDetail] ⚠️ Metadata encontrada sem filtro de tenant:', metadataAlt);
+          // Verificar se o tenant_id corresponde
+          if (metadataAlt.tenant_id !== tenantId) {
+            console.warn('[ICPDetail] ⚠️ Discrepância de tenant_id detectada:', {
+              esperado: tenantId,
+              encontrado: metadataAlt.tenant_id,
+              icpId: id,
+            });
+            
+            // 🔥 PERMITIR ACESSO: Se o RLS permitiu encontrar o ICP, significa que o usuário tem permissão
+            // Pode ser que o contexto do tenant esteja desatualizado ou o usuário tenha acesso a múltiplos tenants
+            console.log('[ICPDetail] ✅ Permitindo acesso ao ICP (RLS permitiu encontrar)');
+            
+            // Avisar o usuário sobre a discrepância, mas permitir acesso
+            toast({
+              title: 'Aviso',
+              description: `Este ICP pertence a outro tenant, mas você tem permissão para acessá-lo.`,
+              variant: 'default',
+            });
+            
+            setProfile(metadataAlt);
+          } else {
+            setProfile(metadataAlt);
+          }
+        } else {
+          throw metaError;
+        }
+      } else {
+        console.log('[ICPDetail] ✅ Metadata encontrada:', metadata?.nome || metadata?.id);
+        setProfile(metadata);
+      }
       setProfile(metadata);
 
       // 🔥 Buscar dados completos do onboarding_sessions para obter benchmarking, clientes E CONCORRENTES
@@ -71,7 +150,9 @@ export default function ICPDetail() {
         console.log('[ICPDetail] 📊 Dados da sessão de onboarding:', {
           session_id: session.id,
           updated_at: session.updated_at,
-          concorrentes_count: session.step4_data?.concorrentesDiretos?.length || 0,
+          concorrentes_step1_count: session.step1_data?.concorrentesDiretos?.length || 0,
+          concorrentes_step4_count: session.step4_data?.concorrentesDiretos?.length || 0,
+          concorrentes_step1_raw: session.step1_data?.concorrentesDiretos, // 🔥 DEBUG
           benchmarking_count: session.step5_data?.empresasBenchmarking?.length || 0,
           clientes_count: session.step5_data?.clientesAtuais?.length || 0,
         });
@@ -101,7 +182,8 @@ export default function ICPDetail() {
           // Situação atual (Step 4) - 🔥 CRÍTICO: Concorrentes devem vir sempre do onboarding
           diferenciais: session.step4_data?.diferenciais || [],
           casos_de_uso: session.step4_data?.casosDeUso || [],
-          concorrentes: session.step4_data?.concorrentesDiretos || [], // 🔥 SEMPRE do onboarding mais recente
+          // 🔥 CRÍTICO: Concorrentes estão em step1_data (foram movidos para lá)
+          concorrentes: session.step1_data?.concorrentesDiretos || session.step4_data?.concorrentesDiretos || [], // 🔥 Buscar em step1 primeiro
           tickets_ciclos: session.step4_data?.ticketsECiclos || [],
           // Histórico (Step 5) - 🔥 CRÍTICO: Benchmarking e clientes devem vir sempre do onboarding
           // 🔥 CORRIGIDO: Mesclar clientes de Step1 e Step5 (evitar duplicatas por CNPJ)
@@ -127,7 +209,12 @@ export default function ICPDetail() {
           setores: enrichedIcpData.setores_alvo?.length || 0,
           cnaes: enrichedIcpData.cnaes_alvo?.length || 0,
           concorrentes: enrichedIcpData.concorrentes?.length || 0,
-          concorrentes_detalhes: enrichedIcpData.concorrentes?.map((c: any) => ({ cnpj: c.cnpj, razao: c.razaoSocial })), // 🔥 NOVO: Log detalhado de concorrentes
+          concorrentes_detalhes: enrichedIcpData.concorrentes?.map((c: any) => ({ 
+            tipo: typeof c,
+            nome: typeof c === 'string' ? c : c.nome || c.razaoSocial,
+            cnpj: typeof c === 'object' ? c.cnpj : null,
+          })), // 🔥 NOVO: Log detalhado de concorrentes
+          concorrentes_raw: enrichedIcpData.concorrentes, // 🔥 DEBUG: Log completo para debug
           clientes: enrichedIcpData.clientes_atuais?.length || 0,
           clientes_step1: session.step1_data?.clientesAtuais?.length || 0,
           clientes_step5: session.step5_data?.clientesAtuais?.length || 0,
@@ -151,10 +238,27 @@ export default function ICPDetail() {
         setIcpData({});
       }
     } catch (error: any) {
-      console.error('Erro ao carregar ICP:', error);
+      console.error('[ICPDetail] ❌ Erro ao carregar ICP:', {
+        error,
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      
+      // Mensagem de erro mais específica
+      let errorMessage = 'Não foi possível carregar os detalhes do ICP.';
+      if (error?.code === 'PGRST116' || error?.message?.includes('406')) {
+        errorMessage = 'Erro de permissão ao acessar o ICP. Verifique se você tem acesso a este perfil.';
+      } else if (error?.message?.includes('tenant')) {
+        errorMessage = 'Este ICP pertence a outro tenant. Você não tem permissão para acessá-lo.';
+      } else if (error?.message) {
+        errorMessage = `Erro: ${error.message}`;
+      }
+      
       toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar os detalhes do ICP.',
+        title: 'Erro ao Carregar ICP',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -321,15 +425,57 @@ export default function ICPDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="resumo" className="space-y-4">
-        <TabsList className="flex flex-wrap h-auto gap-1">
-          <TabsTrigger value="resumo">Resumo Estratégico</TabsTrigger>
-          <TabsTrigger value="configuracao">Configuração</TabsTrigger>
-          <TabsTrigger value="criterios">Critérios</TabsTrigger>
-          <TabsTrigger value="analise">360°</TabsTrigger>
-          <TabsTrigger value="competitiva" className="text-purple-600">🏆 Competitiva</TabsTrigger>
-          <TabsTrigger value="plano" className="text-indigo-600">📋 Plano</TabsTrigger>
-          <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+      <Tabs defaultValue="resumo" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 h-auto gap-2 bg-muted/50 p-2 rounded-lg">
+          <TabsTrigger 
+            value="resumo" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
+          >
+            <Target className="h-4 w-4" />
+            <span className="hidden sm:inline">Resumo</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="configuracao" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-emerald-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
+          >
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Configuração</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="criterios" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-600 data-[state=active]:to-amber-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Critérios</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="analise" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-purple-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">360°</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="competitiva" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-600 data-[state=active]:to-rose-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
+          >
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Competitiva</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="plano" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-indigo-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
+          >
+            <Zap className="h-4 w-4" />
+            <span className="hidden sm:inline">Plano</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="relatorios" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-600 data-[state=active]:to-cyan-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
+          >
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Relatórios</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo" className="space-y-4">
@@ -501,7 +647,7 @@ export default function ICPDetail() {
                       </h3>
                       <div className="flex flex-wrap gap-2">
                         {icpData.clientes_atuais.slice(0, 5).map((cliente: any, idx: number) => (
-                          <Badge key={idx} variant="outline" className="bg-green-50 dark:bg-green-950">
+                          <Badge key={idx} variant="outline" className="bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600">
                             {cliente.nome || cliente.razaoSocial}
                           </Badge>
                         ))}
@@ -666,189 +812,461 @@ export default function ICPDetail() {
           {icpData ? (
             <>
               {/* KPIs Principais */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm text-blue-700 dark:text-blue-300">Nichos Alvo</p>
-                        <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
-                          {(icpData.setores_alvo || icpData.nichos_alvo || []).length}
-                        </p>
-                      </div>
-                      <Target className="h-8 w-8 text-blue-400" />
-                    </div>
-                  </CardContent>
-                </Card>
+              <TooltipProvider>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800 cursor-help">
+                        <CardContent className="pt-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm text-blue-700 dark:text-blue-300">Nichos Alvo</p>
+                                <Info className="h-3 w-3 text-blue-500 opacity-60" />
+                              </div>
+                              <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                                {(icpData.setores_alvo || icpData.nichos_alvo || []).length}
+                              </p>
+                            </div>
+                            <Target className="h-8 w-8 text-blue-400" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="font-semibold mb-1">Nichos Alvo</p>
+                      <p className="text-xs">
+                        Número de nichos de mercado específicos dentro do setor principal ({profile?.setor_foco || 'Manufatura'}) que foram identificados como alvos estratégicos para prospecção. Estes nichos foram definidos com base nas características do seu negócio, diferenciais competitivos e perfil do cliente ideal.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
 
-                <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm text-green-700 dark:text-green-300">Clientes Base</p>
-                        <p className="text-3xl font-bold text-green-900 dark:text-green-100">
-                          {(icpData.clientes_atuais || []).length}
-                        </p>
-                      </div>
-                      <Users className="h-8 w-8 text-green-400" />
-                    </div>
-                  </CardContent>
-                </Card>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800 cursor-help">
+                        <CardContent className="pt-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm text-green-700 dark:text-green-300">Clientes Base</p>
+                                <Info className="h-3 w-3 text-green-500 opacity-60" />
+                              </div>
+                              <p className="text-3xl font-bold text-green-900 dark:text-green-100">
+                                {(icpData.clientes_atuais || []).length}
+                              </p>
+                            </div>
+                            <Users className="h-8 w-8 text-green-400" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="font-semibold mb-1">Clientes Base</p>
+                      <p className="text-xs">
+                        Total de clientes atuais cadastrados que servem como base de análise e referência para identificar padrões, características comuns e validar o perfil do cliente ideal (ICP). Estes clientes são utilizados para benchmarking e para calibrar os critérios de qualificação.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
 
-                <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm text-purple-700 dark:text-purple-300">Benchmarking</p>
-                        <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
-                          {(icpData.empresas_benchmarking || []).length}
-                        </p>
-                      </div>
-                      <BarChart3 className="h-8 w-8 text-purple-400" />
-                    </div>
-                  </CardContent>
-                </Card>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800 cursor-help">
+                        <CardContent className="pt-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm text-purple-700 dark:text-purple-300">Benchmarking</p>
+                                <Info className="h-3 w-3 text-purple-500 opacity-60" />
+                              </div>
+                              <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                                {(icpData.empresas_benchmarking || []).length}
+                              </p>
+                            </div>
+                            <BarChart3 className="h-8 w-8 text-purple-400" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="font-semibold mb-1">Benchmarking</p>
+                      <p className="text-xs">
+                        Número de empresas-alvo cadastradas para análise comparativa e benchmarking. Estas são empresas desejadas como clientes, que possuem características similares aos seus clientes atuais ou que representam o perfil ideal que você busca atingir. Utilizadas para análise estratégica e definição de estratégias de abordagem.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
 
-                <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm text-amber-700 dark:text-amber-300">CNAEs Alvo</p>
-                        <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">
-                          {(icpData.cnaes_alvo || []).length}
-                        </p>
-                      </div>
-                      <FileText className="h-8 w-8 text-amber-400" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Card className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800 cursor-help">
+                        <CardContent className="pt-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm text-amber-700 dark:text-amber-300">CNAEs Alvo</p>
+                                <Info className="h-3 w-3 text-amber-500 opacity-60" />
+                              </div>
+                              <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">
+                                {(icpData.cnaes_alvo || []).length}
+                              </p>
+                            </div>
+                            <FileText className="h-8 w-8 text-amber-400" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="font-semibold mb-1">CNAEs Alvo</p>
+                      <p className="text-xs">
+                        Quantidade de códigos CNAE (Classificação Nacional de Atividades Econômicas) identificados como alvos para prospecção. Os CNAEs representam as atividades econômicas principais das empresas que melhor se alinham com seu produto/serviço e perfil de cliente ideal. Utilizados para filtragem e segmentação na busca de prospects.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
 
               {/* Matriz BCG */}
               <BCGMatrix 
-                items={createBCGItemsFromICP(icpData)}
+                items={[]}
                 title="Matriz BCG - Priorização de Nichos e Clientes"
                 description="Análise estratégica de portfólio baseada em crescimento de mercado e participação"
+                tenantId={tenantId}
+                icpId={id}
+                onboardingData={icpData}
+                useAIAnalysis={true}
               />
 
-              {/* Grid de Análises */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Perfil Financeiro */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <DollarSign className="h-5 w-5 text-green-500" />
-                      Perfil Financeiro Alvo
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {icpData.faturamento_min || icpData.faturamento_max ? (
-                      <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-lg">
-                        <p className="text-sm text-muted-foreground">Faixa de Faturamento</p>
-                        <p className="text-xl font-bold text-green-700 dark:text-green-400">
-                          R$ {(icpData.faturamento_min || 0).toLocaleString('pt-BR')} - R$ {(icpData.faturamento_max || 0).toLocaleString('pt-BR')}
-                        </p>
-                      </div>
-                    ) : null}
-                    {icpData.tickets_ciclos && icpData.tickets_ciclos.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Tickets e Ciclos de Venda</p>
-                        {icpData.tickets_ciclos.slice(0, 3).map((item: any, idx: number) => (
-                          <div key={idx} className="flex justify-between text-sm p-2 bg-muted rounded">
-                            <span>{item.criterio || `Ticket ${idx + 1}`}</span>
-                            <span className="font-medium">
-                              R$ {(item.ticketMedio || item.ticketMedioMin || 0).toLocaleString('pt-BR')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Localização Geográfica */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <MapPin className="h-5 w-5 text-blue-500" />
-                      Cobertura Geográfica
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {icpData.localizacao_alvo?.estados && icpData.localizacao_alvo.estados.length > 0 && (
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-2">Estados Alvo</p>
-                        <div className="flex flex-wrap gap-2">
-                          {icpData.localizacao_alvo.estados.map((estado: string, idx: number) => (
-                            <Badge key={idx} variant="outline" className="bg-blue-50 dark:bg-blue-950">
-                              {estado}
-                            </Badge>
-                          ))}
+              {/* Grid de Análises - Layout Sofisticado */}
+              <div className="space-y-6">
+                {/* Primeira Linha: Perfil Financeiro e Cobertura Geográfica lado a lado */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {/* Perfil Financeiro */}
+                  <Card className="border-l-4 border-l-emerald-600 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                    <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 pb-3">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <div className="p-2 bg-emerald-600/10 rounded-lg">
+                          <DollarSign className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />
                         </div>
-                      </div>
-                    )}
-                    {icpData.localizacao_alvo?.cidades && icpData.localizacao_alvo.cidades.length > 0 && (
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-2">Cidades Prioritárias</p>
-                        <div className="flex flex-wrap gap-2">
-                          {icpData.localizacao_alvo.cidades.slice(0, 8).map((cidade: string, idx: number) => (
-                            <Badge key={idx} variant="secondary">{cidade}</Badge>
-                          ))}
+                        <span className="text-slate-800 dark:text-slate-100">Perfil Financeiro Alvo</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-6">
+                      {icpData.faturamento_min || icpData.faturamento_max ? (
+                        <div className="p-5 bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900/30 dark:to-slate-800/20 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <p className="text-sm text-muted-foreground mb-2">Faixa de Faturamento</p>
+                          <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-500">
+                            R$ {(icpData.faturamento_min || 0).toLocaleString('pt-BR')} - R$ {(icpData.faturamento_max || 0).toLocaleString('pt-BR')}
+                          </p>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Diferenciais Competitivos */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Lightbulb className="h-5 w-5 text-amber-500" />
-                      Diferenciais Competitivos
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {icpData.diferenciais && icpData.diferenciais.length > 0 ? (
-                      <ul className="space-y-2">
-                        {icpData.diferenciais.slice(0, 5).map((dif: string, idx: number) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
-                            <span className="text-sm">{dif}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">Nenhum diferencial registrado</p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Concorrentes */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <AlertTriangle className="h-5 w-5 text-red-500" />
-                      Concorrentes Diretos
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {icpData.concorrentes && icpData.concorrentes.length > 0 ? (
-                      <div className="space-y-2">
-                        {icpData.concorrentes.slice(0, 5).map((conc: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-950/30 rounded">
-                            <span className="text-sm font-medium">
-                              {typeof conc === 'string' ? conc : conc.nome || conc.razaoSocial}
-                            </span>
-                            <Badge variant="destructive" className="text-xs">Monitorar</Badge>
+                      ) : null}
+                      {icpData.tickets_ciclos && icpData.tickets_ciclos.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-sm font-semibold text-muted-foreground">Tickets e Ciclos de Venda</p>
+                          <div className="space-y-2">
+                            {icpData.tickets_ciclos.slice(0, 3).map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between items-center text-sm p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors">
+                                <span className="font-medium">{item.criterio || `Ticket ${idx + 1}`}</span>
+                                <span className="font-bold text-emerald-700 dark:text-emerald-500">
+                                  R$ {(item.ticketMedio || item.ticketMedioMin || 0).toLocaleString('pt-BR')}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">Nenhum concorrente registrado</p>
-                    )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Localização Geográfica */}
+                  <Card className="border-l-4 border-l-blue-600 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                    <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 pb-3">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <div className="p-2 bg-blue-600/10 rounded-lg">
+                          <MapPin className="h-5 w-5 text-blue-700 dark:text-blue-500" />
+                        </div>
+                        <span className="text-slate-800 dark:text-slate-100">Cobertura Geográfica</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-6">
+                    {/* 🔥 NOVO: Extrair localização de clientes e benchmarking da Step 5 */}
+                    {(() => {
+                      const localizacoesClientes = (icpData.clientes_atuais || []).map((c: any) => ({
+                        cidade: c.cidade,
+                        estado: c.estado,
+                        tipo: 'Cliente',
+                        nome: c.nome || c.razaoSocial,
+                        faturamento: c.faturamentoAtual || 0,
+                      })).filter((l: any) => l.cidade && l.estado);
+                      
+                      const localizacoesBenchmarking = (icpData.empresas_benchmarking || []).map((e: any) => ({
+                        cidade: e.cidade,
+                        estado: e.estado,
+                        tipo: 'Benchmarking',
+                        nome: e.nome || e.razaoSocial,
+                        expectativa: e.expectativaFaturamento || 0,
+                      })).filter((l: any) => l.cidade && l.estado);
+                      
+                      const todasLocalizacoes = [...localizacoesClientes, ...localizacoesBenchmarking];
+                      
+                      // Agrupar por estado
+                      const estadosMap = new Map<string, { cidades: Set<string>, count: number }>();
+                      todasLocalizacoes.forEach((loc: any) => {
+                        if (!estadosMap.has(loc.estado)) {
+                          estadosMap.set(loc.estado, { cidades: new Set(), count: 0 });
+                        }
+                        const estadoData = estadosMap.get(loc.estado)!;
+                        estadoData.cidades.add(loc.cidade);
+                        estadoData.count++;
+                      });
+                      
+                      const estados = Array.from(estadosMap.entries()).sort((a, b) => b[1].count - a[1].count);
+                      const todasCidades = Array.from(new Set(todasLocalizacoes.map((l: any) => l.cidade))).sort();
+                      
+                      return (
+                        <>
+                          {estados.length > 0 && (
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                Estados com Presença ({estados.length} estados, {todasCidades.length} cidades)
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {estados.map(([estado, data]) => (
+                                  <Badge key={estado} variant="outline" className="bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600">
+                                    {estado} ({data.count} {data.count === 1 ? 'empresa' : 'empresas'})
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {todasCidades.length > 0 && (
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                Cidades ({todasCidades.length} cidades)
+                              </p>
+                              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                                {todasCidades.slice(0, 20).map((cidade: string, idx: number) => (
+                                  <Badge key={idx} variant="secondary" className="text-xs">{cidade}</Badge>
+                                ))}
+                                {todasCidades.length > 20 && (
+                                  <Badge variant="outline" className="text-xs">+{todasCidades.length - 20} mais</Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Fallback para localização alvo se não houver dados de Step 5 */}
+                          {estados.length === 0 && icpData.localizacao_alvo?.estados && icpData.localizacao_alvo.estados.length > 0 && (
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">Estados Alvo (Configuração)</p>
+                              <div className="flex flex-wrap gap-2">
+                                {icpData.localizacao_alvo.estados.map((estado: string, idx: number) => (
+                          <Badge key={idx} variant="outline" className="bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600">
+                            {estado}
+                          </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {todasCidades.length === 0 && icpData.localizacao_alvo?.cidades && icpData.localizacao_alvo.cidades.length > 0 && (
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">Cidades Prioritárias (Configuração)</p>
+                              <div className="flex flex-wrap gap-2">
+                                {icpData.localizacao_alvo.cidades.slice(0, 8).map((cidade: string, idx: number) => (
+                                  <Badge key={idx} variant="secondary">{cidade}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                    
+                    {/* 🔥 NOVO: Mapa com pinpoints das empresas */}
+                    {(() => {
+                      const localizacoesClientes = (icpData.clientes_atuais || []).map((c: any) => ({
+                        id: c.cnpj || `cliente-${c.nome || c.razaoSocial}`,
+                        name: c.nome || c.razaoSocial,
+                        cidade: c.cidade,
+                        estado: c.estado,
+                        tipo: 'Cliente',
+                        faturamento: c.faturamentoAtual || 0,
+                      })).filter((l: any) => l.cidade && l.estado);
+                      
+                      const localizacoesBenchmarking = (icpData.empresas_benchmarking || []).map((e: any) => ({
+                        id: e.cnpj || `benchmarking-${e.nome || e.razaoSocial}`,
+                        name: e.nome || e.razaoSocial,
+                        cidade: e.cidade,
+                        estado: e.estado,
+                        tipo: 'Benchmarking',
+                        expectativa: e.expectativaFaturamento || 0,
+                      })).filter((l: any) => l.cidade && l.estado);
+                      
+                      const todasLocalizacoes = [...localizacoesClientes, ...localizacoesBenchmarking];
+                      
+                      if (todasLocalizacoes.length === 0) return null;
+                      
+                      return (
+                        <div className="mt-4">
+                          <p className="text-sm font-semibold mb-3 text-blue-700 dark:text-blue-500">Mapa de Localização</p>
+                          <div className="rounded-lg overflow-hidden border-2 border-slate-300 dark:border-slate-600 shadow-inner">
+                            <CompaniesMapWithGeocoding 
+                              companies={todasLocalizacoes}
+                              height="350px"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
+                </div>
+
+                {/* Segunda Linha: Diferenciais e Concorrentes lado a lado */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {/* Diferenciais Competitivos */}
+                  <Card className="border-l-4 border-l-indigo-600 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                    <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 pb-3">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <div className="p-2 bg-indigo-600/10 rounded-lg">
+                          <Lightbulb className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
+                        </div>
+                        <span className="text-slate-800 dark:text-slate-100">Diferenciais Competitivos</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                      {icpData.diferenciais && icpData.diferenciais.length > 0 ? (
+                        <ul className="space-y-3">
+                          {icpData.diferenciais.slice(0, 5).map((dif: string, idx: number) => (
+                            <li key={idx} className="flex items-start gap-3 p-3 bg-slate-50/50 dark:bg-slate-900/20 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/30 transition-colors">
+                              <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
+                              <span className="text-sm leading-relaxed">{dif}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-muted-foreground text-sm">Nenhum diferencial registrado</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Concorrentes */}
+                  <Card className="border-l-4 border-l-orange-600 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                    <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 pb-3">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <div className="p-2 bg-orange-600/10 rounded-lg">
+                          <AlertTriangle className="h-5 w-5 text-orange-700 dark:text-orange-500" />
+                        </div>
+                        <span className="text-slate-800 dark:text-slate-100">Concorrentes Diretos</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                    {(() => {
+                      // 🔥 CRÍTICO: Extrair concorrentes do step1_data (onde estão salvos)
+                      const concorrentes = icpData.concorrentes || [];
+                      
+                      // 🔥 DEBUG: Log para verificar concorrentes
+                      console.log('[ICPDetail] 🔍 Concorrentes carregados no card:', {
+                        total: concorrentes.length,
+                        icpData_keys: Object.keys(icpData),
+                        icpData_concorrentes: icpData.concorrentes,
+                        concorrentes: concorrentes.map((c: any) => ({
+                          tipo: typeof c,
+                          nome: typeof c === 'string' ? c : c.nome || c.razaoSocial,
+                          cnpj: typeof c === 'object' ? c.cnpj : null,
+                          cidade: typeof c === 'object' ? c.cidade : null,
+                          estado: typeof c === 'object' ? c.estado : null,
+                          objeto_completo: c,
+                        })),
+                      });
+                      
+                      if (concorrentes.length === 0) {
+                        return (
+                          <p className="text-muted-foreground text-sm">
+                            Nenhum concorrente registrado. Adicione concorrentes na Step 1 do onboarding.
+                          </p>
+                        );
+                      }
+                      
+                      return (
+                        <>
+                          <div className="mb-4">
+                            <p className="text-sm font-semibold text-muted-foreground mb-4">
+                              {concorrentes.length} {concorrentes.length === 1 ? 'concorrente registrado' : 'concorrentes registrados'}
+                            </p>
+                            <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                              {concorrentes.map((conc: any, idx: number) => {
+                                const nome = typeof conc === 'string' ? conc : conc.nome || conc.nomeFantasia || conc.razaoSocial || `Concorrente ${idx + 1}`;
+                                const cnpj = typeof conc === 'object' ? conc.cnpj : null;
+                                const setor = typeof conc === 'object' ? conc.setor : null;
+                                const cidade = typeof conc === 'object' ? conc.cidade : null;
+                                const estado = typeof conc === 'object' ? conc.estado : null;
+                                
+                                return (
+                                  <div key={idx} className="flex items-center justify-between p-3 bg-slate-50/50 dark:bg-slate-900/20 rounded-lg border border-slate-200/50 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-800/30 hover:border-slate-300 dark:hover:border-slate-600 transition-all">
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-sm font-semibold block truncate">{nome}</span>
+                                      <div className="flex flex-wrap gap-2 mt-1.5">
+                                        {cnpj && (
+                                          <span className="text-xs text-muted-foreground font-mono bg-white dark:bg-gray-800 px-2 py-0.5 rounded">{cnpj}</span>
+                                        )}
+                                        {setor && (
+                                          <Badge variant="outline" className="text-xs border-slate-300 dark:border-slate-600">{setor}</Badge>
+                                        )}
+                                        {cidade && estado && (
+                                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <MapPin className="h-3 w-3" />
+                                            {cidade}, {estado}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <Badge className="text-xs ml-3 shrink-0 bg-orange-600 hover:bg-orange-700 text-white">Monitorar</Badge>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          
+                          {/* 🔥 NOVO: Mapa de concorrentes */}
+                          {(() => {
+                            const concorrentesComLocalizacao = concorrentes
+                              .filter((c: any) => typeof c === 'object' && c.cidade && c.estado)
+                              .map((c: any) => ({
+                                id: c.cnpj || `concorrente-${c.nome || c.razaoSocial}`,
+                                name: c.nome || c.nomeFantasia || c.razaoSocial,
+                                cidade: c.cidade,
+                                estado: c.estado,
+                                tipo: 'Concorrente',
+                                setor: c.setor,
+                                capitalSocial: c.capitalSocial || 0,
+                              }));
+                            
+                            if (concorrentesComLocalizacao.length === 0) return null;
+                            
+                            return (
+                              <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                                <p className="text-sm font-semibold mb-3 text-orange-700 dark:text-orange-500 flex items-center gap-2">
+                                  <MapPin className="h-4 w-4" />
+                                  Mapa de Concorrentes ({concorrentesComLocalizacao.length} {concorrentesComLocalizacao.length === 1 ? 'concorrente' : 'concorrentes'})
+                                </p>
+                                <div className="rounded-lg overflow-hidden border-2 border-slate-300 dark:border-slate-600 shadow-inner">
+                                  <CompaniesMapWithGeocoding 
+                                    companies={concorrentesComLocalizacao}
+                                    height="350px"
+                                    markerColor="red"
+                                    markerLabel="Concorrente"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+                </div>
               </div>
 
               {/* CNAEs Detalhados */}

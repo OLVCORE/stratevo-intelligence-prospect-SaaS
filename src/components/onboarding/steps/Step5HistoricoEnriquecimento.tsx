@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Plus, CheckCircle2, Info, Lightbulb, Clock, Sparkles, Loader2, Building2, Check } from 'lucide-react';
+import { X, Plus, CheckCircle2, Info, Lightbulb, Clock, Sparkles, Loader2, Building2, Check, Target } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 
 // =============================================================================
@@ -304,11 +305,17 @@ interface ClienteAtual {
   nome?: string; // Alias para compatibilidade com o formulário
   setor: string;
   ticketMedio: number;
+  faturamentoAtual: number; // 🔥 NOVO: Faturamento atual que este cliente gera para a empresa
   cidade: string;
   estado: string;
   capitalSocial: number;
   cnaePrincipal: string;
   cnaePrincipalDescricao?: string;
+  // 🔥 NOVO: Campos para classificação BCG
+  tipoRelacionamento?: 'Vaca Leiteira' | 'Estrela' | 'Interrogação' | 'Abacaxi'; // Classificação BCG sugerida
+  potencialCrescimento?: 'Alto' | 'Médio' | 'Baixo';
+  estabilidade?: 'Estável' | 'Crescendo' | 'Declinando';
+  cicloVenda?: number; // Ciclo de venda em dias (já existe em alguns lugares, garantir que está aqui)
 }
 
 interface EmpresaBenchmarking {
@@ -319,8 +326,13 @@ interface EmpresaBenchmarking {
   cidade: string;
   estado: string;
   capitalSocial: number;
+  expectativaFaturamento: number; // 🔥 NOVO: Expectativa de faturamento se esta empresa se tornar cliente
   cnaePrincipal: string;
   cnaePrincipalDescricao?: string;
+  // 🔥 NOVO: Campos para classificação BCG (empresas desejadas = Interrogações)
+  prioridade?: 'Alta' | 'Média' | 'Baixa';
+  potencialConversao?: 'Alto' | 'Médio' | 'Baixo';
+  alinhamentoICP?: 'Alto' | 'Médio' | 'Baixo';
 }
 
 export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialData, isSubmitting, isSaving = false, hasUnsavedChanges = false }: Props) {
@@ -358,17 +370,56 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
     nome: '', // Alias para o formulário
     setor: '', 
     ticketMedio: 0,
+    faturamentoAtual: 0, // 🔥 NOVO: Faturamento atual
     cidade: '',
     estado: '',
     capitalSocial: 0,
     cnaePrincipal: '',
     cnaePrincipalDescricao: '',
+    // 🔥 NOVO: Campos BCG
+    tipoRelacionamento: undefined,
+    potencialCrescimento: undefined,
+    estabilidade: undefined,
+    cicloVenda: 90, // Default 90 dias
   });
 
   const [buscandoCNPJ, setBuscandoCNPJ] = useState(false);
   const [cnpjEncontrado, setCnpjEncontrado] = useState(false);
   const [erroCNPJ, setErroCNPJ] = useState<string | null>(null);
   const [cnpjUltimoBuscado, setCnpjUltimoBuscado] = useState<string>(''); // Guardar último CNPJ buscado
+
+  // 🔥 NOVO: Função para auto-sugerir classificação BCG baseada em faturamento e características
+  const sugerirClassificacaoBCG = (
+    faturamentoAtual: number,
+    faturamentoTotal: number,
+    ticketMedio: number,
+    potencialCrescimento?: 'Alto' | 'Médio' | 'Baixo',
+    estabilidade?: 'Estável' | 'Crescendo' | 'Declinando'
+  ): 'Vaca Leiteira' | 'Estrela' | 'Interrogação' | 'Abacaxi' => {
+    // Calcular participação de mercado (market share)
+    const participacao = faturamentoTotal > 0 ? (faturamentoAtual / faturamentoTotal) * 100 : 0;
+    
+    // Determinar crescimento baseado em características
+    let crescimento = 30; // Base
+    if (potencialCrescimento === 'Alto') crescimento += 30;
+    else if (potencialCrescimento === 'Médio') crescimento += 15;
+    
+    if (estabilidade === 'Crescendo') crescimento += 20;
+    else if (estabilidade === 'Declinando') crescimento -= 20;
+    
+    if (ticketMedio > 50000) crescimento += 10;
+    
+    crescimento = Math.min(100, Math.max(0, crescimento));
+    
+    // Classificar BCG
+    const altaParticipacao = participacao >= 30; // 30% ou mais do faturamento total
+    const altoCrescimento = crescimento >= 50;
+    
+    if (altoCrescimento && altaParticipacao) return 'Estrela';
+    if (altoCrescimento && !altaParticipacao) return 'Interrogação';
+    if (!altoCrescimento && altaParticipacao) return 'Vaca Leiteira';
+    return 'Abacaxi';
+  };
 
   // 🔥 UNIFICADO: Estados para empresas de benchmarking
   const [novoBenchmarking, setNovoBenchmarking] = useState<EmpresaBenchmarking>({ 
@@ -379,8 +430,13 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
     cidade: '',
     estado: '',
     capitalSocial: 0,
+    expectativaFaturamento: 0, // 🔥 NOVO: Expectativa de faturamento
     cnaePrincipal: '',
     cnaePrincipalDescricao: '',
+    // 🔥 NOVO: Campos BCG para benchmarking (empresas desejadas = Interrogações)
+    prioridade: undefined,
+    potencialConversao: undefined,
+    alinhamentoICP: undefined,
   });
   const [loadingBenchmarking, setLoadingBenchmarking] = useState<boolean>(false);
   const [cnpjBenchmarkingEncontrado, setCnpjBenchmarkingEncontrado] = useState<boolean>(false);
@@ -561,11 +617,17 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
       nome: '',
       setor: '', 
       ticketMedio: 0,
+      faturamentoAtual: 0, // 🔥 NOVO
       cidade: '',
       estado: '',
       capitalSocial: 0,
       cnaePrincipal: '',
       cnaePrincipalDescricao: '',
+      // 🔥 NOVO: Campos BCG
+      tipoRelacionamento: undefined,
+      potencialCrescimento: undefined,
+      estabilidade: undefined,
+      cicloVenda: 90,
     });
     setCnpjEncontrado(false);
     setCnpjUltimoBuscado(''); // Resetar para permitir nova busca
@@ -678,7 +740,7 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
     setFormData(updatedFormData);
     
     // Resetar formulário completo
-    setNovoBenchmarking({
+    setNovoBenchmarking({ 
       cnpj: '',
       razaoSocial: '',
       nomeFantasia: '',
@@ -686,8 +748,13 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
       cidade: '',
       estado: '',
       capitalSocial: 0,
+      expectativaFaturamento: 0, // 🔥 NOVO
       cnaePrincipal: '',
       cnaePrincipalDescricao: '',
+      // 🔥 NOVO: Campos BCG
+      prioridade: undefined,
+      potencialConversao: undefined,
+      alinhamentoICP: undefined,
     });
     setCnpjBenchmarkingEncontrado(false);
     cnpjBenchmarkingUltimoBuscadoRef.current = '';
@@ -747,6 +814,7 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
         cidade: '',
         estado: '',
         capitalSocial: 0,
+        expectativaFaturamento: 0, // 🔥 NOVO
         cnaePrincipal: '',
         cnaePrincipalDescricao: '',
       }));
@@ -940,6 +1008,28 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
                   />
                 </div>
 
+                {/* Faturamento Atual - CRÍTICO para BCG */}
+                <div className="space-y-2">
+                  <Label htmlFor="faturamentoAtual" className="text-sm font-medium">
+                    Faturamento Atual R$ <span className="text-red-600 dark:text-red-400 font-semibold">*</span>
+                    <Info className="h-3 w-3 inline ml-1 text-muted-foreground" />
+                  </Label>
+                  <Input
+                    id="faturamentoAtual"
+                    type="text"
+                    value={novoCliente.faturamentoAtual ? novoCliente.faturamentoAtual.toLocaleString('pt-BR') : ''}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setNovoCliente({ ...novoCliente, faturamentoAtual: value ? parseFloat(value) : 0 });
+                    }}
+                    placeholder="Ex: 5000000"
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Faturamento anual que este cliente gera para sua empresa. Essencial para cálculo da Matriz BCG.
+                  </p>
+                </div>
+
                 {/* Cidade */}
                 <div className="space-y-2">
                   <Label htmlFor="cidade" className="text-sm font-medium">
@@ -1006,6 +1096,113 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
                     <p className="text-xs text-muted-foreground">{novoCliente.cnaePrincipalDescricao}</p>
                   )}
                 </div>
+
+                {/* 🔥 NOVO: Campos de Classificação BCG */}
+                <div className="col-span-1 md:col-span-2 space-y-4 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <Label className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                      Classificação BCG (Matriz de Priorização)
+                    </Label>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Potencial de Crescimento */}
+                    <div className="space-y-2">
+                      <Label htmlFor="potencialCrescimento" className="text-xs">
+                        Potencial de Crescimento
+                      </Label>
+                      <Select
+                        value={novoCliente.potencialCrescimento || ''}
+                        onValueChange={(value: 'Alto' | 'Médio' | 'Baixo') => {
+                          setNovoCliente({ ...novoCliente, potencialCrescimento: value });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Alto">Alto</SelectItem>
+                          <SelectItem value="Médio">Médio</SelectItem>
+                          <SelectItem value="Baixo">Baixo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Estabilidade */}
+                    <div className="space-y-2">
+                      <Label htmlFor="estabilidade" className="text-xs">
+                        Estabilidade
+                      </Label>
+                      <Select
+                        value={novoCliente.estabilidade || ''}
+                        onValueChange={(value: 'Estável' | 'Crescendo' | 'Declinando') => {
+                          setNovoCliente({ ...novoCliente, estabilidade: value });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Crescendo">Crescendo</SelectItem>
+                          <SelectItem value="Estável">Estável</SelectItem>
+                          <SelectItem value="Declinando">Declinando</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Tipo de Relacionamento (Classificação BCG) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="tipoRelacionamento" className="text-xs">
+                        Classificação BCG <span className="text-muted-foreground">(Auto-sugerido)</span>
+                      </Label>
+                      <Select
+                        value={novoCliente.tipoRelacionamento || ''}
+                        onValueChange={(value: 'Vaca Leiteira' | 'Estrela' | 'Interrogação' | 'Abacaxi') => {
+                          setNovoCliente({ ...novoCliente, tipoRelacionamento: value });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Auto-sugerido baseado em faturamento..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Estrela">⭐ Estrela (Alto crescimento + Alta participação)</SelectItem>
+                          <SelectItem value="Vaca Leiteira">💰 Vaca Leiteira (Baixo crescimento + Alta participação)</SelectItem>
+                          <SelectItem value="Interrogação">❓ Interrogação (Alto crescimento + Baixa participação)</SelectItem>
+                          <SelectItem value="Abacaxi">🐕 Abacaxi (Baixo crescimento + Baixa participação)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {novoCliente.faturamentoAtual > 0 && formData.clientesAtuais.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          💡 Sugestão: {sugerirClassificacaoBCG(
+                            novoCliente.faturamentoAtual,
+                            formData.clientesAtuais.reduce((acc, c) => acc + (c.faturamentoAtual || 0), 0) + novoCliente.faturamentoAtual,
+                            novoCliente.ticketMedio,
+                            novoCliente.potencialCrescimento,
+                            novoCliente.estabilidade
+                          )}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Ciclo de Venda */}
+                    <div className="space-y-2">
+                      <Label htmlFor="cicloVenda" className="text-xs">
+                        Ciclo de Venda (dias)
+                      </Label>
+                      <Input
+                        id="cicloVenda"
+                        type="number"
+                        value={novoCliente.cicloVenda || 90}
+                        onChange={(e) => {
+                          setNovoCliente({ ...novoCliente, cicloVenda: e.target.value ? parseInt(e.target.value) : 90 });
+                        }}
+                        placeholder="Ex: 90"
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <Button
@@ -1064,6 +1261,12 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
                             <div className="flex items-center gap-2">
                               <span className="text-muted-foreground">Ticket Médio:</span>
                               <Badge variant="outline" className="text-xs font-semibold">R$ {cliente.ticketMedio.toLocaleString('pt-BR')}</Badge>
+                            </div>
+                          )}
+                          {cliente.faturamentoAtual && cliente.faturamentoAtual > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Faturamento Atual:</span>
+                              <Badge variant="default" className="text-xs font-semibold bg-green-600">R$ {cliente.faturamentoAtual.toLocaleString('pt-BR')}</Badge>
                             </div>
                           )}
                         </div>
@@ -1225,6 +1428,28 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
                   />
                 </div>
 
+                {/* Expectativa de Faturamento - CRÍTICO para BCG */}
+                <div className="space-y-2">
+                  <Label htmlFor="expectativaFaturamento" className="text-sm font-medium">
+                    Expectativa de Faturamento R$ <span className="text-red-600 dark:text-red-400 font-semibold">*</span>
+                    <Info className="h-3 w-3 inline ml-1 text-muted-foreground" />
+                  </Label>
+                  <Input
+                    id="expectativaFaturamento"
+                    type="text"
+                    value={novoBenchmarking.expectativaFaturamento ? novoBenchmarking.expectativaFaturamento.toLocaleString('pt-BR') : ''}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setNovoBenchmarking({ ...novoBenchmarking, expectativaFaturamento: value ? parseFloat(value) : 0 });
+                    }}
+                    placeholder="Ex: 3000000"
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Expectativa de faturamento anual se esta empresa se tornar cliente. Essencial para cálculo da Matriz BCG.
+                  </p>
+                </div>
+
                 {/* CNAE Principal */}
                 <div className="space-y-2">
                   <Label htmlFor="cnaePrincipalBenchmarking" className="text-sm font-medium">
@@ -1241,6 +1466,87 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
                   {novoBenchmarking.cnaePrincipalDescricao && (
                     <p className="text-xs text-muted-foreground">{novoBenchmarking.cnaePrincipalDescricao}</p>
                   )}
+                </div>
+
+                {/* 🔥 NOVO: Campos de Classificação BCG para Benchmarking (Empresas Desejadas = Interrogações) */}
+                <div className="col-span-1 md:col-span-2 space-y-4 p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <Label className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                      Classificação BCG (Empresas Desejadas = Interrogações)
+                    </Label>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Prioridade */}
+                    <div className="space-y-2">
+                      <Label htmlFor="prioridade" className="text-xs">
+                        Prioridade
+                      </Label>
+                      <Select
+                        value={novoBenchmarking.prioridade || ''}
+                        onValueChange={(value: 'Alta' | 'Média' | 'Baixa') => {
+                          setNovoBenchmarking({ ...novoBenchmarking, prioridade: value });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Alta">Alta</SelectItem>
+                          <SelectItem value="Média">Média</SelectItem>
+                          <SelectItem value="Baixa">Baixa</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Potencial de Conversão */}
+                    <div className="space-y-2">
+                      <Label htmlFor="potencialConversao" className="text-xs">
+                        Potencial de Conversão
+                      </Label>
+                      <Select
+                        value={novoBenchmarking.potencialConversao || ''}
+                        onValueChange={(value: 'Alto' | 'Médio' | 'Baixo') => {
+                          setNovoBenchmarking({ ...novoBenchmarking, potencialConversao: value });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Alto">Alto</SelectItem>
+                          <SelectItem value="Médio">Médio</SelectItem>
+                          <SelectItem value="Baixo">Baixo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Alinhamento com ICP */}
+                    <div className="space-y-2">
+                      <Label htmlFor="alinhamentoICP" className="text-xs">
+                        Alinhamento com ICP
+                      </Label>
+                      <Select
+                        value={novoBenchmarking.alinhamentoICP || ''}
+                        onValueChange={(value: 'Alto' | 'Médio' | 'Baixo') => {
+                          setNovoBenchmarking({ ...novoBenchmarking, alinhamentoICP: value });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Alto">Alto</SelectItem>
+                          <SelectItem value="Médio">Médio</SelectItem>
+                          <SelectItem value="Baixo">Baixo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    💡 Empresas de benchmarking são classificadas como <strong>Interrogações</strong> na Matriz BCG (alto crescimento potencial, baixa participação atual).
+                  </p>
                 </div>
               </div>
 
@@ -1298,6 +1604,12 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
                           <div className="flex items-center gap-2">
                             <span className="text-muted-foreground">Capital:</span>
                             <span className="text-foreground">R$ {empresa.capitalSocial.toLocaleString('pt-BR')}</span>
+                          </div>
+                        )}
+                        {empresa.expectativaFaturamento && empresa.expectativaFaturamento > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Expectativa Faturamento:</span>
+                            <Badge variant="default" className="text-xs font-semibold bg-purple-600">R$ {empresa.expectativaFaturamento.toLocaleString('pt-BR')}</Badge>
                           </div>
                         )}
                       </div>
