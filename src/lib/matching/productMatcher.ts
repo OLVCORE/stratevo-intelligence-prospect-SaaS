@@ -225,9 +225,20 @@ export function findBestMatches<T extends { nome: string; categoria?: string; de
   candidateProducts: T[],
   minScore: number = 60
 ): Array<T & { matchScore: number; matchConfidence: string; matchReasons: string[] }> {
+  // 🔥 FORÇAR LOG para confirmar rebuild
+  if (targetProduct.nome === 'Clean Cut Flex') {
+    console.log('🔥🔥🔥 [MATCHER REBUILD CONFIRMADO] findBestMatches chamado para:', targetProduct.nome, 'MinScore:', minScore);
+  }
+  
   const matches = candidateProducts
     .map(candidate => {
       const result = calculateProductMatch(targetProduct, candidate);
+      
+      // 🔥 LOG para primeira luva com score alto
+      if (targetProduct.nome === 'Clean Cut Flex' && result.score >= 50) {
+        console.log(`  ✅ Match encontrado: "${candidate.nome}" → Score: ${result.score}% | Razões:`, result.reasons);
+      }
+      
       return {
         ...candidate,
         matchScore: result.score,
@@ -237,6 +248,11 @@ export function findBestMatches<T extends { nome: string; categoria?: string; de
     })
     .filter(m => m.matchScore >= minScore)
     .sort((a, b) => b.matchScore - a.matchScore);
+  
+  // 🔥 LOG resultado final
+  if (targetProduct.nome === 'Clean Cut Flex') {
+    console.log(`  📊 Total matches para "${targetProduct.nome}": ${matches.length} (threshold: ${minScore}%)`);
+  }
   
   return matches;
 }
