@@ -395,7 +395,7 @@ export default function ICPDetail() {
             variant="default"
             size="sm"
             className="bg-green-600 hover:bg-green-700 text-white border-2 border-green-700 shadow-lg font-semibold"
-            onClick={() => navigate('/icp/onboarding')}
+            onClick={() => navigate('/tenant-onboarding')}
             title="Voltar para o cadastro do ICP e editar concorrentes, produtos e dados"
           >
             <Home className="w-4 h-4 mr-1" />
