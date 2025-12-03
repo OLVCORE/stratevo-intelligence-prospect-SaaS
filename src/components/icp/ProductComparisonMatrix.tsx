@@ -338,6 +338,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     compProds: CompetitorProduct[]
   ): ProductMatch[] => {
     console.time('[ProductComparison] ⏱️ Cálculo de matches');
+    console.log('[ProductComparison] 🔥 INICIANDO CÁLCULO COM NOVO ALGORITMO (Threshold: 50%)');
     
     const results = tenantProds.map(tenantProd => {
       // 🔥 Score mínimo 50% (mais sensível - captura concorrência por categoria)
@@ -349,6 +350,11 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       if (matches.length > 0) {
         bestScore = matches[0].matchScore;
         matchType = bestScore >= 90 ? 'exact' : 'similar';
+        
+        // Log detalhado para produtos com alta concorrência
+        if (bestScore >= 90) {
+          console.log(`[ProductComparison] 🔴 ALTA CONCORRÊNCIA: "${tenantProd.nome}" → ${matches.length} matches (score máx: ${bestScore}%)`);
+        }
       }
 
       return {
@@ -359,7 +365,12 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       };
     });
     
+    const comConcorrencia = results.filter(r => r.bestScore >= 90).length;
+    const unicos = results.filter(r => r.matchType === 'unique').length;
+    
     console.timeEnd('[ProductComparison] ⏱️ Cálculo de matches');
+    console.log(`[ProductComparison] 📊 RESULTADO: ${comConcorrencia} com alta concorrência, ${unicos} únicos`);
+    
     return results;
   };
 
