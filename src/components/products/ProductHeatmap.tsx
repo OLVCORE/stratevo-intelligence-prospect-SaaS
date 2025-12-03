@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Flame, ChevronDown, ChevronUp } from 'lucide-react';
-import CompetitorIntensityAnalysis from '@/components/competitive/CompetitorIntensityAnalysis';
 import { cn } from '@/lib/utils';
 
 interface ProductHeatmapProps {
@@ -339,13 +338,6 @@ export default function ProductHeatmap({
           </CardContent>
         </CollapsibleContent>
       </Card>
-
-      {/* 🔥 NOVO: Análise Revolucionária de Intensidade Competitiva */}
-      <CompetitorIntensityAnalysis
-        tenantProducts={tenantProducts}
-        competitorProducts={competitorProducts}
-        matches={matches}
-      />
     </div>
   );
 }

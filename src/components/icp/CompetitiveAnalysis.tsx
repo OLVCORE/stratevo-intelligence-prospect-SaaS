@@ -55,7 +55,7 @@ import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ProductComparisonMatrix } from './ProductComparisonMatrix';
-import AutoSWOTAnalysis from '@/components/competitive/AutoSWOTAnalysis';
+import MarketAnalysisTab from '@/components/competitive/MarketAnalysisTab';
 import { useICPDataSyncHook } from '@/hooks/useICPDataSync';
 import CompetitorDiscovery from './CompetitorDiscovery';
 
@@ -626,7 +626,7 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
             <TabsTrigger value="competitors">Concorrentes ({competitors.length})</TabsTrigger>
             <TabsTrigger value="products">Comparação Produtos</TabsTrigger>
             <TabsTrigger value="discovery">🔍 Descobrir Novos</TabsTrigger>
-            <TabsTrigger value="swot">SWOT</TabsTrigger>
+            <TabsTrigger value="market-analysis">📊 Análise de Mercado</TabsTrigger>
             <TabsTrigger value="ceo" className={ceoAnalysis ? 'text-purple-600' : ''}>
               {ceoAnalysis && '✓ '}Análise CEO
             </TabsTrigger>
@@ -1140,114 +1140,9 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
             />
           </TabsContent>
 
-          {/* SWOT */}
-          <TabsContent value="swot" className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Forças */}
-              <Card className="border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                    <Shield className="h-5 w-5" />
-                    Forças (Strengths)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {diferenciais.slice(0, 5).map((item, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                        {item}
-                      </li>
-                    ))}
-                    {diferenciais.length === 0 && (
-                      <li className="text-sm text-muted-foreground">Cadastre diferenciais na Aba 4</li>
-                    )}
-                  </ul>
-                </CardContent>
-              </Card>
-
-              {/* Fraquezas */}
-              <Card className="border-red-500/30 bg-red-50/50 dark:bg-red-950/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
-                    <AlertTriangle className="h-5 w-5" />
-                    Fraquezas (Weaknesses)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    <li className="flex items-start gap-2 text-sm">
-                      <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
-                      {enrichedCompetitors.filter(c => (c.capitalSocial || 0) > 10000000).length} concorrentes com capital superior
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
-                      Necessidade de maior presença digital
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
-                      Concorrentes em {new Set(enrichedCompetitors.map(c => c.estado)).size} estados diferentes
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
-
-              {/* Oportunidades */}
-              <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                    <Lightbulb className="h-5 w-5" />
-                    Oportunidades (Opportunities)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    <li className="flex items-start gap-2 text-sm">
-                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
-                      Nichos com menor presença competitiva
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
-                      Regiões não cobertas pelos concorrentes
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
-                      Diferenciação por tecnologia e personalização
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
-                      Mercado de EPIs em expansão pós-pandemia
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
-
-              {/* Ameaças */}
-              <Card className="border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                    <Eye className="h-5 w-5" />
-                    Ameaças (Threats)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {enrichedCompetitors.filter(c => c.ameacaPotencial === 'alta').map((c, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
-                        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
-                        <span><strong>{c.nomeFantasia || c.razaoSocial.split(' ')[0]}</strong>: Capital de {formatCurrency(c.capitalSocial)}</span>
-                      </li>
-                    ))}
-                    {enrichedCompetitors.filter(c => c.ameacaPotencial === 'alta').length === 0 && (
-                      <li className="flex items-start gap-2 text-sm">
-                        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
-                        Monitorar movimentos dos {enrichedCompetitors.length} concorrentes
-                      </li>
-                    )}
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
+          {/* 📊 Análise de Mercado (antiga SWOT) */}
+          <TabsContent value="market-analysis" className="space-y-4">
+            <MarketAnalysisTab icpId={icpId} />
           </TabsContent>
 
           {/* Análise CEO */}
