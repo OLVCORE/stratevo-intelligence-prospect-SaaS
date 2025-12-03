@@ -26,6 +26,7 @@ import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info
 import { toast } from 'sonner';
 import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';
+import { cn } from '@/lib/utils';
 
 interface TenantProduct {
   id: string;
@@ -77,38 +78,12 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [altaConcorrenciaOpen, setAltaConcorrenciaOpen] = useState(false);
   const [oportunidadesOpen, setOportunidadesOpen] = useState(false);
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({}); // 🔥 Vazio = TUDO FECHADO
   
-  // 🔥 FUNÇÃO: Categorização Inteligente (detecta tipo de produto pelo nome/descrição)
+  // 🔥 FUNÇÃO: Usar categoria ORIGINAL do banco (GENÉRICO para qualquer tenant)
   const getSmartCategory = (produto: { nome: string; descricao?: string; categoria?: string }): string => {
-    const nome = produto.nome.toLowerCase();
-    const descricao = (produto.descricao || '').toLowerCase();
-    const texto = `${nome} ${descricao}`;
-    
-    // 🔥 PRIORIDADE 1: Detectar "Luva" (core business da UNI LUVAS)
-    if (texto.includes('luva') || texto.includes('glove')) {
-      // Sub-categorizar luvas por tipo
-      if (texto.includes('corte') || texto.includes('perfura') || texto.includes('cut')) {
-        return 'Luvas - Corte/Perfuração';
-      }
-      if (texto.includes('temperatura') || texto.includes('solda') || texto.includes('weld')) {
-        return 'Luvas - Alta Temperatura';
-      }
-      if (texto.includes('mecânica') || texto.includes('algodão') || texto.includes('pigment')) {
-        return 'Luvas - Proteção Mecânica';
-      }
-      return 'Luvas - Outros'; // Luvas genéricas
-    }
-    
-    // Outras categorias
-    if (texto.includes('blusão') || texto.includes('camisa') || texto.includes('manga')) {
-      return 'Vestimentas de Proteção';
-    }
-    if (texto.includes('óculos') || texto.includes('capacete') || texto.includes('protetor')) {
-      return 'EPIs Diversos';
-    }
-    
-    // Usar categoria original se não detectar tipo específico
+    // 🔥 USAR CATEGORIA DO BANCO (preenchida pela IA na extração)
+    // Isso funciona para QUALQUER tipo de produto/tenant
     return produto.categoria || 'Sem Categoria';
   };
   
@@ -815,65 +790,121 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                                     {isExpanded ? (
                                       <ChevronDown className="h-4 w-4" />
                                     ) : (
-                                      <ChevronUp className="h-4 w-4 rotate-180" />
+                                      <ChevronDown className="h-4 w-4 rotate-90" />
                                     )}
                                     <Package className="h-4 w-4 text-primary" />
-                                    <span className="text-sm">{categoria} ({data.produtos.length})</span>
+                                    <span className="text-sm font-semibold">{categoria}</span>
+                                    <Badge variant="outline" className="ml-2 text-xs">{data.produtos.length} total</Badge>
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-center bg-green-50 dark:bg-green-950/20 border-l-2 border-r-2 border-green-500">
-                                  <Badge variant="outline" className="text-xs">
-                                    {produtosTenant.length} prods
+                                  <Badge className={produtosTenant.length > 0 ? "bg-green-600 text-white" : "bg-slate-400 text-white"}>
+                                    {produtosTenant.length}
                                   </Badge>
                                 </TableCell>
-                                {competitors.map((_, compIdx) => (
-                                  <TableCell key={compIdx} className="text-center bg-muted/30 border-r">
-                                    <Badge variant="outline" className="text-xs opacity-50">
-                                      {produtosConcorrentes.filter(p => p.concorrente === competitors[compIdx]).length}
-                                    </Badge>
-                                  </TableCell>
-                                ))}
+                                {competitors.map((comp, compIdx) => {
+                                  const qtd = produtosConcorrentes.filter(p => p.concorrente === comp).length;
+                                  return (
+                                    <TableCell key={compIdx} className="text-center border-r">
+                                      <Badge className={qtd > 0 ? "bg-orange-500 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-600"}>
+                                        {qtd}
+                                      </Badge>
+                                    </TableCell>
+                                  );
+                                })}
                               </TableRow>
                               
-                              {/* LINHAS DOS PRODUTOS (quando expandido) */}
-                              {isExpanded && data.produtos.filter(p => p.tenant).map((produto, prodIdx) => {
-                                // Encontrar produto tenant completo
-                                const tenantProd = tenantProducts.find(tp => tp.nome === produto.nome);
-                                if (!tenantProd) return null;
+                              {/* LINHAS DOS PRODUTOS (quando expandido) - MOSTRAR TODOS (tenant + concorrentes) */}
+                              {isExpanded && (() => {
+                                // 🔥 CORRIGIDO: Mostrar produtos do TENANT primeiro, depois produtos ÚNICOS dos concorrentes
+                                const produtosTenantNaCategoria = data.produtos.filter(p => p.tenant);
+                                const produtosConcorrentesUnicos = Array.from(
+                                  new Map(
+                                    data.produtos
+                                      .filter(p => !p.tenant)
+                                      .map(p => [p.nome.toLowerCase(), p])
+                                  ).values()
+                                );
                                 
-                                return (
-                                  <TableRow key={`prod-${catIdx}-${prodIdx}`} className="border-b hover:bg-muted/30">
-                                    <TableCell className="pl-8 sticky left-0 bg-background z-10 border-r-2">
-                                      <div className="flex items-start gap-2">
-                                        <div className="w-1 h-full bg-green-500 rounded" />
-                                        <div>
-                                          <p className="font-medium text-sm">{produto.nome}</p>
-                                          {produto.descricao && (
-                                            <p className="text-xs text-muted-foreground line-clamp-1">{produto.descricao}</p>
-                                          )}
+                                const todosProdutosParaMostrar = [
+                                  ...produtosTenantNaCategoria,
+                                  ...produtosConcorrentesUnicos.filter(pConc => 
+                                    // Só mostrar produto do concorrente se tenant NÃO tem similar
+                                    !produtosTenantNaCategoria.some(pTenant => {
+                                      const match = calculateProductMatch(
+                                        { nome: pTenant.nome },
+                                        { nome: pConc.nome }
+                                      );
+                                      return match.score >= 70;
+                                    })
+                                  )
+                                ];
+                                
+                                return todosProdutosParaMostrar.map((produto, prodIdx) => {
+                                  const isProdutoTenant = produto.tenant;
+                                  const tenantProd = isProdutoTenant ? tenantProducts.find(tp => tp.nome === produto.nome) : null;
+                                
+                                  return (
+                                    <TableRow key={`prod-${catIdx}-${prodIdx}`} className="border-b hover:bg-muted/30">
+                                      <TableCell className="pl-8 sticky left-0 bg-background z-10 border-r-2">
+                                        <div className="flex items-start gap-2">
+                                          <div className={`w-1 h-full rounded ${isProdutoTenant ? 'bg-green-500' : 'bg-orange-500'}`} />
+                                          <div>
+                                            <p className="font-medium text-sm">{produto.nome}</p>
+                                            {produto.descricao && (
+                                              <p className="text-xs text-muted-foreground line-clamp-1">{produto.descricao}</p>
+                                            )}
+                                            {!isProdutoTenant && produto.concorrente && (
+                                              <Badge variant="outline" className="mt-1 text-[10px]">
+                                                {produto.concorrente.split(' ').slice(0, 2).join(' ')}
+                                              </Badge>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    </TableCell>
-                                    {/* Coluna TENANT - sempre TEM (✓ verde) */}
-                                    <TableCell className="text-center bg-green-50 dark:bg-green-950/10 border-l-2 border-r-2 border-green-500">
-                                      <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto" />
-                                    </TableCell>
-                                    {/* Colunas CONCORRENTES */}
-                                    {competitors.map((competitorName, compIdx) => {
-                                      // Buscar produtos deste concorrente
-                                      const competitorProds = competitorProducts.filter(cp => cp.competitor_name === competitorName);
-                                      
-                                      // 🔥 MATCHING POR SIMILARIDADE (não nome exato)
-                                      let bestMatch: any = null;
-                                      let bestScore = 0;
-                                      
-                                      competitorProds.forEach((cp) => {
-                                        const match = calculateProductMatch(tenantProd, cp);
-                                        if (match.score > bestScore && match.score >= 50) { // Threshold 50%
-                                          bestScore = match.score;
-                                          bestMatch = { ...cp, matchScore: match.score };
+                                      </TableCell>
+                                      {/* Coluna TENANT */}
+                                      <TableCell className="text-center bg-green-50 dark:bg-green-950/10 border-l-2 border-r-2 border-green-500">
+                                        {isProdutoTenant ? (
+                                          <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto" />
+                                        ) : (
+                                          <XCircle className="h-5 w-5 text-red-500 mx-auto" />
+                                        )}
+                                      </TableCell>
+                                      {/* Colunas CONCORRENTES */}
+                                      {competitors.map((competitorName, compIdx) => {
+                                        // Buscar produtos deste concorrente
+                                        const competitorProds = competitorProducts.filter(cp => cp.competitor_name === competitorName);
+                                        
+                                        // 🔥 MATCHING POR SIMILARIDADE
+                                        let bestMatch: any = null;
+                                        let bestScore = 0;
+                                        
+                                        if (isProdutoTenant && tenantProd) {
+                                          // Produto do tenant: verificar se concorrente tem similar
+                                          competitorProds.forEach((cp) => {
+                                            const match = calculateProductMatch(tenantProd, cp);
+                                            if (match.score > bestScore && match.score >= 50) {
+                                              bestScore = match.score;
+                                              bestMatch = { ...cp, matchScore: match.score };
+                                            }
+                                          });
+                                        } else {
+                                          // Produto do concorrente: verificar se ESTE concorrente é o dono
+                                          const isDono = produto.concorrente === competitorName;
+                                          if (isDono) {
+                                            bestMatch = { nome: produto.nome, matchScore: 100 };
+                                            bestScore = 100;
+                                          } else {
+                                            // Verificar se outro concorrente tem produto similar
+                                            competitorProds.forEach((cp) => {
+                                              const match = calculateProductMatch({ nome: produto.nome }, cp);
+                                              if (match.score > bestScore && match.score >= 70) {
+                                                bestScore = match.score;
+                                                bestMatch = { ...cp, matchScore: match.score };
+                                              }
+                                            });
+                                          }
                                         }
-                                      });
                                       
                                       return (
                                         <TableCell key={compIdx} className="text-center border-r">
@@ -927,6 +958,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                                     })}
                                   </TableRow>
                                 );
+                              });
                               })}
                             </>
                           );
