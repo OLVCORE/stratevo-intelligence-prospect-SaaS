@@ -77,6 +77,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [oportunidadesOpen, setOportunidadesOpen] = useState(false);
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({}); // 🔥 Vazio = TUDO FECHADO
+  const [allCategoriesExpanded, setAllCategoriesExpanded] = useState(false); // Estado global de expansão
   
   // 🔥 FUNÇÃO: Usar categoria ORIGINAL do produto (não mapear!)
   const getSmartCategory = (produto: { nome: string; descricao?: string; categoria?: string }): string => {
@@ -242,7 +243,11 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     const loadProducts = async () => {
       setLoading(true);
       try {
-        console.log('[ProductComparison] 🔍 Carregando produtos para tenant:', tenant.id);
+        console.log('🔥🔥🔥 [CRITICAL] Carregando produtos para TENANT:', {
+          id: tenant.id,
+          nome: (tenant as any)?.nome,
+          razao_social: (tenant as any)?.razao_social
+        });
         
         // 🔥 CORRIGIDO: Buscar produtos, filtrar por CNPJs atuais SE disponível
         let query = supabase
@@ -418,16 +423,34 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   
   // 🔥 CÁLCULO ADICIONAL: Alta concorrência (COMPLEMENTAR)
   const calcularAltaConcorrencia = () => {
+    console.log('🔥 [CALC ALTA CONCORRÊNCIA] Total matches disponíveis:', matches.length);
+    console.log('🔥 [CALC ALTA CONCORRÊNCIA] Tenant atual:', (tenant as any)?.nome);
+    
     // Usar matches existente (não recalcular!)
-    return matches
+    const resultado = matches
       .filter(m => m.bestScore >= 60) // 🔥 AJUSTADO: Alta concorrência = 60%+
       .map(m => ({
         produto: m.tenantProduct,
         matchesAltos: m.competitorProducts,
         qtdConcorrentes: new Set(m.competitorProducts.map(cp => cp.competitor_name)).size,
-        scoreMaximo: m.bestScore
+        scoreMaximo: m.bestScore,
+        empresas: Array.from(new Set(m.competitorProducts.map(cp => cp.competitor_name))),
+        qtdMatches: m.competitorProducts.length
       }))
       .sort((a, b) => b.qtdConcorrentes - a.qtdConcorrentes);
+    
+    // 🔥 DEBUG
+    console.log('🔥 [ALTA CONCORRÊNCIA] Total de produtos:', resultado.length);
+    if (resultado.length > 0) {
+      console.log('  Top 5 produtos:', resultado.slice(0, 5).map(r => ({
+        nome: r.produto.nome,
+        score: r.scoreMaximo,
+        matches: r.qtdMatches,
+        empresas: r.empresas
+      })));
+    }
+    
+    return resultado;
   };
   
   // 🔥 CÁLCULO ADICIONAL: Oportunidades por categoria (GAPS)
@@ -710,6 +733,39 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                       <RefreshCw className="h-4 w-4" />
                     )}
                     Atualizar
+                  </Button>
+                  
+                  {/* 🔥 NOVO: Botão Expandir/Colapsar Todas as Categorias */}
+                  <Button
+                    onClick={() => {
+                      const categorias = allProductsGroupedByCategory().map(([cat]) => cat);
+                      const novoEstado = !allCategoriesExpanded;
+                      
+                      // Criar objeto com todas as categorias no novo estado
+                      const newExpandedState = categorias.reduce((acc, cat) => {
+                        acc[cat] = novoEstado;
+                        return acc;
+                      }, {} as Record<string, boolean>);
+                      
+                      setExpandedCategories(newExpandedState);
+                      setAllCategoriesExpanded(novoEstado);
+                      
+                      toast.success(novoEstado ? 'Todas as categorias expandidas' : 'Todas as categorias fechadas');
+                    }}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    {allCategoriesExpanded ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Fechar Todas
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Abrir Todas
+                      </>
+                    )}
                   </Button>
                 </div>
                 
@@ -1001,7 +1057,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                       <div className="text-left">
                         <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Seus Diferenciais (NOVO)</CardTitle>
                         <CardDescription>
-                          Cálculo direto - Produtos sem concorrência (score &lt; 50%)
+                          Cálculo direto - Produtos sem concorrência (score &lt; 60%)
                         </CardDescription>
                       </div>
                     </div>
@@ -1081,19 +1137,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
               <CollapsibleContent>
                 <CardContent className="pt-6">
                   {(() => {
-                    // 🆕 CÁLCULO DIRETO - NÃO USA matches
-                    const altaConcorrencia = tenantProducts.map(tp => {
-                      const matchesAltos = competitorProducts.filter(cp => {
-                        const result = calculateProductMatch(tp, cp);
-                        return result.score >= 90;
-                      });
-                      return {
-                        produto: tp,
-                        qtdMatches: matchesAltos.length,
-                        empresas: [...new Set(matchesAltos.map(m => m.competitor_name))]
-                      };
-                    }).filter(p => p.qtdMatches > 0)
-                      .sort((a, b) => b.qtdMatches - a.qtdMatches);
+                    // 🔥 USAR FUNÇÃO CENTRALIZADA - USA matches já calculados
+                    const altaConcorrencia = calcularAltaConcorrencia();
                     
                     if (altaConcorrencia.length === 0) {
                       return (
