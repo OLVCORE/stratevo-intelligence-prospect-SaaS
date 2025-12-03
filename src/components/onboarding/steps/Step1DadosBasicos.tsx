@@ -49,7 +49,11 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   const [tenantProducts, setTenantProducts] = useState<Array<{ id: string; nome: string; descricao?: string; categoria?: string }>>([]);
   const [productsCatalogOpen, setProductsCatalogOpen] = useState(false);
   const [tenantProductsViewMode, setTenantProductsViewMode] = useState<'cards' | 'table'>('cards');
-  const [tenantProductsOpen, setTenantProductsOpen] = useState(true); // 🔥 NOVO: Estado para abrir/fechar produtos do tenant
+  const [tenantProductsOpen, setTenantProductsOpen] = useState(false); // 🔥 CORRIGIDO: Começar fechado
+  
+  // 🔥 NOVO: Estados para as caixas verdes de dados encontrados
+  const [dadosEmpresaOpen, setDadosEmpresaOpen] = useState(false); // Começar fechado
+  const [dadosConcorrenteOpen, setDadosConcorrenteOpen] = useState(false); // Começar fechado
   
   // 🔥 NOVO: Estados para concorrentes
   interface ConcorrenteDireto {
@@ -1227,18 +1231,29 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         )}
       </div>
 
-      {/* Dados Encontrados (Read-Only) */}
+      {/* Dados Encontrados (Read-Only) - Collapsible */}
       {cnpjData && (
-        <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-              <CardTitle className="text-green-900 dark:text-green-100">
-                Dados Encontrados Automaticamente
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
+        <Collapsible open={dadosEmpresaOpen} onOpenChange={setDadosEmpresaOpen}>
+          <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+            <CollapsibleTrigger className="w-full">
+              <CardHeader className="cursor-pointer hover:bg-green-100/50 dark:hover:bg-green-900/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <CardTitle className="text-green-900 dark:text-green-100">
+                      Dados Encontrados Automaticamente
+                    </CardTitle>
+                  </div>
+                  {dadosEmpresaOpen ? (
+                    <ChevronUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  )}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Razão Social:</span>
@@ -1285,8 +1300,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       )}
 
       {/* Campos Manuais */}
@@ -1674,18 +1691,29 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
               )}
             </div>
 
-            {/* Dados Encontrados - Card Completo */}
+            {/* Dados Encontrados - Card Completo - Collapsible */}
             {cnpjConcorrenteEncontrado && (
-              <Card className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                    <CardTitle className="text-green-900 dark:text-green-100 text-base">
-                      Dados Encontrados Automaticamente
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
+              <Collapsible open={dadosConcorrenteOpen} onOpenChange={setDadosConcorrenteOpen}>
+                <Card className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="cursor-pointer hover:bg-green-100/50 dark:hover:bg-green-900/30 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          <CardTitle className="text-green-900 dark:text-green-100 text-base">
+                            Dados Encontrados Automaticamente
+                          </CardTitle>
+                        </div>
+                        {dadosConcorrenteOpen ? (
+                          <ChevronUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        )}
+                      </div>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                     <div>
                       <span className="text-muted-foreground">Razão Social:</span>
@@ -1745,8 +1773,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                       Informe a URL para extrair produtos automaticamente
                     </p>
                   </div>
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             )}
           </CardContent>
         </Card>
