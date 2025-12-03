@@ -144,11 +144,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '');
         const allProducts = tenantProds || [];
         
-        console.log('[ProductComparison] 🔍 Filtrando produtos:', {
-          totalProdutos: allProducts.length,
-          tenantCNPJ: tenantCNPJ,
-          todosOsCNPJs: Array.from(new Set(allProducts.map(p => p.competitor_cnpj)))
-        });
+        // Log simplificado
+        console.log('[ProductComparison] 🔍 Filtrando produtos...');
         
         // 🔥 CORRIGIDO: Se não tiver CNPJ do tenant, usar tenant_id para filtrar
         const tenantProductsList: TenantProduct[] = tenantCNPJ 
@@ -181,17 +178,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         console.log('[ProductComparison] ✅ Produtos carregados:', {
           tenant: tenantProductsList.length,
           concorrentes: competitorProductsList.length,
-          total: allProducts.length,
-          tenantCNPJ: tenantCNPJ,
-          allProductsSample: allProducts.slice(0, 3),
+          empresasConcorrentes: Array.from(new Set(competitorProductsList.map(p => p.competitor_name))).length,
         });
-        
-        console.log('[ProductComparison] 🔍 Concorrentes únicos:', 
-          Array.from(new Set(competitorProductsList.map(p => p.competitor_name)))
-        );
-        
-        console.log('[ProductComparison] 📦 Amostra Produtos Tenant:', tenantProductsList.slice(0, 3));
-        console.log('[ProductComparison] 🏢 Amostra Produtos Concorrentes:', competitorProductsList.slice(0, 5));
 
         setTenantProducts(tenantProductsList);
         setCompetitorProducts(competitorProductsList);
@@ -216,13 +204,15 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     loadProducts();
   }, [tenant?.id, icpId, concorrentesAtuais]); // 🔥 ADICIONAR concorrentesAtuais como dependência
 
-  // Função para calcular matches entre produtos usando algoritmo avançado
+  // 🔥 OTIMIZADO: Função para calcular matches entre produtos (com menos processamento)
   const calculateMatches = (
     tenantProds: TenantProduct[],
     compProds: CompetitorProduct[]
   ): ProductMatch[] => {
-    return tenantProds.map(tenantProd => {
-      // 🔥 CORRIGIDO: Score mínimo 70% para considerar match (mais rigoroso)
+    console.time('[ProductComparison] ⏱️ Cálculo de matches');
+    
+    const results = tenantProds.map(tenantProd => {
+      // Score mínimo 70% para considerar match
       const matches = findBestMatches(tenantProd, compProds, 70);
       
       let matchType: 'exact' | 'similar' | 'unique' = 'unique';
@@ -230,10 +220,6 @@ export function ProductComparisonMatrix({ icpId }: Props) {
 
       if (matches.length > 0) {
         bestScore = matches[0].matchScore;
-        // 🔥 CORRIGIDO: 
-        // - exact (Alta Concorrência): score >= 90%
-        // - similar (Concorrência Moderada): score >= 70% e < 90%
-        // - unique (Seu Diferencial): score < 70% (NENHUM concorrente tem similar)
         matchType = bestScore >= 90 ? 'exact' : 'similar';
       }
 
@@ -244,6 +230,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         matchType,
       };
     });
+    
+    console.timeEnd('[ProductComparison] ⏱️ Cálculo de matches');
+    return results;
   };
 
   // Filtrar matches por termo de busca
@@ -656,48 +645,19 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                               </div>
                             </TableCell>
                             {competitors.map((competitorName, compIdx) => {
-                              // 🔥 CORRIGIDO: Buscar TODOS os produtos deste concorrente
+                              // Buscar TODOS os produtos deste concorrente
                               const competitorProds = competitorProducts.filter(cp => cp.competitor_name === competitorName);
                               
-                              // 🔥 DEBUG: Log detalhado para primeiro produto e primeiro concorrente
-                              if (prodIdx === 0 && compIdx === 0) {
-                                console.log('[TabelaComparativa] 🔍 DEBUG COMPLETO:', {
-                                  tenantProd: tenantProd,
-                                  concorrente: competitorName,
-                                  produtosDesteConcorrente: competitorProds.length,
-                                  amostra: competitorProds.slice(0, 2),
-                                });
-                              }
-                              
-                              // Encontrar melhor match usando algoritmo (threshold 50% mais flexível)
+                              // Encontrar melhor match usando algoritmo (threshold 50%)
                               let bestMatch: any = null;
                               let bestScore = 0;
                               
-                              competitorProds.forEach((cp, cpIdx) => {
+                              competitorProds.forEach((cp) => {
                                 const match = calculateProductMatch(tenantProd, cp);
                                 
-                                // 🔥 DEBUG: Log primeiros 5 matches
-                                if (prodIdx === 0 && compIdx === 0 && cpIdx < 5) {
-                                  console.log(`[TabelaComparativa] Match ${cpIdx + 1}:`, {
-                                    tenant: tenantProd.nome,
-                                    competitor: cp.nome,
-                                    score: match.score,
-                                    threshold: 50,
-                                    passed: match.score >= 50,
-                                  });
-                                }
-                                
-                                // 🔥 AJUSTADO: Threshold 50% (mais flexível para ver resultados)
                                 if (match.score > bestScore && match.score >= 50) {
                                   bestScore = match.score;
                                   bestMatch = { ...cp, matchScore: match.score };
-                                  
-                                  if (prodIdx === 0 && compIdx === 0) {
-                                    console.log('[TabelaComparativa] ✅ MATCH ENCONTRADO!', {
-                                      score: bestScore,
-                                      produto: bestMatch.nome
-                                    });
-                                  }
                                 }
                               });
                               
