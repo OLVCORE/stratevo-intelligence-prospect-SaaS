@@ -53,33 +53,52 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
   }, [tenant?.id, icpId]);
 
   const loadData = async () => {
-    if (!tenant?.id) return;
+    if (!tenant?.id) {
+      console.log('[MarketAnalysisTab] ⚠️ Tenant ID não encontrado');
+      return;
+    }
 
     try {
       setLoading(true);
+      console.log('[MarketAnalysisTab] 🔄 Carregando dados para tenant:', tenant.id);
 
       // 1. Buscar sessão de onboarding para pegar concorrentes atuais
-      const { data: session } = await supabase
+      const { data: session, error: sessionError } = await supabase
         .from('onboarding_sessions' as any)
         .select('step1_data, step4_data')
         .eq('tenant_id', tenant.id)
         .single();
 
+      if (sessionError) {
+        console.error('[MarketAnalysisTab] ❌ Erro ao buscar sessão:', sessionError);
+      }
+
       const concorrentesAtuais = session?.step1_data?.concorrentesDiretos || [];
       const cnpjsAtuais = concorrentesAtuais.map((c: any) => c.cnpj.replace(/\D/g, ''));
+      console.log('[MarketAnalysisTab] 📊 Concorrentes atuais:', cnpjsAtuais.length);
 
       // 2. Buscar produtos do tenant
-      const { data: tenantProds } = await supabase
+      const { data: tenantProds, error: tenantError } = await supabase
         .from('tenant_products' as any)
         .select('id, nome, descricao, categoria')
         .eq('tenant_id', tenant.id);
 
+      if (tenantError) {
+        console.error('[MarketAnalysisTab] ❌ Erro ao buscar produtos tenant:', tenantError);
+      }
+      console.log('[MarketAnalysisTab] ✅ Produtos do tenant:', tenantProds?.length || 0);
+
       // 3. Buscar produtos dos concorrentes (apenas dos atuais)
-      const { data: competitorProds } = await supabase
+      const { data: competitorProds, error: competitorError } = await supabase
         .from('tenant_competitor_products' as any)
         .select('id, nome, descricao, categoria, competitor_name, competitor_cnpj')
         .eq('tenant_id', tenant.id)
         .in('competitor_cnpj', cnpjsAtuais);
+
+      if (competitorError) {
+        console.error('[MarketAnalysisTab] ❌ Erro ao buscar produtos concorrentes:', competitorError);
+      }
+      console.log('[MarketAnalysisTab] ✅ Produtos de concorrentes:', competitorProds?.length || 0);
 
       setTenantProducts(tenantProds || []);
       setCompetitorProducts(competitorProds || []);
@@ -121,10 +140,20 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
     );
   }
 
-  if (tenantProducts.length === 0) {
+  if (tenantProducts.length === 0 && !loading) {
     return (
       <div className="text-center py-12">
-        <p className="text-muted-foreground">Nenhum produto cadastrado. Cadastre produtos na Aba 1 para ver a análise.</p>
+        <p className="text-muted-foreground mb-2">Nenhum produto cadastrado.</p>
+        <p className="text-sm text-muted-foreground">Cadastre produtos na página de Onboarding (Aba 1) para ver a análise completa.</p>
+      </div>
+    );
+  }
+
+  if (competitorProducts.length === 0 && tenantProducts.length > 0 && !loading) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground mb-2">Nenhum concorrente com produtos extraídos.</p>
+        <p className="text-sm text-muted-foreground">Aguarde a extração de produtos dos concorrentes ou adicione mais concorrentes.</p>
       </div>
     );
   }

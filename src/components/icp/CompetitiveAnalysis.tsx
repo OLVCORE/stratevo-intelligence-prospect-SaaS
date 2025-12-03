@@ -46,7 +46,11 @@ import {
   ChevronDown,
   ChevronUp,
   Home,
-  Edit
+  Edit,
+  LayoutDashboard,
+  Package,
+  Sparkles,
+  Brain
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -622,13 +626,29 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
         <TooltipProvider>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid grid-cols-6 w-full">
-            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-            <TabsTrigger value="competitors">Concorrentes ({competitors.length})</TabsTrigger>
-            <TabsTrigger value="products">Comparação Produtos</TabsTrigger>
-            <TabsTrigger value="discovery">🔍 Descobrir Novos</TabsTrigger>
-            <TabsTrigger value="market-analysis">📊 Análise de Mercado</TabsTrigger>
-            <TabsTrigger value="ceo" className={ceoAnalysis ? 'text-purple-600' : ''}>
-              {ceoAnalysis && '✓ '}Análise CEO
+            <TabsTrigger value="overview" className="gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              Visão Geral
+            </TabsTrigger>
+            <TabsTrigger value="competitors" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              Concorrentes ({competitors.length})
+            </TabsTrigger>
+            <TabsTrigger value="products" className="gap-2">
+              <Package className="h-4 w-4" />
+              Comparação Produtos
+            </TabsTrigger>
+            <TabsTrigger value="discovery" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Descobrir Novos
+            </TabsTrigger>
+            <TabsTrigger value="market-analysis" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Análise de Mercado
+            </TabsTrigger>
+            <TabsTrigger value="ceo" className={cn("gap-2", ceoAnalysis ? 'text-purple-600' : '')}>
+              <Brain className="h-4 w-4" />
+              {ceoAnalysis && <CheckCircle2 className="h-3 w-3" />}Análise CEO
             </TabsTrigger>
           </TabsList>
 
