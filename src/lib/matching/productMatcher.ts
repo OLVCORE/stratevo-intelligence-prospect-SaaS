@@ -98,7 +98,74 @@ function keywordSimilarity(str1: string, str2: string): number {
 }
 
 /**
- * Calcula similaridade de categoria
+ * 🔥 NOVO: Mapeia categorias para grupos padrão
+ * Resolve problema de categorias muito específicas
+ */
+function mapToStandardCategory(categoria?: string): string {
+  if (!categoria) return 'outros';
+  
+  const norm = normalize(categoria);
+  
+  // 🔥 GRUPO 1: Proteção contra CORTE/PERFURAÇÃO
+  if (norm.includes('corte') || norm.includes('cut') || 
+      norm.includes('perfuracao') || norm.includes('perforation') ||
+      norm.includes('anticorte') || norm.includes('anti-cut')) {
+    return 'protecao-corte';
+  }
+  
+  // 🔥 GRUPO 2: Proteção MECÂNICA/ABRASÃO
+  if (norm.includes('mecanica') || norm.includes('mechanical') ||
+      norm.includes('abrasao') || norm.includes('abrasion') ||
+      norm.includes('impacto') || norm.includes('impact')) {
+    return 'protecao-mecanica';
+  }
+  
+  // 🔥 GRUPO 3: Proteção TÉRMICA (calor/frio/temperatura)
+  if (norm.includes('temperatura') || norm.includes('temperature') ||
+      norm.includes('termica') || norm.includes('thermal') ||
+      norm.includes('calor') || norm.includes('heat') ||
+      norm.includes('frio') || norm.includes('cold') ||
+      norm.includes('solda') || norm.includes('weld')) {
+    return 'protecao-termica';
+  }
+  
+  // 🔥 GRUPO 4: Proteção QUÍMICA
+  if (norm.includes('quimica') || norm.includes('chemical') ||
+      norm.includes('latex') || norm.includes('nitrilo') || norm.includes('nitrile') ||
+      norm.includes('resistente') || norm.includes('resistant')) {
+    return 'protecao-quimica';
+  }
+  
+  // 🔥 GRUPO 5: LUVAS genéricas
+  if (norm.includes('luva') || norm.includes('glove')) {
+    return 'luvas-geral';
+  }
+  
+  // 🔥 GRUPO 6: CALÇADOS
+  if (norm.includes('calcado') || norm.includes('footwear') ||
+      norm.includes('bota') || norm.includes('boot') ||
+      norm.includes('sapato') || norm.includes('shoe')) {
+    return 'calcados';
+  }
+  
+  // 🔥 GRUPO 7: VESTIMENTAS
+  if (norm.includes('vestimenta') || norm.includes('clothing') ||
+      norm.includes('roupa') || norm.includes('apparel') ||
+      norm.includes('avental') || norm.includes('apron') ||
+      norm.includes('jaleco') || norm.includes('coat')) {
+    return 'vestimentas';
+  }
+  
+  // 🔥 GRUPO 8: MANGOTES
+  if (norm.includes('mangote') || norm.includes('sleeve')) {
+    return 'mangotes';
+  }
+  
+  return 'outros';
+}
+
+/**
+ * Calcula similaridade de categoria com mapeamento inteligente
  */
 function categorySimilarity(cat1?: string, cat2?: string): number {
   if (!cat1 || !cat2) return 0;
@@ -106,9 +173,20 @@ function categorySimilarity(cat1?: string, cat2?: string): number {
   const norm1 = normalize(cat1);
   const norm2 = normalize(cat2);
   
+  // Verificar match exato
   if (norm1 === norm2) return 100;
   if (norm1.includes(norm2) || norm2.includes(norm1)) return 80;
   
+  // 🔥 NOVO: Usar categorias padrão
+  const stdCat1 = mapToStandardCategory(cat1);
+  const stdCat2 = mapToStandardCategory(cat2);
+  
+  // Match de categoria padrão = 70% (alta correlação)
+  if (stdCat1 === stdCat2 && stdCat1 !== 'outros') {
+    return 70;
+  }
+  
+  // Fallback: keyword similarity
   return keywordSimilarity(cat1, cat2);
 }
 
@@ -124,14 +202,8 @@ export function calculateProductMatch(
   let totalScore = 0;
   let weights = 0;
   
-  // 🔥 DEBUG: Log detalhado para "Clean Cut Flex"
-  const isDebugProduct = product1.nome === 'Clean Cut Flex';
-  
-  if (isDebugProduct) {
-    console.log(`🔍 [MATCHER DEBUG] Comparando "${product1.nome}" vs "${product2.nome}"`);
-    console.log(`  Categoria1: "${product1.categoria}" | Categoria2: "${product2.categoria}"`);
-    console.log(`  Descricao1: "${product1.descricao?.substring(0, 50)}..." | Descricao2: "${product2.descricao?.substring(0, 50)}..."`);
-  }
+  // 🔥 DEBUG: Desabilitado para performance
+  const isDebugProduct = false; // product1.nome === 'Clean Cut Flex';
   
   // 🔥 1. CATEGORIA (peso 40% - PRIORIDADE MÁXIMA)
   // Se mesma categoria = base alta de competição
@@ -241,19 +313,9 @@ export function findBestMatches<T extends { nome: string; categoria?: string; de
   candidateProducts: T[],
   minScore: number = 60
 ): Array<T & { matchScore: number; matchConfidence: string; matchReasons: string[] }> {
-  // 🔥 FORÇAR LOG para confirmar rebuild
-  if (targetProduct.nome === 'Clean Cut Flex') {
-    console.log('🔥🔥🔥 [MATCHER REBUILD CONFIRMADO] findBestMatches chamado para:', targetProduct.nome, 'MinScore:', minScore);
-  }
-  
   const matches = candidateProducts
     .map(candidate => {
       const result = calculateProductMatch(targetProduct, candidate);
-      
-      // 🔥 LOG para primeira luva com score alto
-      if (targetProduct.nome === 'Clean Cut Flex' && result.score >= 50) {
-        console.log(`  ✅ Match encontrado: "${candidate.nome}" → Score: ${result.score}% | Razões:`, result.reasons);
-      }
       
       return {
         ...candidate,
@@ -264,11 +326,6 @@ export function findBestMatches<T extends { nome: string; categoria?: string; de
     })
     .filter(m => m.matchScore >= minScore)
     .sort((a, b) => b.matchScore - a.matchScore);
-  
-  // 🔥 LOG resultado final
-  if (targetProduct.nome === 'Clean Cut Flex') {
-    console.log(`  📊 Total matches para "${targetProduct.nome}": ${matches.length} (threshold: ${minScore}%)`);
-  }
   
   return matches;
 }
