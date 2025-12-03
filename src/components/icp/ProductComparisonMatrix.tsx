@@ -65,14 +65,12 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const { tenant } = useTenant();
   const [tenantProducts, setTenantProducts] = useState<TenantProduct[]>([]);
   const [competitorProducts, setCompetitorProducts] = useState<CompetitorProduct[]>([]);
-  const [matches, setMatches] = useState<ProductMatch[]>([]);
+  const [matches, setMatches] = useState<ProductMatch[]>([]); // 🔥 Mantido para compatibilidade (ProductHeatmap)
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [concorrentesAtuais, setConcorrentesAtuais] = useState<string[]>([]); // 🔥 NOVO: Lista de concorrentes ATUAIS do cadastro
+  const [concorrentesAtuais, setConcorrentesAtuais] = useState<string[]>([]);
   
-  // 🔥 NOVO: Estados para controlar dropdowns
+  // 🔥 Estados para controlar dropdowns
   const [metricsOpen, setMetricsOpen] = useState(false);
-  const [tabelaOpen, setTabelaOpen] = useState(false);
   const [tabelaComparativaOpen, setTabelaComparativaOpen] = useState(false); // Nova tabela estilo pricing
   const [diferenciaisOpen, setDiferenciaisOpen] = useState(false);
   const [altaConcorrenciaOpen, setAltaConcorrenciaOpen] = useState(false);
@@ -365,19 +363,70 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     return results;
   };
 
-  // Filtrar matches por termo de busca
-  const filteredMatches = matches.filter(match => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      match.tenantProduct.nome.toLowerCase().includes(term) ||
-      match.tenantProduct.categoria?.toLowerCase().includes(term) ||
-      match.competitorProducts.some(cp => 
-        cp.nome.toLowerCase().includes(term) ||
-        cp.competitor_name.toLowerCase().includes(term)
-      )
-    );
-  });
+  // 🔥 CÁLCULO ADICIONAL: Produtos únicos (COMPLEMENTAR ao matches)
+  const calcularDiferenciais = () => {
+    // Usar matches existente (não recalcular!)
+    return matches.filter(m => m.matchType === 'unique').map(m => m.tenantProduct);
+  };
+  
+  // 🔥 CÁLCULO ADICIONAL: Alta concorrência (COMPLEMENTAR)
+  const calcularAltaConcorrencia = () => {
+    // Usar matches existente (não recalcular!)
+    return matches
+      .filter(m => m.bestScore >= 90)
+      .map(m => ({
+        produto: m.tenantProduct,
+        matchesAltos: m.competitorProducts,
+        qtdConcorrentes: new Set(m.competitorProducts.map(cp => cp.competitor_name)).size,
+        scoreMaximo: m.bestScore
+      }))
+      .sort((a, b) => b.qtdConcorrentes - a.qtdConcorrentes);
+  };
+  
+  // 🔥 CÁLCULO ADICIONAL: Oportunidades por categoria (GAPS)
+  const calcularOportunidadesPorCategoria = () => {
+    const categoriasConcorrentes = new Map<string, {
+      produtos: CompetitorProduct[];
+      empresas: Set<string>;
+      tenantAtua: boolean;
+    }>();
+    
+    // Processar produtos dos concorrentes
+    competitorProducts.forEach(cp => {
+      const cat = getSmartCategory(cp);
+      if (!categoriasConcorrentes.has(cat)) {
+        categoriasConcorrentes.set(cat, {
+          produtos: [],
+          empresas: new Set(),
+          tenantAtua: false
+        });
+      }
+      categoriasConcorrentes.get(cat)!.produtos.push(cp);
+      categoriasConcorrentes.get(cat)!.empresas.add(cp.competitor_name);
+    });
+    
+    // Marcar categorias que tenant atua
+    tenantProducts.forEach(tp => {
+      const cat = getSmartCategory(tp);
+      if (categoriasConcorrentes.has(cat)) {
+        categoriasConcorrentes.get(cat)!.tenantAtua = true;
+      }
+    });
+    
+    // Retornar GAPS (categorias que tenant NÃO atua)
+    return Array.from(categoriasConcorrentes.entries())
+      .filter(([_, data]) => !data.tenantAtua)
+      .map(([cat, data]) => ({
+        categoria: cat,
+        qtdEmpresas: data.empresas.size,
+        qtdProdutos: data.produtos.length,
+        empresas: Array.from(data.empresas),
+        produtosPopulares: data.produtos.slice(0, 5),
+        potencial: data.empresas.size >= 5 ? 'ALTO' :
+                    data.empresas.size >= 3 ? 'MÉDIO' : 'BAIXO'
+      }))
+      .sort((a, b) => b.qtdEmpresas - a.qtdEmpresas);
+  };
 
   if (loading) {
     return (
@@ -475,188 +524,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       </Collapsible>
 
       {/* Tabela Comparativa - Collapsible */}
-      <Collapsible open={tabelaOpen} onOpenChange={setTabelaOpen}>
-        <Card>
-          <CollapsibleTrigger className="w-full">
-            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Matriz Comparativa de Produtos</CardTitle>
-                  <CardDescription>
-                    Compare seus produtos com os produtos dos concorrentes identificados
-                  </CardDescription>
-                </div>
-                {tabelaOpen ? (
-                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                )}
-              </div>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="space-y-4">
-              <Input
-                placeholder="Buscar por produto, categoria ou concorrente..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-md"
-              />
-
-              {/* Tabela Comparativa */}
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[200px]">Produto Tenant</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Produtos Concorrentes</TableHead>
-                  <TableHead className="w-[150px]">Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredMatches.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      {searchTerm ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredMatches.map((match, idx) => (
-                    <TableRow key={match.tenantProduct.id || idx}>
-                      <TableCell>
-                        <div className="font-medium">{match.tenantProduct.nome}</div>
-                        {match.tenantProduct.descricao && (
-                          <div className="text-xs text-muted-foreground line-clamp-1">
-                            {match.tenantProduct.descricao}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {match.tenantProduct.categoria ? (
-                          <Badge variant="outline">{match.tenantProduct.categoria}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {match.matchType === 'exact' && (
-                          <Badge className="flex items-center gap-1 w-fit bg-orange-600 hover:bg-orange-700">
-                            <AlertCircle className="h-3 w-3" />
-                            Concorrência Direta
-                          </Badge>
-                        )}
-                        {match.matchType === 'similar' && (
-                          <Badge className="flex items-center gap-1 w-fit bg-blue-600 hover:bg-blue-700">
-                            <Target className="h-3 w-3" />
-                            Similar
-                          </Badge>
-                        )}
-                        {match.matchType === 'unique' && (
-                          <Badge className="flex items-center gap-1 w-fit bg-emerald-600 hover:bg-emerald-700">
-                            <Award className="h-3 w-3" />
-                            Diferencial
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {match.competitorProducts.length > 0 ? (
-                          <div className="space-y-2">
-                            {match.competitorProducts.slice(0, 3).map((cp, cpIdx) => (
-                              <TooltipProvider key={cp.id || cpIdx}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-help">
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">{cp.nome}</p>
-                                        <p className="text-xs text-muted-foreground truncate">
-                                          {cp.competitor_name}
-                                        </p>
-                                      </div>
-                                      <Badge variant="outline" className="shrink-0 text-xs">
-                                        {cp.matchScore}%
-                                      </Badge>
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-sm">
-                                    <p className="font-semibold mb-2">{cp.nome}</p>
-                                    <p className="text-xs text-muted-foreground mb-2">
-                                      Concorrente: {cp.competitor_name}
-                                    </p>
-                                    <div className="space-y-1">
-                                      <p className="text-xs"><strong>Score:</strong> {cp.matchScore}%</p>
-                                      <p className="text-xs"><strong>Confiança:</strong> {
-                                        cp.matchConfidence === 'high' ? 'Alta' :
-                                        cp.matchConfidence === 'medium' ? 'Média' : 'Baixa'
-                                      }</p>
-                                      {cp.matchReasons.length > 0 && (
-                                        <>
-                                          <p className="text-xs font-medium mt-2">Razões:</p>
-                                          <ul className="text-xs list-disc list-inside">
-                                            {cp.matchReasons.map((reason, i) => (
-                                              <li key={i}>{reason}</li>
-                                            ))}
-                                          </ul>
-                                        </>
-                                      )}
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ))}
-                            {match.competitorProducts.length > 3 && (
-                              <p className="text-xs text-muted-foreground">
-                                +{match.competitorProducts.length - 3} outros matches
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm italic">Nenhum match</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {match.bestScore > 0 ? (
-                          <div className="space-y-1">
-                            <Progress 
-                              value={match.bestScore} 
-                              className={cn(
-                                "h-2",
-                                match.bestScore >= 90 ? "bg-orange-200 dark:bg-orange-900" :
-                                match.bestScore >= 70 ? "bg-blue-200 dark:bg-blue-900" :
-                                "bg-slate-200 dark:bg-slate-800"
-                              )}
-                            />
-                            <div className="flex items-center gap-2">
-                              <span className={cn(
-                                "text-sm font-bold",
-                                match.bestScore >= 90 ? "text-orange-700 dark:text-orange-400" :
-                                match.bestScore >= 70 ? "text-blue-700 dark:text-blue-400" :
-                                "text-slate-600 dark:text-slate-400"
-                              )}>
-                                {match.bestScore}%
-                              </span>
-                              {match.bestScore >= 90 && (
-                                <Sparkles className="h-3 w-3 text-orange-600" />
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
-
-      {/* NOVA: Tabela Comparativa por Categoria (Agrupada) */}
+      {/* ✅ TABELA POR CATEGORIA - ÚNICA FONTE DE VERDADE */}
       {tenantProducts.length > 0 && competitorProducts.length > 0 && (
         <Collapsible open={tabelaComparativaOpen} onOpenChange={setTabelaComparativaOpen}>
           <Card className="border-2 border-primary/20">
@@ -1021,8 +889,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Collapsible>
       )}
 
-      {/* Insights Estratégicos */}
-      {matches.length > 0 && (
+      {/* Insights Estratégicos - SEMPRE VISÍVEL (baseado em dados reais) */}
+      {tenantProducts.length > 0 && competitorProducts.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Produtos Únicos (Vantagem Competitiva) - Collapsible */}
           <Collapsible open={diferenciaisOpen} onOpenChange={setDiferenciaisOpen}>
@@ -1052,37 +920,66 @@ export function ProductComparisonMatrix({ icpId }: Props) {
               <CollapsibleContent>
                 <CardContent className="pt-6">
               {(() => {
-                const uniqueProducts = matches.filter(m => m.matchType === 'unique');
+                // 🔥 DADOS REAIS do banco (não mock!)
+                const uniqueProducts = calcularDiferenciais();
                 
                 if (uniqueProducts.length === 0) {
                   return (
-                    <p className="text-sm text-muted-foreground italic">
-                      Todos os seus produtos têm concorrência. Considere desenvolver produtos únicos.
-                    </p>
+                    <div className="text-center py-8">
+                      <AlertCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground font-medium">
+                        Todos os seus produtos têm concorrência.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Considere desenvolver produtos únicos para se diferenciar.
+                      </p>
+                    </div>
                   );
                 }
                 
+                // 🔥 Agrupar diferenciais por categoria
+                const diferencialsPorCategoria = uniqueProducts.reduce((acc, prod) => {
+                  const cat = getSmartCategory(prod);
+                  if (!acc[cat]) acc[cat] = [];
+                  acc[cat].push(prod);
+                  return acc;
+                }, {} as Record<string, TenantProduct[]>);
+                
                 return (
-                  <div className="space-y-2">
-                    {uniqueProducts.slice(0, 5).map((match, idx) => (
-                      <div key={idx} className="flex items-center gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{match.tenantProduct.nome}</p>
-                          {match.tenantProduct.categoria && (
-                            <p className="text-xs text-muted-foreground">{match.tenantProduct.categoria}</p>
-                          )}
+                  <div className="space-y-4">
+                    {Object.entries(diferencialsPorCategoria).map(([categoria, prods], catIdx) => (
+                      <div key={catIdx} className="space-y-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Package className="h-4 w-4 text-emerald-600" />
+                          <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{categoria}</span>
+                          <Badge variant="outline" className="text-xs">{prods.length} únicos</Badge>
                         </div>
-                        <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs shrink-0">
-                          Único
-                        </Badge>
+                        {prods.slice(0, 3).map((prod, idx) => (
+                          <div key={idx} className="flex items-center gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg ml-6">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{prod.nome}</p>
+                              {prod.descricao && (
+                                <p className="text-xs text-muted-foreground line-clamp-1">{prod.descricao}</p>
+                              )}
+                            </div>
+                            <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs shrink-0">
+                              Único
+                            </Badge>
+                          </div>
+                        ))}
+                        {prods.length > 3 && (
+                          <p className="text-xs text-muted-foreground text-center ml-6">
+                            +{prods.length - 3} outros em {categoria}
+                          </p>
+                        )}
                       </div>
                     ))}
-                    {uniqueProducts.length > 5 && (
-                      <p className="text-xs text-muted-foreground text-center pt-2">
-                        +{uniqueProducts.length - 5} outros produtos únicos
+                    <div className="mt-4 pt-4 border-t">
+                      <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 text-center">
+                        🎯 Total: {uniqueProducts.length} produtos únicos em {Object.keys(diferencialsPorCategoria).length} categorias
                       </p>
-                    )}
+                    </div>
                   </div>
                 );
               })()}
@@ -1119,37 +1016,75 @@ export function ProductComparisonMatrix({ icpId }: Props) {
               <CollapsibleContent>
                 <CardContent className="pt-6">
               {(() => {
-                const highCompetition = matches
-                  .filter(m => m.bestScore >= 90)
-                  .sort((a, b) => b.bestScore - a.bestScore);
+                // 🔥 DADOS REAIS calculados dinamicamente
+                const highCompetition = calcularAltaConcorrencia();
                 
                 if (highCompetition.length === 0) {
                   return (
-                    <p className="text-sm text-muted-foreground italic">
-                      Nenhum produto com concorrência direta identificada (score &gt; 90%).
-                    </p>
+                    <div className="text-center py-8">
+                      <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-emerald-500/50" />
+                      <p className="text-sm text-muted-foreground font-medium">
+                        Parabéns! Nenhum produto com concorrência direta (&gt; 90%).
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Seus produtos têm boa diferenciação no mercado.
+                      </p>
+                    </div>
                   );
                 }
                 
                 return (
-                  <div className="space-y-2">
-                    {highCompetition.slice(0, 5).map((match, idx) => (
-                      <div key={idx} className="flex items-center gap-3 p-3 bg-orange-50/50 dark:bg-orange-950/20 rounded-lg">
-                        <AlertCircle className="h-4 w-4 text-orange-600 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{match.tenantProduct.nome}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {match.competitorProducts.length} concorrente{match.competitorProducts.length !== 1 ? 's' : ''}
-                          </p>
+                  <div className="space-y-3">
+                    {highCompetition.slice(0, 8).map((item, idx) => (
+                      <div key={idx} className="p-3 bg-orange-50/50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-sm font-semibold truncate">{item.produto.nome}</p>
+                              <Badge className="bg-orange-600 hover:bg-orange-700 text-white text-xs shrink-0 ml-2">
+                                {item.scoreMaximo}%
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-2">
+                              {getSmartCategory(item.produto)} • {item.qtdConcorrentes} concorrente{item.qtdConcorrentes > 1 ? 's' : ''} com produto similar
+                            </p>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex flex-wrap gap-1 cursor-help">
+                                    {item.matchesAltos.slice(0, 3).map((m, mIdx) => (
+                                      <Badge key={mIdx} variant="outline" className="text-[10px]">
+                                        {m.concorrente.split(' ').slice(0, 2).join(' ')} ({m.score}%)
+                                      </Badge>
+                                    ))}
+                                    {item.matchesAltos.length > 3 && (
+                                      <Badge variant="outline" className="text-[10px]">
+                                        +{item.matchesAltos.length - 3}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="font-semibold mb-2">🔴 Concorrentes com produtos similares:</p>
+                                  <ul className="space-y-1">
+                                    {item.matchesAltos.map((m, mIdx) => (
+                                      <li key={mIdx} className="text-xs flex justify-between gap-2">
+                                        <span className="truncate">{m.concorrente}</span>
+                                        <Badge variant="outline" className="text-[10px]">{m.score}%</Badge>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                         </div>
-                        <Badge className="bg-orange-600 hover:bg-orange-700 text-white text-xs shrink-0">
-                          {match.bestScore}%
-                        </Badge>
                       </div>
                     ))}
-                    {highCompetition.length > 5 && (
+                    {highCompetition.length > 8 && (
                       <p className="text-xs text-muted-foreground text-center pt-2">
-                        +{highCompetition.length - 5} outros produtos com alta concorrência
+                        +{highCompetition.length - 8} outros produtos com alta concorrência
                       </p>
                     )}
                   </div>
@@ -1191,81 +1126,77 @@ export function ProductComparisonMatrix({ icpId }: Props) {
             <CollapsibleContent>
               <CardContent className="pt-6">
             {(() => {
-              // Agrupar produtos de concorrentes por nome similar
-              const productCounts = new Map<string, { count: number; competitors: string[]; categoria?: string }>();
-              
-              competitorProducts.forEach(cp => {
-                const normalized = cp.nome.toLowerCase().trim();
-                let found = false;
-                
-                // Verificar se já existe um produto similar
-                for (const [key, value] of productCounts.entries()) {
-                  const result = calculateProductMatch({ nome: key }, { nome: normalized });
-                  if (result.score >= 80) {
-                    value.count++;
-                    if (!value.competitors.includes(cp.competitor_name)) {
-                      value.competitors.push(cp.competitor_name);
-                    }
-                    found = true;
-                    break;
-                  }
-                }
-                
-                if (!found) {
-                  productCounts.set(cp.nome, { 
-                    count: 1, 
-                    competitors: [cp.competitor_name],
-                    categoria: cp.categoria,
-                  });
-                }
-              });
-              
-              // Filtrar produtos que o tenant não tem
-              const gaps = Array.from(productCounts.entries())
-                .filter(([prodName]) => {
-                  // Verificar se tenant tem produto similar
-                  return !tenantProducts.some(tp => {
-                    const result = calculateProductMatch(tp, { nome: prodName });
-                    return result.score >= 70;
-                  });
-                })
-                .filter(([, data]) => data.count >= 2) // Pelo menos 2 concorrentes têm
-                .sort((a, b) => b[1].count - a[1].count)
-                .slice(0, 8);
+              // 🔥 DADOS REAIS: GAPS por categoria
+              const gaps = calcularOportunidadesPorCategoria();
               
               if (gaps.length === 0) {
                 return (
-                  <p className="text-sm text-muted-foreground italic">
-                    Seu portfólio cobre bem o mercado. Nenhum gap significativo identificado.
-                  </p>
+                  <div className="text-center py-8">
+                    <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-emerald-500/50" />
+                    <p className="text-sm text-muted-foreground font-medium">
+                      Excelente! Seu portfólio cobre todas as categorias do mercado.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Nenhum gap significativo identificado.
+                    </p>
+                  </div>
                 );
               }
               
               return (
-                <div className="space-y-2">
-                  {gaps.map(([prodName, data], idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
-                      <Sparkles className="h-4 w-4 text-blue-600 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{prodName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {data.count} concorrente{data.count !== 1 ? 's' : ''} {data.count === 1 ? 'tem' : 'têm'} este produto
-                        </p>
+                <div className="space-y-4">
+                  {gaps.slice(0, 5).map((gap, idx) => (
+                    <div key={idx} className="p-4 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-5 w-5 text-blue-600" />
+                          <div>
+                            <p className="text-sm font-bold text-blue-700 dark:text-blue-400">{gap.categoria}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {gap.qtdProdutos} produtos • {gap.qtdEmpresas} empresas atuam
+                            </p>
+                          </div>
+                        </div>
+                        <Badge className={
+                          gap.potencial === 'ALTO' ? 'bg-orange-600 text-white' :
+                          gap.potencial === 'MÉDIO' ? 'bg-blue-600 text-white' :
+                          'bg-slate-500 text-white'
+                        }>
+                          {gap.potencial}
+                        </Badge>
                       </div>
+                      
+                      <div className="space-y-2 mt-3">
+                        <p className="text-xs font-semibold text-muted-foreground">Empresas nesta categoria:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {gap.empresas.slice(0, 4).map((emp, eIdx) => (
+                            <Badge key={eIdx} variant="outline" className="text-[10px]">
+                              {emp.split(' ').slice(0, 2).join(' ')}
+                            </Badge>
+                          ))}
+                          {gap.empresas.length > 4 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              +{gap.empresas.length - 4}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Badge variant="outline" className="text-xs shrink-0 border-blue-300 dark:border-blue-700 cursor-help">
-                              {data.count} concorrente{data.count !== 1 ? 's' : ''}
-                            </Badge>
+                            <div className="mt-3 p-2 bg-background/50 rounded cursor-help">
+                              <p className="text-xs text-muted-foreground">
+                                💡 Produtos populares: {gap.produtosPopulares.slice(0, 3).map(p => p.nome).join(', ')}...
+                              </p>
+                            </div>
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
-                            <p className="font-semibold mb-2">📋 {data.count} Concorrente{data.count !== 1 ? 's' : ''} têm este produto:</p>
-                            <ul className="space-y-1">
-                              {data.competitors.map((comp, compIdx) => (
-                                <li key={compIdx} className="text-sm flex items-start gap-2">
-                                  <CheckCircle2 className="h-3 w-3 text-blue-500 mt-0.5 shrink-0" />
-                                  {comp}
+                          <TooltipContent className="max-w-sm">
+                            <p className="font-semibold mb-2">📦 Produtos nesta categoria:</p>
+                            <ul className="space-y-1 max-h-[200px] overflow-y-auto">
+                              {gap.produtosPopulares.map((prod, pIdx) => (
+                                <li key={pIdx} className="text-xs">
+                                  • {prod.nome} ({prod.competitor_name.split(' ')[0]})
                                 </li>
                               ))}
                             </ul>
@@ -1274,6 +1205,11 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                       </TooltipProvider>
                     </div>
                   ))}
+                  {gaps.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center pt-2">
+                      +{gaps.length - 5} outras oportunidades de expansão
+                    </p>
+                  )}
                 </div>
               );
             })()}
