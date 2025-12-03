@@ -259,8 +259,8 @@ export function calculateProductMatch(
   let totalScore = 0;
   let weights = 0;
   
-  // 🔥 DEBUG: ATIVADO TEMPORARIAMENTE para verificar scores
-  const isDebugProduct = product1.nome.includes('Clean') || product1.nome.includes('Defender');
+  // 🔥 DEBUG: ATIVADO para TODOS os produtos do tenant
+  const isDebugProduct = true;
   
   // 🔥 1. CATEGORIA ESPECÍFICA (peso 45% - BALANCEADO)
   // Considera o USO específico, não apenas o tipo de EPI
@@ -349,16 +349,11 @@ export function calculateProductMatch(
   // Normalizar score final
   const finalScore = weights > 0 ? Math.min(100, totalScore / weights) : 0;
   
-  // 🔥 LOG CRÍTICO: Mostrar scores altos
-  if (finalScore >= 70) {
-    console.log(`✅ [MATCH ALTO] "${product1.nome}" vs "${product2.nome}"`);
-    console.log(`  📊 Score: ${Math.round(finalScore)}% | Total: ${totalScore.toFixed(1)} | Weights: ${weights}`);
-    console.log(`  📝 Razões:`, reasons);
-  }
-  
-  if (isDebugProduct && finalScore > 40) {
-    console.log(`  📊 FINAL Score: ${Math.round(finalScore)}% | Weights: ${weights} | Total: ${totalScore}`);
-    console.log(`  📝 Razões:`, reasons);
+  // 🔥 LOG TODOS OS MATCHES com score >= 60%
+  if (finalScore >= 60) {
+    console.log(`🎯 [MATCH] "${product1.nome}" vs "${product2.nome}"`);
+    console.log(`  Score: ${Math.round(finalScore)}% | Cat1: "${product1.categoria}" | Cat2: "${product2.categoria}"`);
+    console.log(`  Razões:`, reasons.join(' | '));
   }
   
   // Determinar confiança

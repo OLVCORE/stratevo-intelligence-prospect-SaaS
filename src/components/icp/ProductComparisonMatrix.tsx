@@ -289,6 +289,35 @@ export function ProductComparisonMatrix({ icpId }: Props) {
           empresasConcorrentes: Array.from(new Set(competitorProductsList.map(p => p.competitor_name))).length,
         });
         
+        // 🔥 DEBUG CRÍTICO: Mostrar TODOS os produtos do tenant
+        console.log('🔥🔥🔥 [DEBUG] PRODUTOS DO TENANT:');
+        tenantProductsList.forEach((p, i) => {
+          console.log(`  ${i+1}. "${p.nome}" | Categoria: "${p.categoria}" | Desc: "${p.descricao?.substring(0, 50)}..."`);
+        });
+        
+        // 🔥 DEBUG CRÍTICO: Agrupar produtos concorrentes por nome
+        const produtosPorNome = new Map<string, { empresas: Set<string>, count: number, categorias: Set<string> }>();
+        competitorProductsList.forEach(p => {
+          const nome = p.nome.toLowerCase().trim();
+          if (!produtosPorNome.has(nome)) {
+            produtosPorNome.set(nome, { empresas: new Set(), count: 0, categorias: new Set() });
+          }
+          const info = produtosPorNome.get(nome)!;
+          info.empresas.add(p.competitor_name);
+          info.count++;
+          if (p.categoria) info.categorias.add(p.categoria);
+        });
+        
+        // Mostrar produtos que MÚLTIPLOS concorrentes têm
+        console.log('🔥🔥🔥 [DEBUG] PRODUTOS COM ALTA CONCORRÊNCIA (2+ empresas):');
+        Array.from(produtosPorNome.entries())
+          .filter(([_, info]) => info.empresas.size >= 2)
+          .sort((a, b) => b[1].empresas.size - a[1].empresas.size)
+          .slice(0, 20)
+          .forEach(([nome, info]) => {
+            console.log(`  📦 "${nome}" → ${info.empresas.size} empresas | Categorias: ${Array.from(info.categorias).join(', ')}`);
+          });
+        
         // 🔍 DEBUG: Mostrar primeiros produtos com categorias
         console.log('🔍 [DEBUG] Primeiros produtos TENANT:', tenantProductsList.slice(0, 3).map(p => ({
           nome: p.nome,
