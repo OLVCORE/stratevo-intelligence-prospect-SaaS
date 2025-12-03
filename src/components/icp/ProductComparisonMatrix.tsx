@@ -78,16 +78,32 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({}); // 🔥 Vazio = TUDO FECHADO
   
-  // 🔥 FUNÇÃO: Categorização Inteligente usando sistema unificado
+  // 🔥 FUNÇÃO: Usar categoria ORIGINAL do produto (não mapear!)
   const getSmartCategory = (produto: { nome: string; descricao?: string; categoria?: string }): string => {
-    // Combinar todos os dados do produto para análise
-    const textoCompleto = `${produto.nome} ${produto.descricao || ''} ${produto.categoria || ''}`;
+    // 🔥 PRIORIDADE: Usar categoria ORIGINAL do produto
+    if (produto.categoria && produto.categoria.trim()) {
+      return produto.categoria;
+    }
     
-    // Usar sistema de mapeamento padrão (mesma lógica do matching)
-    const standardCat = mapToStandardCategory(textoCompleto);
+    // Fallback: tentar detectar pelo nome/descrição
+    const textoCompleto = `${produto.nome} ${produto.descricao || ''}`.toLowerCase();
     
-    // Retornar label amigável
-    return getStandardCategoryLabel(standardCat);
+    // Detectar tipos básicos apenas como fallback
+    if (textoCompleto.includes('consultoria') || textoCompleto.includes('assessoria')) {
+      return 'Serviços de Consultoria';
+    }
+    if (textoCompleto.includes('logistica') || textoCompleto.includes('logística')) {
+      return 'Logística';
+    }
+    if (textoCompleto.includes('compliance') || textoCompleto.includes('tributar')) {
+      return 'Compliance e Tributário';
+    }
+    if (textoCompleto.includes('import') || textoCompleto.includes('export')) {
+      return 'Comércio Exterior';
+    }
+    
+    // Última opção: "Outros"
+    return 'Outros Produtos/Serviços';
   };
   
   // 🔥 NOVO: Agrupar TODOS os produtos por categoria INTELIGENTE (Tenant + Concorrentes)
@@ -358,7 +374,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     compProds: CompetitorProduct[]
   ): ProductMatch[] => {
     console.time('[ProductComparison] ⏱️ Cálculo de matches');
-    console.log('[ProductComparison] 🔥 CÁLCULO COM USO ESPECÍFICO (Threshold: 50%, Alta Concorrência: ≥90%)');
+    console.log('[ProductComparison] 🔥 CÁLCULO AJUSTADO (Threshold: 50%, Alta Concorrência: ≥60%)');
     
     const results = tenantProds.map(tenantProd => {
       // 🔥 Score mínimo 50% (BALANCEADO - captura concorrência por uso específico)
@@ -369,10 +385,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
 
       if (matches.length > 0) {
         bestScore = matches[0].matchScore;
-        matchType = bestScore >= 90 ? 'exact' : 'similar'; // Alta concorrência = 90%+
+        matchType = bestScore >= 60 ? 'exact' : 'similar'; // 🔥 AJUSTADO: Alta concorrência = 60%+
         
         // Log detalhado para produtos com alta concorrência
-        if (bestScore >= 90) {
+        if (bestScore >= 60) {
           console.log(`[ProductComparison] 🔴 ALTA CONCORRÊNCIA: "${tenantProd.nome}" → ${matches.length} matches (score máx: ${bestScore}%)`);
         }
       }
@@ -385,11 +401,11 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       };
     });
     
-    const comConcorrencia = results.filter(r => r.bestScore >= 90).length;
+    const comConcorrencia = results.filter(r => r.bestScore >= 60).length;
     const unicos = results.filter(r => r.matchType === 'unique').length;
     
     console.timeEnd('[ProductComparison] ⏱️ Cálculo de matches');
-    console.log(`[ProductComparison] 📊 RESULTADO: ${comConcorrencia} com concorrência direta (≥90%), ${unicos} únicos`);
+    console.log(`[ProductComparison] 📊 RESULTADO: ${comConcorrencia} com concorrência direta (≥60%), ${unicos} únicos`);
     
     return results;
   };
@@ -404,7 +420,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const calcularAltaConcorrencia = () => {
     // Usar matches existente (não recalcular!)
     return matches
-      .filter(m => m.bestScore >= 90) // Alta concorrência = mesmo uso específico
+      .filter(m => m.bestScore >= 60) // 🔥 AJUSTADO: Alta concorrência = 60%+
       .map(m => ({
         produto: m.tenantProduct,
         matchesAltos: m.competitorProducts,
@@ -1050,7 +1066,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                       <div className="text-left">
                         <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Alta Concorrência</CardTitle>
                         <CardDescription>
-                          Produtos com concorrência direta - mesmo uso específico (score ≥ 90%)
+                          Produtos com concorrência direta (score ≥ 60%)
                         </CardDescription>
                       </div>
                     </div>
