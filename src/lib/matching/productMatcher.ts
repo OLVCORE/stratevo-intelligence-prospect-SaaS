@@ -124,6 +124,12 @@ export function calculateProductMatch(
   let totalScore = 0;
   let weights = 0;
   
+  // 🔥 DEBUG: Log para confirmar que NOVO algoritmo está sendo usado
+  const isFirstCall = !calculateProductMatch.prototype;
+  if (isFirstCall) {
+    console.log('🔥 [MATCHER] NOVO ALGORITMO ATIVO: Categoria (40%) + Uso (35%) + Nome (25%)');
+  }
+  
   // 🔥 1. CATEGORIA (peso 40% - PRIORIDADE MÁXIMA)
   // Se mesma categoria = base alta de competição
   if (product1.categoria && product2.categoria) {
