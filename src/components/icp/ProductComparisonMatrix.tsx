@@ -22,7 +22,7 @@ import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
-import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';
@@ -71,6 +71,11 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   // 🔥 NOVO: Estados para controlar dropdowns
   const [metricsOpen, setMetricsOpen] = useState(false);
   const [tabelaOpen, setTabelaOpen] = useState(false);
+  const [tabelaComparativaOpen, setTabelaComparativaOpen] = useState(false); // Nova tabela estilo pricing
+  const [diferenciaisOpen, setDiferenciaisOpen] = useState(false);
+  const [altaConcorrenciaOpen, setAltaConcorrenciaOpen] = useState(false);
+  const [oportunidadesOpen, setOportunidadesOpen] = useState(false);
+  const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
 
   // Carregar produtos do tenant e concorrentes
   useEffect(() => {
@@ -153,14 +158,18 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     compProds: CompetitorProduct[]
   ): ProductMatch[] => {
     return tenantProds.map(tenantProd => {
-      // Usar novo algoritmo para encontrar matches
-      const matches = findBestMatches(tenantProd, compProds, 60); // Score mínimo 60%
+      // 🔥 CORRIGIDO: Score mínimo 70% para considerar match (mais rigoroso)
+      const matches = findBestMatches(tenantProd, compProds, 70);
       
       let matchType: 'exact' | 'similar' | 'unique' = 'unique';
       let bestScore = 0;
 
       if (matches.length > 0) {
         bestScore = matches[0].matchScore;
+        // 🔥 CORRIGIDO: 
+        // - exact (Alta Concorrência): score >= 90%
+        // - similar (Concorrência Moderada): score >= 70% e < 90%
+        // - unique (Seu Diferencial): score < 70% (NENHUM concorrente tem similar)
         matchType = bestScore >= 90 ? 'exact' : 'similar';
       }
 
@@ -464,23 +473,143 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Card>
       </Collapsible>
 
+      {/* NOVA: Tabela Comparativa Estilo Pricing Table */}
+      {tenantProducts.length > 0 && competitorProducts.length > 0 && (
+        <Collapsible open={tabelaComparativaOpen} onOpenChange={setTabelaComparativaOpen}>
+          <Card className="border-2 border-primary/20">
+            <CollapsibleTrigger className="w-full">
+              <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="h-5 w-5 text-primary" />
+                      Tabela Comparativa de Produtos
+                    </CardTitle>
+                    <CardDescription>
+                      Comparação direta: veja quais concorrentes têm produtos similares aos seus
+                    </CardDescription>
+                  </div>
+                  {tabelaComparativaOpen ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[250px] sticky left-0 bg-background z-10">Produto</TableHead>
+                        {/* Header com nomes dos concorrentes */}
+                        {Array.from(new Set(competitorProducts.map(p => p.competitor_name))).map((competitorName, idx) => (
+                          <TableHead key={idx} className="text-center min-w-[150px]">
+                            <div className="flex flex-col items-center">
+                              <Building2 className="h-4 w-4 mb-1 text-orange-600" />
+                              <span className="text-xs font-semibold">{competitorName}</span>
+                            </div>
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tenantProducts.map((tenantProd, prodIdx) => {
+                        // Para cada produto do tenant, ver quais concorrentes têm produto similar
+                        const competitors = Array.from(new Set(competitorProducts.map(p => p.competitor_name)));
+                        
+                        return (
+                          <TableRow key={tenantProd.id || prodIdx}>
+                            <TableCell className="font-medium sticky left-0 bg-background z-10">
+                              <div>
+                                <p className="font-semibold">{tenantProd.nome}</p>
+                                {tenantProd.categoria && (
+                                  <Badge variant="outline" className="mt-1 text-xs">{tenantProd.categoria}</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            {competitors.map((competitorName, compIdx) => {
+                              // Verificar se este concorrente tem produto similar
+                              const similarProduct = competitorProducts.find(cp => {
+                                if (cp.competitor_name !== competitorName) return false;
+                                const match = calculateProductMatch(tenantProd, cp);
+                                return match.score >= 70; // Similar se score >= 70%
+                              });
+                              
+                              return (
+                                <TableCell key={compIdx} className="text-center">
+                                  {similarProduct ? (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="inline-flex flex-col items-center cursor-help">
+                                            <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                            <span className="text-xs text-green-600 font-medium mt-1">
+                                              {Math.round(calculateProductMatch(tenantProd, similarProduct).score)}%
+                                            </span>
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-xs">
+                                          <p className="font-semibold mb-1">{similarProduct.nome}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            Score: {Math.round(calculateProductMatch(tenantProd, similarProduct).score)}%
+                                          </p>
+                                          {similarProduct.categoria && (
+                                            <p className="text-xs">Categoria: {similarProduct.categoria}</p>
+                                          )}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  ) : (
+                                    <XCircle className="h-5 w-5 text-slate-300 dark:text-slate-700 mx-auto" />
+                                  )}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+
       {/* Insights Estratégicos */}
       {matches.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Produtos Únicos (Vantagem Competitiva) */}
-          <Card className="border-l-4 border-l-emerald-600">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <div className="p-2 bg-emerald-600/10 rounded-lg">
-                  <Award className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />
-                </div>
-                <span className="text-slate-800 dark:text-slate-100">Seus Diferenciais</span>
-              </CardTitle>
-              <CardDescription>
-                Produtos únicos que você possui e concorrentes não têm
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
+          {/* Produtos Únicos (Vantagem Competitiva) - Collapsible */}
+          <Collapsible open={diferenciaisOpen} onOpenChange={setDiferenciaisOpen}>
+            <Card className="border-l-4 border-l-emerald-600">
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-emerald-50 hover:to-emerald-100/50 dark:hover:from-emerald-900/30 dark:hover:to-emerald-800/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-emerald-600/10 rounded-lg">
+                        <Award className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />
+                      </div>
+                      <div className="text-left">
+                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">Seus Diferenciais</CardTitle>
+                        <CardDescription>
+                          Produtos únicos que você possui e concorrentes não têm
+                        </CardDescription>
+                      </div>
+                    </div>
+                    {diferenciaisOpen ? (
+                      <ChevronUp className="h-5 w-5 text-emerald-600" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-emerald-600" />
+                    )}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-6">
               {(() => {
                 const uniqueProducts = matches.filter(m => m.matchType === 'unique');
                 
@@ -516,23 +645,38 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                   </div>
                 );
               })()}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-          {/* Produtos com Alta Concorrência */}
-          <Card className="border-l-4 border-l-orange-600">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <div className="p-2 bg-orange-600/10 rounded-lg">
-                  <AlertTriangle className="h-5 w-5 text-orange-700 dark:text-orange-500" />
-                </div>
-                <span className="text-slate-800 dark:text-slate-100">Alta Concorrência</span>
-              </CardTitle>
-              <CardDescription>
-                Produtos com concorrência direta (score &gt; 90%)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
+          {/* Produtos com Alta Concorrência - Collapsible */}
+          <Collapsible open={altaConcorrenciaOpen} onOpenChange={setAltaConcorrenciaOpen}>
+            <Card className="border-l-4 border-l-orange-600">
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-orange-50 hover:to-orange-100/50 dark:hover:from-orange-900/30 dark:hover:to-orange-800/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-orange-600/10 rounded-lg">
+                        <AlertTriangle className="h-5 w-5 text-orange-700 dark:text-orange-500" />
+                      </div>
+                      <div className="text-left">
+                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">Alta Concorrência</CardTitle>
+                        <CardDescription>
+                          Produtos com concorrência direta (score &gt; 90%)
+                        </CardDescription>
+                      </div>
+                    </div>
+                    {altaConcorrenciaOpen ? (
+                      <ChevronUp className="h-5 w-5 text-orange-600" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-orange-600" />
+                    )}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-6">
               {(() => {
                 const highCompetition = matches
                   .filter(m => m.bestScore >= 90)
@@ -570,26 +714,41 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                   </div>
                 );
               })()}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </div>
       )}
 
-      {/* Gaps de Portfólio (produtos que concorrentes têm e tenant não) */}
+      {/* Gaps de Portfólio (produtos que concorrentes têm e tenant não) - Collapsible */}
       {competitorProducts.length > 0 && (
-        <Card className="border-l-4 border-l-blue-600">
-          <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <div className="p-2 bg-blue-600/10 rounded-lg">
-                <Info className="h-5 w-5 text-blue-700 dark:text-blue-500" />
-              </div>
-              <span className="text-slate-800 dark:text-slate-100">Oportunidades de Expansão</span>
-            </CardTitle>
-            <CardDescription>
-              Produtos populares entre concorrentes que você pode considerar adicionar
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
+        <Collapsible open={oportunidadesOpen} onOpenChange={setOportunidadesOpen}>
+          <Card className="border-l-4 border-l-blue-600">
+            <CollapsibleTrigger className="w-full">
+              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-blue-50 hover:to-blue-100/50 dark:hover:from-blue-900/30 dark:hover:to-blue-800/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-blue-600/10 rounded-lg">
+                      <Info className="h-5 w-5 text-blue-700 dark:text-blue-500" />
+                    </div>
+                    <div className="text-left">
+                      <CardTitle className="text-lg text-slate-800 dark:text-slate-100">Oportunidades de Expansão</CardTitle>
+                      <CardDescription>
+                        Produtos populares entre concorrentes que você pode considerar adicionar
+                      </CardDescription>
+                    </div>
+                  </div>
+                  {oportunidadesOpen ? (
+                    <ChevronUp className="h-5 w-5 text-blue-600" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-blue-600" />
+                  )}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-6">
             {(() => {
               // Agrupar produtos de concorrentes por nome similar
               const productCounts = new Map<string, { count: number; competitors: string[]; categoria?: string }>();
@@ -652,25 +811,48 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                           {data.count} concorrente{data.count !== 1 ? 's' : ''} {data.count === 1 ? 'tem' : 'têm'} este produto
                         </p>
                       </div>
-                      <Badge variant="outline" className="text-xs shrink-0 border-blue-300 dark:border-blue-700">
-                        {data.count} concorrente{data.count !== 1 ? 's' : ''}
-                      </Badge>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="text-xs shrink-0 border-blue-300 dark:border-blue-700 cursor-help">
+                              {data.count} concorrente{data.count !== 1 ? 's' : ''}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="font-semibold mb-2">📋 {data.count} Concorrente{data.count !== 1 ? 's' : ''} têm este produto:</p>
+                            <ul className="space-y-1">
+                              {data.competitors.map((comp, compIdx) => (
+                                <li key={compIdx} className="text-sm flex items-start gap-2">
+                                  <CheckCircle2 className="h-3 w-3 text-blue-500 mt-0.5 shrink-0" />
+                                  {comp}
+                                </li>
+                              ))}
+                            </ul>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                   ))}
                 </div>
               );
             })()}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       )}
 
-      {/* Mapa de Calor */}
+      {/* Mapa de Calor - Collapsible */}
       {tenantProducts.length > 0 && competitorProducts.length > 0 && (
-        <ProductHeatmap 
-          tenantProducts={tenantProducts}
-          competitorProducts={competitorProducts}
-          matches={matches}
-        />
+        <Collapsible open={mapaCalorOpen} onOpenChange={setMapaCalorOpen}>
+          <ProductHeatmap 
+            tenantProducts={tenantProducts}
+            competitorProducts={competitorProducts}
+            matches={matches}
+            isOpen={mapaCalorOpen}
+            onToggle={() => setMapaCalorOpen(!mapaCalorOpen)}
+          />
+        </Collapsible>
       )}
     </div>
   );

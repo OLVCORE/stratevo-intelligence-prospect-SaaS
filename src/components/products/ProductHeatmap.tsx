@@ -6,8 +6,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Flame, Package, TrendingUp, AlertCircle } from 'lucide-react';
+import { CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { Flame, Package, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
 interface ProductHeatmapProps {
   tenantProducts: Array<{ nome: string; categoria?: string }>;
@@ -26,12 +28,16 @@ interface ProductHeatmapProps {
     }>;
     bestScore: number;
   }>;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
 export default function ProductHeatmap({ 
   tenantProducts, 
   competitorProducts,
-  matches 
+  matches,
+  isOpen = false,
+  onToggle
 }: ProductHeatmapProps) {
   
   // Agrupar concorrentes únicos
@@ -105,22 +111,74 @@ export default function ProductHeatmap({
     return 'bg-slate-50 dark:bg-slate-900/20';
   };
 
+  // Preparar dados para o gráfico Recharts
+  const chartData = categoryIntensity.map(cat => ({
+    categoria: cat.categoria.length > 20 ? cat.categoria.substring(0, 17) + '...' : cat.categoria,
+    categoriaFull: cat.categoria,
+    seusProdutos: cat.tenantCount,
+    concorrentes: cat.competitorCount,
+    intensidade: Math.round(cat.intensity),
+  }));
+
   return (
     <div className="space-y-6">
-      {/* Mapa de Calor por Categoria */}
+      {/* Mapa de Calor por Categoria - Com Gráfico */}
       <Card className="border-l-4 border-l-orange-600 shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 bg-orange-600/10 rounded-lg">
-              <Flame className="h-5 w-5 text-orange-700 dark:text-orange-500" />
+        <CollapsibleTrigger className="w-full">
+          <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-orange-50 hover:to-orange-100/50 dark:hover:from-orange-900/30 dark:hover:to-orange-800/30 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-orange-600/10 rounded-lg">
+                  <Flame className="h-5 w-5 text-orange-700 dark:text-orange-500" />
+                </div>
+                <div className="text-left">
+                  <CardTitle className="text-slate-800 dark:text-slate-100">Mapa de Calor por Categoria</CardTitle>
+                  <CardDescription>
+                    Intensidade de competição em cada categoria de produto
+                  </CardDescription>
+                </div>
+              </div>
+              {isOpen ? (
+                <ChevronUp className="h-5 w-5 text-orange-600" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-orange-600" />
+              )}
             </div>
-            <span className="text-slate-800 dark:text-slate-100">Mapa de Calor por Categoria</span>
-          </CardTitle>
-          <CardDescription>
-            Intensidade de competição em cada categoria de produto
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-6 space-y-6">
+            {/* Gráfico de Barras Visual */}
+            {categoryIntensity.length > 0 && (
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis 
+                      dataKey="categoria" 
+                      tick={{ fill: 'currentColor', fontSize: 11 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} />
+                    <RechartsTooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--background))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      labelStyle={{ color: 'hsl(var(--foreground))' }}
+                    />
+                    <Legend />
+                    <Bar dataKey="seusProdutos" name="Seus Produtos" fill="#10b981" />
+                    <Bar dataKey="concorrentes" name="Concorrentes" fill="#f97316" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            
+            {/* Lista de categorias com barras */}
           {categoryIntensity.length === 0 ? (
             <p className="text-sm text-muted-foreground italic text-center py-8">
               Nenhuma categoria disponível. Adicione categorias aos produtos.
@@ -186,7 +244,8 @@ export default function ProductHeatmap({
               ))}
             </div>
           )}
-        </CardContent>
+          </CardContent>
+        </CollapsibleContent>
       </Card>
 
       {/* Mapa de Calor por Concorrente */}
