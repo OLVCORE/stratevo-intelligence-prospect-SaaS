@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Target, 
   TrendingUp, 
@@ -41,7 +42,9 @@ import {
   Scale,
   Info,
   Crown,
-  HelpCircle
+  HelpCircle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -133,6 +136,12 @@ export default function CompetitiveAnalysis({
   const [ceoAnalysis, setCeoAnalysis] = useState<string | null>(null);
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // 🔥 NOVO: Estados para controlar dropdowns das seções
+  const [suaEmpresaOpen, setSuaEmpresaOpen] = useState(false);
+  const [kpisOpen, setKpisOpen] = useState(false);
+  const [rankingOpen, setRankingOpen] = useState(false);
+  const [distribuicaoGeoOpen, setDistribuicaoGeoOpen] = useState(false);
 
   // Inicializar com dados dos concorrentes (incluindo refreshTrigger para detectar mudanças)
   useEffect(() => {
@@ -620,16 +629,27 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
 
           {/* Visão Geral */}
           <TabsContent value="overview" className="space-y-6">
-            {/* Card da SUA EMPRESA */}
-            <Card className="border-2 border-green-500 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Crown className="h-5 w-5 text-green-600" />
-                  <CardTitle className="text-lg text-green-800 dark:text-green-200">{companyName}</CardTitle>
-                  <Badge className="bg-green-600">SUA EMPRESA</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
+            {/* Card da SUA EMPRESA - Collapsible */}
+            <Collapsible open={suaEmpresaOpen} onOpenChange={setSuaEmpresaOpen}>
+              <Card className="border-2 border-green-500 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30">
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="pb-3 cursor-pointer hover:bg-green-100/30 dark:hover:bg-green-900/20 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Crown className="h-5 w-5 text-green-600" />
+                        <CardTitle className="text-lg text-green-800 dark:text-green-200">{companyName}</CardTitle>
+                        <Badge className="bg-green-600">SUA EMPRESA</Badge>
+                      </div>
+                      {suaEmpresaOpen ? (
+                        <ChevronUp className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-green-600" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Capital Social</p>
@@ -676,10 +696,32 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                     </HoverCard>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
-            {/* KPIs dos Concorrentes */}
+            {/* KPIs dos Concorrentes - Collapsible */}
+            <Collapsible open={kpisOpen} onOpenChange={setKpisOpen}>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-lg font-semibold">📊 Indicadores Principais</h3>
+                  <Button variant="ghost" size="sm" onClick={() => setKpisOpen(!kpisOpen)} className="flex items-center gap-2">
+                    {kpisOpen ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Fechar
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Abrir
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <CollapsibleContent>
+                  {/* KPIs dos Concorrentes */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -775,20 +817,36 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                   <p className="text-sm">Empresas com capital social muito superior ao seu, que podem investir pesado em market share.</p>
                 </TooltipContent>
               </Tooltip>
-            </div>
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
 
-            {/* Ranking COMPARATIVO (incluindo sua empresa) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Scale className="h-5 w-5 text-primary" />
-                  Ranking Competitivo por Capital Social
-                </CardTitle>
-                <CardDescription>
-                  Comparação direta: {companyName} vs {competitors.length} concorrentes
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            {/* Ranking COMPARATIVO (incluindo sua empresa) - Collapsible */}
+            <Collapsible open={rankingOpen} onOpenChange={setRankingOpen}>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <Scale className="h-5 w-5 text-primary" />
+                          Ranking Competitivo por Capital Social
+                        </CardTitle>
+                        <CardDescription>
+                          Comparação direta: {companyName} vs {competitors.length} concorrentes
+                        </CardDescription>
+                      </div>
+                      {rankingOpen ? (
+                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent>
                 <div className="space-y-4">
                   {allCompaniesForRanking.map((company, idx) => {
                     const percentage = totalMarketCapital > 0 
@@ -833,18 +891,31 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                     );
                   })}
                 </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
-            {/* Mapa de Localização */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" />
-                  Distribuição Geográfica
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            {/* Mapa de Localização - Collapsible */}
+            <Collapsible open={distribuicaoGeoOpen} onOpenChange={setDistribuicaoGeoOpen}>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="h-5 w-5 text-primary" />
+                        Distribuição Geográfica
+                      </CardTitle>
+                      {distribuicaoGeoOpen ? (
+                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                   {enrichedCompetitors.map((competitor, idx) => (
                     <div key={idx} className="p-3 bg-muted rounded-lg text-center">
@@ -853,8 +924,10 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           </TabsContent>
 
           {/* Detalhes dos Concorrentes */}

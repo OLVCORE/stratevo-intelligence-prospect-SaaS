@@ -19,9 +19,10 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
-import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle } from 'lucide-react';
+import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';
@@ -66,6 +67,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [matches, setMatches] = useState<ProductMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 🔥 NOVO: Estados para controlar dropdowns
+  const [metricsOpen, setMetricsOpen] = useState(false);
+  const [tabelaOpen, setTabelaOpen] = useState(false);
 
   // Carregar produtos do tenant e concorrentes
   useEffect(() => {
@@ -199,8 +204,29 @@ export function ProductComparisonMatrix({ icpId }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Estatísticas - Collapsible */}
+      <Collapsible open={metricsOpen} onOpenChange={setMetricsOpen}>
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Métricas de Produtos
+          </h3>
+          <Button variant="ghost" size="sm" onClick={() => setMetricsOpen(!metricsOpen)} className="flex items-center gap-2">
+            {metricsOpen ? (
+              <>
+                <ChevronUp className="h-4 w-4" />
+                Fechar
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4" />
+                Abrir
+              </>
+            )}
+          </Button>
+        </div>
+        <CollapsibleContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-slate-50 to-blue-50/50 dark:from-slate-900 dark:to-blue-950/30 border-slate-300 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -252,25 +278,40 @@ export function ProductComparisonMatrix({ icpId }: Props) {
             </div>
           </CardContent>
         </Card>
-      </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
-      {/* Busca */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Matriz Comparativa de Produtos</CardTitle>
-          <CardDescription>
-            Compare seus produtos com os produtos dos concorrentes identificados
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            placeholder="Buscar por produto, categoria ou concorrente..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-md"
-          />
+      {/* Tabela Comparativa - Collapsible */}
+      <Collapsible open={tabelaOpen} onOpenChange={setTabelaOpen}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Matriz Comparativa de Produtos</CardTitle>
+                  <CardDescription>
+                    Compare seus produtos com os produtos dos concorrentes identificados
+                  </CardDescription>
+                </div>
+                {tabelaOpen ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              <Input
+                placeholder="Buscar por produto, categoria ou concorrente..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="max-w-md"
+              />
 
-          {/* Tabela Comparativa */}
+              {/* Tabela Comparativa */}
           <div className="border rounded-lg overflow-hidden">
             <Table>
               <TableHeader>
@@ -418,8 +459,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
               </TableBody>
             </Table>
           </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Insights Estratégicos */}
       {matches.length > 0 && (
