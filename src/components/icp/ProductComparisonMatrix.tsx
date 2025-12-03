@@ -24,7 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3, XCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
+import { calculateProductMatch, findBestMatches, mapToStandardCategory, getStandardCategoryLabel } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';
 import { cn } from '@/lib/utils';
 
@@ -78,36 +78,16 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({}); // 🔥 Vazio = TUDO FECHADO
   
-  // 🔥 FUNÇÃO: Categorização Inteligente GENÉRICA (detecta tipo principal pelo nome)
+  // 🔥 FUNÇÃO: Categorização Inteligente usando sistema unificado
   const getSmartCategory = (produto: { nome: string; descricao?: string; categoria?: string }): string => {
-    const nome = produto.nome.toLowerCase();
-    const descricao = (produto.descricao || '').toLowerCase();
-    const categoria = (produto.categoria || '').toLowerCase();
-    const texto = `${nome} ${descricao} ${categoria}`;
+    // Combinar todos os dados do produto para análise
+    const textoCompleto = `${produto.nome} ${produto.descricao || ''} ${produto.categoria || ''}`;
     
-    // 🔥 DETECTAR TIPO PRINCIPAL (genérico para qualquer tenant)
-    // Priorizar detecção pelo NOME do produto (mais confiável)
-    if (texto.includes('luva') || texto.includes('glove')) {
-      return 'Luvas'; // Agrupa TODAS as luvas
-    }
-    if (texto.includes('calçado') || texto.includes('sapato') || texto.includes('bota')) {
-      return 'Calçados de Segurança';
-    }
-    if (texto.includes('capacete') || texto.includes('helmet')) {
-      return 'Capacetes';
-    }
-    if (texto.includes('óculos') || texto.includes('goggle')) {
-      return 'Óculos de Proteção';
-    }
-    if (texto.includes('máscara') || texto.includes('respirador')) {
-      return 'Máscaras e Respiradores';
-    }
-    if (texto.includes('protetor auricular') || texto.includes('abafador')) {
-      return 'Proteção Auditiva';
-    }
+    // Usar sistema de mapeamento padrão (mesma lógica do matching)
+    const standardCat = mapToStandardCategory(textoCompleto);
     
-    // Se não detectar tipo específico, usar categoria do banco
-    return produto.categoria || 'Outros EPIs';
+    // Retornar label amigável
+    return getStandardCategoryLabel(standardCat);
   };
   
   // 🔥 NOVO: Agrupar TODOS os produtos por categoria INTELIGENTE (Tenant + Concorrentes)

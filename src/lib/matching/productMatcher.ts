@@ -100,8 +100,9 @@ function keywordSimilarity(str1: string, str2: string): number {
 /**
  * 🔥 NOVO: Mapeia categorias para grupos padrão
  * Resolve problema de categorias muito específicas
+ * EXPORTADO para uso em outros componentes
  */
-function mapToStandardCategory(categoria?: string): string {
+export function mapToStandardCategory(categoria?: string): string {
   if (!categoria) return 'outros';
   
   const norm = normalize(categoria);
@@ -162,6 +163,25 @@ function mapToStandardCategory(categoria?: string): string {
   }
   
   return 'outros';
+}
+
+/**
+ * 🔥 HELPER: Retorna nome amigável do grupo padrão
+ */
+export function getStandardCategoryLabel(standardCategory: string): string {
+  const labels: Record<string, string> = {
+    'protecao-corte': 'Proteção contra Corte/Perfuração',
+    'protecao-mecanica': 'Proteção Mecânica/Abrasão',
+    'protecao-termica': 'Proteção Térmica (Calor/Frio/Solda)',
+    'protecao-quimica': 'Proteção Química',
+    'luvas-geral': 'Luvas (Uso Geral)',
+    'calcados': 'Calçados de Segurança',
+    'vestimentas': 'Vestimentas de Proteção',
+    'mangotes': 'Mangotes de Proteção',
+    'outros': 'Outros EPIs'
+  };
+  
+  return labels[standardCategory] || 'Outros EPIs';
 }
 
 /**
