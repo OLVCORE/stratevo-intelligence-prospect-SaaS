@@ -80,11 +80,36 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({}); // 🔥 Vazio = TUDO FECHADO
   
-  // 🔥 FUNÇÃO: Usar categoria ORIGINAL do banco (GENÉRICO para qualquer tenant)
+  // 🔥 FUNÇÃO: Categorização Inteligente GENÉRICA (detecta tipo principal pelo nome)
   const getSmartCategory = (produto: { nome: string; descricao?: string; categoria?: string }): string => {
-    // 🔥 USAR CATEGORIA DO BANCO (preenchida pela IA na extração)
-    // Isso funciona para QUALQUER tipo de produto/tenant
-    return produto.categoria || 'Sem Categoria';
+    const nome = produto.nome.toLowerCase();
+    const descricao = (produto.descricao || '').toLowerCase();
+    const categoria = (produto.categoria || '').toLowerCase();
+    const texto = `${nome} ${descricao} ${categoria}`;
+    
+    // 🔥 DETECTAR TIPO PRINCIPAL (genérico para qualquer tenant)
+    // Priorizar detecção pelo NOME do produto (mais confiável)
+    if (texto.includes('luva') || texto.includes('glove')) {
+      return 'Luvas'; // Agrupa TODAS as luvas
+    }
+    if (texto.includes('calçado') || texto.includes('sapato') || texto.includes('bota')) {
+      return 'Calçados de Segurança';
+    }
+    if (texto.includes('capacete') || texto.includes('helmet')) {
+      return 'Capacetes';
+    }
+    if (texto.includes('óculos') || texto.includes('goggle')) {
+      return 'Óculos de Proteção';
+    }
+    if (texto.includes('máscara') || texto.includes('respirador')) {
+      return 'Máscaras e Respiradores';
+    }
+    if (texto.includes('protetor auricular') || texto.includes('abafador')) {
+      return 'Proteção Auditiva';
+    }
+    
+    // Se não detectar tipo específico, usar categoria do banco
+    return produto.categoria || 'Outros EPIs';
   };
   
   // 🔥 NOVO: Agrupar TODOS os produtos por categoria INTELIGENTE (Tenant + Concorrentes)
@@ -780,10 +805,14 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                               <TableRow 
                                 key={`cat-${catIdx}`}
                                 className="bg-primary/5 hover:bg-primary/10 cursor-pointer border-b-2"
-                                onClick={() => setExpandedCategories(prev => ({
-                                  ...prev,
-                                  [categoria]: !prev[categoria]
-                                }))}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setExpandedCategories(prev => ({
+                                    ...prev,
+                                    [categoria]: !prev[categoria]
+                                  }));
+                                }}
                               >
                                 <TableCell className="font-bold sticky left-0 bg-primary/10 z-10 border-r-2">
                                   <div className="flex items-center gap-2">
