@@ -681,9 +681,40 @@ export function ProductComparisonMatrix({ icpId }: Props) {
               </CardHeader>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <CardContent>
-                {/* 🔥 NOVO: Estatísticas rápidas + Botão Refresh */}
-                <div className="mb-4 p-3 bg-muted/50 rounded-lg flex items-center justify-between">
+              {/* 🔥 Scrollbar ELEGANTE no Card (não na tabela interna) */}
+              <style>{`
+                .elegant-scrollbar::-webkit-scrollbar {
+                  width: 8px;
+                  height: 8px;
+                }
+                .elegant-scrollbar::-webkit-scrollbar-track {
+                  background: hsl(var(--muted) / 0.3);
+                  border-radius: 10px;
+                  margin: 4px;
+                }
+                .elegant-scrollbar::-webkit-scrollbar-thumb {
+                  background: linear-gradient(180deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.7) 100%);
+                  border-radius: 10px;
+                  border: 2px solid transparent;
+                  background-clip: padding-box;
+                  transition: all 0.3s ease;
+                }
+                .elegant-scrollbar::-webkit-scrollbar-thumb:hover {
+                  background: linear-gradient(180deg, hsl(var(--primary) / 0.9) 0%, hsl(var(--primary) / 0.6) 100%);
+                  box-shadow: 0 0 6px hsl(var(--primary) / 0.5);
+                }
+                .elegant-scrollbar::-webkit-scrollbar-corner {
+                  background: transparent;
+                }
+                /* Firefox */
+                .elegant-scrollbar {
+                  scrollbar-width: thin;
+                  scrollbar-color: hsl(var(--primary)) hsl(var(--muted) / 0.3);
+                }
+              `}</style>
+              <CardContent className="overflow-x-auto overflow-y-auto max-h-[750px] elegant-scrollbar">
+                {/* 🔥 NOVO: Estatísticas rápidas + Botão Refresh (STICKY) */}
+                <div className="mb-4 p-3 bg-muted/50 rounded-lg flex items-center justify-between sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b">
                   <p className="text-sm font-medium">
                     📊 <strong>{tenantProducts.length}</strong> seus produtos • 
                     <strong className="ml-2">{competitorProducts.length}</strong> produtos de concorrentes • 
@@ -719,30 +750,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                 </div>
                 
                 {/* 🔥 NOVA TABELA: Agrupada por Categoria */}
-                <div className="w-full">
-                  <div className="overflow-x-scroll overflow-y-auto max-h-[700px] border-2 rounded-lg relative" 
-                       style={{ 
-                         maxWidth: '100%',
-                         scrollbarWidth: 'auto',
-                       }}>
-                    {/* Scrollbar customizada */}
-                    <style>{`
-                      .overflow-x-scroll::-webkit-scrollbar {
-                        height: 12px;
-                      }
-                      .overflow-x-scroll::-webkit-scrollbar-track {
-                        background: hsl(var(--muted));
-                        border-radius: 6px;
-                      }
-                      .overflow-x-scroll::-webkit-scrollbar-thumb {
-                        background: hsl(var(--primary));
-                        border-radius: 6px;
-                      }
-                      .overflow-x-scroll::-webkit-scrollbar-thumb:hover {
-                        background: hsl(var(--primary) / 0.8);
-                      }
-                    `}</style>
-                    <Table className="relative">
+                <div className="w-full border-2 rounded-lg">
+                    <Table className="relative min-w-[1200px]">
                       {/* 🔥 HEADER FIXO - SEMPRE VISÍVEL */}
                       <TableHeader className="sticky top-0 bg-background z-20 shadow-md">
                         <TableRow className="border-b-2">
@@ -982,7 +991,6 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                         })}
                     </TableBody>
                   </Table>
-                </div>
                 </div>
                 
                 {/* 🔥 NOVO: Legenda de Cores */}
