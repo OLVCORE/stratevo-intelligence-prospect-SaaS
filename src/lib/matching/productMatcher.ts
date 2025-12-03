@@ -113,7 +113,8 @@ function categorySimilarity(cat1?: string, cat2?: string): number {
 }
 
 /**
- * Função principal de matching inteligente
+ * 🔥 FUNÇÃO PRINCIPAL: Matching por CATEGORIA + USO (não por nome)
+ * Prioriza: O QUE o produto FAZ, não como ele se chama
  */
 export function calculateProductMatch(
   product1: { nome: string; categoria?: string; descricao?: string },
@@ -123,88 +124,73 @@ export function calculateProductMatch(
   let totalScore = 0;
   let weights = 0;
   
-  // 1. Similaridade de nome (peso 50%)
+  // 🔥 1. CATEGORIA (peso 40% - PRIORIDADE MÁXIMA)
+  // Se mesma categoria = base alta de competição
+  if (product1.categoria && product2.categoria) {
+    const catScore = categorySimilarity(product1.categoria, product2.categoria);
+    totalScore += catScore * 0.4;
+    weights += 0.4;
+    
+    if (catScore === 100) {
+      reasons.push('✅ Mesma categoria');
+    } else if (catScore > 70) {
+      reasons.push('⚠️ Categoria similar');
+    }
+  }
+  
+  // 🔥 2. USO/FUNÇÃO (peso 35% - descrição + keywords)
+  // Comparar o QUE o produto FAZ
+  const texto1 = `${product1.nome} ${product1.descricao || ''}`;
+  const texto2 = `${product2.nome} ${product2.descricao || ''}`;
+  
+  const usoScore = keywordSimilarity(texto1, texto2);
+  totalScore += usoScore * 0.35;
+  weights += 0.35;
+  
+  if (usoScore > 80) reasons.push('🎯 Mesmo uso/função');
+  else if (usoScore > 60) reasons.push('🟡 Uso similar');
+  
+  // 🔥 3. NOME (peso 25% - menos importante)
   const norm1 = normalize(product1.nome);
   const norm2 = normalize(product2.nome);
   
-  // Verificar match exato
   if (norm1 === norm2) {
-    totalScore += 100 * 0.5;
-    weights += 0.5;
+    totalScore += 100 * 0.25;
+    weights += 0.25;
     reasons.push('Nome idêntico');
   } else {
-    // Levenshtein para nomes
-    const levenScore = levenshteinSimilarity(norm1, norm2);
-    totalScore += levenScore * 0.3;
-    weights += 0.3;
-    
-    if (levenScore > 90) reasons.push('Nome muito similar');
-    else if (levenScore > 70) reasons.push('Nome parcialmente similar');
-    
-    // Palavras-chave em comum (peso 20%)
-    const keywordScore = keywordSimilarity(product1.nome, product2.nome);
-    totalScore += keywordScore * 0.2;
-    weights += 0.2;
-    
-    if (keywordScore > 60) {
-      reasons.push(`${Math.round(keywordScore)}% palavras-chave comuns`);
-    }
-  }
-  
-  // 2. Similaridade de categoria (peso 25%)
-  if (product1.categoria && product2.categoria) {
-    const catScore = categorySimilarity(product1.categoria, product2.categoria);
-    totalScore += catScore * 0.25;
+    const nomeScore = Math.max(
+      levenshteinSimilarity(norm1, norm2),
+      keywordSimilarity(product1.nome, product2.nome)
+    );
+    totalScore += nomeScore * 0.25;
     weights += 0.25;
     
-    if (catScore === 100) reasons.push('Categoria idêntica');
-    else if (catScore > 70) reasons.push('Categoria similar');
+    if (nomeScore > 70) reasons.push('Nome similar');
   }
   
-  // 3. Similaridade de descrição (peso 15% - opcional)
-  if (product1.descricao && product2.descricao) {
-    const descScore = keywordSimilarity(product1.descricao, product2.descricao);
-    totalScore += descScore * 0.15;
-    weights += 0.15;
+  // 🔥 BOOST: Se categoria = "Luvas" + uso = "corte" → ALTA CONCORRÊNCIA
+  const cat1 = normalize(product1.categoria || '');
+  const cat2 = normalize(product2.categoria || '');
+  
+  if ((cat1.includes('luva') && cat2.includes('luva')) ||
+      (cat1.includes('glove') && cat2.includes('glove'))) {
+    // Ambos são luvas - verificar tipo
+    const tipo1 = normalize(texto1);
+    const tipo2 = normalize(texto2);
     
-    if (descScore > 50) {
-      reasons.push('Descrições relacionadas');
-    }
-  }
-  
-  // 4. Verificar substrings significativas (peso 10%)
-  if (norm1.length > 5 && norm2.length > 5) {
-    if (norm1.includes(norm2) || norm2.includes(norm1)) {
-      totalScore += 80 * 0.1;
-      weights += 0.1;
-      reasons.push('Um nome contém o outro');
-    } else {
-      // Verificar substrings longas comuns
-      const minLen = Math.min(norm1.length, norm2.length);
-      let maxCommonSubstring = 0;
-      
-      for (let i = 0; i < norm1.length; i++) {
-        for (let j = 0; j < norm2.length; j++) {
-          let len = 0;
-          while (
-            i + len < norm1.length &&
-            j + len < norm2.length &&
-            norm1[i + len] === norm2[j + len]
-          ) {
-            len++;
-          }
-          maxCommonSubstring = Math.max(maxCommonSubstring, len);
-        }
-      }
-      
-      if (maxCommonSubstring > 5) {
-        const substringScore = (maxCommonSubstring / minLen) * 100;
-        totalScore += substringScore * 0.1;
-        weights += 0.1;
-        
-        if (substringScore > 40) {
-          reasons.push('Substring comum significativa');
-        }
+    const tiposComuns = [
+      'corte', 'perfuracao', 'cut', 
+      'temperatura', 'solda', 'weld',
+      'mecanica', 'mechanical',
+      'quimica', 'chemical'
+    ];
+    
+    for (const tipo of tiposComuns) {
+      if (tipo1.includes(tipo) && tipo2.includes(tipo)) {
+        totalScore += 20; // Boost de 20 pontos
+        reasons.push(`🔥 Mesmo tipo de luva: ${tipo}`);
+        break;
       }
     }
   }
