@@ -949,10 +949,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Collapsible>
       )}
 
-      {/* Insights Estratégicos - SEMPRE VISÍVEL (baseado em dados reais) */}
+      {/* 🆕 NOVOS CARDS - CRIADOS DO ZERO (baseados em cálculo DIRETO, não em matches) */}
       {tenantProducts.length > 0 && competitorProducts.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Produtos Únicos (Vantagem Competitiva) - Collapsible */}
+          {/* 🆕 NOVO: Seus Diferenciais (cálculo direto) */}
           <Collapsible open={diferenciaisOpen} onOpenChange={setDiferenciaisOpen}>
             <Card className="border-l-4 border-l-emerald-600">
               <CollapsibleTrigger className="w-full">
@@ -963,9 +963,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                         <Award className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />
                       </div>
                       <div className="text-left">
-                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">Seus Diferenciais</CardTitle>
+                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Seus Diferenciais (NOVO)</CardTitle>
                         <CardDescription>
-                          Produtos únicos que você possui e concorrentes não têm
+                          Cálculo direto - Produtos sem concorrência (score &lt; 50%)
                         </CardDescription>
                       </div>
                     </div>
@@ -979,76 +979,45 @@ export function ProductComparisonMatrix({ icpId }: Props) {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="pt-6">
-              {(() => {
-                // 🔥 DADOS REAIS do banco (não mock!)
-                const uniqueProducts = calcularDiferenciais();
-                
-                if (uniqueProducts.length === 0) {
-                  return (
-                    <div className="text-center py-8">
-                      <AlertCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-                      <p className="text-sm text-muted-foreground font-medium">
-                        Todos os seus produtos têm concorrência.
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Considere desenvolver produtos únicos para se diferenciar.
-                      </p>
-                    </div>
-                  );
-                }
-                
-                // 🔥 Agrupar diferenciais por categoria
-                const diferencialsPorCategoria = uniqueProducts.reduce((acc, prod) => {
-                  const cat = getSmartCategory(prod);
-                  if (!acc[cat]) acc[cat] = [];
-                  acc[cat].push(prod);
-                  return acc;
-                }, {} as Record<string, TenantProduct[]>);
-                
-                return (
-                  <div className="space-y-4">
-                    {Object.entries(diferencialsPorCategoria).map(([categoria, prods], catIdx) => (
-                      <div key={catIdx} className="space-y-2">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Package className="h-4 w-4 text-emerald-600" />
-                          <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{categoria}</span>
-                          <Badge variant="outline" className="text-xs">{prods.length} únicos</Badge>
-                        </div>
-                        {prods.slice(0, 3).map((prod, idx) => (
-                          <div key={idx} className="flex items-center gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg ml-6">
+                  {(() => {
+                    // 🆕 CÁLCULO DIRETO - NÃO USA matches
+                    const diferenciais = tenantProducts.filter(tp => {
+                      const temMatch = competitorProducts.some(cp => {
+                        const result = calculateProductMatch(tp, cp);
+                        return result.score >= 50;
+                      });
+                      return !temMatch;
+                    });
+                    
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-sm font-bold mb-4">
+                          🎯 {diferenciais.length} produtos únicos encontrados (cálculo direto)
+                        </p>
+                        {diferenciais.slice(0, 5).map((prod, idx) => (
+                          <div key={idx} className="flex items-center gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg">
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{prod.nome}</p>
-                              {prod.descricao && (
-                                <p className="text-xs text-muted-foreground line-clamp-1">{prod.descricao}</p>
-                              )}
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{prod.nome}</p>
+                              <p className="text-xs text-muted-foreground">{getSmartCategory(prod)}</p>
                             </div>
-                            <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs shrink-0">
-                              Único
-                            </Badge>
+                            <Badge className="bg-emerald-600 text-white text-xs">Único</Badge>
                           </div>
                         ))}
-                        {prods.length > 3 && (
-                          <p className="text-xs text-muted-foreground text-center ml-6">
-                            +{prods.length - 3} outros em {categoria}
+                        {diferenciais.length > 5 && (
+                          <p className="text-xs text-center text-muted-foreground">
+                            +{diferenciais.length - 5} outros
                           </p>
                         )}
                       </div>
-                    ))}
-                    <div className="mt-4 pt-4 border-t">
-                      <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 text-center">
-                        🎯 Total: {uniqueProducts.length} produtos únicos em {Object.keys(diferencialsPorCategoria).length} categorias
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
+                    );
+                  })()}
                 </CardContent>
               </CollapsibleContent>
             </Card>
           </Collapsible>
 
-          {/* Produtos com Alta Concorrência - Collapsible */}
+          {/* 🆕 NOVO: Alta Concorrência (cálculo direto) */}
           <Collapsible open={altaConcorrenciaOpen} onOpenChange={setAltaConcorrenciaOpen}>
             <Card className="border-l-4 border-l-orange-600">
               <CollapsibleTrigger className="w-full">
@@ -1059,9 +1028,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                         <AlertTriangle className="h-5 w-5 text-orange-700 dark:text-orange-500" />
                       </div>
                       <div className="text-left">
-                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">Alta Concorrência</CardTitle>
+                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Alta Concorrência (NOVO)</CardTitle>
                         <CardDescription>
-                          Produtos com concorrência direta (score &gt; 90%)
+                          Cálculo direto - Produtos com score &gt; 90%
                         </CardDescription>
                       </div>
                     </div>
@@ -1075,81 +1044,57 @@ export function ProductComparisonMatrix({ icpId }: Props) {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="pt-6">
-              {(() => {
-                // 🔥 DADOS REAIS calculados dinamicamente
-                const highCompetition = calcularAltaConcorrencia();
-                
-                if (highCompetition.length === 0) {
-                  return (
-                    <div className="text-center py-8">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-emerald-500/50" />
-                      <p className="text-sm text-muted-foreground font-medium">
-                        Parabéns! Nenhum produto com concorrência direta (&gt; 90%).
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Seus produtos têm boa diferenciação no mercado.
-                      </p>
-                    </div>
-                  );
-                }
-                
-                return (
-                  <div className="space-y-3">
-                    {highCompetition.slice(0, 8).map((item, idx) => (
-                      <div key={idx} className="p-3 bg-orange-50/50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-sm font-semibold truncate">{item.produto.nome}</p>
-                              <Badge className="bg-orange-600 hover:bg-orange-700 text-white text-xs shrink-0 ml-2">
-                                {item.scoreMaximo}%
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground mb-2">
-                              {getSmartCategory(item.produto)} • {item.qtdConcorrentes} concorrente{item.qtdConcorrentes > 1 ? 's' : ''} com produto similar
-                            </p>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex flex-wrap gap-1 cursor-help">
-                                    {item.matchesAltos.slice(0, 3).map((m, mIdx) => (
-                                      <Badge key={mIdx} variant="outline" className="text-[10px]">
-                                        {m.concorrente.split(' ').slice(0, 2).join(' ')} ({m.score}%)
-                                      </Badge>
-                                    ))}
-                                    {item.matchesAltos.length > 3 && (
-                                      <Badge variant="outline" className="text-[10px]">
-                                        +{item.matchesAltos.length - 3}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent className="max-w-xs">
-                                  <p className="font-semibold mb-2">🔴 Concorrentes com produtos similares:</p>
-                                  <ul className="space-y-1">
-                                    {item.matchesAltos.map((m, mIdx) => (
-                                      <li key={mIdx} className="text-xs flex justify-between gap-2">
-                                        <span className="truncate">{m.concorrente}</span>
-                                        <Badge variant="outline" className="text-[10px]">{m.score}%</Badge>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
+                  {(() => {
+                    // 🆕 CÁLCULO DIRETO - NÃO USA matches
+                    const altaConcorrencia = tenantProducts.map(tp => {
+                      const matchesAltos = competitorProducts.filter(cp => {
+                        const result = calculateProductMatch(tp, cp);
+                        return result.score >= 90;
+                      });
+                      return {
+                        produto: tp,
+                        qtdMatches: matchesAltos.length,
+                        empresas: [...new Set(matchesAltos.map(m => m.competitor_name))]
+                      };
+                    }).filter(p => p.qtdMatches > 0)
+                      .sort((a, b) => b.qtdMatches - a.qtdMatches);
+                    
+                    if (altaConcorrencia.length === 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-emerald-500/50" />
+                          <p className="text-sm font-medium">
+                            ✅ Nenhum produto com concorrência &gt; 90%
+                          </p>
                         </div>
+                      );
+                    }
+                    
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-sm font-bold mb-4 text-orange-600">
+                          🔥 {altaConcorrencia.length} produtos com alta concorrência (cálculo direto)
+                        </p>
+                        {altaConcorrencia.slice(0, 5).map((item, idx) => (
+                          <div key={idx} className="flex items-center gap-3 p-3 bg-orange-50/50 dark:bg-orange-950/20 rounded-lg border border-orange-300">
+                            <AlertTriangle className="h-4 w-4 text-orange-600 shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{item.produto.nome}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {getSmartCategory(item.produto)} • {item.empresas.length} empresas
+                              </p>
+                            </div>
+                            <Badge className="bg-orange-600 text-white text-xs">{item.qtdMatches} matches</Badge>
+                          </div>
+                        ))}
+                        {altaConcorrencia.length > 5 && (
+                          <p className="text-xs text-center text-muted-foreground">
+                            +{altaConcorrencia.length - 5} outros
+                          </p>
+                        )}
                       </div>
-                    ))}
-                    {highCompetition.length > 8 && (
-                      <p className="text-xs text-muted-foreground text-center pt-2">
-                        +{highCompetition.length - 8} outros produtos com alta concorrência
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
+                    );
+                  })()}
                 </CardContent>
               </CollapsibleContent>
             </Card>
