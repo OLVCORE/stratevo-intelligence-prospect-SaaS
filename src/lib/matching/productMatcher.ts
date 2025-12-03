@@ -124,10 +124,13 @@ export function calculateProductMatch(
   let totalScore = 0;
   let weights = 0;
   
-  // 🔥 DEBUG: Log para confirmar que NOVO algoritmo está sendo usado
-  const isFirstCall = !calculateProductMatch.prototype;
-  if (isFirstCall) {
-    console.log('🔥 [MATCHER] NOVO ALGORITMO ATIVO: Categoria (40%) + Uso (35%) + Nome (25%)');
+  // 🔥 DEBUG: Log detalhado para "Clean Cut Flex"
+  const isDebugProduct = product1.nome === 'Clean Cut Flex';
+  
+  if (isDebugProduct) {
+    console.log(`🔍 [MATCHER DEBUG] Comparando "${product1.nome}" vs "${product2.nome}"`);
+    console.log(`  Categoria1: "${product1.categoria}" | Categoria2: "${product2.categoria}"`);
+    console.log(`  Descricao1: "${product1.descricao?.substring(0, 50)}..." | Descricao2: "${product2.descricao?.substring(0, 50)}..."`);
   }
   
   // 🔥 1. CATEGORIA (peso 40% - PRIORIDADE MÁXIMA)
@@ -137,10 +140,18 @@ export function calculateProductMatch(
     totalScore += catScore * 0.4;
     weights += 0.4;
     
+    if (isDebugProduct && catScore > 0) {
+      console.log(`  ✅ Categoria Score: ${catScore}% (peso: 40%)`);
+    }
+    
     if (catScore === 100) {
       reasons.push('✅ Mesma categoria');
     } else if (catScore > 70) {
       reasons.push('⚠️ Categoria similar');
+    }
+  } else {
+    if (isDebugProduct) {
+      console.log(`  ❌ Categoria faltando: p1="${product1.categoria}" p2="${product2.categoria}"`);
     }
   }
   
@@ -203,6 +214,11 @@ export function calculateProductMatch(
   
   // Normalizar score final
   const finalScore = weights > 0 ? Math.min(100, totalScore / weights) : 0;
+  
+  if (isDebugProduct && finalScore > 0) {
+    console.log(`  📊 FINAL Score: ${Math.round(finalScore)}% | Weights: ${weights} | Total: ${totalScore}`);
+    console.log(`  📝 Razões:`, reasons);
+  }
   
   // Determinar confiança
   let confidence: 'high' | 'medium' | 'low';
