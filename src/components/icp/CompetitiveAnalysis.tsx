@@ -44,11 +44,14 @@ import {
   Crown,
   HelpCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Home,
+  Edit
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ProductComparisonMatrix } from './ProductComparisonMatrix';
@@ -126,6 +129,7 @@ export default function CompetitiveAnalysis({
   competitors = [], 
   diferenciais = [] 
 }: CompetitiveAnalysisProps) {
+  const navigate = useNavigate();
   const { refreshTrigger, forceRefresh } = useICPDataSyncHook({
     icpId,
     autoRefresh: false, // 🔥 DESABILITADO: estava causando loop infinito
@@ -566,6 +570,22 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
               )}
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (icpId) {
+                    navigate(`/icp/edit/${icpId}`);
+                  } else {
+                    navigate('/icp/onboarding');
+                  }
+                }}
+                className="flex items-center gap-2"
+                title="Voltar para editar cadastro do ICP"
+              >
+                <Home className="h-4 w-4" />
+                <Edit className="h-4 w-4" />
+                Editar Cadastro
+              </Button>
               <Button
                 variant="outline"
                 onClick={async () => {

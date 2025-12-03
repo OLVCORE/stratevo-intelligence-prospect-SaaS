@@ -103,25 +103,39 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '');
         const allProducts = tenantProds || [];
         
-        const tenantProductsList: TenantProduct[] = allProducts
-          .filter(p => p.competitor_cnpj?.replace(/\D/g, '') === tenantCNPJ)
-          .map(p => ({
-            id: p.id,
-            nome: p.nome,
-            descricao: p.descricao,
-            categoria: p.categoria,
-          }));
+        console.log('[ProductComparison] 🔍 Filtrando produtos:', {
+          totalProdutos: allProducts.length,
+          tenantCNPJ: tenantCNPJ,
+          todosOsCNPJs: Array.from(new Set(allProducts.map(p => p.competitor_cnpj)))
+        });
         
-        const competitorProductsList: CompetitorProduct[] = allProducts
-          .filter(p => p.competitor_cnpj?.replace(/\D/g, '') !== tenantCNPJ)
-          .map(p => ({
-            id: p.id,
-            nome: p.nome,
-            descricao: p.descricao,
-            categoria: p.categoria,
-            competitor_name: p.competitor_name,
-            competitor_cnpj: p.competitor_cnpj,
-          }));
+        // 🔥 CORRIGIDO: Se não tiver CNPJ do tenant, usar tenant_id para filtrar
+        const tenantProductsList: TenantProduct[] = tenantCNPJ 
+          ? allProducts.filter(p => p.competitor_cnpj?.replace(/\D/g, '') === tenantCNPJ)
+              .map(p => ({ id: p.id, nome: p.nome, descricao: p.descricao, categoria: p.categoria }))
+          : allProducts.filter(p => !p.competitor_cnpj || p.competitor_cnpj === tenant.id)
+              .map(p => ({ id: p.id, nome: p.nome, descricao: p.descricao, categoria: p.categoria }));
+        
+        // 🔥 CORRIGIDO: Todos os outros são de concorrentes
+        const competitorProductsList: CompetitorProduct[] = tenantCNPJ
+          ? allProducts.filter(p => p.competitor_cnpj?.replace(/\D/g, '') !== tenantCNPJ && p.competitor_cnpj)
+              .map(p => ({
+                id: p.id,
+                nome: p.nome,
+                descricao: p.descricao,
+                categoria: p.categoria,
+                competitor_name: p.competitor_name,
+                competitor_cnpj: p.competitor_cnpj,
+              }))
+          : allProducts.filter(p => p.competitor_cnpj && p.competitor_cnpj !== tenant.id)
+              .map(p => ({
+                id: p.id,
+                nome: p.nome,
+                descricao: p.descricao,
+                categoria: p.categoria,
+                competitor_name: p.competitor_name,
+                competitor_cnpj: p.competitor_cnpj,
+              }));
 
         console.log('[ProductComparison] ✅ Produtos carregados:', {
           tenant: tenantProductsList.length,
@@ -134,6 +148,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         console.log('[ProductComparison] 🔍 Concorrentes únicos:', 
           Array.from(new Set(competitorProductsList.map(p => p.competitor_name)))
         );
+        
+        console.log('[ProductComparison] 📦 Amostra Produtos Tenant:', tenantProductsList.slice(0, 3));
+        console.log('[ProductComparison] 🏢 Amostra Produtos Concorrentes:', competitorProductsList.slice(0, 5));
 
         setTenantProducts(tenantProductsList);
         setCompetitorProducts(competitorProductsList);
@@ -508,18 +525,40 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                 {/* 🔥 NOVO: Estatísticas rápidas */}
                 <div className="mb-4 p-3 bg-muted/50 rounded-lg">
                   <p className="text-sm font-medium">
-                    📊 Mostrando <strong>{Math.min(15, tenantProducts.length)}</strong> de <strong>{tenantProducts.length}</strong> produtos
-                    {tenantProducts.length > 15 && ' (role para ver mais)'}
+                    📊 Mostrando <strong>{Math.min(15, tenantProducts.length)}</strong> de <strong>{tenantProducts.length}</strong> produtos • 
+                    <strong className="ml-2">{Array.from(new Set(competitorProducts.map(p => p.competitor_name))).length}</strong> concorrentes
+                    {tenantProducts.length > 15 && ' (scroll vertical para mais produtos)'}
                   </p>
                 </div>
                 
-                <div className="overflow-x-auto max-w-[calc(100vw-320px)]">
-                  {/* 🔥 NOVO: Altura máxima com scroll vertical */}
-                  <div className="max-h-[600px] overflow-y-auto">
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background z-20">
-                        <TableRow>
-                          <TableHead className="w-[200px] sticky left-0 bg-background z-30 border-r-2">Produto</TableHead>
+                {/* 🔥 EXPANDIDO: Usar TODA largura - scroll horizontal bem visível */}
+                <div className="w-full">
+                  <div className="overflow-x-scroll overflow-y-auto max-h-[700px] border-2 rounded-lg relative" 
+                       style={{ 
+                         maxWidth: '100%',
+                         scrollbarWidth: 'auto', /* Firefox */
+                       }}>
+                    {/* 🔥 Forçar scrollbar sempre visível */}
+                    <style>{`
+                      .overflow-x-scroll::-webkit-scrollbar {
+                        height: 12px;
+                      }
+                      .overflow-x-scroll::-webkit-scrollbar-track {
+                        background: hsl(var(--muted));
+                        border-radius: 6px;
+                      }
+                      .overflow-x-scroll::-webkit-scrollbar-thumb {
+                        background: hsl(var(--primary));
+                        border-radius: 6px;
+                      }
+                      .overflow-x-scroll::-webkit-scrollbar-thumb:hover {
+                        background: hsl(var(--primary) / 0.8);
+                      }
+                    `}</style>
+                    <Table className="relative">
+                      <TableHeader className="sticky top-0 bg-background z-20 shadow-md">
+                        <TableRow className="border-b-2">
+                          <TableHead className="w-[250px] sticky left-0 bg-background z-30 border-r-2 font-bold">Produto</TableHead>
                           {/* Header com nomes CURTOS dos concorrentes */}
                           {Array.from(new Set(competitorProducts.map(p => p.competitor_name))).map((competitorName, idx) => {
                             // 🔥 NOVO: Extrair apenas primeiro e segundo nome
@@ -566,20 +605,31 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                               // 🔥 CORRIGIDO: Buscar TODOS os produtos deste concorrente
                               const competitorProds = competitorProducts.filter(cp => cp.competitor_name === competitorName);
                               
-                              // Encontrar melhor match usando algoritmo (threshold 60% mais flexível)
+                              // 🔥 DEBUG: Log detalhado para primeiro produto e primeiro concorrente
+                              if (prodIdx === 0 && compIdx === 0) {
+                                console.log('[TabelaComparativa] 🔍 DEBUG COMPLETO:', {
+                                  tenantProd: tenantProd,
+                                  concorrente: competitorName,
+                                  produtosDesteConcorrente: competitorProds.length,
+                                  amostra: competitorProds.slice(0, 2),
+                                });
+                              }
+                              
+                              // Encontrar melhor match usando algoritmo (threshold 50% mais flexível)
                               let bestMatch: any = null;
                               let bestScore = 0;
                               
-                              competitorProds.forEach(cp => {
+                              competitorProds.forEach((cp, cpIdx) => {
                                 const match = calculateProductMatch(tenantProd, cp);
                                 
-                                // 🔥 DEBUG: Log para diagnóstico
-                                if (prodIdx === 0 && compIdx === 0) {
-                                  console.log('[TabelaComparativa] 🔍 Exemplo de matching:', {
-                                    tenantProd: tenantProd.nome,
-                                    competitorProd: cp.nome,
+                                // 🔥 DEBUG: Log primeiros 5 matches
+                                if (prodIdx === 0 && compIdx === 0 && cpIdx < 5) {
+                                  console.log(`[TabelaComparativa] Match ${cpIdx + 1}:`, {
+                                    tenant: tenantProd.nome,
+                                    competitor: cp.nome,
                                     score: match.score,
                                     threshold: 50,
+                                    passed: match.score >= 50,
                                   });
                                 }
                                 
@@ -587,6 +637,13 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                                 if (match.score > bestScore && match.score >= 50) {
                                   bestScore = match.score;
                                   bestMatch = { ...cp, matchScore: match.score };
+                                  
+                                  if (prodIdx === 0 && compIdx === 0) {
+                                    console.log('[TabelaComparativa] ✅ MATCH ENCONTRADO!', {
+                                      score: bestScore,
+                                      produto: bestMatch.nome
+                                    });
+                                  }
                                 }
                               });
                               
@@ -677,8 +734,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Collapsible>
       )}
 
+      {/* 🔥 TEMPORARIAMENTE OCULTO: Focar na tabela comparativa
       {/* Insights Estratégicos */}
-      {matches.length > 0 && (
+      {false && matches.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Produtos Únicos (Vantagem Competitiva) - Collapsible */}
           <Collapsible open={diferenciaisOpen} onOpenChange={setDiferenciaisOpen}>
@@ -818,8 +876,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </div>
       )}
 
+      {/* 🔥 TEMPORARIAMENTE OCULTO: Focar na tabela comparativa
       {/* Gaps de Portfólio (produtos que concorrentes têm e tenant não) - Collapsible */}
-      {competitorProducts.length > 0 && (
+      {false && competitorProducts.length > 0 && (
         <Collapsible open={oportunidadesOpen} onOpenChange={setOportunidadesOpen}>
           <Card className="border-l-4 border-l-blue-600">
             <CollapsibleTrigger className="w-full">
@@ -939,8 +998,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Collapsible>
       )}
 
+      {/* 🔥 TEMPORARIAMENTE OCULTO: Focar na tabela comparativa
       {/* Mapa de Calor - Collapsible */}
-      {tenantProducts.length > 0 && competitorProducts.length > 0 && (
+      {false && tenantProducts.length > 0 && competitorProducts.length > 0 && (
         <Collapsible open={mapaCalorOpen} onOpenChange={setMapaCalorOpen}>
           <ProductHeatmap 
             tenantProducts={tenantProducts}
