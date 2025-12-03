@@ -55,6 +55,7 @@ import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ProductComparisonMatrix } from './ProductComparisonMatrix';
+import AutoSWOTAnalysis from '@/components/competitive/AutoSWOTAnalysis';
 import { useICPDataSyncHook } from '@/hooks/useICPDataSync';
 import CompetitorDiscovery from './CompetitorDiscovery';
 

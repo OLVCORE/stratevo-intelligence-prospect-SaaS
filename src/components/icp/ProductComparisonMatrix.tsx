@@ -26,6 +26,7 @@ import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info
 import { toast } from 'sonner';
 import { calculateProductMatch, findBestMatches, mapToStandardCategory, getStandardCategoryLabel } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';
+import AutoSWOTAnalysis from '@/components/competitive/AutoSWOTAnalysis';
 import { cn } from '@/lib/utils';
 
 interface TenantProduct {
@@ -76,6 +77,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [altaConcorrenciaOpen, setAltaConcorrenciaOpen] = useState(false);
   const [oportunidadesOpen, setOportunidadesOpen] = useState(false);
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
+  const [swotOpen, setSwotOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({}); // 🔥 Vazio = TUDO FECHADO
   const [allCategoriesExpanded, setAllCategoriesExpanded] = useState(false); // Estado global de expansão
   
@@ -1318,6 +1320,47 @@ export function ProductComparisonMatrix({ icpId }: Props) {
             isOpen={mapaCalorOpen}
             onToggle={() => setMapaCalorOpen(!mapaCalorOpen)}
           />
+        </Collapsible>
+      )}
+
+      {/* 🔥 NOVO: Análise SWOT Automática - Collapsible */}
+      {tenantProducts.length > 0 && competitorProducts.length > 0 && (
+        <Collapsible open={swotOpen} onOpenChange={setSwotOpen}>
+          <Card className="border-purple-500/30">
+            <CollapsibleTrigger className="w-full">
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100/50 dark:from-purple-900/30 dark:to-purple-800/20 cursor-pointer hover:from-purple-100 hover:to-purple-200/50 dark:hover:from-purple-900/40 dark:hover:to-purple-800/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-purple-600/10 rounded-lg">
+                      <Target className="h-5 w-5 text-purple-700 dark:text-purple-500" />
+                    </div>
+                    <div className="text-left">
+                      <CardTitle className="text-lg text-purple-800 dark:text-purple-100">
+                        Análise SWOT Automática
+                      </CardTitle>
+                      <CardDescription>
+                        Forças, Fraquezas, Oportunidades e Ameaças baseadas em dados reais
+                      </CardDescription>
+                    </div>
+                  </div>
+                  {swotOpen ? (
+                    <ChevronUp className="h-5 w-5 text-purple-600" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-purple-600" />
+                  )}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-6">
+                <AutoSWOTAnalysis
+                  tenantProducts={tenantProducts}
+                  competitorProducts={competitorProducts}
+                  matches={matches}
+                />
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
         </Collapsible>
       )}
     </div>
