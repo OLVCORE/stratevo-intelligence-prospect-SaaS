@@ -734,9 +734,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Collapsible>
       )}
 
-      {/* 🔥 TEMPORARIAMENTE OCULTO: Focar na tabela comparativa
       {/* Insights Estratégicos */}
-      {false && matches.length > 0 && (
+      {matches.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Produtos Únicos (Vantagem Competitiva) - Collapsible */}
           <Collapsible open={diferenciaisOpen} onOpenChange={setDiferenciaisOpen}>
@@ -876,9 +875,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </div>
       )}
 
-      {/* 🔥 TEMPORARIAMENTE OCULTO: Focar na tabela comparativa
       {/* Gaps de Portfólio (produtos que concorrentes têm e tenant não) - Collapsible */}
-      {false && competitorProducts.length > 0 && (
+      {competitorProducts.length > 0 && (
         <Collapsible open={oportunidadesOpen} onOpenChange={setOportunidadesOpen}>
           <Card className="border-l-4 border-l-blue-600">
             <CollapsibleTrigger className="w-full">
@@ -998,9 +996,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Collapsible>
       )}
 
-      {/* 🔥 TEMPORARIAMENTE OCULTO: Focar na tabela comparativa
       {/* Mapa de Calor - Collapsible */}
-      {false && tenantProducts.length > 0 && competitorProducts.length > 0 && (
+      {tenantProducts.length > 0 && competitorProducts.length > 0 && (
         <Collapsible open={mapaCalorOpen} onOpenChange={setMapaCalorOpen}>
           <ProductHeatmap 
             tenantProducts={tenantProducts}

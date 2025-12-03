@@ -6,7 +6,7 @@ import { useICPDataSync } from '@/contexts/ICPDataSyncContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp, Users, DollarSign, MapPin, AlertTriangle, Lightbulb, TrendingDown, Info } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp, Users, DollarSign, MapPin, AlertTriangle, Lightbulb, TrendingDown, Info, Home, Edit } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
@@ -390,7 +390,18 @@ export default function ICPDetail() {
             {profile.descricao || 'Perfil de Cliente Ideal'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="default"
+            size="sm"
+            className="bg-green-600 hover:bg-green-700 text-white border-2 border-green-700 shadow-lg font-semibold"
+            onClick={() => navigate('/icp/onboarding')}
+            title="Voltar para o cadastro do ICP e editar concorrentes, produtos e dados"
+          >
+            <Home className="w-4 h-4 mr-1" />
+            <Edit className="w-4 h-4 mr-2" />
+            Editar Cadastro
+          </Button>
           <Button
             variant="outline"
             onClick={handleRegenerateICP}

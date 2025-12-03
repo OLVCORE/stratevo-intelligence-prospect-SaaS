@@ -572,22 +572,6 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => {
-                  if (icpId) {
-                    navigate(`/icp/edit/${icpId}`);
-                  } else {
-                    navigate('/icp/onboarding');
-                  }
-                }}
-                className="flex items-center gap-2"
-                title="Voltar para editar cadastro do ICP"
-              >
-                <Home className="h-4 w-4" />
-                <Edit className="h-4 w-4" />
-                Editar Cadastro
-              </Button>
-              <Button
-                variant="outline"
                 onClick={async () => {
                   await forceRefresh();
                   toast({
