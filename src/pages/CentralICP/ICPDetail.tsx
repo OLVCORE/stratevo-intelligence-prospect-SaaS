@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { useICPDataSync } from '@/contexts/ICPDataSyncContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ export default function ICPDetail() {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const { triggerRefresh, setCurrentIcpId } = useICPDataSync();
+  const queryClient = useQueryClient();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [icpData, setIcpData] = useState<any>(null);
@@ -34,6 +36,19 @@ export default function ICPDetail() {
       setCurrentIcpId(id);
     }
   }, [id, setCurrentIcpId]);
+  
+  // 🔥 NOVO: Invalidar cache quando retornar à página (sincronização em tempo real)
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('[ICPDetail] 🔄 Página focada - Invalidando cache para atualizar dados');
+      queryClient.invalidateQueries({ queryKey: ['onboarding_sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant_competitor_products'] });
+      loadProfile(); // Recarregar dados
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [queryClient]);
 
   useEffect(() => {
     console.log('[ICPDetail] 🔄 useEffect executado:', {

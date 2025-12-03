@@ -22,7 +22,7 @@ import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
-import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3, XCircle } from 'lucide-react';
+import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3, XCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';
@@ -67,6 +67,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [matches, setMatches] = useState<ProductMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [concorrentesAtuais, setConcorrentesAtuais] = useState<string[]>([]); // 🔥 NOVO: Lista de concorrentes ATUAIS do cadastro
   
   // 🔥 NOVO: Estados para controlar dropdowns
   const [metricsOpen, setMetricsOpen] = useState(false);
@@ -77,26 +78,66 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [oportunidadesOpen, setOportunidadesOpen] = useState(false);
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
 
-  // Carregar produtos do tenant e concorrentes
+  // 🔥 PRIMEIRO: Carregar lista de concorrentes ATUAIS do cadastro
   useEffect(() => {
     if (!tenant?.id) return;
+
+    const loadCurrentCompetitors = async () => {
+      try {
+        // Buscar dados ATUAIS do onboarding_sessions
+        const { data: sessionData } = await supabase
+          .from('onboarding_sessions')
+          .select('data')
+          .eq('tenant_id', tenant.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (sessionData?.data) {
+          // 🔥 INCLUIR: CNPJ do tenant + CNPJs dos concorrentes
+          const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '') || sessionData.data.cnpj?.replace(/\D/g, '');
+          const concorrentesCNPJs = (sessionData.data.concorrentesDiretos || []).map((c: any) => 
+            c.cnpj.replace(/\D/g, '')
+          );
+          
+          const todosOsCNPJs = tenantCNPJ ? [tenantCNPJ, ...concorrentesCNPJs] : concorrentesCNPJs;
+          
+          setConcorrentesAtuais(todosOsCNPJs);
+          console.log('[ProductComparison] ✅ CNPJs ATUAIS (Tenant + Concorrentes):', {
+            tenantCNPJ,
+            concorrentesCNPJs,
+            total: todosOsCNPJs.length,
+            cnpjs: todosOsCNPJs,
+          });
+        }
+      } catch (err) {
+        console.error('[ProductComparison] ❌ Erro ao carregar concorrentes atuais:', err);
+      }
+    };
+
+    loadCurrentCompetitors();
+  }, [tenant?.id]);
+
+  // Carregar produtos do tenant e concorrentes
+  useEffect(() => {
+    if (!tenant?.id || concorrentesAtuais.length === 0) return;
 
     const loadProducts = async () => {
       setLoading(true);
       try {
         console.log('[ProductComparison] 🔍 Carregando produtos para tenant:', tenant.id);
+        console.log('[ProductComparison] 🔍 Filtrar apenas concorrentes atuais:', concorrentesAtuais);
         
-        // Produtos do tenant (buscar de tenant_competitor_products onde competitor_cnpj é o CNPJ do tenant)
-        // OU de tenant_products (tabela dedicada)
+        // 🔥 CORRIGIDO: Buscar APENAS produtos de concorrentes ATUAIS
         const { data: tenantProds, error: tenantError } = await supabase
           .from('tenant_competitor_products' as any)
           .select('id, nome, descricao, categoria, competitor_name, competitor_cnpj')
           .eq('tenant_id', tenant.id)
+          .in('competitor_cnpj', concorrentesAtuais) // 🔥 FILTRAR apenas CNPJs atuais
           .order('nome');
 
         if (tenantError) {
-          console.warn('[ProductComparison] ⚠️ Erro ao buscar de tenant_competitor_products:', tenantError);
-          // Tentar fallback para tenant_products se existir
+          console.warn('[ProductComparison] ⚠️ Erro ao buscar produtos:', tenantError);
         }
 
         // Separar produtos do tenant vs concorrentes
@@ -173,7 +214,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     };
 
     loadProducts();
-  }, [tenant?.id, icpId]);
+  }, [tenant?.id, icpId, concorrentesAtuais]); // 🔥 ADICIONAR concorrentesAtuais como dependência
 
   // Função para calcular matches entre produtos usando algoritmo avançado
   const calculateMatches = (
@@ -522,13 +563,26 @@ export function ProductComparisonMatrix({ icpId }: Props) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent>
-                {/* 🔥 NOVO: Estatísticas rápidas */}
-                <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                {/* 🔥 NOVO: Estatísticas rápidas + Botão Refresh */}
+                <div className="mb-4 p-3 bg-muted/50 rounded-lg flex items-center justify-between">
                   <p className="text-sm font-medium">
-                    📊 Mostrando <strong>{Math.min(15, tenantProducts.length)}</strong> de <strong>{tenantProducts.length}</strong> produtos • 
-                    <strong className="ml-2">{Array.from(new Set(competitorProducts.map(p => p.competitor_name))).length}</strong> concorrentes
-                    {tenantProducts.length > 15 && ' (scroll vertical para mais produtos)'}
+                    📊 <strong>{tenantProducts.length}</strong> seus produtos • 
+                    <strong className="ml-2">{competitorProducts.length}</strong> produtos de concorrentes • 
+                    <strong className="ml-2">{Array.from(new Set(competitorProducts.map(p => p.competitor_name))).length}</strong> empresas concorrentes
+                    {tenantProducts.length > 15 && ' • (scroll vertical para mais)'}
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setLoading(true);
+                      window.location.reload(); // 🔥 Forçar reload completo
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Atualizar
+                  </Button>
                 </div>
                 
                 {/* 🔥 EXPANDIDO: Usar TODA largura - scroll horizontal bem visível */}
