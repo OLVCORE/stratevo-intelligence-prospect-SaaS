@@ -308,6 +308,17 @@ export function ProductComparisonMatrix({ icpId }: Props) {
           concorrentes: competitorProductsList.length,
           empresasConcorrentes: Array.from(new Set(competitorProductsList.map(p => p.competitor_name))).length,
         });
+        
+        // 🔍 DEBUG: Mostrar primeiros produtos com categorias
+        console.log('🔍 [DEBUG] Primeiros produtos TENANT:', tenantProductsList.slice(0, 3).map(p => ({
+          nome: p.nome,
+          categoria: p.categoria || '❌ SEM CATEGORIA'
+        })));
+        console.log('🔍 [DEBUG] Primeiros produtos CONCORRENTE:', competitorProductsList.slice(0, 5).map(p => ({
+          nome: p.nome,
+          categoria: p.categoria || '❌ SEM CATEGORIA',
+          empresa: p.competitor_name
+        })));
 
         setTenantProducts(tenantProductsList);
         setCompetitorProducts(competitorProductsList);
