@@ -94,3 +94,6 @@ supabase/functions/enrich-apollo/index.ts
 supabase/functions/generate-product-gaps/index.ts
 supabase/functions/simple-totvs-check/index.ts
 supabase/functions/stc-agent-internal/index.ts
+[33m905506e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m fix: CORRECAO CRITICA - Categorizacao por USO ESPECIFICO em vez de tipo generico - Luvas de CORTE vs Luvas de SOLDA agora sao diferenciadas corretamente - Sistema agora considera o uso/aplicacao especifica do produto para determinar concorrencia - Pesos rebalanceados: Categoria 45%, Uso 35%, Nome 20% - Threshold: 50% para matches, 90% para alta concorrencia
+[33mcc3920f[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: Sistema unificado de categorizacao inteligente para TODOS os cards - Seus Diferenciais, Alta Concorrencia, Oportunidades, Mapa de Calor e Intensidade agora usam o mesmo algoritmo de 8 grupos padrao
+[33m8339fe7[m feat: Melhoria CRITICA no algoritmo de matching de produtos - Sistema de categorizacao inteligente com 8 grupos padrao para melhor identificacao de produtos similares

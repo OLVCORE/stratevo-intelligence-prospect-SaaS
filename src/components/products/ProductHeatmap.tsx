@@ -9,7 +9,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Flame, Package, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
 interface ProductHeatmapProps {
   tenantProducts: Array<{ nome: string; categoria?: string }>;
@@ -53,12 +52,31 @@ export default function ProductHeatmap({
     ])
   ).filter(Boolean) as string[];
   
-  // Calcular intensidade de competição por categoria
+  // 🔥 NOVO: Criar MATRIZ de intensidade (Categoria x Concorrente)
+  const heatmapMatrix = categories.map(cat => {
+    const row: any = {
+      categoria: cat,
+      tenantCount: tenantProducts.filter(p => p.categoria === cat).length,
+    };
+    
+    // Para cada concorrente, calcular quantos produtos tem nesta categoria
+    competitors.forEach(comp => {
+      const produtosNaCategoria = competitorProducts.filter(p => 
+        p.categoria === cat && p.competitor_name === comp
+      ).length;
+      
+      row[comp] = produtosNaCategoria;
+    });
+    
+    return row;
+  }).filter(row => row.tenantCount > 0 || Object.values(row).some((v: any) => typeof v === 'number' && v > 0));
+  
+  // Calcular intensidade total por categoria (para ordenação)
   const categoryIntensity = categories.map(cat => {
     const tenantCount = tenantProducts.filter(p => p.categoria === cat).length;
     const competitorCount = competitorProducts.filter(p => p.categoria === cat).length;
     const matchesInCategory = matches.filter(m => 
-      m.tenantProduct.categoria === cat && m.bestScore >= 70
+      m.tenantProduct.categoria === cat && m.bestScore >= 60
     ).length;
     
     const intensity = tenantCount > 0 
@@ -72,7 +90,7 @@ export default function ProductHeatmap({
       matchesCount: matchesInCategory,
       intensity,
     };
-  }).sort((a, b) => b.intensity - a.intensity);
+  }).sort((a, b) => (b.tenantCount + b.competitorCount) - (a.tenantCount + a.competitorCount));
   
   // Calcular intensidade por concorrente
   const competitorIntensity = competitors.map(comp => {
@@ -94,31 +112,7 @@ export default function ProductHeatmap({
     };
   }).sort((a, b) => b.intensity - a.intensity);
   
-  // Função para determinar cor do heatmap
-  const getHeatColor = (intensity: number) => {
-    if (intensity >= 75) return 'bg-orange-600 dark:bg-orange-500';
-    if (intensity >= 50) return 'bg-orange-500 dark:bg-orange-600';
-    if (intensity >= 25) return 'bg-blue-500 dark:bg-blue-600';
-    if (intensity > 0) return 'bg-emerald-500 dark:bg-emerald-600';
-    return 'bg-slate-300 dark:bg-slate-700';
-  };
-  
-  const getHeatBgColor = (intensity: number) => {
-    if (intensity >= 75) return 'bg-orange-100 dark:bg-orange-950/30';
-    if (intensity >= 50) return 'bg-orange-50 dark:bg-orange-950/20';
-    if (intensity >= 25) return 'bg-blue-50 dark:bg-blue-950/20';
-    if (intensity > 0) return 'bg-emerald-50 dark:bg-emerald-950/20';
-    return 'bg-slate-50 dark:bg-slate-900/20';
-  };
 
-  // Preparar dados para o gráfico Recharts
-  const chartData = categoryIntensity.map(cat => ({
-    categoria: cat.categoria.length > 20 ? cat.categoria.substring(0, 17) + '...' : cat.categoria,
-    categoriaFull: cat.categoria,
-    seusProdutos: cat.tenantCount,
-    concorrentes: cat.competitorCount,
-    intensidade: Math.round(cat.intensity),
-  }));
 
   return (
     <div className="space-y-6">
@@ -148,102 +142,219 @@ export default function ProductHeatmap({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="pt-6 space-y-6">
-            {/* Gráfico de Barras Visual */}
-            {categoryIntensity.length > 0 && (
-              <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis 
-                      dataKey="categoria" 
-                      tick={{ fill: 'currentColor', fontSize: 11 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} />
-                    <RechartsTooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--background))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
-                      labelStyle={{ color: 'hsl(var(--foreground))' }}
-                    />
-                    <Legend />
-                    <Bar dataKey="seusProdutos" name="Seus Produtos" fill="#10b981" />
-                    <Bar dataKey="concorrentes" name="Concorrentes" fill="#f97316" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {categoryIntensity.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic text-center py-8">
+                Nenhuma categoria disponível. Adicione produtos e concorrentes.
+              </p>
+            ) : (
+              <>
+                {/* 🔥 HEATMAP VISUAL - GRID DE CÉLULAS COLORIDAS */}
+                <div className="overflow-x-auto">
+                  <div className="min-w-[800px]">
+                    {/* Header do Grid */}
+                    <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `200px repeat(${competitors.length + 1}, 80px)` }}>
+                      <div className="p-2 font-bold text-xs bg-slate-200 dark:bg-slate-800 rounded flex items-center">
+                        Categoria
+                      </div>
+                      <div className="p-2 text-center font-bold text-xs bg-green-100 dark:bg-green-900/30 rounded">
+                        VOCÊ
+                      </div>
+                      {competitors.map((comp, idx) => (
+                        <TooltipProvider key={idx}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="p-2 text-center font-bold text-[10px] bg-orange-50 dark:bg-orange-900/20 rounded cursor-help truncate">
+                                {comp.split(' ')[0]}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs max-w-[200px]">{comp}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ))}
+                    </div>
+                    
+                    {/* Grid de Células - HEATMAP REAL */}
+                    {heatmapMatrix.map((row, rowIdx) => (
+                      <div key={rowIdx} className="grid gap-1 mb-1" style={{ gridTemplateColumns: `200px repeat(${competitors.length + 1}, 80px)` }}>
+                        {/* Nome da Categoria */}
+                        <div className="p-2 text-xs font-medium bg-slate-100 dark:bg-slate-800/50 rounded truncate">
+                          {row.categoria}
+                        </div>
+                        
+                        {/* Célula do Tenant */}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className={cn(
+                                "p-2 text-center text-xs font-bold rounded cursor-help transition-all hover:scale-105",
+                                row.tenantCount > 0 
+                                  ? "bg-green-500 text-white" 
+                                  : "bg-slate-200 dark:bg-slate-800 text-slate-400"
+                              )}>
+                                {row.tenantCount || '-'}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">
+                                <strong>Seus produtos:</strong> {row.tenantCount}
+                                {row.tenantCount > 0 ? ' ✅' : ' (Oportunidade de expansão!)'}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        
+                        {/* Células dos Concorrentes */}
+                        {competitors.map((comp, compIdx) => {
+                          const count = row[comp] || 0;
+                          const maxCount = Math.max(...competitors.map(c => row[c] || 0));
+                          const intensity = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                          
+                          return (
+                            <TooltipProvider key={compIdx}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className={cn(
+                                    "p-2 text-center text-xs font-bold rounded cursor-help transition-all hover:scale-105",
+                                    intensity >= 75 ? "bg-red-500 text-white" :
+                                    intensity >= 50 ? "bg-orange-500 text-white" :
+                                    intensity >= 25 ? "bg-yellow-500 text-black" :
+                                    count > 0 ? "bg-green-400 text-black" :
+                                    "bg-slate-200 dark:bg-slate-800 text-slate-400"
+                                  )}>
+                                    {count || '-'}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="space-y-1">
+                                    <p className="text-xs font-semibold">{comp}</p>
+                                    <p className="text-xs"><strong>Categoria:</strong> {row.categoria}</p>
+                                    <p className="text-xs"><strong>Produtos:</strong> {count}</p>
+                                    {count > 0 && row.tenantCount > 0 && (
+                                      <p className="text-xs mt-2 pt-2 border-t text-orange-500">
+                                        🔥 CONCORRÊNCIA DIRETA nesta categoria!
+                                      </p>
+                                    )}
+                                    {count > 0 && row.tenantCount === 0 && (
+                                      <p className="text-xs mt-2 pt-2 border-t text-blue-500">
+                                        💡 OPORTUNIDADE: Eles têm {count} produto{count > 1 ? 's' : ''}, você não atua aqui
+                                      </p>
+                                    )}
+                                    {count === 0 && row.tenantCount > 0 && (
+                                      <p className="text-xs mt-2 pt-2 border-t text-green-500">
+                                        ✅ DIFERENCIAL: Você atua, eles não!
+                                      </p>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Legenda do Heatmap */}
+                <div className="flex flex-wrap items-center justify-center gap-4 p-4 bg-slate-100 dark:bg-slate-900/50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-red-500" />
+                    <span className="text-xs">Altíssima (líder)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-orange-500" />
+                    <span className="text-xs">Alta</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-yellow-500" />
+                    <span className="text-xs">Moderada</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-green-400" />
+                    <span className="text-xs">Baixa</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-slate-300 dark:bg-slate-700" />
+                    <span className="text-xs">Nenhum produto</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-green-500" />
+                    <span className="text-xs font-bold">VOCÊ (Tenant)</span>
+                  </div>
+                </div>
+                
+                {/* 🔥 ANÁLISE DE IA - Recomendações Estratégicas */}
+                <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border-l-4 border-blue-600">
+                  <h4 className="font-bold text-sm mb-3 flex items-center gap-2">
+                    <Flame className="h-4 w-4 text-blue-600" />
+                    Análise Estratégica de IA
+                  </h4>
+                  <div className="space-y-2 text-xs">
+                    {(() => {
+                      const recomendacoes = [];
+                      
+                      // Categorias onde tenant lidera
+                      const categoriasLideres = categoryIntensity.filter(c => 
+                        c.tenantCount > 0 && c.competitorCount === 0
+                      );
+                      if (categoriasLideres.length > 0) {
+                        recomendacoes.push(
+                          <p key="lideres" className="flex items-start gap-2">
+                            <span className="text-green-600">✅</span>
+                            <span><strong>DIFERENCIAIS ÚNICOS:</strong> Você é único em {categoriasLideres.length} categoria{categoriasLideres.length > 1 ? 's' : ''}: {categoriasLideres.slice(0, 3).map(c => c.categoria).join(', ')}</span>
+                          </p>
+                        );
+                      }
+                      
+                      // Categorias com alta concorrência
+                      const altaConcorrencia = categoryIntensity.filter(c => 
+                        c.tenantCount > 0 && c.competitorCount > 5
+                      );
+                      if (altaConcorrencia.length > 0) {
+                        recomendacoes.push(
+                          <p key="alta-conc" className="flex items-start gap-2">
+                            <span className="text-red-600">🔥</span>
+                            <span><strong>ALTA COMPETIÇÃO:</strong> {altaConcorrencia.length} categoria{altaConcorrencia.length > 1 ? 's' : ''} com muitos players. Foque em diferenciação!</span>
+                          </p>
+                        );
+                      }
+                      
+                      // Oportunidades (concorrentes têm, tenant não)
+                      const oportunidades = categoryIntensity.filter(c => 
+                        c.tenantCount === 0 && c.competitorCount >= 2
+                      );
+                      if (oportunidades.length > 0) {
+                        recomendacoes.push(
+                          <p key="oport" className="flex items-start gap-2">
+                            <span className="text-blue-600">💡</span>
+                            <span><strong>OPORTUNIDADES:</strong> {oportunidades.length} categoria{oportunidades.length > 1 ? 's' : ''} explorada{oportunidades.length > 1 ? 's' : ''} por múltiplos concorrentes. Considere expandir!</span>
+                          </p>
+                        );
+                      }
+                      
+                      // Nichos com poucos players
+                      const nichos = categoryIntensity.filter(c => 
+                        c.tenantCount > 0 && c.competitorCount >= 1 && c.competitorCount <= 3
+                      );
+                      if (nichos.length > 0) {
+                        recomendacoes.push(
+                          <p key="nichos" className="flex items-start gap-2">
+                            <span className="text-yellow-600">⭐</span>
+                            <span><strong>NICHOS PROMISSORES:</strong> {nichos.length} categoria{nichos.length > 1 ? 's' : ''} com baixa concorrência. Potencial de crescimento!</span>
+                          </p>
+                        );
+                      }
+                      
+                      return recomendacoes.length > 0 ? recomendacoes : (
+                        <p className="text-muted-foreground italic">Adicione produtos e concorrentes para ver análises estratégicas.</p>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </>
             )}
-            
-            {/* Lista de categorias com barras */}
-          {categoryIntensity.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic text-center py-8">
-              Nenhuma categoria disponível. Adicione categorias aos produtos.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {categoryIntensity.map((cat, idx) => (
-                <TooltipProvider key={idx}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className={cn(
-                        "p-4 rounded-lg transition-all cursor-help hover:scale-[1.02]",
-                        getHeatBgColor(cat.intensity)
-                      )}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex-1">
-                            <p className="font-semibold text-sm">{cat.categoria}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {cat.tenantCount} seu{cat.tenantCount !== 1 ? 's' : ''} produto{cat.tenantCount !== 1 ? 's' : ''} • {cat.competitorCount} concorrente{cat.competitorCount !== 1 ? 's' : ''}
-                            </p>
-                          </div>
-                          <Badge className={cn(
-                            "text-white text-xs",
-                            cat.intensity >= 75 ? "bg-orange-600 hover:bg-orange-700" :
-                            cat.intensity >= 50 ? "bg-orange-500 hover:bg-orange-600" :
-                            cat.intensity >= 25 ? "bg-blue-600 hover:bg-blue-700" :
-                            cat.intensity > 0 ? "bg-emerald-600 hover:bg-emerald-700" :
-                            "bg-slate-500 hover:bg-slate-600"
-                          )}>
-                            {Math.round(cat.intensity)}%
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                            <div
-                              className={cn("h-2 rounded-full transition-all", getHeatColor(cat.intensity))}
-                              style={{ width: `${Math.min(100, cat.intensity)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <div className="space-y-2">
-                        <p className="font-semibold">{cat.categoria}</p>
-                        <div className="text-xs space-y-1">
-                          <p>• <strong>Seus produtos:</strong> {cat.tenantCount}</p>
-                          <p>• <strong>Produtos concorrentes:</strong> {cat.competitorCount}</p>
-                          <p>• <strong>Matches identificados:</strong> {cat.matchesCount}</p>
-                          <p>• <strong>Intensidade de competição:</strong> {Math.round(cat.intensity)}%</p>
-                        </div>
-                        <p className="text-xs mt-2 pt-2 border-t">
-                          {cat.intensity >= 75 ? '🔥 Categoria com altíssima concorrência' :
-                           cat.intensity >= 50 ? '⚠️ Categoria com concorrência moderada' :
-                           cat.intensity >= 25 ? '✅ Categoria com concorrência baixa' :
-                           cat.intensity > 0 ? '🎯 Categoria com poucos concorrentes' :
-                           '✨ Categoria sem concorrência'}
-                        </p>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ))}
-            </div>
-          )}
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -353,33 +464,6 @@ export default function ProductHeatmap({
           )}
           </CardContent>
         </CollapsibleContent>
-      </Card>
-
-      {/* Legenda do Mapa de Calor */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Legenda de Intensidade</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-orange-600" />
-              <span className="text-xs">≥ 75% - Altíssima</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-orange-500" />
-              <span className="text-xs">50-74% - Alta</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-blue-600" />
-              <span className="text-xs">25-49% - Moderada</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-emerald-600" />
-              <span className="text-xs">1-24% - Baixa</span>
-            </div>
-          </div>
-        </CardContent>
       </Card>
     </div>
   );
