@@ -332,7 +332,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     loadProducts();
   }, [tenant?.id, icpId, concorrentesAtuais]); // 🔥 ADICIONAR concorrentesAtuais como dependência
 
-  // 🔥 OTIMIZADO: Função para calcular matches entre produtos (com menos processamento)
+  // 🔥 OTIMIZADO: Função para calcular matches entre produtos
   const calculateMatches = (
     tenantProds: TenantProduct[],
     compProds: CompetitorProduct[]
@@ -340,8 +340,8 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     console.time('[ProductComparison] ⏱️ Cálculo de matches');
     
     const results = tenantProds.map(tenantProd => {
-      // Score mínimo 70% para considerar match
-      const matches = findBestMatches(tenantProd, compProds, 70);
+      // 🔥 Score mínimo 50% (mais sensível - captura concorrência por categoria)
+      const matches = findBestMatches(tenantProd, compProds, 50);
       
       let matchType: 'exact' | 'similar' | 'unique' = 'unique';
       let bestScore = 0;
@@ -594,12 +594,30 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                     size="sm"
                     onClick={async () => {
                       setLoading(true);
-                      toast.info('Limpando banco e atualizando dados...');
+                      toast.info('Recalculando matches com novo algoritmo...');
                       try {
                         // 🔥 Limpar banco
                         await cleanDatabaseAndLoadCompetitors();
-                        // 🔥 Forçar reload da página para recarregar TUDO
-                        window.location.reload();
+                        
+                        // 🔥 RECALCULAR matches imediatamente
+                        const { data: sessionData } = await supabase
+                          .from('onboarding_sessions' as any)
+                          .select('step1_data, step4_data')
+                          .eq('tenant_id', tenant?.id)
+                          .order('updated_at', { ascending: false })
+                          .limit(1)
+                          .maybeSingle();
+                        
+                        if (sessionData?.step1_data?.concorrentesDiretos) {
+                          const cnpjs = sessionData.step1_data.concorrentesDiretos.map((c: any) => 
+                            c.cnpj.replace(/\D/g, '')
+                          );
+                          setConcorrentesAtuais(cnpjs);
+                        }
+                        
+                        // Toast de sucesso
+                        toast.success('✅ Dados atualizados! Matches recalculados.');
+                        setLoading(false);
                       } catch (err) {
                         setLoading(false);
                         toast.error('Erro ao atualizar');
