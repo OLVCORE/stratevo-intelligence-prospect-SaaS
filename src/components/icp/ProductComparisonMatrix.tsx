@@ -22,7 +22,7 @@ import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
-import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3, XCircle, RefreshCw } from 'lucide-react';
+import { Package, Building2, Target, TrendingUp, AlertCircle, CheckCircle2, Info, Sparkles, Award, AlertTriangle, ChevronDown, ChevronUp, BarChart3, XCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
 import ProductHeatmap from '@/components/products/ProductHeatmap';
@@ -77,64 +77,194 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const [altaConcorrenciaOpen, setAltaConcorrenciaOpen] = useState(false);
   const [oportunidadesOpen, setOportunidadesOpen] = useState(false);
   const [mapaCalorOpen, setMapaCalorOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  
+  // 🔥 FUNÇÃO: Categorização Inteligente (detecta tipo de produto pelo nome/descrição)
+  const getSmartCategory = (produto: { nome: string; descricao?: string; categoria?: string }): string => {
+    const nome = produto.nome.toLowerCase();
+    const descricao = (produto.descricao || '').toLowerCase();
+    const texto = `${nome} ${descricao}`;
+    
+    // 🔥 PRIORIDADE 1: Detectar "Luva" (core business da UNI LUVAS)
+    if (texto.includes('luva') || texto.includes('glove')) {
+      // Sub-categorizar luvas por tipo
+      if (texto.includes('corte') || texto.includes('perfura') || texto.includes('cut')) {
+        return 'Luvas - Corte/Perfuração';
+      }
+      if (texto.includes('temperatura') || texto.includes('solda') || texto.includes('weld')) {
+        return 'Luvas - Alta Temperatura';
+      }
+      if (texto.includes('mecânica') || texto.includes('algodão') || texto.includes('pigment')) {
+        return 'Luvas - Proteção Mecânica';
+      }
+      return 'Luvas - Outros'; // Luvas genéricas
+    }
+    
+    // Outras categorias
+    if (texto.includes('blusão') || texto.includes('camisa') || texto.includes('manga')) {
+      return 'Vestimentas de Proteção';
+    }
+    if (texto.includes('óculos') || texto.includes('capacete') || texto.includes('protetor')) {
+      return 'EPIs Diversos';
+    }
+    
+    // Usar categoria original se não detectar tipo específico
+    return produto.categoria || 'Sem Categoria';
+  };
+  
+  // 🔥 NOVO: Agrupar TODOS os produtos por categoria INTELIGENTE (Tenant + Concorrentes)
+  const allProductsGroupedByCategory = () => {
+    const categoriesMap = new Map<string, {
+      produtos: Array<{
+        nome: string;
+        descricao?: string;
+        tenant: boolean;
+        concorrente?: string;
+      }>;
+    }>();
+    
+    // Adicionar produtos do tenant
+    tenantProducts.forEach(p => {
+      const cat = getSmartCategory(p); // 🔥 Usar categorização inteligente
+      if (!categoriesMap.has(cat)) {
+        categoriesMap.set(cat, { produtos: [] });
+      }
+      categoriesMap.get(cat)!.produtos.push({
+        nome: p.nome,
+        descricao: p.descricao,
+        tenant: true,
+      });
+    });
+    
+    // Adicionar produtos dos concorrentes
+    competitorProducts.forEach(p => {
+      const cat = getSmartCategory(p); // 🔥 Usar categorização inteligente
+      if (!categoriesMap.has(cat)) {
+        categoriesMap.set(cat, { produtos: [] });
+      }
+      categoriesMap.get(cat)!.produtos.push({
+        nome: p.nome,
+        descricao: p.descricao,
+        tenant: false,
+        concorrente: p.competitor_name,
+      });
+    });
+    
+    return Array.from(categoriesMap.entries()).sort((a, b) => 
+      b[1].produtos.length - a[1].produtos.length // Ordenar por mais produtos
+    );
+  };
 
-  // 🔥 PRIMEIRO: Carregar lista de concorrentes ATUAIS do cadastro
-  useEffect(() => {
+  // 🔥 FUNÇÃO DE LIMPEZA (exposta para uso no botão Atualizar)
+  const cleanDatabaseAndLoadCompetitors = async () => {
     if (!tenant?.id) return;
-
-    const loadCurrentCompetitors = async () => {
       try {
-        // Buscar dados ATUAIS do onboarding_sessions
-        const { data: sessionData } = await supabase
+        console.log('[ProductComparison] 🧹 INICIANDO LIMPEZA DEFINITIVA DO BANCO...');
+        
+        // PASSO 1: Buscar CNPJs ATUAIS do cadastro (🔥 CORRIGIDO: usar step1_data)
+        const { data: sessionData, error: sessionError } = await supabase
           .from('onboarding_sessions')
-          .select('data')
+          .select('step1_data, step4_data')
           .eq('tenant_id', tenant.id)
           .order('updated_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         
-        if (sessionData?.data) {
-          // 🔥 INCLUIR: CNPJ do tenant + CNPJs dos concorrentes
-          const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '') || sessionData.data.cnpj?.replace(/\D/g, '');
-          const concorrentesCNPJs = (sessionData.data.concorrentesDiretos || []).map((c: any) => 
-            c.cnpj.replace(/\D/g, '')
+        if (sessionError || !sessionData) {
+          console.error('[ProductComparison] ❌ Erro ao buscar session:', sessionError);
+          toast.error('Erro ao carregar dados do cadastro');
+          return;
+        }
+        
+        // PASSO 2: Extrair CNPJs válidos (Tenant + Concorrentes)
+        // 🔥 CORRIGIDO: Concorrentes estão em step1_data (foram movidos para Step 1)
+        const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '') || sessionData.step1_data?.cnpj?.replace(/\D/g, '');
+        const concorrentesCNPJs = (sessionData.step1_data?.concorrentesDiretos || []).map((c: any) => 
+          c.cnpj.replace(/\D/g, '')
+        );
+        
+        const cnpjsValidos = tenantCNPJ ? [tenantCNPJ, ...concorrentesCNPJs] : concorrentesCNPJs;
+        
+        console.log('[ProductComparison] ✅ CNPJs VÁLIDOS:', {
+          tenant: tenantCNPJ,
+          concorrentes: concorrentesCNPJs.length,
+          total: cnpjsValidos.length,
+        });
+        
+        // PASSO 3: DELETAR PRODUTOS ÓRFÃOS (concorrentes deletados)
+        if (cnpjsValidos.length > 0) {
+          // Buscar TODOS os produtos do tenant
+          const { data: todosProdutos } = await supabase
+            .from('tenant_competitor_products' as any)
+            .select('id, competitor_name, competitor_cnpj')
+            .eq('tenant_id', tenant.id);
+          
+          // Filtrar órfãos (CNPJs que NÃO estão na lista válida)
+          const produtosOrfaos = (todosProdutos || []).filter(p => 
+            p.competitor_cnpj && !cnpjsValidos.includes(p.competitor_cnpj.replace(/\D/g, ''))
           );
           
-          const todosOsCNPJs = tenantCNPJ ? [tenantCNPJ, ...concorrentesCNPJs] : concorrentesCNPJs;
-          
-          setConcorrentesAtuais(todosOsCNPJs);
-          console.log('[ProductComparison] ✅ CNPJs ATUAIS (Tenant + Concorrentes):', {
-            tenantCNPJ,
-            concorrentesCNPJs,
-            total: todosOsCNPJs.length,
-            cnpjs: todosOsCNPJs,
-          });
+          if (produtosOrfaos.length > 0) {
+            const empresasOrfas = Array.from(new Set(produtosOrfaos.map(p => p.competitor_name)));
+            console.warn('[ProductComparison] 🗑️ DELETANDO', produtosOrfaos.length, 'produtos de empresas DELETADAS:', empresasOrfas);
+            
+            const idsParaDeletar = produtosOrfaos.map(p => p.id);
+            const { error: deleteError } = await supabase
+              .from('tenant_competitor_products' as any)
+              .delete()
+              .in('id', idsParaDeletar);
+            
+            if (deleteError) {
+              console.error('[ProductComparison] ❌ Erro ao deletar órfãos:', deleteError);
+            } else {
+              console.log('[ProductComparison] ✅ LIMPEZA CONCLUÍDA:', produtosOrfaos.length, 'produtos removidos');
+              toast.success(`🗑️ ${produtosOrfaos.length} produtos de empresas deletadas foram removidos`, {
+                description: `Empresas: ${empresasOrfas.join(', ')}`
+              });
+            }
+          } else {
+            console.log('[ProductComparison] ✅ Banco limpo - Nenhum produto órfão encontrado');
+          }
         }
+        
+        // PASSO 4: Setar CNPJs válidos para uso posterior
+        setConcorrentesAtuais(cnpjsValidos);
+        
       } catch (err) {
-        console.error('[ProductComparison] ❌ Erro ao carregar concorrentes atuais:', err);
+        console.error('[ProductComparison] ❌ Erro na limpeza:', err);
+        toast.error('Erro ao limpar banco de dados');
       }
-    };
+  };
 
-    loadCurrentCompetitors();
+  // 🔥 EXECUTAR LIMPEZA ao montar componente
+  useEffect(() => {
+    cleanDatabaseAndLoadCompetitors();
   }, [tenant?.id]);
 
   // Carregar produtos do tenant e concorrentes
   useEffect(() => {
-    if (!tenant?.id || concorrentesAtuais.length === 0) return;
+    if (!tenant?.id) return; // 🔥 REMOVER verificação de concorrentesAtuais para não bloquear
 
     const loadProducts = async () => {
       setLoading(true);
       try {
         console.log('[ProductComparison] 🔍 Carregando produtos para tenant:', tenant.id);
-        console.log('[ProductComparison] 🔍 Filtrar apenas concorrentes atuais:', concorrentesAtuais);
         
-        // 🔥 CORRIGIDO: Buscar APENAS produtos de concorrentes ATUAIS
-        const { data: tenantProds, error: tenantError } = await supabase
+        // 🔥 CORRIGIDO: Buscar produtos, filtrar por CNPJs atuais SE disponível
+        let query = supabase
           .from('tenant_competitor_products' as any)
           .select('id, nome, descricao, categoria, competitor_name, competitor_cnpj')
-          .eq('tenant_id', tenant.id)
-          .in('competitor_cnpj', concorrentesAtuais) // 🔥 FILTRAR apenas CNPJs atuais
-          .order('nome');
+          .eq('tenant_id', tenant.id);
+        
+        // Aplicar filtro de CNPJs APENAS se tiver lista de concorrentes atuais
+        if (concorrentesAtuais.length > 0) {
+          console.log('[ProductComparison] 🔍 Filtrando por', concorrentesAtuais.length, 'CNPJs atuais');
+          query = query.in('competitor_cnpj', concorrentesAtuais);
+        } else {
+          console.log('[ProductComparison] ⚠️ Sem filtro de CNPJs (carregando todos)');
+        }
+        
+        const { data: tenantProds, error: tenantError } = await query.order('nome');
 
         if (tenantError) {
           console.warn('[ProductComparison] ⚠️ Erro ao buscar produtos:', tenantError);
@@ -526,7 +656,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         </Card>
       </Collapsible>
 
-      {/* NOVA: Tabela Comparativa Estilo Pricing Table */}
+      {/* NOVA: Tabela Comparativa por Categoria (Agrupada) */}
       {tenantProducts.length > 0 && competitorProducts.length > 0 && (
         <Collapsible open={tabelaComparativaOpen} onOpenChange={setTabelaComparativaOpen}>
           <Card className="border-2 border-primary/20">
@@ -536,10 +666,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Target className="h-5 w-5 text-primary" />
-                      Tabela Comparativa de Produtos
+                      Tabela Comparativa de Produtos (Por Categoria)
                     </CardTitle>
                     <CardDescription>
-                      Comparação direta: veja quais concorrentes têm produtos similares aos seus
+                      {allProductsGroupedByCategory().length} categorias • {tenantProducts.length + competitorProducts.length} produtos totais
                     </CardDescription>
                   </div>
                   {tabelaComparativaOpen ? (
@@ -563,25 +693,39 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
+                    onClick={async () => {
                       setLoading(true);
-                      window.location.reload(); // 🔥 Forçar reload completo
+                      toast.info('Limpando banco e atualizando dados...');
+                      try {
+                        // 🔥 Limpar banco
+                        await cleanDatabaseAndLoadCompetitors();
+                        // 🔥 Forçar reload da página para recarregar TUDO
+                        window.location.reload();
+                      } catch (err) {
+                        setLoading(false);
+                        toast.error('Erro ao atualizar');
+                      }
                     }}
                     className="flex items-center gap-2"
+                    disabled={loading}
                   >
-                    <RefreshCw className="h-4 w-4" />
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
                     Atualizar
                   </Button>
                 </div>
                 
-                {/* 🔥 EXPANDIDO: Usar TODA largura - scroll horizontal bem visível */}
+                {/* 🔥 NOVA TABELA: Agrupada por Categoria */}
                 <div className="w-full">
                   <div className="overflow-x-scroll overflow-y-auto max-h-[700px] border-2 rounded-lg relative" 
                        style={{ 
                          maxWidth: '100%',
-                         scrollbarWidth: 'auto', /* Firefox */
+                         scrollbarWidth: 'auto',
                        }}>
-                    {/* 🔥 Forçar scrollbar sempre visível */}
+                    {/* Scrollbar customizada */}
                     <style>{`
                       .overflow-x-scroll::-webkit-scrollbar {
                         height: 12px;
@@ -599,15 +743,36 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                       }
                     `}</style>
                     <Table className="relative">
+                      {/* 🔥 HEADER FIXO - SEMPRE VISÍVEL */}
                       <TableHeader className="sticky top-0 bg-background z-20 shadow-md">
                         <TableRow className="border-b-2">
-                          <TableHead className="w-[250px] sticky left-0 bg-background z-30 border-r-2 font-bold">Produto</TableHead>
-                          {/* Header com nomes CURTOS dos concorrentes */}
+                          <TableHead className="w-[280px] sticky left-0 bg-background z-30 border-r-2 font-bold text-base">
+                            Categoria / Produtos
+                          </TableHead>
+                          {/* 🔥 PRIMEIRO: TENANT (nome dinâmico) */}
+                          <TableHead className="text-center min-w-[140px] bg-green-50 dark:bg-green-950/30 border-l-2 border-r-2 border-green-500">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex flex-col items-center cursor-help">
+                                    <Building2 className="h-5 w-5 mb-1 text-green-600" />
+                                    <span className="text-sm font-bold text-green-700 dark:text-green-400">
+                                      {(tenant as any)?.nome?.split(' ').slice(0, 2).join(' ') || 'TENANT'}
+                                    </span>
+                                    <Badge className="mt-1 bg-green-600 text-[10px]">VOCÊ</Badge>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs max-w-[200px] font-semibold">{(tenant as any)?.nome || 'Seu Tenant'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          {/* Header com concorrentes */}
                           {Array.from(new Set(competitorProducts.map(p => p.competitor_name))).map((competitorName, idx) => {
-                            // 🔥 NOVO: Extrair apenas primeiro e segundo nome
                             const nomesCurtos = competitorName.split(' ').slice(0, 2).join(' ');
                             return (
-                              <TableHead key={idx} className="text-center min-w-[120px]">
+                              <TableHead key={idx} className="text-center min-w-[130px] border-r">
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -627,94 +792,145 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {tenantProducts.map((tenantProd, prodIdx) => {
-                        // Para cada produto do tenant, ver quais concorrentes têm produto similar
-                        const competitors = Array.from(new Set(competitorProducts.map(p => p.competitor_name)));
-                        
-                        return (
-                          <TableRow key={tenantProd.id || prodIdx} className="border-b">
-                            <TableCell className="font-medium sticky left-0 bg-background z-10 border-r-2">
-                              <div>
-                                <p className="font-semibold text-sm">{tenantProd.nome}</p>
-                                {tenantProd.categoria && (
-                                  <Badge variant="outline" className="mt-1 text-xs">{tenantProd.categoria}</Badge>
-                                )}
-                                {tenantProd.descricao && (
-                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{tenantProd.descricao}</p>
-                                )}
-                              </div>
-                            </TableCell>
-                            {competitors.map((competitorName, compIdx) => {
-                              // Buscar TODOS os produtos deste concorrente
-                              const competitorProds = competitorProducts.filter(cp => cp.competitor_name === competitorName);
-                              
-                              // Encontrar melhor match usando algoritmo (threshold 50%)
-                              let bestMatch: any = null;
-                              let bestScore = 0;
-                              
-                              competitorProds.forEach((cp) => {
-                                const match = calculateProductMatch(tenantProd, cp);
-                                
-                                if (match.score > bestScore && match.score >= 50) {
-                                  bestScore = match.score;
-                                  bestMatch = { ...cp, matchScore: match.score };
-                                }
-                              });
-                              
-                              return (
-                                <TableCell key={compIdx} className="text-center">
-                                  {bestMatch ? (
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <div className="inline-flex flex-col items-center cursor-help">
-                                            <CheckCircle2 className={`h-6 w-6 ${
-                                              bestScore >= 90 ? 'text-red-600' : 
-                                              bestScore >= 75 ? 'text-orange-500' : 
-                                              'text-green-600'
-                                            }`} />
-                                            <span className={`text-xs font-bold mt-1 ${
-                                              bestScore >= 90 ? 'text-red-600' : 
-                                              bestScore >= 75 ? 'text-orange-500' : 
-                                              'text-green-600'
-                                            }`}>
-                                              {Math.round(bestScore)}%
-                                            </span>
-                                          </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent className="max-w-xs">
-                                          <p className="font-semibold mb-1">✓ TEM Similar</p>
-                                          <p className="text-sm font-medium mb-2">{bestMatch.nome}</p>
-                                          <div className="text-xs space-y-1">
-                                            <p><strong>Score:</strong> {Math.round(bestScore)}%</p>
-                                            {bestMatch.categoria && <p><strong>Categoria:</strong> {bestMatch.categoria}</p>}
-                                            <p className="mt-2 pt-2 border-t">
-                                              {bestScore >= 90 ? '🔴 Concorrência DIRETA' :
-                                               bestScore >= 75 ? '🟠 Produto MUITO Similar' :
-                                               '🟢 Produto Similar'}
-                                            </p>
-                                          </div>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  ) : (
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <XCircle className="h-6 w-6 text-slate-400 dark:text-slate-600 mx-auto cursor-help" />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p className="text-xs">❌ Este concorrente NÃO tem produto similar</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  )}
+                        {/* 🔥 AGRUPAR POR CATEGORIA */}
+                        {allProductsGroupedByCategory().map(([categoria, data], catIdx) => {
+                          const isExpanded = expandedCategories[categoria] ?? false;
+                          const produtosTenant = data.produtos.filter(p => p.tenant);
+                          const produtosConcorrentes = data.produtos.filter(p => !p.tenant);
+                          const competitors = Array.from(new Set(competitorProducts.map(p => p.competitor_name)));
+                          
+                          return (
+                            <>
+                              {/* LINHA DA CATEGORIA (clicável) */}
+                              <TableRow 
+                                key={`cat-${catIdx}`}
+                                className="bg-primary/5 hover:bg-primary/10 cursor-pointer border-b-2"
+                                onClick={() => setExpandedCategories(prev => ({
+                                  ...prev,
+                                  [categoria]: !prev[categoria]
+                                }))}
+                              >
+                                <TableCell className="font-bold sticky left-0 bg-primary/10 z-10 border-r-2">
+                                  <div className="flex items-center gap-2">
+                                    {isExpanded ? (
+                                      <ChevronDown className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronUp className="h-4 w-4 rotate-180" />
+                                    )}
+                                    <Package className="h-4 w-4 text-primary" />
+                                    <span className="text-sm">{categoria} ({data.produtos.length})</span>
+                                  </div>
                                 </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        );
-                      })}
+                                <TableCell className="text-center bg-green-50 dark:bg-green-950/20 border-l-2 border-r-2 border-green-500">
+                                  <Badge variant="outline" className="text-xs">
+                                    {produtosTenant.length} prods
+                                  </Badge>
+                                </TableCell>
+                                {competitors.map((_, compIdx) => (
+                                  <TableCell key={compIdx} className="text-center bg-muted/30 border-r">
+                                    <Badge variant="outline" className="text-xs opacity-50">
+                                      {produtosConcorrentes.filter(p => p.concorrente === competitors[compIdx]).length}
+                                    </Badge>
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                              
+                              {/* LINHAS DOS PRODUTOS (quando expandido) */}
+                              {isExpanded && data.produtos.filter(p => p.tenant).map((produto, prodIdx) => {
+                                // Encontrar produto tenant completo
+                                const tenantProd = tenantProducts.find(tp => tp.nome === produto.nome);
+                                if (!tenantProd) return null;
+                                
+                                return (
+                                  <TableRow key={`prod-${catIdx}-${prodIdx}`} className="border-b hover:bg-muted/30">
+                                    <TableCell className="pl-8 sticky left-0 bg-background z-10 border-r-2">
+                                      <div className="flex items-start gap-2">
+                                        <div className="w-1 h-full bg-green-500 rounded" />
+                                        <div>
+                                          <p className="font-medium text-sm">{produto.nome}</p>
+                                          {produto.descricao && (
+                                            <p className="text-xs text-muted-foreground line-clamp-1">{produto.descricao}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    {/* Coluna TENANT - sempre TEM (✓ verde) */}
+                                    <TableCell className="text-center bg-green-50 dark:bg-green-950/10 border-l-2 border-r-2 border-green-500">
+                                      <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto" />
+                                    </TableCell>
+                                    {/* Colunas CONCORRENTES */}
+                                    {competitors.map((competitorName, compIdx) => {
+                                      // Buscar produtos deste concorrente
+                                      const competitorProds = competitorProducts.filter(cp => cp.competitor_name === competitorName);
+                                      
+                                      // 🔥 MATCHING POR SIMILARIDADE (não nome exato)
+                                      let bestMatch: any = null;
+                                      let bestScore = 0;
+                                      
+                                      competitorProds.forEach((cp) => {
+                                        const match = calculateProductMatch(tenantProd, cp);
+                                        if (match.score > bestScore && match.score >= 50) { // Threshold 50%
+                                          bestScore = match.score;
+                                          bestMatch = { ...cp, matchScore: match.score };
+                                        }
+                                      });
+                                      
+                                      return (
+                                        <TableCell key={compIdx} className="text-center border-r">
+                                          {bestMatch ? (
+                                            <TooltipProvider>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <div className="inline-flex flex-col items-center cursor-help">
+                                                    <CheckCircle2 className={`h-6 w-6 ${
+                                                      bestScore >= 90 ? 'text-red-600' : 
+                                                      bestScore >= 75 ? 'text-orange-500' : 
+                                                      'text-green-600'
+                                                    }`} />
+                                                    <span className={`text-xs font-bold mt-1 ${
+                                                      bestScore >= 90 ? 'text-red-600' : 
+                                                      bestScore >= 75 ? 'text-orange-500' : 
+                                                      'text-green-600'
+                                                    }`}>
+                                                      {Math.round(bestScore)}%
+                                                    </span>
+                                                  </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="max-w-xs">
+                                                  <p className="font-semibold mb-1">✓ TEM Similar</p>
+                                                  <p className="text-sm font-medium mb-2">{bestMatch.nome}</p>
+                                                  <div className="text-xs space-y-1">
+                                                    <p><strong>Score:</strong> {Math.round(bestScore)}%</p>
+                                                    <p className="mt-2 pt-2 border-t">
+                                                      {bestScore >= 90 ? '🔴 DIRETA' :
+                                                       bestScore >= 75 ? '🟠 MUITO Similar' :
+                                                       '🟢 Similar'}
+                                                    </p>
+                                                  </div>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                          ) : (
+                                            <TooltipProvider>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <XCircle className="h-5 w-5 text-slate-400 dark:text-slate-600 mx-auto cursor-help" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p className="text-xs">❌ NÃO tem</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                          )}
+                                        </TableCell>
+                                      );
+                                    })}
+                                  </TableRow>
+                                );
+                              })}
+                            </>
+                          );
+                        })}
                     </TableBody>
                   </Table>
                 </div>

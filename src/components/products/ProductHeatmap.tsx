@@ -248,20 +248,32 @@ export default function ProductHeatmap({
         </CollapsibleContent>
       </Card>
 
-      {/* Mapa de Calor por Concorrente */}
+      {/* Mapa de Calor por Concorrente - Com Dropdown */}
       <Card className="border-l-4 border-l-indigo-600 shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 bg-indigo-600/10 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
+        <CollapsibleTrigger className="w-full">
+          <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-indigo-50 hover:to-indigo-100/50 dark:hover:from-indigo-900/30 dark:hover:to-indigo-800/30 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-600/10 rounded-lg">
+                  <TrendingUp className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
+                </div>
+                <div className="text-left">
+                  <CardTitle className="text-slate-800 dark:text-slate-100">Intensidade por Concorrente</CardTitle>
+                  <CardDescription>
+                    Nível de sobreposição de portfólio com cada concorrente
+                  </CardDescription>
+                </div>
+              </div>
+              {isOpen ? (
+                <ChevronUp className="h-5 w-5 text-indigo-600" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-indigo-600" />
+              )}
             </div>
-            <span className="text-slate-800 dark:text-slate-100">Intensidade por Concorrente</span>
-          </CardTitle>
-          <CardDescription>
-            Nível de sobreposição de portfólio com cada concorrente
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-6">
           {competitorIntensity.length === 0 ? (
             <p className="text-sm text-muted-foreground italic text-center py-8">
               Nenhum concorrente com produtos cadastrados.
@@ -339,7 +351,8 @@ export default function ProductHeatmap({
               )}
             </div>
           )}
-        </CardContent>
+          </CardContent>
+        </CollapsibleContent>
       </Card>
 
       {/* Legenda do Mapa de Calor */}
