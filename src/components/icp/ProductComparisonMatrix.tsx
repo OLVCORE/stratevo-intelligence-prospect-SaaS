@@ -329,10 +329,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     compProds: CompetitorProduct[]
   ): ProductMatch[] => {
     console.time('[ProductComparison] ⏱️ Cálculo de matches');
-    console.log('[ProductComparison] 🔥 INICIANDO CÁLCULO COM NOVO ALGORITMO (Threshold: 50%)');
+    console.log('[ProductComparison] 🔥 CÁLCULO COM USO ESPECÍFICO (Threshold: 50%, Alta Concorrência: ≥90%)');
     
     const results = tenantProds.map(tenantProd => {
-      // 🔥 Score mínimo 50% (mais sensível - captura concorrência por categoria)
+      // 🔥 Score mínimo 50% (BALANCEADO - captura concorrência por uso específico)
       const matches = findBestMatches(tenantProd, compProds, 50);
       
       let matchType: 'exact' | 'similar' | 'unique' = 'unique';
@@ -340,7 +340,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
 
       if (matches.length > 0) {
         bestScore = matches[0].matchScore;
-        matchType = bestScore >= 90 ? 'exact' : 'similar';
+        matchType = bestScore >= 90 ? 'exact' : 'similar'; // Alta concorrência = 90%+
         
         // Log detalhado para produtos com alta concorrência
         if (bestScore >= 90) {
@@ -360,7 +360,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     const unicos = results.filter(r => r.matchType === 'unique').length;
     
     console.timeEnd('[ProductComparison] ⏱️ Cálculo de matches');
-    console.log(`[ProductComparison] 📊 RESULTADO: ${comConcorrencia} com alta concorrência, ${unicos} únicos`);
+    console.log(`[ProductComparison] 📊 RESULTADO: ${comConcorrencia} com concorrência direta (≥90%), ${unicos} únicos`);
     
     return results;
   };
@@ -375,7 +375,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const calcularAltaConcorrencia = () => {
     // Usar matches existente (não recalcular!)
     return matches
-      .filter(m => m.bestScore >= 90)
+      .filter(m => m.bestScore >= 90) // Alta concorrência = mesmo uso específico
       .map(m => ({
         produto: m.tenantProduct,
         matchesAltos: m.competitorProducts,
@@ -1019,9 +1019,9 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                         <AlertTriangle className="h-5 w-5 text-orange-700 dark:text-orange-500" />
                       </div>
                       <div className="text-left">
-                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Alta Concorrência (NOVO)</CardTitle>
+                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Alta Concorrência</CardTitle>
                         <CardDescription>
-                          Cálculo direto - Produtos com score &gt; 90%
+                          Produtos com concorrência direta - mesmo uso específico (score ≥ 90%)
                         </CardDescription>
                       </div>
                     </div>
@@ -1055,7 +1055,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                         <div className="text-center py-8">
                           <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-emerald-500/50" />
                           <p className="text-sm font-medium">
-                            ✅ Nenhum produto com concorrência &gt; 90%
+                            ✅ Nenhum produto com concorrência direta no mesmo uso específico
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Seus produtos têm aplicações diferenciadas
                           </p>
                         </div>
                       );

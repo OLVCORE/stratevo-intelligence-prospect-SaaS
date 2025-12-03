@@ -107,57 +107,79 @@ export function mapToStandardCategory(categoria?: string): string {
   
   const norm = normalize(categoria);
   
-  // 🔥 GRUPO 1: Proteção contra CORTE/PERFURAÇÃO
-  if (norm.includes('corte') || norm.includes('cut') || 
-      norm.includes('perfuracao') || norm.includes('perforation') ||
-      norm.includes('anticorte') || norm.includes('anti-cut')) {
-    return 'protecao-corte';
+  // 🔥 CATEGORIZAÇÃO ESPECÍFICA POR USO (não agrupar tudo!)
+  
+  // LUVAS - CORTE/PERFURAÇÃO
+  if ((norm.includes('luva') || norm.includes('glove')) && 
+      (norm.includes('corte') || norm.includes('cut') || 
+       norm.includes('perfuracao') || norm.includes('perforation'))) {
+    return 'luvas-corte';
   }
   
-  // 🔥 GRUPO 2: Proteção MECÂNICA/ABRASÃO
-  if (norm.includes('mecanica') || norm.includes('mechanical') ||
-      norm.includes('abrasao') || norm.includes('abrasion') ||
-      norm.includes('impacto') || norm.includes('impact')) {
-    return 'protecao-mecanica';
+  // LUVAS - TÉRMICA/SOLDA
+  if ((norm.includes('luva') || norm.includes('glove')) && 
+      (norm.includes('temperatura') || norm.includes('temperature') ||
+       norm.includes('termica') || norm.includes('thermal') ||
+       norm.includes('calor') || norm.includes('heat') ||
+       norm.includes('solda') || norm.includes('weld'))) {
+    return 'luvas-termica';
   }
   
-  // 🔥 GRUPO 3: Proteção TÉRMICA (calor/frio/temperatura)
-  if (norm.includes('temperatura') || norm.includes('temperature') ||
-      norm.includes('termica') || norm.includes('thermal') ||
-      norm.includes('calor') || norm.includes('heat') ||
-      norm.includes('frio') || norm.includes('cold') ||
-      norm.includes('solda') || norm.includes('weld')) {
-    return 'protecao-termica';
+  // LUVAS - QUÍMICA
+  if ((norm.includes('luva') || norm.includes('glove')) && 
+      (norm.includes('quimica') || norm.includes('chemical') ||
+       norm.includes('latex') || norm.includes('nitrilo'))) {
+    return 'luvas-quimica';
   }
   
-  // 🔥 GRUPO 4: Proteção QUÍMICA
-  if (norm.includes('quimica') || norm.includes('chemical') ||
-      norm.includes('latex') || norm.includes('nitrilo') || norm.includes('nitrile') ||
-      norm.includes('resistente') || norm.includes('resistant')) {
-    return 'protecao-quimica';
+  // LUVAS - MECÂNICA/ABRASÃO
+  if ((norm.includes('luva') || norm.includes('glove')) && 
+      (norm.includes('mecanica') || norm.includes('mechanical') ||
+       norm.includes('abrasao') || norm.includes('impacto'))) {
+    return 'luvas-mecanica';
   }
   
-  // 🔥 GRUPO 5: LUVAS genéricas
+  // LUVAS - GENÉRICAS (sem especificação)
   if (norm.includes('luva') || norm.includes('glove')) {
     return 'luvas-geral';
   }
   
-  // 🔥 GRUPO 6: CALÇADOS
-  if (norm.includes('calcado') || norm.includes('footwear') ||
-      norm.includes('bota') || norm.includes('boot') ||
-      norm.includes('sapato') || norm.includes('shoe')) {
+  // PROTEÇÃO CORTE (não-luva)
+  if (norm.includes('corte') || norm.includes('cut') || 
+      norm.includes('perfuracao') || norm.includes('perforation')) {
+    return 'protecao-corte';
+  }
+  
+  // PROTEÇÃO TÉRMICA (não-luva)
+  if (norm.includes('temperatura') || norm.includes('termica') ||
+      norm.includes('calor') || norm.includes('solda') || norm.includes('weld')) {
+    return 'protecao-termica';
+  }
+  
+  // PROTEÇÃO QUÍMICA (não-luva)
+  if (norm.includes('quimica') || norm.includes('chemical')) {
+    return 'protecao-quimica';
+  }
+  
+  // PROTEÇÃO MECÂNICA (não-luva)
+  if (norm.includes('mecanica') || norm.includes('mechanical') ||
+      norm.includes('abrasao') || norm.includes('impacto')) {
+    return 'protecao-mecanica';
+  }
+  
+  // CALÇADOS
+  if (norm.includes('calcado') || norm.includes('bota') || 
+      norm.includes('sapato') || norm.includes('boot')) {
     return 'calcados';
   }
   
-  // 🔥 GRUPO 7: VESTIMENTAS
-  if (norm.includes('vestimenta') || norm.includes('clothing') ||
-      norm.includes('roupa') || norm.includes('apparel') ||
-      norm.includes('avental') || norm.includes('apron') ||
-      norm.includes('jaleco') || norm.includes('coat')) {
+  // VESTIMENTAS
+  if (norm.includes('vestimenta') || norm.includes('roupa') ||
+      norm.includes('avental') || norm.includes('jaleco')) {
     return 'vestimentas';
   }
   
-  // 🔥 GRUPO 8: MANGOTES
+  // MANGOTES
   if (norm.includes('mangote') || norm.includes('sleeve')) {
     return 'mangotes';
   }
@@ -170,11 +192,15 @@ export function mapToStandardCategory(categoria?: string): string {
  */
 export function getStandardCategoryLabel(standardCategory: string): string {
   const labels: Record<string, string> = {
+    'luvas-corte': 'Luvas - Proteção contra Corte/Perfuração',
+    'luvas-termica': 'Luvas - Proteção Térmica (Calor/Solda)',
+    'luvas-quimica': 'Luvas - Proteção Química',
+    'luvas-mecanica': 'Luvas - Proteção Mecânica/Abrasão',
+    'luvas-geral': 'Luvas (Uso Geral)',
     'protecao-corte': 'Proteção contra Corte/Perfuração',
     'protecao-mecanica': 'Proteção Mecânica/Abrasão',
     'protecao-termica': 'Proteção Térmica (Calor/Frio/Solda)',
     'protecao-quimica': 'Proteção Química',
-    'luvas-geral': 'Luvas (Uso Geral)',
     'calcados': 'Calçados de Segurança',
     'vestimentas': 'Vestimentas de Proteção',
     'mangotes': 'Mangotes de Proteção',
@@ -197,13 +223,24 @@ function categorySimilarity(cat1?: string, cat2?: string): number {
   if (norm1 === norm2) return 100;
   if (norm1.includes(norm2) || norm2.includes(norm1)) return 80;
   
-  // 🔥 NOVO: Usar categorias padrão
+  // 🔥 CATEGORIZAÇÃO ESPECÍFICA POR USO
   const stdCat1 = mapToStandardCategory(cat1);
   const stdCat2 = mapToStandardCategory(cat2);
   
-  // Match de categoria padrão = 70% (alta correlação)
-  if (stdCat1 === stdCat2 && stdCat1 !== 'outros') {
-    return 70;
+  // 🔥 Match EXATO de categoria específica = 95% (CONCORRÊNCIA DIRETA!)
+  // Ex: "Luvas-Corte" vs "Luvas-Corte" = CONCORRENTES
+  if (stdCat1 === stdCat2 && stdCat1 !== 'outros' && stdCat1 !== 'luvas-geral') {
+    return 95;
+  }
+  
+  // 🔥 Categorias relacionadas mas diferentes = 50-70%
+  // Ex: "Luvas-Corte" vs "Luvas-Térmica" = RELACIONADAS mas NÃO concorrentes diretos
+  if (stdCat1.startsWith('luvas-') && stdCat2.startsWith('luvas-')) {
+    return 50; // Ambas são luvas, mas usos diferentes
+  }
+  
+  if (stdCat1.startsWith('protecao-') && stdCat2.startsWith('protecao-')) {
+    return 50; // Ambas são proteção, mas tipos diferentes
   }
   
   // Fallback: keyword similarity
@@ -222,24 +259,26 @@ export function calculateProductMatch(
   let totalScore = 0;
   let weights = 0;
   
-  // 🔥 DEBUG: Desabilitado para performance
-  const isDebugProduct = false; // product1.nome === 'Clean Cut Flex';
+  // 🔥 DEBUG: ATIVADO TEMPORARIAMENTE para verificar scores
+  const isDebugProduct = product1.nome.includes('Clean') || product1.nome.includes('Defender');
   
-  // 🔥 1. CATEGORIA (peso 40% - PRIORIDADE MÁXIMA)
-  // Se mesma categoria = base alta de competição
+  // 🔥 1. CATEGORIA ESPECÍFICA (peso 45% - BALANCEADO)
+  // Considera o USO específico, não apenas o tipo de EPI
   if (product1.categoria && product2.categoria) {
     const catScore = categorySimilarity(product1.categoria, product2.categoria);
-    totalScore += catScore * 0.4;
-    weights += 0.4;
+    totalScore += catScore * 0.45;
+    weights += 0.45;
     
     if (isDebugProduct && catScore > 0) {
-      console.log(`  ✅ Categoria Score: ${catScore}% (peso: 40%)`);
+      console.log(`  ✅ Categoria Score: ${catScore}% (peso: 45%)`);
     }
     
-    if (catScore === 100) {
-      reasons.push('✅ Mesma categoria');
-    } else if (catScore > 70) {
+    if (catScore >= 95) {
+      reasons.push('🔥 MESMO USO ESPECÍFICO (Concorrente Direto)');
+    } else if (catScore >= 70) {
       reasons.push('⚠️ Categoria similar');
+    } else if (catScore >= 50) {
+      reasons.push('ℹ️ Tipo relacionado (usos diferentes)');
     }
   } else {
     if (isDebugProduct) {
@@ -248,7 +287,7 @@ export function calculateProductMatch(
   }
   
   // 🔥 2. USO/FUNÇÃO (peso 35% - descrição + keywords)
-  // Comparar o QUE o produto FAZ
+  // Comparar o QUE o produto FAZ (CRÍTICO para diferenciar)
   const texto1 = `${product1.nome} ${product1.descricao || ''}`;
   const texto2 = `${product2.nome} ${product2.descricao || ''}`;
   
@@ -256,58 +295,68 @@ export function calculateProductMatch(
   totalScore += usoScore * 0.35;
   weights += 0.35;
   
-  if (usoScore > 80) reasons.push('🎯 Mesmo uso/função');
-  else if (usoScore > 60) reasons.push('🟡 Uso similar');
+  if (usoScore > 80) reasons.push('🎯 Mesma função/aplicação');
+  else if (usoScore > 60) reasons.push('🟡 Função similar');
   
-  // 🔥 3. NOME (peso 25% - menos importante)
+  // 🔥 3. NOME (peso 20% - menos importante ainda)
   const norm1 = normalize(product1.nome);
   const norm2 = normalize(product2.nome);
   
   if (norm1 === norm2) {
-    totalScore += 100 * 0.25;
-    weights += 0.25;
+    totalScore += 100 * 0.2; // Reduzido de 0.25 para 0.2
+    weights += 0.2;
     reasons.push('Nome idêntico');
   } else {
     const nomeScore = Math.max(
       levenshteinSimilarity(norm1, norm2),
       keywordSimilarity(product1.nome, product2.nome)
     );
-    totalScore += nomeScore * 0.25;
-    weights += 0.25;
+    totalScore += nomeScore * 0.2; // Reduzido de 0.25 para 0.2
+    weights += 0.2;
     
     if (nomeScore > 70) reasons.push('Nome similar');
   }
   
-  // 🔥 BOOST: Se categoria = "Luvas" + uso = "corte" → ALTA CONCORRÊNCIA
-  const cat1 = normalize(product1.categoria || '');
-  const cat2 = normalize(product2.categoria || '');
+  // 🔥 BOOST: Se ambos têm o MESMO USO ESPECÍFICO
+  const stdCat1 = mapToStandardCategory(product1.categoria || '');
+  const stdCat2 = mapToStandardCategory(product2.categoria || '');
   
-  if ((cat1.includes('luva') && cat2.includes('luva')) ||
-      (cat1.includes('glove') && cat2.includes('glove'))) {
-    // Ambos são luvas - verificar tipo
-    const tipo1 = normalize(texto1);
-    const tipo2 = normalize(texto2);
-    
-    const tiposComuns = [
-      'corte', 'perfuracao', 'cut', 
-      'temperatura', 'solda', 'weld',
-      'mecanica', 'mechanical',
-      'quimica', 'chemical'
-    ];
-    
-    for (const tipo of tiposComuns) {
-      if (tipo1.includes(tipo) && tipo2.includes(tipo)) {
-        totalScore += 20; // Boost de 20 pontos
-        reasons.push(`🔥 Mesmo tipo de luva: ${tipo}`);
-        break;
-      }
+  // Boost APENAS se for a mesma categoria específica (ex: luvas-corte vs luvas-corte)
+  if (stdCat1 === stdCat2 && stdCat1 !== 'outros' && stdCat1 !== 'luvas-geral' && !stdCat1.includes('protecao-')) {
+    totalScore += 10; // Boost moderado
+    reasons.push(`🎯 Mesmo uso específico confirmado`);
+  }
+  
+  // Verificar keywords de uso específico
+  const tipo1 = normalize(texto1);
+  const tipo2 = normalize(texto2);
+  
+  const tiposEspecificos = [
+    'corte', 'perfuracao', 'cut', 
+    'temperatura', 'solda', 'weld', 'termica',
+    'mecanica', 'abrasao', 'impacto',
+    'quimica', 'chemical', 'latex', 'nitrilo'
+  ];
+  
+  for (const tipo of tiposEspecificos) {
+    if (tipo1.includes(tipo) && tipo2.includes(tipo)) {
+      totalScore += 8; // Boost adicional por keyword específica
+      reasons.push(`⚡ Aplicação similar: ${tipo}`);
+      break;
     }
   }
   
   // Normalizar score final
   const finalScore = weights > 0 ? Math.min(100, totalScore / weights) : 0;
   
-  if (isDebugProduct && finalScore > 0) {
+  // 🔥 LOG CRÍTICO: Mostrar scores altos
+  if (finalScore >= 70) {
+    console.log(`✅ [MATCH ALTO] "${product1.nome}" vs "${product2.nome}"`);
+    console.log(`  📊 Score: ${Math.round(finalScore)}% | Total: ${totalScore.toFixed(1)} | Weights: ${weights}`);
+    console.log(`  📝 Razões:`, reasons);
+  }
+  
+  if (isDebugProduct && finalScore > 40) {
     console.log(`  📊 FINAL Score: ${Math.round(finalScore)}% | Weights: ${weights} | Total: ${totalScore}`);
     console.log(`  📝 Razões:`, reasons);
   }
