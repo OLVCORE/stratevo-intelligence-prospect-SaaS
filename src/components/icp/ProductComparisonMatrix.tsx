@@ -594,31 +594,62 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                     size="sm"
                     onClick={async () => {
                       setLoading(true);
-                      toast.info('Recalculando matches com novo algoritmo...');
+                      toast.info('🔄 Recalculando matches com novo algoritmo...');
                       try {
-                        // 🔥 Limpar banco
+                        // 🔥 PASSO 1: Limpar banco
                         await cleanDatabaseAndLoadCompetitors();
                         
-                        // 🔥 RECALCULAR matches imediatamente
-                        const { data: sessionData } = await supabase
-                          .from('onboarding_sessions' as any)
-                          .select('step1_data, step4_data')
+                        // 🔥 PASSO 2: RECARREGAR produtos do banco
+                        const { data: allProds } = await supabase
+                          .from('tenant_competitor_products' as any)
+                          .select('id, nome, descricao, categoria, competitor_name, competitor_cnpj')
                           .eq('tenant_id', tenant?.id)
-                          .order('updated_at', { ascending: false })
-                          .limit(1)
-                          .maybeSingle();
+                          .order('nome');
                         
-                        if (sessionData?.step1_data?.concorrentesDiretos) {
-                          const cnpjs = sessionData.step1_data.concorrentesDiretos.map((c: any) => 
-                            c.cnpj.replace(/\D/g, '')
-                          );
-                          setConcorrentesAtuais(cnpjs);
+                        if (!allProds) {
+                          toast.error('Erro ao carregar produtos');
+                          setLoading(false);
+                          return;
                         }
                         
+                        // 🔥 PASSO 3: Separar tenant vs concorrentes
+                        const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '');
+                        const tenantProds: TenantProduct[] = allProds
+                          .filter(p => tenantCNPJ && p.competitor_cnpj?.replace(/\D/g, '') === tenantCNPJ)
+                          .map(p => ({ id: p.id, nome: p.nome, descricao: p.descricao, categoria: p.categoria }));
+                        
+                        const compProds: CompetitorProduct[] = allProds
+                          .filter(p => p.competitor_cnpj && (!tenantCNPJ || p.competitor_cnpj?.replace(/\D/g, '') !== tenantCNPJ))
+                          .map(p => ({
+                            id: p.id,
+                            nome: p.nome,
+                            descricao: p.descricao,
+                            categoria: p.categoria,
+                            competitor_name: p.competitor_name,
+                            competitor_cnpj: p.competitor_cnpj,
+                          }));
+                        
+                        // 🔥 PASSO 4: RECALCULAR matches com NOVO algoritmo
+                        const newMatches = calculateMatches(tenantProds, compProds);
+                        
+                        // 🔥 PASSO 5: Atualizar estados
+                        setTenantProducts(tenantProds);
+                        setCompetitorProducts(compProds);
+                        setMatches(newMatches);
+                        
+                        console.log('🎯 RECALCULADO:', {
+                          tenant: tenantProds.length,
+                          concorrentes: compProds.length,
+                          matchesTotal: newMatches.length,
+                          comConcorrencia: newMatches.filter(m => m.bestScore >= 90).length,
+                          unicos: newMatches.filter(m => m.matchType === 'unique').length
+                        });
+                        
                         // Toast de sucesso
-                        toast.success('✅ Dados atualizados! Matches recalculados.');
+                        toast.success('✅ Matches recalculados com novo algoritmo!');
                         setLoading(false);
                       } catch (err) {
+                        console.error('Erro:', err);
                         setLoading(false);
                         toast.error('Erro ao atualizar');
                       }
