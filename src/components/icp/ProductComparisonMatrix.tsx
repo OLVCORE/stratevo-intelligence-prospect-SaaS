@@ -808,10 +808,15 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  setExpandedCategories(prev => ({
-                                    ...prev,
-                                    [categoria]: !prev[categoria]
-                                  }));
+                                  console.log(`[Dropdown] Clicou em "${categoria}" - Estado atual:`, isExpanded, '→ Novo estado:', !isExpanded);
+                                  setExpandedCategories(prev => {
+                                    const newState = {
+                                      ...prev,
+                                      [categoria]: !prev[categoria]
+                                    };
+                                    console.log('[Dropdown] Novo expandedCategories:', newState);
+                                    return newState;
+                                  });
                                 }}
                               >
                                 <TableCell className="font-bold sticky left-0 bg-primary/10 z-10 border-r-2">
