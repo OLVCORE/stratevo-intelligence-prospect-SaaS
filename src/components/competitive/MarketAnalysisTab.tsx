@@ -170,37 +170,41 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
         </div>
       ) : (
         <>
-          {/* 🔥 CONTADOR DE PRODUTOS - Visual e Profissional */}
+          {/* 🔥 MÉTRICAS - Design Corporativo Profissional */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 rounded-lg shadow-lg">
-              <p className="text-xs font-medium opacity-90">SEUS PRODUTOS</p>
-              <p className="text-3xl font-bold mt-1">{tenantProducts.length}</p>
-              <p className="text-xs opacity-75 mt-1">
-                {tenantProducts.length > 0 ? `${Math.round((tenantProducts.length / totalProdutos) * 100)}% do mercado` : 'Cadastre produtos'}
+            {/* Card 1: Seus Produtos */}
+            <div className="bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 text-white p-5 rounded-xl shadow-md border border-emerald-500/20">
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Seu Portfólio</p>
+              <p className="text-4xl font-bold mt-2">{tenantProducts.length}</p>
+              <p className="text-xs font-medium opacity-80 mt-2">
+                {tenantProducts.length > 0 ? `${Math.round((tenantProducts.length / totalProdutos) * 100)}% da amostra analisada` : 'Cadastre produtos'}
               </p>
             </div>
             
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-4 rounded-lg shadow-lg">
-              <p className="text-xs font-medium opacity-90">CONCORRENTES</p>
-              <p className="text-3xl font-bold mt-1">{totalCompetidores}</p>
-              <p className="text-xs opacity-75 mt-1">
-                {totalCompetidores > 0 ? 'empresas ativas' : 'Nenhum cadastrado'}
+            {/* Card 2: Concorrentes */}
+            <div className="bg-gradient-to-br from-slate-600/90 to-slate-700/90 text-white p-5 rounded-xl shadow-md border border-slate-500/20">
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Concorrentes Cadastrados</p>
+              <p className="text-4xl font-bold mt-2">{totalCompetidores}</p>
+              <p className="text-xs font-medium opacity-80 mt-2">
+                {totalCompetidores > 0 ? 'empresas no radar competitivo' : 'Nenhum cadastrado'}
               </p>
             </div>
             
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-lg shadow-lg">
-              <p className="text-xs font-medium opacity-90">PRODUTOS CONCORRENTES</p>
-              <p className="text-3xl font-bold mt-1">{competitorProducts.length}</p>
-              <p className="text-xs opacity-75 mt-1">
-                {competitorProducts.length > 0 ? `${Math.round((competitorProducts.length / totalProdutos) * 100)}% do mercado` : 'Aguarde extração'}
+            {/* Card 3: Produtos Concorrentes */}
+            <div className="bg-gradient-to-br from-sky-600/90 to-sky-700/90 text-white p-5 rounded-xl shadow-md border border-sky-500/20">
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Portfólio Concorrentes</p>
+              <p className="text-4xl font-bold mt-2">{competitorProducts.length}</p>
+              <p className="text-xs font-medium opacity-80 mt-2">
+                {competitorProducts.length > 0 ? `${Math.round((competitorProducts.length / totalProdutos) * 100)}% da amostra analisada` : 'Aguarde extração'}
               </p>
             </div>
             
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 rounded-lg shadow-lg">
-              <p className="text-xs font-medium opacity-90">TOTAL MERCADO</p>
-              <p className="text-3xl font-bold mt-1">{totalProdutos}</p>
-              <p className="text-xs opacity-75 mt-1">
-                {Array.from(new Set([...tenantProducts.map(p => p.categoria), ...competitorProducts.map(p => p.categoria)].filter(Boolean))).length} categorias
+            {/* Card 4: Mercado Analisado */}
+            <div className="bg-gradient-to-br from-indigo-600/90 to-indigo-700/90 text-white p-5 rounded-xl shadow-md border border-indigo-500/20">
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Amostra Competitiva</p>
+              <p className="text-4xl font-bold mt-2">{totalProdutos}</p>
+              <p className="text-xs font-medium opacity-80 mt-2">
+                produtos em {Array.from(new Set([...tenantProducts.map(p => p.categoria), ...competitorProducts.map(p => p.categoria)].filter(Boolean))).length} categorias analisadas
               </p>
             </div>
           </div>

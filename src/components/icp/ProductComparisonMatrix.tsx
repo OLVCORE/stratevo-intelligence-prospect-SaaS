@@ -597,13 +597,13 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       {/* ✅ TABELA POR CATEGORIA - ÚNICA FONTE DE VERDADE */}
       {tenantProducts.length > 0 && competitorProducts.length > 0 && (
         <Collapsible open={tabelaComparativaOpen} onOpenChange={setTabelaComparativaOpen}>
-          <Card className="border-2 border-primary/20">
+          <Card className="border-l-4 border-l-indigo-600/90 shadow-md">
             <CollapsibleTrigger className="w-full">
-              <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 cursor-pointer hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Target className="h-5 w-5 text-primary" />
+                    <CardTitle className="flex items-center gap-2 text-indigo-800 dark:text-indigo-100 font-semibold">
+                      <Target className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
                       Tabela Comparativa de Produtos (Por Categoria)
                     </CardTitle>
                     <CardDescription>
@@ -1057,16 +1057,16 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 🆕 NOVO: Seus Diferenciais (cálculo direto) */}
           <Collapsible open={diferenciaisOpen} onOpenChange={setDiferenciaisOpen}>
-            <Card className="border-l-4 border-l-emerald-600">
+            <Card className="border-l-4 border-l-emerald-600/90 shadow-md">
               <CollapsibleTrigger className="w-full">
-                <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-emerald-50 hover:to-emerald-100/50 dark:hover:from-emerald-900/30 dark:hover:to-emerald-800/30 transition-colors">
+                <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 cursor-pointer hover:from-emerald-50/60 hover:to-emerald-100/40 dark:hover:from-emerald-900/20 dark:hover:to-emerald-800/20 transition-all duration-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="p-2 bg-emerald-600/10 rounded-lg">
                         <Award className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />
                       </div>
                       <div className="text-left">
-                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Seus Diferenciais (NOVO)</CardTitle>
+                        <CardTitle className="text-lg text-emerald-800 dark:text-emerald-100 font-semibold">Seus Diferenciais</CardTitle>
                         <CardDescription>
                           Cálculo direto - Produtos sem concorrência (score &lt; 60%)
                         </CardDescription>
@@ -1122,16 +1122,16 @@ export function ProductComparisonMatrix({ icpId }: Props) {
 
           {/* 🆕 NOVO: Alta Concorrência (cálculo direto) */}
           <Collapsible open={altaConcorrenciaOpen} onOpenChange={setAltaConcorrenciaOpen}>
-            <Card className="border-l-4 border-l-orange-600">
+            <Card className="border-l-4 border-l-orange-600/90 shadow-md">
               <CollapsibleTrigger className="w-full">
-                <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-orange-50 hover:to-orange-100/50 dark:hover:from-orange-900/30 dark:hover:to-orange-800/30 transition-colors">
+                <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 cursor-pointer hover:from-orange-50/60 hover:to-orange-100/40 dark:hover:from-orange-900/20 dark:hover:to-orange-800/20 transition-all duration-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="p-2 bg-orange-600/10 rounded-lg">
                         <AlertTriangle className="h-5 w-5 text-orange-700 dark:text-orange-500" />
                       </div>
                       <div className="text-left">
-                        <CardTitle className="text-lg text-slate-800 dark:text-slate-100">🆕 Alta Concorrência</CardTitle>
+                        <CardTitle className="text-lg text-orange-800 dark:text-orange-100 font-semibold">Alta Concorrência</CardTitle>
                         <CardDescription>
                           Produtos com concorrência direta (score ≥ 60%)
                         </CardDescription>
@@ -1200,16 +1200,16 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       {/* Gaps de Portfólio (produtos que concorrentes têm e tenant não) - Collapsible */}
       {competitorProducts.length > 0 && (
         <Collapsible open={oportunidadesOpen} onOpenChange={setOportunidadesOpen}>
-          <Card className="border-l-4 border-l-blue-600">
+          <Card className="border-l-4 border-l-sky-600/90 shadow-md">
             <CollapsibleTrigger className="w-full">
-              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-blue-50 hover:to-blue-100/50 dark:hover:from-blue-900/30 dark:hover:to-blue-800/30 transition-colors">
+              <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 cursor-pointer hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="p-2 bg-blue-600/10 rounded-lg">
                       <Info className="h-5 w-5 text-blue-700 dark:text-blue-500" />
                     </div>
                     <div className="text-left">
-                      <CardTitle className="text-lg text-slate-800 dark:text-slate-100">Oportunidades de Expansão</CardTitle>
+                      <CardTitle className="text-lg text-sky-800 dark:text-sky-100 font-semibold">Oportunidades de Expansão</CardTitle>
                       <CardDescription>
                         Produtos populares entre concorrentes que você pode considerar adicionar
                       </CardDescription>

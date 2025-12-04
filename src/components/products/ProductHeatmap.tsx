@@ -97,16 +97,16 @@ export default function ProductHeatmap({
   return (
     <div className="space-y-6">
       {/* Mapa de Calor por Categoria - Com Gráfico */}
-      <Card className="border-l-4 border-l-orange-600 shadow-lg">
+      <Card className="border-l-4 border-l-orange-600/90 shadow-md">
         <CollapsibleTrigger className="w-full">
-          <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30 cursor-pointer hover:from-orange-50 hover:to-orange-100/50 dark:hover:from-orange-900/30 dark:hover:to-orange-800/30 transition-colors">
+          <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 cursor-pointer hover:from-orange-50/60 hover:to-orange-100/40 dark:hover:from-orange-900/20 dark:hover:to-orange-800/20 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-orange-600/10 rounded-lg">
                   <Flame className="h-5 w-5 text-orange-700 dark:text-orange-500" />
                 </div>
                 <div className="text-left">
-                  <CardTitle className="text-slate-800 dark:text-slate-100">Mapa de Calor por Categoria</CardTitle>
+                  <CardTitle className="text-orange-800 dark:text-orange-100 font-semibold">Mapa de Calor por Categoria</CardTitle>
                   <CardDescription>
                     Intensidade de competição em cada categoria de produto
                   </CardDescription>
