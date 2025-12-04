@@ -217,9 +217,16 @@ export default function CompetitiveAnalysis({
           .single();
         
         const concorrentesCadastro = session?.step1_data?.concorrentesDiretos || [];
-        console.log('[CompetitiveAnalysis] 📋 Concorrentes do cadastro:', concorrentesCadastro.length);
+        const tenantCadastro = session?.step1_data?.cnpjData || {};
         
-        // Criar mapa de dados extras por CNPJ
+        console.log('[CompetitiveAnalysis] 📋 Concorrentes do cadastro:', concorrentesCadastro.length);
+        console.log('[CompetitiveAnalysis] 🏢 Dados do Tenant:', {
+          cep: tenantCadastro.cep,
+          endereco: tenantCadastro.logradouro,
+          cidade: tenantCadastro.municipio,
+        });
+        
+        // Criar mapa de dados extras por CNPJ (CONCORRENTES)
         const dadosExtrasMap = concorrentesCadastro.reduce((acc: any, conc: any) => {
           const cnpjClean = conc.cnpj?.replace(/\D/g, '');
           if (cnpjClean) {
@@ -296,6 +303,22 @@ export default function CompetitiveAnalysis({
         setTenantProductsCount(totalTenantProducts);
         
         console.log('[CompetitiveAnalysis] ✅ Total enriquecido:', enrichedWithAddress.length, 'concorrentes');
+        
+        // 🔥 NOVO: Adicionar dados do tenant ao primeiro concorrente (para facilitar acesso)
+        if (enrichedWithAddress.length > 0) {
+          enrichedWithAddress[0] = {
+            ...enrichedWithAddress[0],
+            _tenantData: {
+              cep: tenantCadastro.cep,
+              endereco: tenantCadastro.logradouro,
+              numero: tenantCadastro.numero,
+              bairro: tenantCadastro.bairro,
+              cidade: tenantCadastro.municipio,
+              estado: tenantCadastro.uf,
+            }
+          } as any;
+        }
+        
         setEnrichedCompetitors(enrichedWithAddress);
       } catch (error) {
         console.error('[CompetitiveAnalysis] ❌ Erro ao carregar produtos:', error);
@@ -1044,7 +1067,25 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                 cidade: enrichedCompetitors[0]?.cidade || 'São Paulo',
                 estado: enrichedCompetitors[0]?.estado || 'SP',
                 capitalSocial: companyCapitalSocial,
-                produtosCount: tenantProductsCount
+                produtosCount: tenantProductsCount,
+                // 🔥 NOVO: Passar endereço completo do tenant para geocoding preciso
+                cep: (() => {
+                  // Buscar dos dados de onboarding_sessions
+                  const session = enrichedCompetitors[0] as any;
+                  return session?._tenantData?.cep || '';
+                })(),
+                endereco: (() => {
+                  const session = enrichedCompetitors[0] as any;
+                  return session?._tenantData?.endereco || '';
+                })(),
+                bairro: (() => {
+                  const session = enrichedCompetitors[0] as any;
+                  return session?._tenantData?.bairro || '';
+                })(),
+                numero: (() => {
+                  const session = enrichedCompetitors[0] as any;
+                  return session?._tenantData?.numero || '';
+                })(),
               }}
               isOpen={mapaCompetitivoOpen}
               onToggle={() => setMapaCompetitivoOpen(!mapaCompetitivoOpen)}

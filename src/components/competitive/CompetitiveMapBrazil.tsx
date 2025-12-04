@@ -65,6 +65,10 @@ interface CompetitiveMapBrazilProps {
     estado: string;
     capitalSocial?: number;
     produtosCount?: number;
+    cep?: string; // 🔥 NOVO: Para geocoding preciso
+    endereco?: string; // 🔥 NOVO: Logradouro
+    bairro?: string; // 🔥 NOVO: Bairro
+    numero?: string; // 🔥 NOVO: Número
   };
   isOpen?: boolean;
   onToggle?: () => void;
@@ -153,11 +157,178 @@ export default function CompetitiveMapBrazil({
 }: CompetitiveMapBrazilProps) {
   const [selectedCompetitor, setSelectedCompetitor] = useState<Competitor | null>(null);
   const [loading, setLoading] = useState(true);
+  const [geocodedLocations, setGeocodedLocations] = useState<Record<string, { lat: number; lng: number }>>({});
+  const [geocodingProgress, setGeocodingProgress] = useState({ current: 0, total: 0 });
 
+  // 🔥 FUNÇÃO: Geocoding preciso usando endereço completo
+  const geocodeAddress = async (comp: Competitor): Promise<{ lat: number; lng: number } | null> => {
+    // Prioridade 1: Endereço completo (CEP + logradouro + número)
+    if (comp.cep && comp.endereco) {
+      const enderecoCompleto = `${comp.endereco}${comp.numero ? ', ' + comp.numero : ''}, ${comp.bairro || ''}, ${comp.cidade}, ${comp.estado}, ${comp.cep}, Brazil`;
+      
+      try {
+        console.log(`[Map] 📍 Geocoding PRECISO para ${comp.razaoSocial}: ${enderecoCompleto}`);
+        
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?` +
+          `q=${encodeURIComponent(enderecoCompleto)}&` +
+          `format=json&` +
+          `limit=1&` +
+          `countrycodes=br&` +
+          `addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'StrateVO Intelligence Platform',
+            }
+          }
+        );
+        
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+          console.log(`[Map] ✅ Coordenadas EXATAS encontradas:`, coords);
+          return coords;
+        }
+      } catch (error) {
+        console.warn(`[Map] ⚠️ Erro ao geocode endereço completo:`, error);
+      }
+      
+      // Aguardar 1s para não sobrecarregar Nominatim (rate limit)
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Prioridade 2: Apenas CEP
+    if (comp.cep) {
+      try {
+        console.log(`[Map] 📍 Geocoding por CEP para ${comp.razaoSocial}: ${comp.cep}`);
+        
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?` +
+          `postalcode=${comp.cep.replace(/\D/g, '')}&` +
+          `country=Brazil&` +
+          `format=json&` +
+          `limit=1`,
+          {
+            headers: {
+              'User-Agent': 'StrateVO Intelligence Platform',
+            }
+          }
+        );
+        
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+          console.log(`[Map] ✅ Coordenadas por CEP encontradas:`, coords);
+          return coords;
+        }
+      } catch (error) {
+        console.warn(`[Map] ⚠️ Erro ao geocode CEP:`, error);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Prioridade 3: Fallback para cidade (coordenadas aproximadas)
+    const key = `${comp.cidade.toUpperCase()}-${comp.estado}`;
+    if (cityCoordinates[key]) {
+      console.log(`[Map] 📍 Usando coordenadas aproximadas da cidade: ${key}`);
+      return cityCoordinates[key];
+    }
+    
+    // Prioridade 4: Geocoding por cidade
+    try {
+      console.log(`[Map] 📍 Geocoding por cidade: ${comp.cidade}, ${comp.estado}`);
+      
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?` +
+        `city=${encodeURIComponent(comp.cidade)}&` +
+        `state=${encodeURIComponent(comp.estado)}&` +
+        `country=Brazil&` +
+        `format=json&` +
+        `limit=1`,
+        {
+          headers: {
+            'User-Agent': 'StrateVO Intelligence Platform',
+          }
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        console.log(`[Map] ✅ Coordenadas por cidade encontradas:`, coords);
+        return coords;
+      }
+    } catch (error) {
+      console.warn(`[Map] ⚠️ Erro ao geocode cidade:`, error);
+    }
+    
+    // Default: Brasília
+    console.log(`[Map] ⚠️ Usando coordenadas padrão (Brasília) para ${comp.razaoSocial}`);
+    return { lat: -15.7801, lng: -47.9292 };
+  };
+
+  // 🔥 EFEITO: Geocoding de todos os concorrentes e tenant ao abrir
   useEffect(() => {
-    // Simular geocoding (já temos coordenadas fixas)
-    setLoading(false);
-  }, []);
+    if (!isOpen) return;
+    
+    const performGeocoding = async () => {
+      setLoading(true);
+      setGeocodingProgress({ current: 0, total: competitors.length + (tenant ? 1 : 0) });
+      
+      const locations: Record<string, { lat: number; lng: number }> = {};
+      let current = 0;
+      
+      // Geocode tenant com endereço completo
+      if (tenant) {
+        current++;
+        setGeocodingProgress({ current, total: competitors.length + 1 });
+        
+        const tenantComp: Competitor = {
+          cnpj: tenant.cnpj,
+          razaoSocial: tenant.nome,
+          cidade: tenant.cidade,
+          estado: tenant.estado,
+          capitalSocial: tenant.capitalSocial || 0,
+          cep: tenant.cep, // 🔥 NOVO
+          endereco: tenant.endereco, // 🔥 NOVO
+          bairro: tenant.bairro, // 🔥 NOVO
+        };
+        
+        console.log('[Map] 🏢 Geocoding TENANT com endereço completo:', {
+          nome: tenant.nome,
+          cep: tenant.cep,
+          endereco: tenant.endereco,
+          cidade: tenant.cidade,
+        });
+        
+        const coords = await geocodeAddress(tenantComp);
+        if (coords) {
+          locations[tenant.cnpj] = coords;
+        }
+      }
+      
+      // Geocode concorrentes
+      for (const comp of competitors) {
+        current++;
+        setGeocodingProgress({ current, total: competitors.length + (tenant ? 1 : 0) });
+        
+        const coords = await geocodeAddress(comp);
+        if (coords) {
+          locations[comp.cnpj] = coords;
+        }
+      }
+      
+      console.log('[Map] ✅ Geocoding concluído:', locations);
+      setGeocodedLocations(locations);
+      setLoading(false);
+    };
+    
+    performGeocoding();
+  }, [isOpen, competitors, tenant]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -168,8 +339,14 @@ export default function CompetitiveMapBrazil({
   };
 
   const getCompetitorLocation = (comp: Competitor) => {
+    // 🔥 NOVO: Usar coordenadas geocoded se disponível
+    if (geocodedLocations[comp.cnpj]) {
+      return geocodedLocations[comp.cnpj];
+    }
+    
+    // Fallback para coordenadas fixas
     const key = `${comp.cidade.toUpperCase()}-${comp.estado}`;
-    return cityCoordinates[key] || { lat: -15.7801, lng: -47.9292 }; // Brasília default
+    return cityCoordinates[key] || { lat: -15.7801, lng: -47.9292 };
   };
 
   // Classificar nível de ameaça por capital
@@ -211,9 +388,21 @@ export default function CompetitiveMapBrazil({
           <CollapsibleContent>
             <CardContent className="pt-6">
               {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                  <span className="ml-3 text-muted-foreground">Carregando mapa...</span>
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
+                  <div className="text-center">
+                    <div className="font-semibold text-indigo-900 dark:text-indigo-100">
+                      🌍 Geocoding Preciso em Andamento...
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      Buscando coordenadas exatas via endereço completo (CEP + logradouro + número)
+                    </div>
+                    {geocodingProgress.total > 0 && (
+                      <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-2">
+                        📍 {geocodingProgress.current} de {geocodingProgress.total} empresas
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -247,8 +436,10 @@ export default function CompetitiveMapBrazil({
                       
                       {/* 🌟 PIN DO TENANT (PULSANTE E DESTACADO) */}
                       {tenant && (() => {
-                        const tenantKey = `${tenant.cidade.toUpperCase()}-${tenant.estado}`;
-                        const tenantLocation = cityCoordinates[tenantKey] || { lat: -23.5505, lng: -46.6333 };
+                        // 🔥 NOVO: Usar coordenadas geocoded (precisas)
+                        const tenantLocation = geocodedLocations[tenant.cnpj] || 
+                          cityCoordinates[`${tenant.cidade.toUpperCase()}-${tenant.estado}`] || 
+                          { lat: -23.5505, lng: -46.6333 };
                         
                         return (
                           <Marker
@@ -264,6 +455,18 @@ export default function CompetitiveMapBrazil({
                                 <p className="text-xs text-muted-foreground mt-1">
                                   📍 {tenant.cidade}, {tenant.estado}
                                 </p>
+                                {/* 🔥 NOVO: Indicador de precisão */}
+                                {geocodedLocations[tenant.cnpj] && (tenant.cep || tenant.endereco) && (
+                                  <p className="text-xs text-green-700 dark:text-green-300 mt-1 flex items-center gap-1">
+                                    <Navigation className="h-3 w-3" />
+                                    📍 Localização Precisa
+                                  </p>
+                                )}
+                                {geocodedLocations[tenant.cnpj] && !(tenant.cep || tenant.endereco) && (
+                                  <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 flex items-center gap-1">
+                                    ⚠️ Localização Aproximada
+                                  </p>
+                                )}
                                 <p className="text-xs font-semibold mt-2">
                                   📦 {tenant.produtosCount || 0} produtos
                                 </p>
@@ -409,17 +612,39 @@ export default function CompetitiveMapBrazil({
 
               {/* Localização Completa + Google Maps */}
               <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                <p className="text-xs text-muted-foreground mb-2">Localização Completa</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground">Localização Completa</p>
+                  {/* 🔥 NOVO: Indicador de precisão do geocoding */}
+                  {geocodedLocations[selectedCompetitor.cnpj] && (selectedCompetitor.cep || selectedCompetitor.endereco) && (
+                    <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950 border-green-500 text-green-700 dark:text-green-300">
+                      <Navigation className="h-3 w-3 mr-1" />
+                      📍 Localização Exata
+                    </Badge>
+                  )}
+                  {geocodedLocations[selectedCompetitor.cnpj] && !(selectedCompetitor.cep || selectedCompetitor.endereco) && (
+                    <Badge variant="outline" className="text-xs bg-orange-50 dark:bg-orange-950 border-orange-500 text-orange-700 dark:text-orange-300">
+                      ⚠️ Aproximada (cidade)
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm font-semibold flex items-start gap-1 mb-3">
                   <MapPin className="h-4 w-4 text-indigo-600 mt-0.5" />
                   <span>
                     {selectedCompetitor.endereco || 'Endereço não disponível'}
-                    {selectedCompetitor.bairro && `, ${selectedCompetitor.bairro}`}
+                    {selectedCompetitor.numero && `, ${selectedCompetitor.numero}`}
+                    {selectedCompetitor.bairro && ` - ${selectedCompetitor.bairro}`}
                     <br />
                     {selectedCompetitor.cidade}, {selectedCompetitor.estado}
                     {selectedCompetitor.cep && ` - CEP: ${selectedCompetitor.cep}`}
                   </span>
                 </p>
+                {/* 🔥 NOVO: Mostrar coordenadas exatas se disponível */}
+                {geocodedLocations[selectedCompetitor.cnpj] && (
+                  <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-2">
+                    🌍 Lat: {geocodedLocations[selectedCompetitor.cnpj].lat.toFixed(6)}, 
+                    Lng: {geocodedLocations[selectedCompetitor.cnpj].lng.toFixed(6)}
+                  </p>
+                )}
                 <Button 
                   size="sm" 
                   variant="outline"
