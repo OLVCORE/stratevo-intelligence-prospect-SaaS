@@ -437,7 +437,6 @@ export default function CompetitiveMapBrazil({
                   }
                 </p>
               </div>
-            </div>
 
               {/* Classificação de Ameaça */}
               <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 rounded-lg border-2 border-indigo-200 dark:border-indigo-800">
@@ -456,6 +455,7 @@ export default function CompetitiveMapBrazil({
                   </p>
                 </div>
               </div>
+            </div>
           </DialogContent>
         </Dialog>
       )}
