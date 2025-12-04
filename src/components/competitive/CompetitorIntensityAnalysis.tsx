@@ -12,7 +12,7 @@ import { AlertTriangle, TrendingUp, Shield, Target, Flame, Award, Info, ChevronD
 import { cn } from '@/lib/utils';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface CompetitorIntensityProps {
   tenantProducts: Array<{ nome: string; categoria?: string }>;
@@ -38,10 +38,32 @@ export default function CompetitorIntensityAnalysis({
   matches
 }: CompetitorIntensityProps) {
   
-  // Estados para dropdowns
-  const [radarOpen, setRadarOpen] = useState(false);
-  const [rankingOpen, setRankingOpen] = useState(false);
-  const [resumoOpen, setResumoOpen] = useState(false);
+  // Estados para dropdowns COM PERSISTÊNCIA
+  const [radarOpen, setRadarOpen] = useState(() => {
+    const saved = localStorage.getItem('competitorIntensity_radarOpen');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [rankingOpen, setRankingOpen] = useState(() => {
+    const saved = localStorage.getItem('competitorIntensity_rankingOpen');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [resumoOpen, setResumoOpen] = useState(() => {
+    const saved = localStorage.getItem('competitorIntensity_resumoOpen');
+    return saved ? JSON.parse(saved) : false;
+  });
+  
+  // Persistir estados no localStorage
+  useEffect(() => {
+    localStorage.setItem('competitorIntensity_radarOpen', JSON.stringify(radarOpen));
+  }, [radarOpen]);
+  
+  useEffect(() => {
+    localStorage.setItem('competitorIntensity_rankingOpen', JSON.stringify(rankingOpen));
+  }, [rankingOpen]);
+  
+  useEffect(() => {
+    localStorage.setItem('competitorIntensity_resumoOpen', JSON.stringify(resumoOpen));
+  }, [resumoOpen]);
   
   // 🔥 NOVO: Calcular SCORE DE AMEAÇA COMPOSTO para cada concorrente
   const calculateThreatScore = (competitorName: string) => {

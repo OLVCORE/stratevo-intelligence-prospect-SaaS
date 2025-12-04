@@ -46,10 +46,16 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
   const [matches, setMatches] = useState<ProductMatch[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Estados para dropdowns
-  const [swotOpen, setSwotOpen] = useState(true); // SWOT aberto por padrão
-  const [radarOpen, setRadarOpen] = useState(false);
-  const [rankingOpen, setRankingOpen] = useState(false);
+  // Estados para dropdowns COM PERSISTÊNCIA
+  const [swotOpen, setSwotOpen] = useState(() => {
+    const saved = localStorage.getItem('marketAnalysis_swotOpen');
+    return saved ? JSON.parse(saved) : true; // Aberto por padrão
+  });
+  
+  // Persistir estado do SWOT
+  useEffect(() => {
+    localStorage.setItem('marketAnalysis_swotOpen', JSON.stringify(swotOpen));
+  }, [swotOpen]);
 
   useEffect(() => {
     if (tenant?.id) {

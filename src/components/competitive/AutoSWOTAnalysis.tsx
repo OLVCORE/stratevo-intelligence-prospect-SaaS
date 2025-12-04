@@ -259,10 +259,10 @@ export default function AutoSWOTAnalysis({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
               {/* ✅ FORÇAS */}
-              <Card className="border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
+              <Card className="border-emerald-200/40 bg-slate-50/30 dark:bg-slate-900/40 dark:border-emerald-700/30">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                    <Shield className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                    <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     Forças (Strengths)
                   </CardTitle>
                 </CardHeader>
@@ -280,15 +280,15 @@ export default function AutoSWOTAnalysis({
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <p className="text-sm font-semibold">{f.categoria}</p>
-                                <Badge className="bg-green-600 text-white text-[10px]">
+                                <Badge className="bg-emerald-600/90 text-white text-[10px]">
                                   {f.tipo}
                                 </Badge>
                               </div>
                               <p className="text-xs text-muted-foreground">
                                 {f.quantidade} produto{f.quantidade > 1 ? 's' : ''} SEM NENHUM concorrente direto
                               </p>
-                              <p className="text-xs text-green-700 dark:text-green-400 mt-1 font-medium flex items-center gap-1">
-                                <Award className="h-3 w-3" />
+                              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 font-medium flex items-center gap-1">
+                                <Award className="h-3 w-3 text-emerald-600" />
                                 Posição de liderança exclusiva - Capacidade de pricing premium
                               </p>
                             </div>
@@ -301,10 +301,10 @@ export default function AutoSWOTAnalysis({
               </Card>
 
               {/* ❌ FRAQUEZAS */}
-              <Card className="border-red-500/30 bg-red-50/50 dark:bg-red-950/20">
+              <Card className="border-rose-200/40 bg-slate-50/30 dark:bg-slate-900/40 dark:border-rose-700/30">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
-                    <XCircle className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+                    <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                     Fraquezas (Weaknesses)
                   </CardTitle>
                 </CardHeader>
@@ -324,7 +324,7 @@ export default function AutoSWOTAnalysis({
                                 <p className="text-sm font-semibold">{f.categoria}</p>
                                 <Badge className={cn(
                                   "text-white text-[10px]",
-                                  f.severidade === 'CRÍTICA' ? 'bg-red-700' : 'bg-red-600'
+                                  f.severidade === 'CRÍTICA' ? 'bg-rose-700/90' : 'bg-rose-600/90'
                                 )}>
                                   {f.severidade}
                                 </Badge>
@@ -335,7 +335,7 @@ export default function AutoSWOTAnalysis({
                                   : `Portfólio de ${f.produtos} produtos vs média de ${Math.round(mediaProdutosConcorrente)} dos concorrentes.`
                                 }
                               </p>
-                              <p className="text-xs text-red-700 dark:text-red-400 mt-1 font-medium">
+                              <p className="text-xs text-rose-700 dark:text-rose-400 mt-1 font-medium">
                                 ⚠️ {f.tipo === 'AUSÊNCIA CRÍTICA' 
                                   ? 'Perda de receita potencial + risco de irrelevância'
                                   : 'Limitações em escala, barganha e investimento em P&D'
@@ -351,10 +351,10 @@ export default function AutoSWOTAnalysis({
               </Card>
 
               {/* 💡 OPORTUNIDADES */}
-              <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+              <Card className="border-sky-200/40 bg-slate-50/30 dark:bg-slate-900/40 dark:border-sky-700/30">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                    <Lightbulb className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-sky-700 dark:text-sky-400">
+                    <Lightbulb className="h-5 w-5 text-sky-600 dark:text-sky-400" />
                     Oportunidades (Opportunities)
                   </CardTitle>
                 </CardHeader>
@@ -374,9 +374,9 @@ export default function AutoSWOTAnalysis({
                                 <p className="text-sm font-semibold">{o.categoria}</p>
                                 <Badge className={cn(
                                   "text-white text-[10px]",
-                                  o.potencial === 'ALTO' ? 'bg-blue-700' :
-                                  o.potencial === 'MÉDIO' ? 'bg-blue-500' :
-                                  'bg-blue-400'
+                                  o.potencial === 'ALTO' ? 'bg-sky-700/90' :
+                                  o.potencial === 'MÉDIO' ? 'bg-sky-600/90' :
+                                  'bg-sky-500/90'
                                 )}>
                                   {o.potencial}
                                 </Badge>
@@ -384,7 +384,7 @@ export default function AutoSWOTAnalysis({
                               <p className="text-xs text-muted-foreground">
                                 {o.empresas} concorrente{o.empresas > 1 ? 's' : ''} com {o.produtos} produto{o.produtos > 1 ? 's' : ''} ativos
                               </p>
-                              <p className="text-xs text-blue-700 dark:text-blue-400 mt-1 font-medium">
+                              <p className="text-xs text-sky-700 dark:text-sky-400 mt-1 font-medium">
                                 🎯 {o.razao} - Entrada estratégica recomendada
                               </p>
                             </div>
@@ -397,10 +397,10 @@ export default function AutoSWOTAnalysis({
               </Card>
 
               {/* ⚠️ AMEAÇAS */}
-              <Card className="border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
+              <Card className="border-orange-200/40 bg-slate-50/30 dark:bg-slate-900/40 dark:border-orange-700/30">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                    <Flame className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                    <Flame className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                     Ameaças (Threats)
                   </CardTitle>
                 </CardHeader>
@@ -420,10 +420,10 @@ export default function AutoSWOTAnalysis({
                                 <p className="text-sm font-semibold">{a.tipo}</p>
                                 <Badge className={cn(
                                   "text-white text-[10px]",
-                                  a.urgencia === 'CRÍTICA' ? 'bg-red-700' :
-                                  a.urgencia === 'ALTA' ? 'bg-orange-600' :
-                                  a.urgencia === 'MÉDIA' ? 'bg-yellow-600' :
-                                  'bg-blue-500'
+                                  a.urgencia === 'CRÍTICA' ? 'bg-rose-700/90' :
+                                  a.urgencia === 'ALTA' ? 'bg-orange-600/90' :
+                                  a.urgencia === 'MÉDIA' ? 'bg-amber-600/90' :
+                                  'bg-slate-500/90'
                                 )}>
                                   {a.urgencia}
                                 </Badge>
