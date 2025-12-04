@@ -45,6 +45,11 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
   const [competitorProducts, setCompetitorProducts] = useState<CompetitorProduct[]>([]);
   const [matches, setMatches] = useState<ProductMatch[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estados para dropdowns
+  const [swotOpen, setSwotOpen] = useState(true); // SWOT aberto por padrão
+  const [radarOpen, setRadarOpen] = useState(false);
+  const [rankingOpen, setRankingOpen] = useState(false);
 
   useEffect(() => {
     if (tenant?.id) {
@@ -140,15 +145,17 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
         </div>
       ) : (
         <>
-          {/* 🔥 1. Análise Multidimensional de Ameaça (Top 5) + Ranking + Resumo */}
-          <CompetitorIntensityAnalysis
+          {/* 🔥 1. SWOT AUTOMÁTICO (PRIMEIRO) */}
+          <AutoSWOTAnalysis
             tenantProducts={tenantProducts}
             competitorProducts={competitorProducts}
             matches={matches}
+            isOpen={swotOpen}
+            onToggle={() => setSwotOpen(!swotOpen)}
           />
 
-          {/* 🔥 2. Análise SWOT Automática */}
-          <AutoSWOTAnalysis
+          {/* 🔥 2. Análise Multidimensional de Ameaça (Top 5) + Ranking + Resumo */}
+          <CompetitorIntensityAnalysis
             tenantProducts={tenantProducts}
             competitorProducts={competitorProducts}
             matches={matches}
