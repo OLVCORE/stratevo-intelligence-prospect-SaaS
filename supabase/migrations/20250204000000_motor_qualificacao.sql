@@ -7,7 +7,7 @@
 CREATE TABLE IF NOT EXISTS prospect_qualification_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  icp_id uuid REFERENCES icp(id), -- ICP usado como referência
+  icp_id uuid, -- ICP usado como referência (opcional - sem foreign key)
   
   -- Metadados do job
   job_name text NOT NULL, -- Nome do lote (ex: "Prospecção Indústrias SP Jan/2025")
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS qualified_prospects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   job_id uuid REFERENCES prospect_qualification_jobs(id) ON DELETE CASCADE,
-  icp_id uuid REFERENCES icp(id),
+  icp_id uuid, -- ICP usado como referência (opcional - sem foreign key)
   
   -- Dados básicos da empresa
   cnpj text NOT NULL,
