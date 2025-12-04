@@ -257,26 +257,26 @@ export default function CommandCenter() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-4 items-center">
+            <div className="grid grid-cols-7 gap-6 items-center">
               {/* ETAPA 1: IMPORTADAS */}
               <div 
                 className="relative group cursor-pointer rounded-lg border-l-4 border-l-sky-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200"
                 onClick={() => navigate('/companies')}
               >
-                <div className="p-4 space-y-3">
+                <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <Database className="h-6 w-6 text-sky-700 dark:text-sky-500" />
-                    <Badge className="bg-sky-600/90 text-white text-base">
+                    <Database className="h-7 w-7 text-sky-700 dark:text-sky-500" />
+                    <Badge className="bg-sky-600/90 text-white text-lg px-3 py-1">
                       {metrics.totalImported}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sky-800 dark:text-sky-100">Importadas</h3>
-                    <p className="text-xs text-muted-foreground">Total no sistema</p>
+                    <h3 className="font-bold text-base text-sky-800 dark:text-sky-100">Importadas</h3>
+                    <p className="text-sm text-muted-foreground">Total no sistema</p>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-sky-700 dark:text-sky-400 hover:text-sky-800 hover:bg-sky-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-sm font-medium text-sky-700 dark:text-sky-400 hover:text-sky-800 hover:bg-sky-600/10">
                     Ver Todas
-                    <ArrowRight className="ml-2 h-3 w-3" />
+                    <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -291,26 +291,26 @@ export default function CommandCenter() {
                 className="relative group cursor-pointer rounded-lg border-l-4 border-l-orange-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-orange-50/60 hover:to-orange-100/40 dark:hover:from-orange-900/20 dark:hover:to-orange-800/20 transition-all duration-200"
                 onClick={() => navigate('/leads/icp-quarantine')}
               >
-                <div className="p-4 space-y-3">
+                <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <Filter className="h-6 w-6 text-orange-700 dark:text-orange-500" />
-                    <Badge className="bg-orange-600/90 text-white text-base">
+                    <Filter className="h-7 w-7 text-orange-700 dark:text-orange-500" />
+                    <Badge className="bg-orange-600/90 text-white text-lg px-3 py-1">
                       {metrics.inQuarantine}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-orange-800 dark:text-orange-100">Quarentena ICP</h3>
-                    <p className="text-xs text-muted-foreground">Análise pendente</p>
+                    <h3 className="font-bold text-base text-orange-800 dark:text-orange-100">Quarentena ICP</h3>
+                    <p className="text-sm text-muted-foreground">Análise pendente</p>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Taxa aprovação:</span>
-                    <span className="font-semibold text-orange-700 dark:text-orange-400">
+                    <span className="font-bold text-orange-700 dark:text-orange-400">
                       {metrics.conversionRate.quarantineToApproved}%
                     </span>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-orange-700 dark:text-orange-400 hover:text-orange-800 hover:bg-orange-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-sm font-medium text-orange-700 dark:text-orange-400 hover:text-orange-800 hover:bg-orange-600/10">
                     Analisar
-                    <ArrowRight className="ml-2 h-3 w-3" />
+                    <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -325,26 +325,26 @@ export default function CommandCenter() {
                 className="relative group cursor-pointer rounded-lg border-l-4 border-l-emerald-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-emerald-50/60 hover:to-emerald-100/40 dark:hover:from-emerald-900/20 dark:hover:to-emerald-800/20 transition-all duration-200"
                 onClick={() => navigate('/leads/approved')}
               >
-                <div className="p-4 space-y-3">
+                <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <CheckCircle2 className="h-6 w-6 text-emerald-700 dark:text-emerald-500" />
-                    <Badge className="bg-emerald-600/90 text-white text-base">
+                    <CheckCircle2 className="h-7 w-7 text-emerald-700 dark:text-emerald-500" />
+                    <Badge className="bg-emerald-600/90 text-white text-lg px-3 py-1">
                       {metrics.approved}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-emerald-800 dark:text-emerald-100">Aprovadas</h3>
-                    <p className="text-xs text-muted-foreground">Prontas para vendas</p>
+                    <h3 className="font-bold text-base text-emerald-800 dark:text-emerald-100">Aprovadas</h3>
+                    <p className="text-sm text-muted-foreground">Prontas para vendas</p>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Conv. Pipeline:</span>
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
                       {metrics.conversionRate.approvedToPipeline}%
                     </span>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 hover:bg-emerald-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 hover:bg-emerald-600/10">
                     Criar Deals
-                    <ArrowRight className="ml-2 h-3 w-3" />
+                    <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -359,26 +359,26 @@ export default function CommandCenter() {
                 className="relative group cursor-pointer rounded-lg border-l-4 border-l-indigo-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200"
                 onClick={() => navigate('/sdr/workspace')}
               >
-                <div className="p-4 space-y-3">
+                <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <Zap className="h-6 w-6 text-indigo-700 dark:text-indigo-500" />
-                    <Badge className="bg-indigo-600/90 text-white text-base">
+                    <Zap className="h-7 w-7 text-indigo-700 dark:text-indigo-500" />
+                    <Badge className="bg-indigo-600/90 text-white text-lg px-3 py-1">
                       {metrics.inPipeline}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-indigo-800 dark:text-indigo-100">Pipeline Ativo</h3>
-                    <p className="text-xs text-muted-foreground">Em negociação</p>
+                    <h3 className="font-bold text-base text-indigo-800 dark:text-indigo-100">Pipeline Ativo</h3>
+                    <p className="text-sm text-muted-foreground">Em negociação</p>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Taxa global:</span>
-                    <span className="font-semibold text-indigo-700 dark:text-indigo-400">
+                    <span className="font-bold text-indigo-700 dark:text-indigo-400">
                       {metrics.conversionRate.overall}%
                     </span>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-indigo-700 dark:text-indigo-400 hover:text-indigo-800 hover:bg-indigo-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-sm font-medium text-indigo-700 dark:text-indigo-400 hover:text-indigo-800 hover:bg-indigo-600/10">
                     Abrir Workspace
-                    <ArrowRight className="ml-2 h-3 w-3" />
+                    <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
               </div>

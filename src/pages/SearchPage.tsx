@@ -1446,11 +1446,13 @@ export default function SearchPage() {
                       </div>
                     )}
                   </div>
-                  <CardDescription className="space-y-1 pt-2">
+                  <CardDescription className="space-y-2 pt-2">
                     {previewData.company.cnpj && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">CNPJ:</span>
-                        <span className="text-sm font-mono font-semibold">{previewData.company.cnpj}</span>
+                      <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
+                        <span className="text-sm font-medium text-muted-foreground">CNPJ:</span>
+                        <span className="text-xl font-mono font-bold text-indigo-700 dark:text-indigo-400">
+                          {previewData.company.cnpj}
+                        </span>
                       </div>
                     )}
                     {previewData.company.website && (
@@ -1526,35 +1528,44 @@ export default function SearchPage() {
                   {/* Situação Cadastral */}
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Situação Cadastral</CardTitle>
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        Situação Cadastral
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2 text-xs">
-                      {previewData.company.raw_data?.receita?.situacao && (
-                        <div>
-                          <span className="text-muted-foreground">Status:</span>
-                          <Badge 
-                            className={`ml-2 ${
-                              previewData.company.raw_data.receita.situacao === 'ATIVA' 
-                                ? 'bg-green-500 hover:bg-green-600 text-white border-green-600' 
-                                : previewData.company.raw_data.receita.situacao === 'ALERTA'
-                                ? 'bg-yellow-500 hover:bg-yellow-600 text-white border-yellow-600'
-                                : 'bg-red-500 hover:bg-red-600 text-white border-red-600'
-                            }`}
-                          >
-                            {previewData.company.raw_data.receita.situacao}
-                          </Badge>
-                        </div>
-                      )}
-                      {previewData.company.raw_data?.receita?.data_situacao && (
-                        <div>
-                          <span className="text-muted-foreground">Data:</span>
-                          <p className="font-medium">{previewData.company.raw_data.receita.data_situacao}</p>
-                        </div>
-                      )}
+                    <CardContent className="space-y-3 text-xs">
+                      {/* 🔥 SEMPRE MOSTRAR */}
+                      <div>
+                        <span className="text-muted-foreground">Status:</span>
+                        <Badge 
+                          className={`ml-2 ${
+                            previewData.company.raw_data?.receita?.situacao === 'ATIVA' 
+                              ? 'bg-emerald-500 text-white' 
+                              : 'bg-rose-500 text-white'
+                          }`}
+                        >
+                          {previewData.company.raw_data?.receita?.situacao || 'N/A'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Data Situação:</span>
+                        <p className="font-medium">{previewData.company.raw_data?.receita?.data_situacao || 'N/A'}</p>
+                      </div>
                       {previewData.company.raw_data?.receita?.motivo_situacao && (
                         <div>
                           <span className="text-muted-foreground">Motivo:</span>
-                          <p className="font-medium text-[10px]">{previewData.company.raw_data.receita.motivo_situacao}</p>
+                          <p className="font-medium text-[11px]">{previewData.company.raw_data.receita.motivo_situacao}</p>
+                        </div>
+                      )}
+                      {previewData.company.raw_data?.receita?.situacao_especial && (
+                        <div>
+                          <span className="text-muted-foreground">Situação Especial:</span>
+                          <p className="font-medium text-orange-600">{previewData.company.raw_data.receita.situacao_especial}</p>
+                          {previewData.company.raw_data.receita.data_situacao_especial && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Desde: {previewData.company.raw_data.receita.data_situacao_especial}
+                            </p>
+                          )}
                         </div>
                       )}
                     </CardContent>
@@ -1563,34 +1574,40 @@ export default function SearchPage() {
                   {/* Regimes Especiais */}
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Regimes Especiais</CardTitle>
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Scale className="h-4 w-4" />
+                        Regimes Especiais
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2 text-xs">
-                      {previewData.company.raw_data?.receita?.simples && (
-                        <div>
-                          <span className="text-muted-foreground">Simples Nacional:</span>
-                          <Badge variant={previewData.company.raw_data.receita.simples.optante ? 'default' : 'secondary'} className="ml-2 text-[10px]">
-                            {previewData.company.raw_data.receita.simples.optante ? 'Optante' : 'Não Optante'}
-                          </Badge>
-                          {previewData.company.raw_data.receita.simples.data_opcao && (
-                            <p className="text-[10px] text-muted-foreground mt-1">Desde: {previewData.company.raw_data.receita.simples.data_opcao}</p>
-                          )}
-                        </div>
-                      )}
-                      {previewData.company.raw_data?.receita?.simei && (
-                        <div>
-                          <span className="text-muted-foreground">MEI (Simei):</span>
-                          <Badge variant={previewData.company.raw_data.receita.simei.optante ? 'default' : 'secondary'} className="ml-2 text-[10px]">
-                            {previewData.company.raw_data.receita.simei.optante ? 'Optante' : 'Não Optante'}
-                          </Badge>
-                        </div>
-                      )}
-                      {previewData.company.raw_data?.receita?.efr && (
-                        <div>
-                          <span className="text-muted-foreground">EFR:</span>
-                          <p className="font-medium">{previewData.company.raw_data.receita.efr}</p>
-                        </div>
-                      )}
+                    <CardContent className="space-y-3 text-xs">
+                      {/* 🔥 SEMPRE MOSTRAR */}
+                      <div>
+                        <span className="text-muted-foreground">Simples Nacional:</span>
+                        <Badge 
+                          variant={previewData.company.raw_data?.receita?.simples?.optante ? 'default' : 'secondary'} 
+                          className="ml-2 text-[11px]"
+                        >
+                          {previewData.company.raw_data?.receita?.simples?.optante ? 'Optante' : 'Não Optante'}
+                        </Badge>
+                        {previewData.company.raw_data?.receita?.simples?.data_opcao && (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            Desde: {previewData.company.raw_data.receita.simples.data_opcao}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">MEI (Simei):</span>
+                        <Badge 
+                          variant={previewData.company.raw_data?.receita?.simei?.optante ? 'default' : 'secondary'} 
+                          className="ml-2 text-[11px]"
+                        >
+                          {previewData.company.raw_data?.receita?.simei?.optante ? 'Optante' : 'Não Optante'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">EFR:</span>
+                        <p className="font-medium">{previewData.company.raw_data?.receita?.efr || 'N/A'}</p>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -1643,50 +1660,80 @@ export default function SearchPage() {
                   {/* Contato */}
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Contato</CardTitle>
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Contato
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2 text-xs">
-                      {previewData.company.raw_data?.receita?.email && (
+                    <CardContent className="space-y-3 text-xs">
+                      {/* 🔥 SEMPRE MOSTRAR */}
+                      <div>
+                        <span className="text-muted-foreground">Email:</span>
+                        <p className="font-mono text-[11px] break-all">
+                          {previewData.company.raw_data?.receita?.email || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Telefone:</span>
+                        <p className="font-medium text-sm">
+                          {previewData.company.raw_data?.receita?.telefone || 'N/A'}
+                        </p>
+                      </div>
+                      {previewData.company.website && (
                         <div>
-                          <span className="text-muted-foreground">Email:</span>
-                          <p className="font-mono text-[10px]">{previewData.company.raw_data.receita.email}</p>
-                        </div>
-                      )}
-                      {previewData.company.raw_data?.receita?.telefone && (
-                        <div>
-                          <span className="text-muted-foreground">Telefone:</span>
-                          <p className="font-medium">{previewData.company.raw_data.receita.telefone}</p>
+                          <span className="text-muted-foreground">Website:</span>
+                          <a 
+                            href={previewData.company.website} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-sky-600 hover:underline text-[11px] block break-all"
+                          >
+                            {previewData.company.website}
+                          </a>
                         </div>
                       )}
                     </CardContent>
                   </Card>
 
                   {/* QSA - Quadro de Sócios */}
-                  {previewData.company.raw_data?.receita?.qsa && previewData.company.raw_data.receita.qsa.length > 0 && (
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm">Quadro de Sócios e Administradores</CardTitle>
-                      </CardHeader>
-                      <CardContent>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Quadro de Sócios e Administradores
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {previewData.company.raw_data?.receita?.qsa && previewData.company.raw_data.receita.qsa.length > 0 ? (
                         <div className="space-y-2 max-h-[240px] overflow-y-auto">
                           {previewData.company.raw_data.receita.qsa.map((socio: any, idx: number) => (
-                            <div key={idx} className="p-2 rounded border bg-muted/30">
-                              <p className="font-medium text-xs">{socio.nome}</p>
-                              <Badge variant="outline" className="text-[10px] mt-1">{socio.qual}</Badge>
+                            <div key={idx} className="p-3 rounded-lg border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20">
+                              <p className="font-bold text-sm text-indigo-900 dark:text-indigo-100">
+                                {socio.nome || socio.nome_socio}
+                              </p>
+                              <Badge variant="outline" className="text-[11px] mt-2 bg-indigo-100 dark:bg-indigo-900 border-indigo-400">
+                                {socio.qual || socio.qualificacao}
+                              </Badge>
                               {socio.pais_origem && socio.pais_origem !== 'BRASIL' && (
-                                <p className="text-[10px] text-muted-foreground mt-1">País: {socio.pais_origem}</p>
+                                <p className="text-[11px] text-muted-foreground mt-2">
+                                  🌍 País: {socio.pais_origem}
+                                </p>
                               )}
                               {socio.nome_rep_legal && (
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  Rep. Legal: {socio.nome_rep_legal} ({socio.qual_rep_legal})
+                                <p className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-2">
+                                  👤 Rep. Legal: {socio.nome_rep_legal} ({socio.qual_rep_legal})
                                 </p>
                               )}
                             </div>
                           ))}
                         </div>
-                      </CardContent>
-                    </Card>
-                  )}
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-4 text-center">
+                          Nenhum sócio registrado na Receita Federal
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
 
                 {/* Coluna 3 - Atividades e Scores */}
