@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
-import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1311,6 +1311,29 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                   <p className="font-medium text-foreground">{cnpjData.atividade_principal[0].code} - {cnpjData.atividade_principal[0].text}</p>
                 </div>
               )}
+              {/* 🔥 NOVO: CEP e Endereço Completo */}
+              {cnpjData.cep && (
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground text-xs">CEP:</span>
+                    <p className="font-medium text-foreground">{cnpjData.cep}</p>
+                  </div>
+                </div>
+              )}
+              {cnpjData.logradouro && (
+                <div className="col-span-2">
+                  <span className="text-muted-foreground text-xs">Endereço Completo:</span>
+                  <p className="font-medium text-foreground flex items-start gap-1.5">
+                    <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <span>
+                      {cnpjData.logradouro}
+                      {cnpjData.numero && `, ${cnpjData.numero}`}
+                      {cnpjData.bairro && ` - ${cnpjData.bairro}`}
+                    </span>
+                  </p>
+                </div>
+              )}
             </div>
               </CardContent>
             </CollapsibleContent>
@@ -1769,6 +1792,29 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                       <div className="col-span-2 md:col-span-3">
                         <span className="text-muted-foreground">Descrição CNAE:</span>
                         <p className="text-xs text-foreground">{novoConcorrente.cnaePrincipalDescricao}</p>
+                      </div>
+                    )}
+                    {/* 🔥 NOVO: CEP e Endereço Completo */}
+                    {novoConcorrente.cep && (
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <div>
+                          <span className="text-muted-foreground text-xs">CEP:</span>
+                          <p className="font-medium text-foreground">{novoConcorrente.cep}</p>
+                        </div>
+                      </div>
+                    )}
+                    {novoConcorrente.endereco && (
+                      <div className="col-span-2 md:col-span-3">
+                        <span className="text-muted-foreground text-xs">Endereço Completo:</span>
+                        <p className="font-medium text-foreground flex items-start gap-1.5">
+                          <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                          <span>
+                            {novoConcorrente.endereco}
+                            {novoConcorrente.numero && `, ${novoConcorrente.numero}`}
+                            {novoConcorrente.bairro && ` - ${novoConcorrente.bairro}`}
+                          </span>
+                        </p>
                       </div>
                     )}
                   </div>
