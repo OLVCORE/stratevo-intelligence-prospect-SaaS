@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Search, Building2, Loader2, Users, BarChart, Globe, Instagram, Linkedin, MapPin, CheckCircle2, Package, Sparkles, Upload, Download, X, FileText, Briefcase, DollarSign, Scale, Save, Plus, AlertTriangle, XCircle, CheckCircle, Clock, Target } from "lucide-react";
+import { Search, Building2, Loader2, Users, BarChart, Globe, Instagram, Linkedin, MapPin, CheckCircle2, Package, Sparkles, Upload, Download, X, FileText, Briefcase, DollarSign, Scale, Save, Plus, AlertTriangle, XCircle, CheckCircle, Clock, Target, Zap, RefreshCw } from "lucide-react";
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -523,7 +523,7 @@ export default function SearchPage() {
           }
         }
 
-        // Montar previewData no formato esperado
+        // Montar previewData no formato esperado com TODOS os dados da Receita
         const previewData = {
           success: true,
           company: {
@@ -544,6 +544,29 @@ export default function SearchPage() {
                 empresaData.bairro
               ].filter(Boolean).join(', '),
               cep: empresaData.cep
+            },
+            // 🔥 NOVO: Incluir TODOS os dados da Receita Federal
+            raw_data: {
+              receita: {
+                nome: empresaData.razao_social || empresaData.nome,
+                fantasia: empresaData.nome_fantasia || empresaData.fantasia,
+                porte: empresaData.porte,
+                tipo: empresaData.tipo || empresaData.natureza_juridica,
+                abertura: empresaData.data_inicio_atividade || empresaData.abertura,
+                natureza_juridica: empresaData.natureza_juridica,
+                capital_social: empresaData.capital_social,
+                situacao: empresaData.situacao,
+                data_situacao: empresaData.data_situacao,
+                motivo_situacao: empresaData.motivo_situacao,
+                situacao_especial: empresaData.situacao_especial,
+                data_situacao_especial: empresaData.data_situacao_especial,
+                cnae_principal: empresaData.cnae_fiscal || empresaData.atividade_principal?.[0]?.code,
+                cnae_principal_descricao: empresaData.cnae_fiscal_descricao || empresaData.atividade_principal?.[0]?.text,
+                cnaes_secundarios: empresaData.atividades_secundarias || [],
+                qsa: empresaData.qsa || empresaData.socios || [],
+                // Dados completos
+                ...empresaData
+              }
             }
           },
           cnpj_status: empresaData.situacao === 'ATIVA' ? 'ativo' : 'inativo',
@@ -1461,25 +1484,28 @@ export default function SearchPage() {
                         Dados Cadastrais
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2 text-xs">
-                      {previewData.company.raw_data?.receita?.porte && (
-                        <div>
-                          <span className="text-muted-foreground">Porte:</span>
-                          <p className="font-medium">{previewData.company.raw_data.receita.porte}</p>
-                        </div>
-                      )}
-                      {previewData.company.raw_data?.receita?.tipo && (
-                        <div>
-                          <span className="text-muted-foreground">Tipo:</span>
-                          <p className="font-medium">{previewData.company.raw_data.receita.tipo}</p>
-                        </div>
-                      )}
-                      {previewData.company.raw_data?.receita?.abertura && (
-                        <div>
-                          <span className="text-muted-foreground">Abertura:</span>
-                          <p className="font-medium">{previewData.company.raw_data.receita.abertura}</p>
-                        </div>
-                      )}
+                    <CardContent className="space-y-3 text-xs">
+                      {/* 🔥 SEMPRE MOSTRAR DADOS (mesmo que vazios) */}
+                      <div>
+                        <span className="text-muted-foreground">Porte:</span>
+                        <p className="font-medium">{previewData.company.raw_data?.receita?.porte || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Tipo:</span>
+                        <p className="font-medium">{previewData.company.raw_data?.receita?.tipo || previewData.company.raw_data?.receita?.natureza_juridica || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Abertura:</span>
+                        <p className="font-medium">{previewData.company.raw_data?.receita?.abertura || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Capital Social:</span>
+                        <p className="font-medium">
+                          {previewData.company.raw_data?.receita?.capital_social 
+                            ? `R$ ${Number(previewData.company.raw_data.receita.capital_social).toLocaleString('pt-BR')}` 
+                            : 'N/A'}
+                        </p>
+                      </div>
                       {previewData.company.raw_data?.receita?.natureza_juridica && (
                         <div>
                           <span className="text-muted-foreground">Natureza Jurídica:</span>

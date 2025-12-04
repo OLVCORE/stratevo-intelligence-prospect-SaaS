@@ -257,24 +257,24 @@ export default function CommandCenter() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-2 items-center">
+            <div className="grid grid-cols-7 gap-4 items-center">
               {/* ETAPA 1: IMPORTADAS */}
               <div 
-                className="relative group cursor-pointer border border-border rounded-lg hover:border-blue-600/50 transition-all bg-card"
+                className="relative group cursor-pointer rounded-lg border-l-4 border-l-sky-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200"
                 onClick={() => navigate('/companies')}
               >
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <Database className="h-6 w-6 text-blue-600" />
-                    <Badge variant="secondary" className="text-base">
+                    <Database className="h-6 w-6 text-sky-700 dark:text-sky-500" />
+                    <Badge className="bg-sky-600/90 text-white text-base">
                       {metrics.totalImported}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold">Importadas</h3>
+                    <h3 className="font-semibold text-sky-800 dark:text-sky-100">Importadas</h3>
                     <p className="text-xs text-muted-foreground">Total no sistema</p>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-sky-700 dark:text-sky-400 hover:text-sky-800 hover:bg-sky-600/10">
                     Ver Todas
                     <ArrowRight className="ml-2 h-3 w-3" />
                   </Button>
@@ -288,27 +288,27 @@ export default function CommandCenter() {
 
               {/* ETAPA 2: QUARENTENA */}
               <div 
-                className="relative group cursor-pointer border border-border rounded-lg hover:border-yellow-600/50 transition-all bg-card"
+                className="relative group cursor-pointer rounded-lg border-l-4 border-l-orange-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-orange-50/60 hover:to-orange-100/40 dark:hover:from-orange-900/20 dark:hover:to-orange-800/20 transition-all duration-200"
                 onClick={() => navigate('/leads/icp-quarantine')}
               >
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <Filter className="h-6 w-6 text-yellow-600" />
-                    <Badge variant="secondary" className="text-base">
+                    <Filter className="h-6 w-6 text-orange-700 dark:text-orange-500" />
+                    <Badge className="bg-orange-600/90 text-white text-base">
                       {metrics.inQuarantine}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold">Quarentena ICP</h3>
+                    <h3 className="font-semibold text-orange-800 dark:text-orange-100">Quarentena ICP</h3>
                     <p className="text-xs text-muted-foreground">Análise pendente</p>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Taxa aprovação:</span>
-                    <span className="font-semibold text-yellow-600">
+                    <span className="font-semibold text-orange-700 dark:text-orange-400">
                       {metrics.conversionRate.quarantineToApproved}%
                     </span>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-yellow-600 hover:text-yellow-700 hover:bg-yellow-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-orange-700 dark:text-orange-400 hover:text-orange-800 hover:bg-orange-600/10">
                     Analisar
                     <ArrowRight className="ml-2 h-3 w-3" />
                   </Button>
@@ -322,27 +322,27 @@ export default function CommandCenter() {
 
               {/* ETAPA 3: APROVADAS */}
               <div 
-                className="relative group cursor-pointer border border-border rounded-lg hover:border-green-600/50 transition-all bg-card"
+                className="relative group cursor-pointer rounded-lg border-l-4 border-l-emerald-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-emerald-50/60 hover:to-emerald-100/40 dark:hover:from-emerald-900/20 dark:hover:to-emerald-800/20 transition-all duration-200"
                 onClick={() => navigate('/leads/approved')}
               >
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <CheckCircle2 className="h-6 w-6 text-green-600" />
-                    <Badge variant="secondary" className="text-base">
+                    <CheckCircle2 className="h-6 w-6 text-emerald-700 dark:text-emerald-500" />
+                    <Badge className="bg-emerald-600/90 text-white text-base">
                       {metrics.approved}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold">Aprovadas</h3>
+                    <h3 className="font-semibold text-emerald-800 dark:text-emerald-100">Aprovadas</h3>
                     <p className="text-xs text-muted-foreground">Prontas para vendas</p>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Conv. Pipeline:</span>
-                    <span className="font-semibold text-green-600">
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                       {metrics.conversionRate.approvedToPipeline}%
                     </span>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-green-600 hover:text-green-700 hover:bg-green-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 hover:bg-emerald-600/10">
                     Criar Deals
                     <ArrowRight className="ml-2 h-3 w-3" />
                   </Button>
@@ -356,27 +356,27 @@ export default function CommandCenter() {
 
               {/* ETAPA 4: PIPELINE */}
               <div 
-                className="relative group cursor-pointer border border-border rounded-lg hover:border-blue-600/50 transition-all bg-card"
+                className="relative group cursor-pointer rounded-lg border-l-4 border-l-indigo-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200"
                 onClick={() => navigate('/sdr/workspace')}
               >
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <Zap className="h-6 w-6 text-blue-600" />
-                    <Badge variant="secondary" className="text-base">
+                    <Zap className="h-6 w-6 text-indigo-700 dark:text-indigo-500" />
+                    <Badge className="bg-indigo-600/90 text-white text-base">
                       {metrics.inPipeline}
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-semibold">Pipeline Ativo</h3>
+                    <h3 className="font-semibold text-indigo-800 dark:text-indigo-100">Pipeline Ativo</h3>
                     <p className="text-xs text-muted-foreground">Em negociação</p>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Taxa global:</span>
-                    <span className="font-semibold text-blue-600">
+                    <span className="font-semibold text-indigo-700 dark:text-indigo-400">
                       {metrics.conversionRate.overall}%
                     </span>
                   </div>
-                  <Button variant="ghost" size="sm" className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-600/10">
+                  <Button variant="ghost" size="sm" className="w-full text-indigo-700 dark:text-indigo-400 hover:text-indigo-800 hover:bg-indigo-600/10">
                     Abrir Workspace
                     <ArrowRight className="ml-2 h-3 w-3" />
                   </Button>

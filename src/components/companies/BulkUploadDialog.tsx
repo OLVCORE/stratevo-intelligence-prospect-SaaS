@@ -37,7 +37,7 @@ const navigate = useNavigate();
 const [sourceName, setSourceName] = useState("");
 const [sourceCampaign, setSourceCampaign] = useState("");
 const [enableQualification, setEnableQualification] = useState(true); // 🔥 NOVO: Qualificação automática
-const [selectedIcpId, setSelectedIcpId] = useState<string>(''); // 🔥 NOVO: ICP selecionado
+const [selectedIcpIds, setSelectedIcpIds] = useState<string[]>([]); // 🔥 NOVO: ICPs selecionados (múltiplos)
 const [availableIcps, setAvailableIcps] = useState<any[]>([]); // 🔥 NOVO: Lista de ICPs
 
   // Carregar ICPs do tenant
@@ -78,7 +78,7 @@ const [availableIcps, setAvailableIcps] = useState<any[]>([]); // 🔥 NOVO: Lis
       
       // Auto-selecionar o mais recente
       if (icpList.length > 0) {
-        setSelectedIcpId(icpList[0].id);
+        setSelectedIcpIds([icpList[0].id]);
       }
     };
     
@@ -701,43 +701,62 @@ if (insertedCompanies.length > 0) {
       const tenantId = userProfile?.tenant_id;
       
       if (tenantId && cnpjs.length > 0) {
-        const { data: job, error: jobError } = await supabase
-          .from('prospect_qualification_jobs' as any)
-          .insert({
-            tenant_id: tenantId,
-            icp_id: selectedIcpId || null, // 🔥 NOVO: ICP selecionado
-            job_name: sourceName || `Upload ${new Date().toLocaleDateString('pt-BR')}`,
-            source_type: 'upload_csv',
-            source_file_name: file.name,
-            total_cnpjs: cnpjs.length,
-            status: 'pending',
-          })
-          .select()
-          .single();
+        // 🔥 NOVO: Criar um job para CADA ICP selecionado
+        const jobIds: string[] = [];
         
-        if (!jobError && job) {
-          // Chamar Edge Function (assíncrono - não bloqueia)
-          supabase.functions.invoke('qualify-prospects-bulk', {
-            body: {
+        for (const icpId of (selectedIcpIds.length > 0 ? selectedIcpIds : [null])) {
+          const { data: job, error: jobError } = await supabase
+            .from('prospect_qualification_jobs' as any)
+            .insert({
               tenant_id: tenantId,
-              job_id: job.id,
-              icp_id: selectedIcpId || null, // 🔥 NOVO: Passar ICP para Edge Function
-              cnpjs: cnpjs,
-            },
-          }).then(({ data: qualData, error: qualError }) => {
-            if (qualError) {
-              console.error('Erro na qualificação:', qualError);
-              toast.warning('⚠️ Qualificação em background', {
-                description: 'As empresas foram importadas mas a qualificação teve problemas.'
-              });
-            } else {
-              console.log('✅ Qualificação concluída:', qualData);
-              toast.success('✅ Qualificação concluída!', {
-                description: `${qualData?.enriched || 0} prospects qualificados e classificados.`,
-                duration: 5000,
-              });
-            }
+              icp_id: icpId,
+              job_name: `${sourceName || `Upload ${new Date().toLocaleDateString('pt-BR')}`}${icpId ? ` - ICP ${availableIcps.find(i => i.id === icpId)?.nome}` : ''}`,
+              source_type: 'upload_csv',
+              source_file_name: file.name,
+              total_cnpjs: cnpjs.length,
+              status: 'pending',
+            })
+            .select()
+            .single();
+          
+          if (!jobError && job) {
+            jobIds.push(job.id);
+          }
+        }
+        
+        // Processar qualificação para cada job/ICP
+        if (jobIds.length > 0) {
+          toast.info(`🤖 Qualificação iniciada para ${jobIds.length} ICP(s)`, {
+            description: 'Processamento em background...'
           });
+          
+          for (let i = 0; i < jobIds.length; i++) {
+            const jobId = jobIds[i];
+            const icpId = selectedIcpIds[i] || null;
+            
+            // Chamar Edge Function (assíncrono - não bloqueia)
+            supabase.functions.invoke('qualify-prospects-bulk', {
+              body: {
+                tenant_id: tenantId,
+                job_id: jobId,
+                icp_id: icpId,
+                cnpjs: cnpjs,
+              },
+            }).then(({ data: qualData, error: qualError }) => {
+              if (qualError) {
+                console.error(`Erro na qualificação (ICP ${i+1}):`, qualError);
+              } else {
+                console.log(`✅ Qualificação concluída (ICP ${i+1}/${jobIds.length}):`, qualData);
+                if (i === jobIds.length - 1) {
+                  // Última qualificação
+                  toast.success('✅ Qualificação concluída para todos os ICPs!', {
+                    description: `${qualData?.enriched || 0} prospects qualificados e classificados.`,
+                    duration: 5000,
+                  });
+                }
+              }
+            });
+          }
         }
       }
     } catch (qualError) {
@@ -841,28 +860,52 @@ try {
             <AlertDescription>
               <div className="space-y-2">
                 <p className="font-semibold text-indigo-900 dark:text-indigo-100">
-                  🎯 Selecione o ICP para Calcular FIT Score:
+                  🎯 Selecione os ICPs para Calcular FIT Score:
                 </p>
-                <Select value={selectedIcpId} onValueChange={setSelectedIcpId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Escolha o ICP de referência..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableIcps.map(icp => (
-                      <SelectItem key={icp.id} value={icp.id}>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4" />
-                          <span className="font-medium">{icp.nome}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({icp.cnpj}) • {icp.criado}
-                          </span>
+                <p className="text-xs text-indigo-700 dark:text-indigo-300 mb-2">
+                  ✨ Pode selecionar múltiplos ICPs • Um prospect pode se encaixar em vários perfis
+                </p>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {availableIcps.map(icp => {
+                    const isSelected = selectedIcpIds.includes(icp.id);
+                    return (
+                      <div
+                        key={icp.id}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedIcpIds(selectedIcpIds.filter(id => id !== icp.id));
+                          } else {
+                            setSelectedIcpIds([...selectedIcpIds, icp.id]);
+                          }
+                        }}
+                        className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/30'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                            isSelected
+                              ? 'border-indigo-600 bg-indigo-600'
+                              : 'border-slate-300 dark:border-slate-600'
+                          }`}>
+                            {isSelected && <CheckCircle2 className="h-4 w-4 text-white" />}
+                          </div>
+                          <Building2 className="h-4 w-4 text-indigo-600" />
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{icp.nome}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {icp.cnpj} • Criado em {icp.criado}
+                            </p>
+                          </div>
                         </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-indigo-700 dark:text-indigo-300">
-                  Os prospects serão comparados com este ICP para calcular compatibilidade
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-2">
+                  💡 Cada prospect receberá um FIT score para cada ICP selecionado
                 </p>
               </div>
             </AlertDescription>
