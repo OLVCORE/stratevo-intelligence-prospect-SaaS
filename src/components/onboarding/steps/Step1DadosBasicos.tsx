@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
-import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw, MapPin, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -105,6 +105,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   const [cnpjConcorrenteEncontrado, setCnpjConcorrenteEncontrado] = useState(false);
   const [erroCNPJConcorrente, setErroCNPJConcorrente] = useState<string | null>(null);
   const [reprocessandoEnderecos, setReprocessandoEnderecos] = useState(false);
+  const [showAlertaEnderecos, setShowAlertaEnderecos] = useState(false);
   const [scanningConcorrente, setScanningConcorrente] = useState<Record<string, boolean>>({});
   const cnpjConcorrenteUltimoBuscadoRef = useRef<string>('');
   const [bulkExtracting, setBulkExtracting] = useState(false); // 🔥 NOVO: Estado para extração em massa
@@ -1166,20 +1167,38 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     );
 
     if (concorrentesSemEndereco.length === 0) {
-      toast.info('Todos os concorrentes já têm endereço completo!');
+      toast.success('✅ Todos os concorrentes já têm endereço completo!', {
+        description: 'Nenhuma atualização necessária.'
+      });
       return;
     }
 
     setReprocessandoEnderecos(true);
-    toast.info(`Reprocessando ${concorrentesSemEndereco.length} concorrente(s)...`);
+    
+    toast.info(`🔄 Reprocessando ${concorrentesSemEndereco.length} concorrente(s)...`, {
+      description: 'Buscando na Receita Federal e ViaCEP...'
+    });
 
     let sucesso = 0;
     let erros = 0;
     const concorrentesAtualizados = [...concorrentes];
 
-    for (const concorrente of concorrentesSemEndereco) {
+    console.log('[Step1] 🔄 Iniciando reprocessamento de endereços:', {
+      total: concorrentesSemEndereco.length,
+      concorrentes: concorrentesSemEndereco.map(c => ({ cnpj: c.cnpj, razao: c.razaoSocial }))
+    });
+
+    for (let i = 0; i < concorrentesSemEndereco.length; i++) {
+      const concorrente = concorrentesSemEndereco[i];
+      
+      // Atualizar toast com progresso
+      toast.loading(`🔄 Processando ${i + 1}/${concorrentesSemEndereco.length}: ${concorrente.razaoSocial}`, {
+        id: 'reprocessamento'
+      });
+      
       try {
         const cnpjClean = concorrente.cnpj.replace(/\D/g, '');
+        console.log(`[Step1] 📞 Consultando Receita Federal: ${cnpjClean}`);
         const result = await consultarReceitaFederal(cnpjClean);
 
         if (!result.success || !result.data) {
@@ -1234,6 +1253,8 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     }
 
     // Atualizar estado e salvar
+    toast.dismiss('reprocessamento');
+    
     if (sucesso > 0) {
       setConcorrentes(concorrentesAtualizados);
 
@@ -1245,11 +1266,19 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         await onSave(dataToSave);
       }
 
-      toast.success(`✅ ${sucesso} endereço(s) atualizado(s)!`, {
-        description: erros > 0 ? `${erros} erro(s) encontrado(s)` : 'Todos os endereços foram atualizados',
+      console.log('[Step1] ✅ Reprocessamento concluído:', { sucesso, erros });
+
+      toast.success(`✅ ${sucesso} endereço(s) atualizado(s) com sucesso!`, {
+        description: erros > 0 
+          ? `${erros} erro(s) - Alguns concorrentes podem ter dados incompletos na Receita Federal` 
+          : 'Todos os endereços foram atualizados e salvos no banco!',
+        duration: 5000,
       });
     } else {
-      toast.error(`Nenhum endereço foi atualizado. ${erros} erro(s) encontrado(s).`);
+      toast.error(`❌ Nenhum endereço foi atualizado`, {
+        description: `${erros} erro(s) encontrado(s). Verifique se os CNPJs estão corretos.`,
+        duration: 5000,
+      });
     }
 
     setReprocessandoEnderecos(false);
@@ -1815,6 +1844,49 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       <Separator className="my-6" />
       
       <div>
+        {/* 🔥 ALERTA GLOBAL: Concorrentes sem endereço */}
+        {concorrentes.length > 0 && concorrentes.some(c => !c.cep || !c.endereco) && (
+          <Alert className="mb-4 border-2 border-yellow-500 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/30 dark:to-orange-950/30 shadow-lg">
+            <div className="flex items-start gap-3">
+              <div className="bg-yellow-500 rounded-full p-2">
+                <AlertTriangle className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="font-bold text-lg text-yellow-900 dark:text-yellow-100">
+                  ⚠️ {concorrentes.filter(c => !c.cep || !c.endereco).length} concorrente(s) sem endereço completo
+                </div>
+                <div className="text-sm text-yellow-800 dark:text-yellow-200 mt-1.5">
+                  O mapa e as análises precisam de endereços completos para funcionar corretamente.
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={reprocessarEnderecosConcorrentes}
+                    disabled={reprocessandoEnderecos}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                  >
+                    {reprocessandoEnderecos ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Buscando endereços...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        🔄 Atualizar TODOS os Endereços Agora
+                      </>
+                    )}
+                  </Button>
+                  <span className="text-xs text-yellow-700 dark:text-yellow-300">
+                    ⚡ Automático via Receita Federal + ViaCEP
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Alert>
+        )}
+        
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex-1 min-w-[200px]">
             <h3 className="text-lg font-semibold text-foreground">🏆 Meus Concorrentes</h3>
