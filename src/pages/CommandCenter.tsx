@@ -256,14 +256,14 @@ export default function CommandCenter() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-7 gap-6 items-center">
+          <CardContent className="px-6">
+            <div className="flex items-center gap-3">
               {/* ETAPA 1: IMPORTADAS */}
               <div 
-                className="relative group cursor-pointer rounded-lg border-l-4 border-l-sky-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200"
+                className="flex-1 relative group cursor-pointer rounded-lg border-l-4 border-l-sky-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200"
                 onClick={() => navigate('/companies')}
               >
-                <div className="p-5 space-y-3">
+                <div className="px-6 py-6 space-y-3">
                   <div className="flex items-center justify-between">
                     <Database className="h-7 w-7 text-sky-700 dark:text-sky-500" />
                     <Badge className="bg-sky-600/90 text-white text-lg px-3 py-1">
@@ -282,16 +282,14 @@ export default function CommandCenter() {
               </div>
 
               {/* SETA */}
-              <div className="flex items-center justify-center">
-                <ArrowRight className="h-8 w-8 text-muted-foreground" />
-              </div>
+              <ArrowRight className="h-8 w-8 text-muted-foreground/50 flex-shrink-0" />
 
               {/* ETAPA 2: QUARENTENA */}
               <div 
-                className="relative group cursor-pointer rounded-lg border-l-4 border-l-orange-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-orange-50/60 hover:to-orange-100/40 dark:hover:from-orange-900/20 dark:hover:to-orange-800/20 transition-all duration-200"
+                className="flex-1 relative group cursor-pointer rounded-lg border-l-4 border-l-orange-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-orange-50/60 hover:to-orange-100/40 dark:hover:from-orange-900/20 dark:hover:to-orange-800/20 transition-all duration-200"
                 onClick={() => navigate('/leads/icp-quarantine')}
               >
-                <div className="p-5 space-y-3">
+                <div className="px-6 py-6 space-y-3">
                   <div className="flex items-center justify-between">
                     <Filter className="h-7 w-7 text-orange-700 dark:text-orange-500" />
                     <Badge className="bg-orange-600/90 text-white text-lg px-3 py-1">
@@ -316,16 +314,14 @@ export default function CommandCenter() {
               </div>
 
               {/* SETA */}
-              <div className="flex items-center justify-center">
-                <ArrowRight className="h-8 w-8 text-muted-foreground" />
-              </div>
+              <ArrowRight className="h-8 w-8 text-muted-foreground/50 flex-shrink-0" />
 
               {/* ETAPA 3: APROVADAS */}
               <div 
-                className="relative group cursor-pointer rounded-lg border-l-4 border-l-emerald-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-emerald-50/60 hover:to-emerald-100/40 dark:hover:from-emerald-900/20 dark:hover:to-emerald-800/20 transition-all duration-200"
+                className="flex-1 relative group cursor-pointer rounded-lg border-l-4 border-l-emerald-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-emerald-50/60 hover:to-emerald-100/40 dark:hover:from-emerald-900/20 dark:hover:to-emerald-800/20 transition-all duration-200"
                 onClick={() => navigate('/leads/approved')}
               >
-                <div className="p-5 space-y-3">
+                <div className="px-6 py-6 space-y-3">
                   <div className="flex items-center justify-between">
                     <CheckCircle2 className="h-7 w-7 text-emerald-700 dark:text-emerald-500" />
                     <Badge className="bg-emerald-600/90 text-white text-lg px-3 py-1">
@@ -350,16 +346,14 @@ export default function CommandCenter() {
               </div>
 
               {/* SETA */}
-              <div className="flex items-center justify-center">
-                <ArrowRight className="h-8 w-8 text-muted-foreground" />
-              </div>
+              <ArrowRight className="h-8 w-8 text-muted-foreground/50 flex-shrink-0" />
 
               {/* ETAPA 4: PIPELINE */}
               <div 
-                className="relative group cursor-pointer rounded-lg border-l-4 border-l-indigo-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200"
+                className="flex-1 relative group cursor-pointer rounded-lg border-l-4 border-l-indigo-600/90 shadow-md bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200"
                 onClick={() => navigate('/sdr/workspace')}
               >
-                <div className="p-5 space-y-3">
+                <div className="px-6 py-6 space-y-3">
                   <div className="flex items-center justify-between">
                     <Zap className="h-7 w-7 text-indigo-700 dark:text-indigo-500" />
                     <Badge className="bg-indigo-600/90 text-white text-lg px-3 py-1">
