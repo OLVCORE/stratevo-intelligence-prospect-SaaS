@@ -28,7 +28,30 @@ import {
   Edit,
   MoreHorizontal,
   Star,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  Globe,
+  FileText,
+  FileSpreadsheet,
+  Image as ImageIcon,
+  StarOff,
+  Search,
+  Filter,
+  Download,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Eye,
+  Target,
+  DollarSign,
+  Building2,
+  MapPin,
+  Zap,
+  Link,
+  Settings,
+  Copy,
+  Archive
 } from 'lucide-react';
 import {
   Dialog,
@@ -63,41 +86,6 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
-import {
-  Package,
-  Plus,
-  Upload,
-  Globe,
-  FileText,
-  FileSpreadsheet,
-  Image as ImageIcon,
-  Trash2,
-  Edit,
-  MoreHorizontal,
-  Loader2,
-  Sparkles,
-  Star,
-  StarOff,
-  Search,
-  Filter,
-  Download,
-  RefreshCw,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Eye,
-  Target,
-  DollarSign,
-  Building2,
-  MapPin,
-  Zap,
-  Brain,
-  FileUp,
-  Link,
-  Settings,
-  Copy,
-  Archive,
-} from 'lucide-react';
 
 interface TenantProduct {
   id: string;
