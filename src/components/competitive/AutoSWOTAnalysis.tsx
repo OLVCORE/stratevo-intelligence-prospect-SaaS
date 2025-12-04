@@ -1,23 +1,20 @@
 /**
- * 🔥 ANÁLISE SWOT AUTOMÁTICA PROFISSIONAL
- * Baseada em melhores práticas de Competitive Intelligence e Análise Estratégica
- * 100% dinâmica - análise real do mercado
+ * 🔥 ANÁLISE SWOT PROFISSIONAL
+ * Baseada em critérios estratégicos reais de grandes empresas
+ * Considera TODAS as dimensões competitivas
  */
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Shield, AlertTriangle, Lightbulb, Eye, CheckCircle2, XCircle, TrendingUp, Target, Award, Zap } from 'lucide-react';
+import { Shield, AlertTriangle, Lightbulb, Eye, CheckCircle2, XCircle, TrendingUp, Target, ChevronDown, ChevronUp, Flame, Award } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
 
 interface AutoSWOTProps {
-  tenantProducts: Array<{ nome: string; categoria?: string; descricao?: string }>;
+  tenantProducts: Array<{ nome: string; categoria?: string }>;
   competitorProducts: Array<{ 
     nome: string; 
     categoria?: string;
-    descricao?: string;
     competitor_name: string;
   }>;
   matches: Array<{
@@ -42,251 +39,193 @@ export default function AutoSWOTAnalysis({
   onToggle
 }: AutoSWOTProps) {
   
-  // 🔥 FORÇAS: Análise estratégica profissional
-  const calcularForcas = () => {
-    const forcas: Array<{tipo: string; descricao: string; icon: any}> = [];
-    
-    // 1. Produtos com baixa concorrência (score < 60%)
-    const produtosDiferenciados = matches.filter(m => m.bestScore < 60);
-    if (produtosDiferenciados.length > 0) {
-      const percent = Math.round((produtosDiferenciados.length / tenantProducts.length) * 100);
-      forcas.push({
-        tipo: 'PORTFÓLIO DIFERENCIADO',
-        descricao: `${produtosDiferenciados.length} produtos (${percent}%) com baixa concorrência direta, permitindo pricing premium e maior margem de lucro.`,
-        icon: Award
-      });
-    }
-    
-    // 2. Categorias exclusivas
-    const categoriasTenant = new Set(tenantProducts.map(p => p.categoria).filter(Boolean));
-    const categoriasCompetidores = new Set(competitorProducts.map(p => p.categoria).filter(Boolean));
-    const categoriasExclusivas = Array.from(categoriasTenant).filter(cat => !categoriasCompetidores.has(cat));
-    
-    if (categoriasExclusivas.length > 0) {
-      forcas.push({
+  const categoriasTenant = new Set(tenantProducts.map(p => p.categoria).filter(Boolean));
+  const categoriasConcorrentes = new Set(competitorProducts.map(p => p.categoria).filter(Boolean));
+  const totalConcorrentes = Array.from(new Set(competitorProducts.map(p => p.competitor_name))).length;
+  
+  // ✅ FORÇAS: Nichos exclusivos + Vantagens competitivas
+  const forcas = Array.from(categoriasTenant)
+    .filter(cat => !categoriasConcorrentes.has(cat)) // Categorias SEM concorrentes
+    .map(cat => {
+      const produtos = tenantProducts.filter(p => p.categoria === cat);
+      return {
         tipo: 'NICHO EXCLUSIVO',
-        descricao: `Atuação exclusiva em ${categoriasExclusivas.length} categoria(s): ${categoriasExclusivas.slice(0, 2).join(', ')}${categoriasExclusivas.length > 2 ? '...' : ''}. Sem concorrência direta, posição de liderança garantida.`,
-        icon: Target
-      });
-    }
-    
-    // 3. Diversificação de portfólio
-    if (categoriasTenant.size >= 3) {
-      forcas.push({
-        tipo: 'DIVERSIFICAÇÃO ESTRATÉGICA',
-        descricao: `Portfólio diversificado em ${categoriasTenant.size} categorias reduz dependência de único segmento e mitiga riscos de mercado.`,
-        icon: Zap
-      });
-    }
-    
-    // 4. Volume de produtos
-    if (tenantProducts.length > 20) {
-      forcas.push({
-        tipo: 'AMPLITUDE DE PORTFÓLIO',
-        descricao: `${tenantProducts.length} produtos cadastrados demonstram capacidade produtiva robusta e expertise em múltiplas soluções.`,
-        icon: CheckCircle2
-      });
-    }
-    
-    return forcas.length > 0 ? forcas : [{
-      tipo: 'PRESENÇA NO MERCADO',
-      descricao: `Atuação estabelecida com ${tenantProducts.length} produtos. Oportunidade de fortalecer posicionamento e diferenciais competitivos.`,
-      icon: Shield
-    }];
-  };
+        categoria: cat,
+        quantidade: produtos.length,
+        produtos: produtos.map(p => p.nome),
+        impacto: 'ALTO'
+      };
+    })
+    .sort((a, b) => b.quantidade - a.quantidade);
   
-  // 🔥 FRAQUEZAS: Análise crítica estratégica
-  const calcularFraquezas = () => {
-    const fraquezas: Array<{tipo: string; descricao: string; severidade: string; icon: any}> = [];
-    
-    // 1. Categorias com alta concorrência
-    const categoriasTenant = new Set(tenantProducts.map(p => p.categoria).filter(Boolean));
-    
-    Array.from(categoriasTenant).forEach(cat => {
-      const tenantCount = tenantProducts.filter(p => p.categoria === cat).length;
-      const competitorCount = competitorProducts.filter(p => p.categoria === cat).length;
-      const empresas = new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name)).size;
-      
-      if (competitorCount > tenantCount * 3 && empresas >= 3) {
-        fraquezas.push({
-          tipo: `DESVANTAGEM NUMÉRICA - ${cat}`,
-          descricao: `${empresas} concorrentes com ${competitorCount} produtos vs seus ${tenantCount}. Risco de perda de market share por menor visibilidade e opções limitadas.`,
-          severidade: 'ALTA',
-          icon: AlertTriangle
-        });
-      }
+  // Adicionar força se tem boa diversificação
+  if (categoriasTenant.size >= 3) {
+    forcas.push({
+      tipo: 'DIVERSIFICAÇÃO',
+      categoria: `${categoriasTenant.size} categorias diferentes`,
+      quantidade: tenantProducts.length,
+      produtos: [],
+      impacto: 'MÉDIO'
     });
-    
-    // 2. Categorias de alto valor sem presença
-    const categoriasGrandes = Array.from(
-      new Set(competitorProducts.map(p => p.categoria).filter(Boolean))
-    ).map(cat => ({
-      categoria: cat,
-      produtos: competitorProducts.filter(p => p.categoria === cat).length,
-      empresas: new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name)).size
-    })).filter(c => c.empresas >= 5 && c.produtos >= 20);
-    
-    categoriasGrandes.forEach(c => {
-      if (!categoriasTenant.has(c.categoria)) {
-        fraquezas.push({
-          tipo: `AUSÊNCIA EM CATEGORIA CHAVE - ${c.categoria}`,
-          descricao: `${c.empresas} concorrentes investem pesadamente nesta categoria (${c.produtos} produtos). Sua ausência representa perda de receita potencial significativa.`,
-          severidade: 'CRÍTICA',
-          icon: XCircle
-        });
-      }
-    });
-    
-    // 3. Produtos com alta concorrência direta
-    const altaConcorrencia = matches.filter(m => m.bestScore >= 80);
-    if (altaConcorrencia.length > tenantProducts.length * 0.3) {
-      fraquezas.push({
-        tipo: 'COMODITIZAÇÃO DE PORTFÓLIO',
-        descricao: `${altaConcorrencia.length} produtos (${Math.round((altaConcorrencia.length/tenantProducts.length)*100)}%) com concorrentes idênticos. Dificulta diferenciação e pressiona margens de lucro.`,
-        severidade: 'ALTA',
-        icon: AlertTriangle
-      });
-    }
-    
-    return fraquezas.length > 0 ? fraquezas : [{
-      tipo: 'MONITORAMENTO CONTÍNUO',
-      descricao: 'Manter vigilância sobre movimentos competitivos e tendências de mercado para identificar gaps emergentes.',
-      severidade: 'BAIXA',
-      icon: Eye
-    }];
-  };
+  }
   
-  // 🔥 OPORTUNIDADES: Análise estratégica de crescimento
-  const calcularOportunidades = () => {
-    const oportunidades: Array<{tipo: string; descricao: string; potencial: string; icon: any}> = [];
-    
-    // 1. Categorias com demanda comprovada (muitos concorrentes) mas baixa presença tenant
-    const categoriasConcorrentes = new Set(competitorProducts.map(p => p.categoria).filter(Boolean));
-    const categoriasTenant = new Set(tenantProducts.map(p => p.categoria).filter(Boolean));
-    
-    Array.from(categoriasConcorrentes).forEach(cat => {
-      if (!categoriasTenant.has(cat)) {
-        const empresas = new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name)).size;
-        const produtos = competitorProducts.filter(p => p.categoria === cat).length;
-        
-        if (empresas >= 3) {
-          oportunidades.push({
-            tipo: `EXPANSÃO - ${cat}`,
-            descricao: `${empresas} concorrentes atuantes com ${produtos} produtos. Demanda de mercado comprovada. Oportunidade de capturar share em segmento estabelecido.`,
-            potencial: empresas >= 5 ? 'ALTO' : empresas >= 3 ? 'MÉDIO' : 'BAIXO',
-            icon: TrendingUp
-          });
-        }
-      }
-    });
-    
-    // 2. Categorias com poucos players mas volume razoável
-    Array.from(categoriasConcorrentes).forEach(cat => {
+  // ❌ FRAQUEZAS: Gaps competitivos críticos
+  const fraquezas: Array<{tipo: string; categoria: string; gap: number; empresas: number; produtos: number; severidade: string}> = [];
+  
+  // 1. Categorias grandes onde tenant NÃO atua
+  Array.from(categoriasConcorrentes)
+    .filter(cat => !categoriasTenant.has(cat))
+    .forEach(cat => {
       const empresas = new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name)).size;
       const produtos = competitorProducts.filter(p => p.categoria === cat).length;
-      const tenantNaCategoria = tenantProducts.filter(p => p.categoria === cat).length;
       
-      if (empresas <= 2 && produtos >= 10 && tenantNaCategoria === 0) {
-        oportunidades.push({
-          tipo: `NICHO EMERGENTE - ${cat}`,
-          descricao: `Apenas ${empresas} player(s) com ${produtos} produtos. Baixa competição + demanda = oportunidade de liderança rápida com investimento moderado.`,
-          potencial: 'ALTO',
-          icon: Lightbulb
+      if (produtos >= 20) { // Categorias grandes
+        fraquezas.push({
+          tipo: 'AUSÊNCIA CRÍTICA',
+          categoria: cat,
+          gap: produtos,
+          empresas,
+          produtos,
+          severidade: empresas >= 5 ? 'CRÍTICA' : 'ALTA'
         });
       }
     });
-    
-    // 3. Fortalecimento de categorias com vantagem
-    const produtosDiferenciados = matches.filter(m => m.bestScore < 60);
-    if (produtosDiferenciados.length > 0) {
-      const categoriasFortes = new Set(produtosDiferenciados.map(m => m.tenantProduct.categoria).filter(Boolean));
-      if (categoriasFortes.size > 0) {
-        oportunidades.push({
-          tipo: 'INTENSIFICAÇÃO DE VANTAGENS',
-          descricao: `Expandir linha em ${Array.from(categoriasFortes).slice(0, 2).join(', ')} onde você já tem diferencial competitivo. Capitalizar posição forte para aumentar market share.`,
-          potencial: 'ALTO',
-          icon: Award
-        });
-      }
-    }
-    
-    return oportunidades.slice(0, 5);
-  };
   
-  // 🔥 AMEAÇAS: Análise de riscos competitivos
-  const calcularAmeacas = () => {
-    const ameacas: Array<{tipo: string; descricao: string; urgencia: string; icon: any}> = [];
-    
-    // 1. Concorrentes com portfólio muito maior
-    const concorrentesGrandes = Array.from(
-      new Set(competitorProducts.map(p => p.competitor_name))
-    ).map(comp => ({
+  // 2. Volume total menor que concorrentes
+  const mediaProdutosConcorrente = totalConcorrentes > 0 ? competitorProducts.length / totalConcorrentes : 0;
+  if (tenantProducts.length < mediaProdutosConcorrente * 0.7) {
+    fraquezas.push({
+      tipo: 'ESCALA REDUZIDA',
+      categoria: 'Portfólio geral',
+      gap: Math.round(mediaProdutosConcorrente - tenantProducts.length),
+      empresas: totalConcorrentes,
+      produtos: tenantProducts.length,
+      severidade: 'ALTA'
+    });
+  }
+  
+  // 💡 OPORTUNIDADES: Expansão para categorias com demanda comprovada
+  const oportunidades = Array.from(categoriasConcorrentes)
+    .filter(cat => !categoriasTenant.has(cat)) // Tenant NÃO atua
+    .map(cat => {
+      const empresas = new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name));
+      const produtos = competitorProducts.filter(p => p.categoria === cat).length;
+      
+      return {
+        categoria: cat,
+        empresas: empresas.size,
+        produtos,
+        potencial: empresas.size >= 5 ? 'ALTO' : empresas.size >= 3 ? 'MÉDIO' : 'BAIXO',
+        razao: empresas.size >= 5 
+          ? 'Mercado maduro com alta demanda'
+          : empresas.size >= 3 
+          ? 'Mercado em crescimento' 
+          : 'Nicho emergente'
+      };
+    })
+    .sort((a, b) => b.empresas - a.empresas)
+    .slice(0, 5);
+  
+  // ⚠️ AMEAÇAS: TODAS as dimensões competitivas
+  const ameacas: Array<{tipo: string; descricao: string; impacto: string; urgencia: string}> = [];
+  
+  // 1. AMEAÇA: Número de concorrentes (intensidade competitiva)
+  if (totalConcorrentes >= 10) {
+    ameacas.push({
+      tipo: 'MERCADO SATURADO',
+      descricao: `${totalConcorrentes} concorrentes ativos no mercado. Alta intensidade competitiva, pressão de preços e guerra por market share.`,
+      impacto: 'ALTO',
+      urgencia: 'CRÍTICA'
+    });
+  } else if (totalConcorrentes >= 5) {
+    ameacas.push({
+      tipo: 'COMPETIÇÃO INTENSA',
+      descricao: `${totalConcorrentes} players disputando mercado. Risco de consolidação e agressividade comercial.`,
+      impacto: 'MÉDIO',
+      urgencia: 'ALTA'
+    });
+  }
+  
+  // 2. AMEAÇA: Concorrentes MUITO maiores (economias de escala)
+  const concorrentesGrandes = Array.from(new Set(competitorProducts.map(p => p.competitor_name)))
+    .map(comp => ({
       nome: comp,
       produtos: competitorProducts.filter(p => p.competitor_name === comp).length
-    })).filter(c => c.produtos > tenantProducts.length * 2);
+    }))
+    .filter(c => c.produtos > tenantProducts.length * 1.5) // 50% maiores
+    .sort((a, b) => b.produtos - a.produtos);
+  
+  if (concorrentesGrandes.length > 0) {
+    const top3 = concorrentesGrandes.slice(0, 3).map(c => `${c.nome.split(' ')[0]} (${c.produtos})`).join(', ');
+    ameacas.push({
+      tipo: 'PLAYERS DOMINANTES',
+      descricao: `${concorrentesGrandes.length} concorrente(s) com portfólio superior: ${top3}. Vantagens em escala, barganha e recursos.`,
+      impacto: 'ALTO',
+      urgencia: 'ALTA'
+    });
+  }
+  
+  // 3. AMEAÇA: Competição direta em categorias estratégicas
+  Array.from(categoriasTenant).forEach(cat => {
+    const tenantCount = tenantProducts.filter(p => p.categoria === cat).length;
+    const competitorCount = competitorProducts.filter(p => p.categoria === cat).length;
+    const empresas = new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name)).size;
     
-    if (concorrentesGrandes.length > 0) {
-      concorrentesGrandes.forEach(c => {
-        ameacas.push({
-          tipo: `PLAYER DOMINANTE - ${c.nome.split(' ').slice(0, 2).join(' ')}`,
-          descricao: `${c.produtos} produtos vs seus ${tenantProducts.length}. Maior visibilidade, poder de barganha com fornecedores e economias de escala. Risco de agressividade competitiva.`,
-          urgencia: 'ALTA',
-          icon: AlertTriangle
-        });
-      });
-    }
-    
-    // 2. Alta sobreposição de produtos
-    const matchesAltos = matches.filter(m => m.bestScore >= 75);
-    if (matchesAltos.length > tenantProducts.length * 0.4) {
-      ameacas.push({
-        tipo: 'GUERRA DE PREÇOS IMINENTE',
-        descricao: `${matchesAltos.length} produtos (${Math.round((matchesAltos.length/tenantProducts.length)*100)}%) com concorrentes diretos. Alta probabilidade de competição por preço, compressão de margens e necessidade de diferenciação urgente.`,
-        urgencia: 'CRÍTICA',
-        icon: AlertTriangle
-      });
-    }
-    
-    // 3. Concentração de concorrentes em categorias-chave
-    const categoriasTenant = new Set(tenantProducts.map(p => p.categoria).filter(Boolean));
-    
-    Array.from(categoriasTenant).forEach(cat => {
-      const empresas = new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name)).size;
-      const tenantCount = tenantProducts.filter(p => p.categoria === cat).length;
+    if (competitorCount > 0 && empresas >= 1) {
+      // Calcular intensidade de competição REAL
+      const matchesNaCategoria = matches.filter(m => 
+        m.tenantProduct.categoria === cat && 
+        m.bestScore >= 60
+      ).length;
       
-      if (empresas >= 5 && tenantCount < 5) {
+      const intensidade = tenantCount > 0 ? (matchesNaCategoria / tenantCount) * 100 : 0;
+      
+      // Se concorrente tem MUITO mais produtos OU alta intensidade de match
+      if (competitorCount > tenantCount * 2 || intensidade >= 50) {
         ameacas.push({
-          tipo: `CERCO COMPETITIVO - ${cat}`,
-          descricao: `${empresas} concorrentes disputam esta categoria onde você tem apenas ${tenantCount} produto(s). Risco de marginalização e perda de relevância se não expandir rapidamente.`,
-          urgencia: 'ALTA',
-          icon: Eye
+          tipo: `COMPETIÇÃO DIRETA - ${cat}`,
+          descricao: `${empresas} concorrente(s) com ${competitorCount} produtos vs seus ${tenantCount}. ${matchesNaCategoria} matches diretos (${Math.round(intensidade)}% intensidade).`,
+          impacto: competitorCount > tenantCount * 3 ? 'ALTO' : 'MÉDIO',
+          urgencia: intensidade >= 75 ? 'CRÍTICA' : intensidade >= 50 ? 'ALTA' : 'MÉDIA'
         });
       }
-    });
-    
-    // 4. Tendência de consolidação
-    const totalConcorrentes = new Set(competitorProducts.map(p => p.competitor_name)).size;
-    if (totalConcorrentes >= 10) {
-      ameacas.push({
-        tipo: 'CONSOLIDAÇÃO DE MERCADO',
-        descricao: `${totalConcorrentes} players ativos indicam mercado fragmentado. Tendência de consolidação via M&A pode criar gigantes com recursos superiores e pressionar pequenos players.`,
-        urgencia: 'MÉDIA',
-        icon: AlertTriangle
-      });
     }
-    
-    return ameacas.length > 0 ? ameacas : [{
-      tipo: 'VIGILÂNCIA DE MERCADO',
-      descricao: 'Manter monitoramento ativo de movimentos competitivos, lançamentos de produtos e mudanças estratégicas dos players.',
-      urgencia: 'BAIXA',
-      icon: Eye
-    }];
-  };
+  });
   
-  const forcas = calcularForcas();
-  const fraquezas = calcularFraquezas();
-  const oportunidades = calcularOportunidades();
-  const ameacas = calcularAmeacas();
+  // 4. AMEAÇA: Ausência em categorias-chave = Perda de relevância
+  const categoriasCriticas = Array.from(categoriasConcorrentes)
+    .map(cat => ({
+      categoria: cat,
+      empresas: new Set(competitorProducts.filter(p => p.categoria === cat).map(p => p.competitor_name)).size,
+      produtos: competitorProducts.filter(p => p.categoria === cat).length
+    }))
+    .filter(c => c.empresas >= 5) // Categorias com muitos players = importantes
+    .filter(c => !categoriasTenant.has(c.categoria)); // Tenant NÃO atua
+  
+  if (categoriasCriticas.length > 0) {
+    const top = categoriasCriticas[0];
+    ameacas.push({
+      tipo: 'PERDA DE RELEVÂNCIA',
+      descricao: `Ausência em "${top.categoria}" (${top.empresas} concorrentes, ${top.produtos} produtos). Risco de marginalização no mercado principal.`,
+      impacto: 'ALTO',
+      urgencia: 'ALTA'
+    });
+  }
+  
+  // 5. AMEAÇA: Risco de commoditização
+  const altaConcorrencia = matches.filter(m => m.bestScore >= 75).length;
+  if (altaConcorrencia > tenantProducts.length * 0.3) {
+    ameacas.push({
+      tipo: 'COMMODITIZAÇÃO',
+      descricao: `${altaConcorrencia} produtos (${Math.round((altaConcorrencia/tenantProducts.length)*100)}%) com concorrentes idênticos. Pressão de preços e erosão de margens.`,
+      impacto: 'MÉDIO',
+      urgencia: 'MÉDIA'
+    });
+  }
+  
+  // Ordenar ameaças por urgência
+  const ordenacaoUrgencia: Record<string, number> = { 'CRÍTICA': 4, 'ALTA': 3, 'MÉDIA': 2, 'BAIXA': 1 };
+  ameacas.sort((a, b) => (ordenacaoUrgencia[b.urgencia] || 0) - (ordenacaoUrgencia[a.urgencia] || 0));
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
@@ -300,10 +239,10 @@ export default function AutoSWOTAnalysis({
                 </div>
                 <div className="text-left">
                   <CardTitle className="text-lg text-purple-800 dark:text-purple-100">
-                    Análise SWOT Automática
+                    Análise SWOT Profissional
                   </CardTitle>
                   <CardDescription>
-                    Análise estratégica profissional baseada em inteligência competitiva
+                    Análise estratégica completa baseada em {tenantProducts.length} seus produtos vs {competitorProducts.length} de {totalConcorrentes} concorrentes
                   </CardDescription>
                 </div>
               </div>
@@ -318,6 +257,7 @@ export default function AutoSWOTAnalysis({
         <CollapsibleContent>
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
               {/* ✅ FORÇAS */}
               <Card className="border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
                 <CardHeader>
@@ -327,22 +267,36 @@ export default function AutoSWOTAnalysis({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {forcas.map((f, idx) => {
-                      const Icon = f.icon;
-                      return (
-                        <div key={idx} className="border-b border-green-200 dark:border-green-800 pb-3 last:border-0">
+                  {forcas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">
+                      Todas as suas categorias enfrentam concorrência. Foque em diferenciação.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {forcas.map((f, idx) => (
+                        <li key={idx} className="border-b border-green-200 dark:border-green-800 pb-3 last:border-0">
                           <div className="flex items-start gap-2">
-                            <Icon className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                            <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                             <div className="flex-1">
-                              <p className="text-sm font-semibold text-green-800 dark:text-green-300">{f.tipo}</p>
-                              <p className="text-xs text-muted-foreground mt-1">{f.descricao}</p>
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-semibold">{f.categoria}</p>
+                                <Badge className="bg-green-600 text-white text-[10px]">
+                                  {f.tipo}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {f.quantidade} produto{f.quantidade > 1 ? 's' : ''} SEM NENHUM concorrente direto
+                              </p>
+                              <p className="text-xs text-green-700 dark:text-green-400 mt-1 font-medium flex items-center gap-1">
+                                <Award className="h-3 w-3" />
+                                Posição de liderança exclusiva - Capacidade de pricing premium
+                              </p>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardContent>
               </Card>
 
@@ -350,35 +304,49 @@ export default function AutoSWOTAnalysis({
               <Card className="border-red-500/30 bg-red-50/50 dark:bg-red-950/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
-                    <AlertTriangle className="h-5 w-5" />
+                    <XCircle className="h-5 w-5" />
                     Fraquezas (Weaknesses)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {fraquezas.map((f, idx) => {
-                      const Icon = f.icon;
-                      return (
-                        <div key={idx} className="border-b border-red-200 dark:border-red-800 pb-3 last:border-0">
+                  {fraquezas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">
+                      Portfólio competitivo sem gaps críticos identificados.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {fraquezas.slice(0, 5).map((f, idx) => (
+                        <li key={idx} className="border-b border-red-200 dark:border-red-800 pb-3 last:border-0">
                           <div className="flex items-start gap-2">
-                            <Icon className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                            <XCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm font-semibold text-red-800 dark:text-red-300">{f.tipo}</p>
+                                <p className="text-sm font-semibold">{f.categoria}</p>
                                 <Badge className={cn(
-                                  "text-[10px] h-4",
-                                  f.severidade === 'CRÍTICA' ? 'bg-red-600' :
-                                  f.severidade === 'ALTA' ? 'bg-orange-600' :
-                                  'bg-yellow-600'
-                                )}>{f.severidade}</Badge>
+                                  "text-white text-[10px]",
+                                  f.severidade === 'CRÍTICA' ? 'bg-red-700' : 'bg-red-600'
+                                )}>
+                                  {f.severidade}
+                                </Badge>
                               </div>
-                              <p className="text-xs text-muted-foreground">{f.descricao}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {f.tipo === 'AUSÊNCIA CRÍTICA' 
+                                  ? `${f.empresas} concorrentes com ${f.produtos} produtos. Você NÃO atua nesta categoria.`
+                                  : `Portfólio de ${f.produtos} produtos vs média de ${Math.round(mediaProdutosConcorrente)} dos concorrentes.`
+                                }
+                              </p>
+                              <p className="text-xs text-red-700 dark:text-red-400 mt-1 font-medium">
+                                ⚠️ {f.tipo === 'AUSÊNCIA CRÍTICA' 
+                                  ? 'Perda de receita potencial + risco de irrelevância'
+                                  : 'Limitações em escala, barganha e investimento em P&D'
+                                }
+                              </p>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardContent>
               </Card>
 
@@ -391,32 +359,40 @@ export default function AutoSWOTAnalysis({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {oportunidades.length > 0 ? oportunidades.map((o, idx) => {
-                      const Icon = o.icon;
-                      return (
-                        <div key={idx} className="border-b border-blue-200 dark:border-blue-800 pb-3 last:border-0">
+                  {oportunidades.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">
+                      Você já cobre todas as categorias exploradas pelos concorrentes.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {oportunidades.map((o, idx) => (
+                        <li key={idx} className="border-b border-blue-200 dark:border-blue-800 pb-3 last:border-0">
                           <div className="flex items-start gap-2">
-                            <Icon className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                            <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">{o.tipo}</p>
+                                <p className="text-sm font-semibold">{o.categoria}</p>
                                 <Badge className={cn(
-                                  "text-[10px] h-4",
+                                  "text-white text-[10px]",
                                   o.potencial === 'ALTO' ? 'bg-blue-700' :
                                   o.potencial === 'MÉDIO' ? 'bg-blue-500' :
                                   'bg-blue-400'
-                                )}>{o.potencial}</Badge>
+                                )}>
+                                  {o.potencial}
+                                </Badge>
                               </div>
-                              <p className="text-xs text-muted-foreground">{o.descricao}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {o.empresas} concorrente{o.empresas > 1 ? 's' : ''} com {o.produtos} produto{o.produtos > 1 ? 's' : ''} ativos
+                              </p>
+                              <p className="text-xs text-blue-700 dark:text-blue-400 mt-1 font-medium">
+                                🎯 {o.razao} - Entrada estratégica recomendada
+                              </p>
                             </div>
                           </div>
-                        </div>
-                      );
-                    }) : (
-                      <p className="text-sm text-muted-foreground italic">Expanda para novos mercados e categorias.</p>
-                    )}
-                  </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardContent>
               </Card>
 
@@ -424,36 +400,46 @@ export default function AutoSWOTAnalysis({
               <Card className="border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                    <Eye className="h-5 w-5" />
+                    <Flame className="h-5 w-5" />
                     Ameaças (Threats)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {ameacas.map((a, idx) => {
-                      const Icon = a.icon;
-                      return (
-                        <div key={idx} className="border-b border-amber-200 dark:border-amber-800 pb-3 last:border-0">
+                  {ameacas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">
+                      Mercado favorável sem ameaças imediatas identificadas.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {ameacas.map((a, idx) => (
+                        <li key={idx} className="border-b border-amber-200 dark:border-amber-800 pb-3 last:border-0">
                           <div className="flex items-start gap-2">
-                            <Icon className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">{a.tipo}</p>
+                                <p className="text-sm font-semibold">{a.tipo}</p>
                                 <Badge className={cn(
-                                  "text-[10px] h-4",
-                                  a.urgencia === 'CRÍTICA' ? 'bg-red-600' :
+                                  "text-white text-[10px]",
+                                  a.urgencia === 'CRÍTICA' ? 'bg-red-700' :
                                   a.urgencia === 'ALTA' ? 'bg-orange-600' :
                                   a.urgencia === 'MÉDIA' ? 'bg-yellow-600' :
                                   'bg-blue-500'
-                                )}>{a.urgencia}</Badge>
+                                )}>
+                                  {a.urgencia}
+                                </Badge>
                               </div>
-                              <p className="text-xs text-muted-foreground">{a.descricao}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {a.descricao}
+                              </p>
+                              <Badge variant="outline" className="mt-2 text-[10px]">
+                                Impacto: {a.impacto}
+                              </Badge>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -462,4 +448,6 @@ export default function AutoSWOTAnalysis({
       </Card>
     </Collapsible>
   );
+}
+
 }
