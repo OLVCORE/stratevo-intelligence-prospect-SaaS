@@ -160,16 +160,18 @@ export default function CompetitiveAnalysis({
       console.log('[CompetitiveAnalysis] 📊 Carregando concorrentes + produtos completos');
       
       try {
-        // Buscar TODOS os produtos para cada concorrente
+        // 1. Buscar produtos de tenant_competitor_products
         const { data: allProducts } = await supabase
           .from('tenant_competitor_products' as any)
           .select('competitor_cnpj, competitor_name, nome')
           .eq('tenant_id', icpId);
         
+        console.log('[CompetitiveAnalysis] 📦 Produtos brutos:', allProducts?.length || 0);
+        
         // Agrupar por CNPJ (contagem + lista de nomes)
         const productsMap = (allProducts || []).reduce((acc: Record<string, {count: number, produtos: string[]}>, p: any) => {
           const cnpj = p.competitor_cnpj?.replace(/\D/g, '');
-          if (cnpj) {
+          if (cnpj && p.nome) {
             if (!acc[cnpj]) acc[cnpj] = { count: 0, produtos: [] };
             acc[cnpj].count++;
             acc[cnpj].produtos.push(p.nome);
@@ -177,10 +179,17 @@ export default function CompetitiveAnalysis({
           return acc;
         }, {});
         
+        console.log('[CompetitiveAnalysis] 🗂️ Produtos agrupados por CNPJ:', Object.keys(productsMap).length, 'empresas');
+        Object.entries(productsMap).forEach(([cnpj, data]) => {
+          console.log(`  CNPJ ${cnpj}: ${data.count} produtos`);
+        });
+        
         // Enriquecer com contagem + lista de produtos
         const enriched: CompetitorEnriched[] = competitors.map(c => {
           const cnpjClean = c.cnpj.replace(/\D/g, '');
           const prodData = productsMap[cnpjClean] || { count: 0, produtos: [] };
+          
+          console.log(`[CompetitiveAnalysis] 📊 ${c.nomeFantasia || c.razaoSocial.split(' ')[0]}: ${prodData.count} produtos`);
           
           return {
             ...c,
@@ -190,8 +199,36 @@ export default function CompetitiveAnalysis({
           };
         });
         
-        console.log('[CompetitiveAnalysis] ✅ Produtos carregados:', productsMap);
-        setEnrichedCompetitors(enriched);
+        // 2. Buscar endereços via CEP (se disponível nos dados do concorrente)
+        const enrichedWithAddress = await Promise.all(enriched.map(async (c) => {
+          // Se já tem endereço, não busca
+          if ((c as any).endereco) return c;
+          
+          // Se tem CEP, busca via ViaCEP
+          const cep = (c as any).cep;
+          if (cep) {
+            try {
+              const response = await fetch(`https://viacep.com.br/ws/${cep.replace(/\D/g, '')}/json/`);
+              const data = await response.json();
+              
+              if (!data.erro) {
+                return {
+                  ...c,
+                  endereco: `${data.logradouro || 'Não disponível'}`,
+                  bairro: data.bairro,
+                  cep: data.cep
+                };
+              }
+            } catch (error) {
+              console.warn(`[CompetitiveAnalysis] ⚠️ Erro ao buscar CEP ${cep}:`, error);
+            }
+          }
+          
+          return c;
+        }));
+        
+        console.log('[CompetitiveAnalysis] ✅ Total enriquecido:', enrichedWithAddress.length, 'concorrentes');
+        setEnrichedCompetitors(enrichedWithAddress);
       } catch (error) {
         console.error('[CompetitiveAnalysis] ❌ Erro ao carregar produtos:', error);
         // Fallback sem contagem
