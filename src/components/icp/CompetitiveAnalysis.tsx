@@ -151,6 +151,7 @@ export default function CompetitiveAnalysis({
   const [suaEmpresaOpen, setSuaEmpresaOpen] = useState(false);
   const [kpisOpen, setKpisOpen] = useState(false);
   const [mapaCompetitivoOpen, setMapaCompetitivoOpen] = useState(false);
+  const [tenantProductsCount, setTenantProductsCount] = useState(0);
 
   // Inicializar com dados dos concorrentes + BUSCAR PRODUTOS COMPLETOS
   useEffect(() => {
@@ -259,6 +260,40 @@ export default function CompetitiveAnalysis({
             ...dadosExtras
           };
         }));
+        
+        // 4. Buscar produtos do TENANT também (TODAS as fontes possíveis)
+        console.log('[CompetitiveAnalysis] 🔍 Buscando produtos do TENANT...');
+        
+        // Buscar CNPJ do tenant de onboarding_sessions
+        const { data: tenantSession } = await supabase
+          .from('onboarding_sessions' as any)
+          .select('step1_data')
+          .eq('tenant_id', tenantId)
+          .single();
+        
+        const tenantCNPJ = tenantSession?.step1_data?.cnpj?.replace(/\D/g, '') || '';
+        console.log('[CompetitiveAnalysis] 📋 CNPJ do Tenant:', tenantCNPJ);
+        
+        // Buscar de tenant_competitor_products (produtos extraídos)
+        const tenantProductsFromCompetitors = (allProducts || []).filter((p: any) => 
+          p.competitor_cnpj?.replace(/\D/g, '') === tenantCNPJ
+        );
+        
+        // Buscar de tenant_products (produtos diretos)
+        const { data: tenantProductsDirect } = await supabase
+          .from('tenant_products' as any)
+          .select('id, nome')
+          .eq('tenant_id', tenantId);
+        
+        const totalTenantProducts = tenantProductsFromCompetitors.length + (tenantProductsDirect?.length || 0);
+        
+        console.log('[CompetitiveAnalysis] 🏢 Produtos do TENANT:', {
+          fromCompetitors: tenantProductsFromCompetitors.length,
+          fromDirect: tenantProductsDirect?.length || 0,
+          total: totalTenantProducts
+        });
+        
+        setTenantProductsCount(totalTenantProducts);
         
         console.log('[CompetitiveAnalysis] ✅ Total enriquecido:', enrichedWithAddress.length, 'concorrentes');
         setEnrichedCompetitors(enrichedWithAddress);
@@ -616,7 +651,34 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
         // Pequeno delay para não sobrecarregar API
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      setEnrichedCompetitors(enrichedResults);
+      // 🔥 NOVO: Ao enriquecer, também atualizar CEP/endereços
+      const enrichedWithCEP = await Promise.all(enrichedResults.map(async (c) => {
+        // Se já tem endereço, mantém
+        if ((c as any).endereco) return c;
+        
+        // Se tem CEP, busca via ViaCEP
+        if ((c as any).cep) {
+          try {
+            const response = await fetch(`https://viacep.com.br/ws/${(c as any).cep.replace(/\D/g, '')}/json/`);
+            const data = await response.json();
+            
+            if (!data.erro) {
+              return {
+                ...c,
+                endereco: data.logradouro,
+                bairro: data.bairro,
+                cep: data.cep
+              };
+            }
+          } catch (error) {
+            console.warn(`[CompetitiveAnalysis] ⚠️ Erro ao buscar CEP:`, error);
+          }
+        }
+        
+        return c;
+      }));
+      
+      setEnrichedCompetitors(enrichedWithCEP);
 
       // Gerar análise CEO
       toast({
@@ -982,7 +1044,7 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                 cidade: enrichedCompetitors[0]?.cidade || 'São Paulo',
                 estado: enrichedCompetitors[0]?.estado || 'SP',
                 capitalSocial: companyCapitalSocial,
-                produtosCount: 0
+                produtosCount: tenantProductsCount
               }}
               isOpen={mapaCompetitivoOpen}
               onToggle={() => setMapaCompetitivoOpen(!mapaCompetitivoOpen)}
