@@ -8,7 +8,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Building2, DollarSign, Package, MapPinned, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MapPin, Building2, DollarSign, Package, MapPinned, Loader2, ChevronDown, ChevronUp, Globe, ExternalLink, Navigation } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -48,9 +49,11 @@ interface Competitor {
   estado: string;
   capitalSocial: number;
   produtosCount?: number;
+  produtos?: string[]; // Lista de produtos
   endereco?: string;
   bairro?: string;
   cep?: string;
+  website?: string;
 }
 
 interface CompetitiveMapBrazilProps {
@@ -287,44 +290,33 @@ export default function CompetitiveMapBrazil({
                               }
                             }}
                           >
-                            {/* Popup com design corporativo responsivo */}
-                            <Popup className="custom-popup">
-                              <div className="min-w-[260px] p-1">
-                                <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border-2 border-indigo-500 dark:border-indigo-600">
-                                  <p className="font-bold text-base text-slate-900 dark:text-slate-50">
-                                    {comp.nomeFantasia || comp.razaoSocial.split(' ').slice(0, 3).join(' ')}
+                            {/* Tooltip ao HOVER (aparece automaticamente) */}
+                            <Tooltip direction="top" offset={[0, -40]} opacity={1} permanent={false}>
+                              <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border-2 border-indigo-500 dark:border-indigo-600 shadow-xl min-w-[280px]">
+                                <p className="font-bold text-base text-slate-900 dark:text-slate-50">
+                                  {comp.nomeFantasia || comp.razaoSocial.split(' ').slice(0, 3).join(' ')}
+                                </p>
+                                <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {comp.cidade}, {comp.estado}
+                                </p>
+                                <div className="flex items-center gap-2 mt-3">
+                                  <Badge className={`${threat.color} text-white text-[10px]`}>{threat.label}</Badge>
+                                  <span className="text-sm font-bold text-slate-900 dark:text-slate-50">{formatCurrency(comp.capitalSocial)}</span>
+                                </div>
+                                {comp.produtosCount !== undefined && comp.produtosCount > 0 && (
+                                  <p className="text-xs text-orange-700 dark:text-orange-400 mt-2 font-medium flex items-center gap-1">
+                                    <Package className="h-3 w-3" />
+                                    {comp.produtosCount} produtos
                                   </p>
-                                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 flex items-center gap-1">
-                                    <MapPin className="h-3 w-3" />
-                                    {comp.cidade}, {comp.estado}
+                                )}
+                                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                                  <p className="text-xs text-indigo-700 dark:text-indigo-300 font-semibold text-center">
+                                    👆 Clique no pin para detalhes completos
                                   </p>
-                                  <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">
-                                    <strong>CNPJ:</strong> {comp.cnpj}
-                                  </p>
-                                  <div className="flex items-center gap-2 mt-3">
-                                    <Badge className={`${threat.color} text-white`}>{threat.label}</Badge>
-                                    <span className="text-sm font-bold text-slate-900 dark:text-slate-50">{formatCurrency(comp.capitalSocial)}</span>
-                                  </div>
-                                  {comp.produtosCount !== undefined && (
-                                    <p className="text-xs text-orange-700 dark:text-orange-400 mt-2 font-medium flex items-center gap-1">
-                                      <Package className="h-3 w-3" />
-                                      {comp.produtosCount} produtos cadastrados
-                                    </p>
-                                  )}
-                                  <div 
-                                    className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/30 p-2 rounded transition-colors"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedCompetitor(comp);
-                                    }}
-                                  >
-                                    <p className="text-xs text-indigo-700 dark:text-indigo-300 font-semibold text-center">
-                                      👆 Clique para detalhes completos
-                                    </p>
-                                  </div>
                                 </div>
                               </div>
-                            </Popup>
+                            </Tooltip>
                           </Marker>
                         );
                       })}
@@ -393,8 +385,9 @@ export default function CompetitiveMapBrazil({
       </Collapsible>
 
       {/* Modal com Detalhes Completos - Z-INDEX ALTO */}
-      <Dialog open={!!selectedCompetitor} onOpenChange={() => setSelectedCompetitor(null)}>
-        <DialogContent className="max-w-2xl" style={{ zIndex: 9999 }}>
+      {selectedCompetitor && (
+        <Dialog open={true} onOpenChange={() => setSelectedCompetitor(null)}>
+          <DialogContent className="max-w-2xl" style={{ zIndex: 9999 }}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-indigo-600" />
@@ -414,28 +407,80 @@ export default function CompetitiveMapBrazil({
                 </div>
               </div>
 
+              {/* Localização Completa + Google Maps */}
               <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                <p className="text-xs text-muted-foreground mb-1">Localização Completa</p>
-                <p className="text-sm font-semibold flex items-start gap-1">
+                <p className="text-xs text-muted-foreground mb-2">Localização Completa</p>
+                <p className="text-sm font-semibold flex items-start gap-1 mb-3">
                   <MapPin className="h-4 w-4 text-indigo-600 mt-0.5" />
                   <span>
-                    {selectedCompetitor.endereco && `${selectedCompetitor.endereco}, `}
-                    {selectedCompetitor.bairro && `${selectedCompetitor.bairro}, `}
+                    {selectedCompetitor.endereco || 'Endereço não disponível'}
+                    {selectedCompetitor.bairro && `, ${selectedCompetitor.bairro}`}
+                    <br />
                     {selectedCompetitor.cidade}, {selectedCompetitor.estado}
                     {selectedCompetitor.cep && ` - CEP: ${selectedCompetitor.cep}`}
                   </span>
                 </p>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    const address = `${selectedCompetitor.endereco || ''}, ${selectedCompetitor.cidade}, ${selectedCompetitor.estado}, Brasil`;
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank');
+                  }}
+                >
+                  <Navigation className="h-3 w-3 mr-2" />
+                  Abrir no Google Maps
+                </Button>
               </div>
 
-              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                <p className="text-xs text-muted-foreground mb-1">Produtos Cadastrados</p>
-                <p className="text-sm font-semibold flex items-center gap-1">
-                  <Package className="h-4 w-4 text-orange-600" />
-                  {selectedCompetitor.produtosCount !== undefined && selectedCompetitor.produtosCount > 0 
-                    ? `${selectedCompetitor.produtosCount} produtos extraídos do website`
-                    : 'Aguardando extração de produtos'
-                  }
-                </p>
+              {/* Website */}
+              {selectedCompetitor.website && (
+                <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                  <p className="text-xs text-muted-foreground mb-2">Website</p>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => window.open(selectedCompetitor.website, '_blank')}
+                  >
+                    <Globe className="h-3 w-3 mr-2" />
+                    Visitar Website
+                    <ExternalLink className="h-3 w-3 ml-2" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Produtos */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg col-span-2">
+                <p className="text-xs text-muted-foreground mb-2">Produtos Cadastrados</p>
+                {selectedCompetitor.produtosCount !== undefined && selectedCompetitor.produtosCount > 0 ? (
+                  <>
+                    <p className="text-sm font-semibold flex items-center gap-1 mb-3">
+                      <Package className="h-4 w-4 text-orange-600" />
+                      {selectedCompetitor.produtosCount} produtos extraídos do website
+                    </p>
+                    {selectedCompetitor.produtos && selectedCompetitor.produtos.length > 0 && (
+                      <div className="mt-2 max-h-[150px] overflow-y-auto">
+                        <ul className="space-y-1 text-xs">
+                          {selectedCompetitor.produtos.slice(0, 10).map((produto, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-orange-600">•</span>
+                              <span className="text-slate-700 dark:text-slate-300">{produto}</span>
+                            </li>
+                          ))}
+                          {selectedCompetitor.produtos.length > 10 && (
+                            <li className="text-xs text-muted-foreground italic">
+                              +{selectedCompetitor.produtos.length - 10} outros produtos...
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Aguardando extração de produtos do website</p>
+                )}
               </div>
 
               {/* Classificação de Ameaça */}
