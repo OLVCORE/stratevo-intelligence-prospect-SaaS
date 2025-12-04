@@ -67,46 +67,61 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
       setLoading(true);
       console.log('[MarketAnalysisTab] 🔄 Carregando dados para tenant:', tenant.id);
 
-      // 1. Buscar sessão de onboarding para pegar concorrentes atuais
-      const { data: session, error: sessionError } = await supabase
-        .from('onboarding_sessions' as any)
-        .select('step1_data, step4_data')
-        .eq('tenant_id', tenant.id)
-        .single();
-
-      if (sessionError) {
-        console.error('[MarketAnalysisTab] ❌ Erro ao buscar sessão:', sessionError);
-      }
-
-      const concorrentesAtuais = session?.step1_data?.concorrentesDiretos || [];
-      const cnpjsAtuais = concorrentesAtuais.map((c: any) => c.cnpj.replace(/\D/g, ''));
-      console.log('[MarketAnalysisTab] 📊 Concorrentes atuais:', cnpjsAtuais.length);
-
-      // 2. Buscar produtos do tenant
-      const { data: tenantProds, error: tenantError } = await supabase
-        .from('tenant_products' as any)
-        .select('id, nome, descricao, categoria')
-        .eq('tenant_id', tenant.id);
-
-      if (tenantError) {
-        console.error('[MarketAnalysisTab] ❌ Erro ao buscar produtos tenant:', tenantError);
-      }
-      console.log('[MarketAnalysisTab] ✅ Produtos do tenant:', tenantProds?.length || 0);
-
-      // 3. Buscar produtos dos concorrentes (apenas dos atuais)
-      const { data: competitorProds, error: competitorError } = await supabase
+      // 🔥 USAR MESMA LÓGICA DO ProductComparisonMatrix
+      // 1. Buscar TODOS os produtos de tenant_competitor_products
+      let query = supabase
         .from('tenant_competitor_products' as any)
         .select('id, nome, descricao, categoria, competitor_name, competitor_cnpj')
-        .eq('tenant_id', tenant.id)
-        .in('competitor_cnpj', cnpjsAtuais);
+        .eq('tenant_id', tenant.id);
 
-      if (competitorError) {
-        console.error('[MarketAnalysisTab] ❌ Erro ao buscar produtos concorrentes:', competitorError);
+      const { data: allProducts, error: productsError } = await query.order('nome');
+
+      if (productsError) {
+        console.error('[MarketAnalysisTab] ❌ Erro ao buscar produtos:', productsError);
       }
-      console.log('[MarketAnalysisTab] ✅ Produtos de concorrentes:', competitorProds?.length || 0);
 
-      setTenantProducts(tenantProds || []);
-      setCompetitorProducts(competitorProds || []);
+      // 2. Separar produtos do TENANT vs CONCORRENTES
+      const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '');
+      const allProds = allProducts || [];
+      
+      console.log('[MarketAnalysisTab] 🔍 Filtrando produtos - Tenant CNPJ:', tenantCNPJ);
+
+      // 🔥 PRODUTOS DO TENANT (mesma lógica do ProductComparisonMatrix)
+      const tenantProductsList: TenantProduct[] = tenantCNPJ 
+        ? allProds.filter(p => p.competitor_cnpj?.replace(/\D/g, '') === tenantCNPJ)
+            .map(p => ({ id: p.id, nome: p.nome, descricao: p.descricao, categoria: p.categoria }))
+        : allProds.filter(p => !p.competitor_cnpj || p.competitor_cnpj === tenant.id)
+            .map(p => ({ id: p.id, nome: p.nome, descricao: p.descricao, categoria: p.categoria }));
+      
+      // 🔥 PRODUTOS DOS CONCORRENTES
+      const competitorProductsList: CompetitorProduct[] = tenantCNPJ
+        ? allProds.filter(p => p.competitor_cnpj?.replace(/\D/g, '') !== tenantCNPJ && p.competitor_cnpj)
+            .map(p => ({
+              id: p.id,
+              nome: p.nome,
+              descricao: p.descricao,
+              categoria: p.categoria,
+              competitor_name: p.competitor_name,
+              competitor_cnpj: p.competitor_cnpj,
+            }))
+        : allProds.filter(p => p.competitor_cnpj && p.competitor_cnpj !== tenant.id)
+            .map(p => ({
+              id: p.id,
+              nome: p.nome,
+              descricao: p.descricao,
+              categoria: p.categoria,
+              competitor_name: p.competitor_name,
+              competitor_cnpj: p.competitor_cnpj,
+            }));
+
+      console.log('[MarketAnalysisTab] ✅ Produtos carregados:', {
+        tenant: tenantProductsList.length,
+        concorrentes: competitorProductsList.length,
+        empresasConcorrentes: Array.from(new Set(competitorProductsList.map(p => p.competitor_name))).length,
+      });
+
+      setTenantProducts(tenantProductsList);
+      setCompetitorProducts(competitorProductsList);
 
       // 4. Calcular matches
       if (tenantProds && competitorProds) {
@@ -136,6 +151,10 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
     }
   };
 
+  // Estatísticas gerais
+  const totalCompetidores = Array.from(new Set(competitorProducts.map(p => p.competitor_name))).length;
+  const totalProdutos = tenantProducts.length + competitorProducts.length;
+
   return (
     <div className="space-y-6">
       {loading ? (
@@ -145,6 +164,41 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
         </div>
       ) : (
         <>
+          {/* 🔥 CONTADOR DE PRODUTOS - Visual e Profissional */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 rounded-lg shadow-lg">
+              <p className="text-xs font-medium opacity-90">SEUS PRODUTOS</p>
+              <p className="text-3xl font-bold mt-1">{tenantProducts.length}</p>
+              <p className="text-xs opacity-75 mt-1">
+                {tenantProducts.length > 0 ? `${Math.round((tenantProducts.length / totalProdutos) * 100)}% do mercado` : 'Cadastre produtos'}
+              </p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-4 rounded-lg shadow-lg">
+              <p className="text-xs font-medium opacity-90">CONCORRENTES</p>
+              <p className="text-3xl font-bold mt-1">{totalCompetidores}</p>
+              <p className="text-xs opacity-75 mt-1">
+                {totalCompetidores > 0 ? 'empresas ativas' : 'Nenhum cadastrado'}
+              </p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-lg shadow-lg">
+              <p className="text-xs font-medium opacity-90">PRODUTOS CONCORRENTES</p>
+              <p className="text-3xl font-bold mt-1">{competitorProducts.length}</p>
+              <p className="text-xs opacity-75 mt-1">
+                {competitorProducts.length > 0 ? `${Math.round((competitorProducts.length / totalProdutos) * 100)}% do mercado` : 'Aguarde extração'}
+              </p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 rounded-lg shadow-lg">
+              <p className="text-xs font-medium opacity-90">TOTAL MERCADO</p>
+              <p className="text-3xl font-bold mt-1">{totalProdutos}</p>
+              <p className="text-xs opacity-75 mt-1">
+                {Array.from(new Set([...tenantProducts.map(p => p.categoria), ...competitorProducts.map(p => p.categoria)].filter(Boolean))).length} categorias
+              </p>
+            </div>
+          </div>
+
           {/* 🔥 1. SWOT AUTOMÁTICO (PRIMEIRO) */}
           <AutoSWOTAnalysis
             tenantProducts={tenantProducts}
