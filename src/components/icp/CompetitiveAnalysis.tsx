@@ -60,6 +60,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ProductComparisonMatrix } from './ProductComparisonMatrix';
 import MarketAnalysisTab from '@/components/competitive/MarketAnalysisTab';
+import CompetitiveMapBrazil from '@/components/competitive/CompetitiveMapBrazil';
 import { useICPDataSyncHook } from '@/hooks/useICPDataSync';
 import CompetitorDiscovery from './CompetitorDiscovery';
 
@@ -149,8 +150,7 @@ export default function CompetitiveAnalysis({
   // 🔥 NOVO: Estados para controlar dropdowns das seções
   const [suaEmpresaOpen, setSuaEmpresaOpen] = useState(false);
   const [kpisOpen, setKpisOpen] = useState(false);
-  const [rankingOpen, setRankingOpen] = useState(false);
-  const [distribuicaoGeoOpen, setDistribuicaoGeoOpen] = useState(false);
+  const [mapaCompetitivoOpen, setMapaCompetitivoOpen] = useState(false);
 
   // Inicializar com dados dos concorrentes (incluindo refreshTrigger para detectar mudanças)
   useEffect(() => {
@@ -847,112 +847,21 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
               </div>
             </Collapsible>
 
-            {/* Ranking COMPARATIVO (incluindo sua empresa) - Collapsible */}
-            <Collapsible open={rankingOpen} onOpenChange={setRankingOpen}>
-              <Card className="border-l-4 border-l-indigo-600/90 shadow-md">
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2 text-indigo-800 dark:text-indigo-100 font-semibold">
-                          <Scale className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
-                          Ranking Competitivo por Capital Social
-                        </CardTitle>
-                        <CardDescription>
-                          Comparação direta: {companyName} vs {competitors.length} concorrentes
-                        </CardDescription>
-                      </div>
-                      {rankingOpen ? (
-                        <ChevronUp className="h-5 w-5 text-indigo-600" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5 text-indigo-600" />
-                      )}
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent>
-                <div className="space-y-4">
-                  {allCompaniesForRanking.map((company, idx) => {
-                    const percentage = totalMarketCapital > 0 
-                      ? ((company.capitalSocial || 0) / totalMarketCapital) * 100 
-                      : 0;
-                    const isYou = (company as any).isYourCompany;
-                    return (
-                      <div key={idx} className={cn(
-                        "space-y-2 p-3 rounded-lg transition-all",
-                        isYou ? "bg-green-100 dark:bg-green-900/30 border-2 border-green-500" : "hover:bg-muted/50"
-                      )}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge 
-                              variant={isYou ? "default" : "outline"} 
-                              className={cn(
-                                "w-7 h-7 rounded-full flex items-center justify-center text-sm",
-                                isYou && "bg-green-600"
-                              )}
-                            >
-                              {idx + 1}
-                            </Badge>
-                            <span className={cn("font-medium", isYou && "text-green-700 dark:text-green-300")}>
-                              {(company as any).razaoSocial || company.nome}
-                              {isYou && " (VOCÊ)"}
-                            </span>
-                            {!isYou && <ThreatBadge level={(company as any).ameacaPotencial} />}
-                            {isYou && <Badge className="bg-green-600">SUA EMPRESA</Badge>}
-                          </div>
-                          <span className={cn("font-bold", isYou ? "text-green-700 dark:text-green-300" : "")}>
-                            {formatCurrency(company.capitalSocial || 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Progress 
-                            value={percentage} 
-                            className={cn("h-2 flex-1", isYou && "[&>div]:bg-green-600")} 
-                          />
-                          <span className="text-xs text-muted-foreground w-14 text-right">{percentage.toFixed(1)}%</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
+            {/* 🗺️ NOVO: Mapa Competitivo Unificado (substitui Ranking + Distribuição) */}
+            <CompetitiveMapBrazil
+              competitors={enrichedCompetitors.map(c => ({
+                cnpj: c.cnpj,
+                razaoSocial: c.razaoSocial,
+                nomeFantasia: c.nomeFantasia,
+                cidade: c.cidade,
+                estado: c.estado,
+                capitalSocial: c.capitalSocial || 0,
+                produtosCount: 0 // TODO: adicionar contagem real
+              }))}
+              isOpen={mapaCompetitivoOpen}
+              onToggle={() => setMapaCompetitivoOpen(!mapaCompetitivoOpen)}
+            />
 
-            {/* Mapa de Localização - Collapsible */}
-            <Collapsible open={distribuicaoGeoOpen} onOpenChange={setDistribuicaoGeoOpen}>
-              <Card className="border-l-4 border-l-sky-600/90 shadow-md">
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2 text-sky-800 dark:text-sky-100 font-semibold">
-                        <MapPin className="h-5 w-5 text-sky-700 dark:text-sky-500" />
-                        Distribuição Geográfica
-                      </CardTitle>
-                      {distribuicaoGeoOpen ? (
-                        <ChevronUp className="h-5 w-5 text-sky-600" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5 text-sky-600" />
-                      )}
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {enrichedCompetitors.map((competitor, idx) => (
-                    <div key={idx} className="p-3 bg-muted rounded-lg text-center">
-                      <p className="font-medium text-sm truncate">{competitor.nomeFantasia || competitor.razaoSocial.split(' ')[0]}</p>
-                      <p className="text-xs text-muted-foreground">{competitor.cidade}/{competitor.estado}</p>
-                    </div>
-                  ))}
-                </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
           </TabsContent>
 
           {/* Detalhes dos Concorrentes */}
