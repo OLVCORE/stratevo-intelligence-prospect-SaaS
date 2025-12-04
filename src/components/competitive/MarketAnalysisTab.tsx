@@ -131,48 +131,30 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-        <span className="ml-3 text-muted-foreground">Carregando análise de mercado...</span>
-      </div>
-    );
-  }
-
-  if (tenantProducts.length === 0 && !loading) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground mb-2">Nenhum produto cadastrado.</p>
-        <p className="text-sm text-muted-foreground">Cadastre produtos na página de Onboarding (Aba 1) para ver a análise completa.</p>
-      </div>
-    );
-  }
-
-  if (competitorProducts.length === 0 && tenantProducts.length > 0 && !loading) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground mb-2">Nenhum concorrente com produtos extraídos.</p>
-        <p className="text-sm text-muted-foreground">Aguarde a extração de produtos dos concorrentes ou adicione mais concorrentes.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      {/* 1. Análise Multidimensional de Ameaça (Top 5) - Aberto por padrão */}
-      <CompetitorIntensityAnalysis
-        tenantProducts={tenantProducts}
-        competitorProducts={competitorProducts}
-        matches={matches}
-      />
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+          <span className="ml-3 text-muted-foreground">Carregando análise de mercado...</span>
+        </div>
+      ) : (
+        <>
+          {/* 🔥 1. Análise Multidimensional de Ameaça (Top 5) + Ranking + Resumo */}
+          <CompetitorIntensityAnalysis
+            tenantProducts={tenantProducts}
+            competitorProducts={competitorProducts}
+            matches={matches}
+          />
 
-      {/* 2. Análise SWOT Automática */}
-      <AutoSWOTAnalysis
-        tenantProducts={tenantProducts}
-        competitorProducts={competitorProducts}
-        matches={matches}
-      />
+          {/* 🔥 2. Análise SWOT Automática */}
+          <AutoSWOTAnalysis
+            tenantProducts={tenantProducts}
+            competitorProducts={competitorProducts}
+            matches={matches}
+          />
+        </>
+      )}
     </div>
   );
 }
