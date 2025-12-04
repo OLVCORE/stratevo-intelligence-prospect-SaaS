@@ -456,7 +456,6 @@ export default function CompetitiveMapBrazil({
                   </p>
                 </div>
               </div>
-            </div>
           </DialogContent>
         </Dialog>
       )}
