@@ -858,6 +858,14 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                 capitalSocial: c.capitalSocial || 0,
                 produtosCount: 0 // TODO: adicionar contagem real
               }))}
+              tenant={{
+                nome: companyName,
+                cnpj: '00.000.000/0000-00',
+                cidade: enrichedCompetitors[0]?.cidade || 'São Paulo',
+                estado: enrichedCompetitors[0]?.estado || 'SP',
+                capitalSocial: companyCapitalSocial,
+                produtosCount: 0
+              }}
               isOpen={mapaCompetitivoOpen}
               onToggle={() => setMapaCompetitivoOpen(!mapaCompetitivoOpen)}
             />

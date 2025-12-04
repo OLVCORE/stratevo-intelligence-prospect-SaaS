@@ -34,12 +34,58 @@ interface Competitor {
 
 interface CompetitiveMapBrazilProps {
   competitors: Competitor[];
+  tenant?: {
+    nome: string;
+    cnpj: string;
+    cidade: string;
+    estado: string;
+    capitalSocial?: number;
+    produtosCount?: number;
+  };
   isOpen?: boolean;
   onToggle?: () => void;
 }
 
 // Criar ícones coloridos por capital social
-const createColoredIcon = (capitalSocial: number) => {
+const createColoredIcon = (capitalSocial: number, isTenant = false) => {
+  if (isTenant) {
+    // PIN PULSANTE ESPECIAL para o TENANT
+    const svgIcon = `
+      <svg width="35" height="51" viewBox="0 0 35 51" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+          <style>
+            @keyframes pulse {
+              0%, 100% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.7; transform: scale(1.1); }
+            }
+            .pulse-pin { animation: pulse 2s ease-in-out infinite; }
+          </style>
+        </defs>
+        <g class="pulse-pin" filter="url(#glow)">
+          <path d="M17.5 0C10.6 0 5 5.6 5 12.5c0 8.4 12.5 38.5 12.5 38.5S30 20.9 30 12.5C30 5.6 24.4 0 17.5 0z" 
+                fill="#22c55e" stroke="#fff" stroke-width="3"/>
+          <circle cx="17.5" cy="12.5" r="7" fill="#fff"/>
+          <text x="17.5" y="16" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">★</text>
+        </g>
+      </svg>
+    `;
+    
+    return L.divIcon({
+      html: svgIcon,
+      className: 'tenant-pin-icon',
+      iconSize: [35, 51],
+      iconAnchor: [17.5, 51],
+      popupAnchor: [0, -51]
+    });
+  }
+  
   const color = capitalSocial >= 50000000 ? '#dc2626' : // Vermelho (ALTA)
                 capitalSocial >= 5000000 ? '#ea580c' :  // Laranja (MÉDIA)
                 '#22c55e'; // Verde (BAIXA)
@@ -77,6 +123,7 @@ const cityCoordinates: Record<string, { lat: number; lng: number }> = {
 
 export default function CompetitiveMapBrazil({ 
   competitors,
+  tenant,
   isOpen = false,
   onToggle
 }: CompetitiveMapBrazilProps) {
@@ -173,6 +220,35 @@ export default function CompetitiveMapBrazil({
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                       />
                       
+                      {/* 🌟 PIN DO TENANT (PULSANTE E DESTACADO) */}
+                      {tenant && (() => {
+                        const tenantKey = `${tenant.cidade.toUpperCase()}-${tenant.estado}`;
+                        const tenantLocation = cityCoordinates[tenantKey] || { lat: -23.5505, lng: -46.6333 };
+                        
+                        return (
+                          <Marker
+                            position={[tenantLocation.lat, tenantLocation.lng]}
+                            icon={createColoredIcon(0, true)}
+                          >
+                            <Popup permanent className="tenant-popup">
+                              <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-3 rounded-lg border-2 border-green-500 min-w-[220px]">
+                                <p className="font-bold text-sm text-green-800 dark:text-green-100 flex items-center gap-2">
+                                  ⭐ {tenant.nome}
+                                </p>
+                                <Badge className="bg-green-600 mt-1 mb-2">SUA EMPRESA</Badge>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  📍 {tenant.cidade}, {tenant.estado}
+                                </p>
+                                <p className="text-xs font-semibold mt-2">
+                                  📦 {tenant.produtosCount || 0} produtos
+                                </p>
+                              </div>
+                            </Popup>
+                          </Marker>
+                        );
+                      })()}
+                      
+                      {/* PINS DOS CONCORRENTES */}
                       {competitors.map((comp, idx) => {
                         const location = getCompetitorLocation(comp);
                         const threat = getThreatLevel(comp.capitalSocial);
@@ -181,46 +257,72 @@ export default function CompetitiveMapBrazil({
                           <Marker
                             key={idx}
                             position={[location.lat, location.lng]}
-                            icon={createColoredIcon(comp.capitalSocial)}
-                            eventHandlers={{
-                              click: () => setSelectedCompetitor(comp),
-                            }}
+                            icon={createColoredIcon(comp.capitalSocial, false)}
                           >
-                            {/* Tooltip no Hover */}
-                            <Tooltip direction="top" offset={[0, -40]} opacity={1}>
-                              <div className="bg-white dark:bg-slate-800 p-3 rounded-lg shadow-xl border-2 border-indigo-500 min-w-[220px]">
+                            {/* Popup permanente ao click */}
+                            <Popup>
+                              <div className="min-w-[220px] cursor-pointer" onClick={() => setSelectedCompetitor(comp)}>
                                 <p className="font-bold text-sm text-slate-800 dark:text-slate-100">
                                   {comp.nomeFantasia || comp.razaoSocial.split(' ').slice(0, 3).join(' ')}
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                  {comp.cidade}, {comp.estado}
+                                  📍 {comp.cidade}, {comp.estado}
+                                </p>
+                                <p className="text-xs mt-1">
+                                  <strong>CNPJ:</strong> {comp.cnpj}
                                 </p>
                                 <div className="flex items-center gap-2 mt-2">
                                   <Badge className={threat.color}>{threat.label}</Badge>
                                   <span className="text-xs font-semibold">{formatCurrency(comp.capitalSocial)}</span>
                                 </div>
+                                {comp.produtosCount && comp.produtosCount > 0 && (
+                                  <p className="text-xs mt-2">
+                                    📦 {comp.produtosCount} produtos
+                                  </p>
+                                )}
                                 <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-medium">
-                                  👆 Clique para detalhes completos
+                                  👆 Clique aqui para detalhes completos
                                 </p>
                               </div>
-                            </Tooltip>
+                            </Popup>
                           </Marker>
                         );
                       })}
                     </MapContainer>
                   </div>
 
-                  {/* Ranking Resumido abaixo do mapa */}
+                  {/* Ranking Resumido abaixo do mapa - TODOS os concorrentes + Tenant */}
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {/* TENANT SEMPRE EM PRIMEIRO (destacado) */}
+                    {tenant && (
+                      <div
+                        className="p-3 rounded-lg border-2 border-green-500 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 hover:border-green-600 transition-all cursor-pointer shadow-lg"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <Badge className="bg-green-600 text-[10px]">⭐ VOCÊ</Badge>
+                        </div>
+                        <p className="text-sm font-bold text-green-800 dark:text-green-100 truncate">
+                          {tenant.nome}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">{tenant.capitalSocial ? formatCurrency(tenant.capitalSocial) : 'N/A'}</p>
+                        <p className="text-xs text-green-700 dark:text-green-400 mt-1 font-medium">
+                          {tenant.cidade}, {tenant.estado}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          📦 {tenant.produtosCount || 0} produtos
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* TODOS OS CONCORRENTES (não apenas 8) */}
                     {competitors
                       .sort((a, b) => b.capitalSocial - a.capitalSocial)
-                      .slice(0, 8)
                       .map((comp, idx) => {
                         const threat = getThreatLevel(comp.capitalSocial);
                         return (
                           <div
                             key={idx}
-                            className="p-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all cursor-pointer"
+                            className="p-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all cursor-pointer hover:shadow-md"
                             onClick={() => setSelectedCompetitor(comp)}
                           >
                             <div className="flex items-start justify-between mb-2">
@@ -232,8 +334,13 @@ export default function CompetitiveMapBrazil({
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">{formatCurrency(comp.capitalSocial)}</p>
                             <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
-                              {comp.cidade}, {comp.estado}
+                              📍 {comp.cidade}, {comp.estado}
                             </p>
+                            {comp.produtosCount && comp.produtosCount > 0 && (
+                              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                📦 {comp.produtosCount} produtos
+                              </p>
+                            )}
                           </div>
                         );
                       })}
