@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
-import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw, MapPin } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,6 @@ import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
 import { TenantProductsCatalog } from '@/components/products/TenantProductsCatalog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
