@@ -180,20 +180,20 @@ export default function CompetitorIntensityAnalysis({
       {/* 🔥 GRÁFICO RADAR - Comparação Visual */}
       {competitorAnalysis.length > 0 && (
         <Collapsible open={radarOpen} onOpenChange={setRadarOpen}>
-          <Card className="border-purple-500/30">
+          <Card className="border-l-4 border-l-indigo-600/90 shadow-md">
             <CollapsibleTrigger className="w-full">
-              <CardHeader className="cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors">
+              <CardHeader className="cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-left">
-                      <Target className="h-5 w-5 text-purple-500" />
+                    <CardTitle className="flex items-center gap-2 text-left text-indigo-800 dark:text-indigo-100 font-semibold">
+                      <Target className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
                       Análise Multidimensional de Ameaça (Top 5)
                     </CardTitle>
                     <CardDescription className="text-left">
                       Comparação visual em 5 dimensões estratégicas
                     </CardDescription>
                   </div>
-                  {radarOpen ? <ChevronUp className="h-5 w-5 text-purple-500" /> : <ChevronDown className="h-5 w-5 text-purple-500" />}
+                  {radarOpen ? <ChevronUp className="h-5 w-5 text-indigo-600" /> : <ChevronDown className="h-5 w-5 text-indigo-600" />}
                 </div>
               </CardHeader>
             </CollapsibleTrigger>
@@ -235,20 +235,20 @@ export default function CompetitorIntensityAnalysis({
       
       {/* 🔥 RANKING DE AMEAÇA COMPETITIVA */}
       <Collapsible open={rankingOpen} onOpenChange={setRankingOpen}>
-        <Card>
+        <Card className="border-l-4 border-l-orange-600/90 shadow-md">
           <CollapsibleTrigger className="w-full">
-            <CardHeader className="cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-colors">
+            <CardHeader className="cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-orange-50/60 hover:to-orange-100/40 dark:hover:from-orange-900/20 dark:hover:to-orange-800/20 transition-all duration-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-left">
-                    <Flame className="h-5 w-5 text-orange-500" />
+                  <CardTitle className="flex items-center gap-2 text-left text-orange-800 dark:text-orange-100 font-semibold">
+                    <Flame className="h-5 w-5 text-orange-700 dark:text-orange-500" />
                     Ranking de Ameaça Competitiva
                   </CardTitle>
                   <CardDescription className="text-left">
                     Score composto baseado em 4 dimensões estratégicas
                   </CardDescription>
                 </div>
-                {rankingOpen ? <ChevronUp className="h-5 w-5 text-orange-500" /> : <ChevronDown className="h-5 w-5 text-orange-500" />}
+                {rankingOpen ? <ChevronUp className="h-5 w-5 text-orange-600" /> : <ChevronDown className="h-5 w-5 text-orange-600" />}
               </div>
             </CardHeader>
           </CollapsibleTrigger>
@@ -364,15 +364,15 @@ export default function CompetitorIntensityAnalysis({
       
       {/* 🔥 RESUMO EXECUTIVO */}
       <Collapsible open={resumoOpen} onOpenChange={setResumoOpen}>
-        <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+        <Card className="border-l-4 border-l-sky-600/90 shadow-md">
           <CollapsibleTrigger className="w-full">
-            <CardHeader className="cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors">
+            <CardHeader className="cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400 text-left">
-                  <Info className="h-5 w-5" />
+                <CardTitle className="flex items-center gap-2 text-sky-800 dark:text-sky-100 font-semibold text-left">
+                  <Info className="h-5 w-5 text-sky-700 dark:text-sky-500" />
                   Resumo Executivo - Análise de Intensidade
                 </CardTitle>
-                {resumoOpen ? <ChevronUp className="h-5 w-5 text-blue-500" /> : <ChevronDown className="h-5 w-5 text-blue-500" />}
+                {resumoOpen ? <ChevronUp className="h-5 w-5 text-sky-600" /> : <ChevronDown className="h-5 w-5 text-sky-600" />}
               </div>
             </CardHeader>
           </CollapsibleTrigger>

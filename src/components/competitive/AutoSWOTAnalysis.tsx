@@ -229,16 +229,16 @@ export default function AutoSWOTAnalysis({
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
-      <Card className="border-purple-500/30">
+      <Card className="border-l-4 border-l-purple-600/90 shadow-md">
         <CollapsibleTrigger className="w-full">
-          <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100/50 dark:from-purple-900/30 dark:to-purple-800/20 cursor-pointer hover:from-purple-100 hover:to-purple-200/50 dark:hover:from-purple-900/40 dark:hover:to-purple-800/30 transition-colors">
+          <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 cursor-pointer hover:from-purple-50/60 hover:to-purple-100/40 dark:hover:from-purple-900/20 dark:hover:to-purple-800/20 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-purple-600/10 rounded-lg">
                   <Target className="h-5 w-5 text-purple-700 dark:text-purple-500" />
                 </div>
                 <div className="text-left">
-                  <CardTitle className="text-lg text-purple-800 dark:text-purple-100">
+                  <CardTitle className="text-lg text-purple-800 dark:text-purple-100 font-semibold">
                     Análise SWOT Profissional
                   </CardTitle>
                   <CardDescription>

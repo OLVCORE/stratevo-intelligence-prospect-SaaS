@@ -656,19 +656,19 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
           <TabsContent value="overview" className="space-y-6">
             {/* Card da SUA EMPRESA - Collapsible */}
             <Collapsible open={suaEmpresaOpen} onOpenChange={setSuaEmpresaOpen}>
-              <Card className="border-2 border-green-500 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30">
+              <Card className="border-l-4 border-l-emerald-600/90 shadow-md">
                 <CollapsibleTrigger className="w-full">
-                  <CardHeader className="pb-3 cursor-pointer hover:bg-green-100/30 dark:hover:bg-green-900/20 transition-colors">
+                  <CardHeader className="pb-3 cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-emerald-50/60 hover:to-emerald-100/40 dark:hover:from-emerald-900/20 dark:hover:to-emerald-800/20 transition-all duration-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Crown className="h-5 w-5 text-green-600" />
-                        <CardTitle className="text-lg text-green-800 dark:text-green-200">{companyName}</CardTitle>
-                        <Badge className="bg-green-600">SUA EMPRESA</Badge>
+                        <Crown className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />
+                        <CardTitle className="text-lg text-emerald-800 dark:text-emerald-100 font-semibold">{companyName}</CardTitle>
+                        <Badge className="bg-emerald-600/90">SUA EMPRESA</Badge>
                       </div>
                       {suaEmpresaOpen ? (
-                        <ChevronUp className="h-5 w-5 text-green-600" />
+                        <ChevronUp className="h-5 w-5 text-emerald-600" />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-green-600" />
+                        <ChevronDown className="h-5 w-5 text-emerald-600" />
                       )}
                     </div>
                   </CardHeader>
@@ -849,13 +849,13 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
 
             {/* Ranking COMPARATIVO (incluindo sua empresa) - Collapsible */}
             <Collapsible open={rankingOpen} onOpenChange={setRankingOpen}>
-              <Card>
+              <Card className="border-l-4 border-l-indigo-600/90 shadow-md">
                 <CollapsibleTrigger className="w-full">
-                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <CardHeader className="cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200">
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Scale className="h-5 w-5 text-primary" />
+                        <CardTitle className="flex items-center gap-2 text-indigo-800 dark:text-indigo-100 font-semibold">
+                          <Scale className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
                           Ranking Competitivo por Capital Social
                         </CardTitle>
                         <CardDescription>
@@ -863,9 +863,9 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                         </CardDescription>
                       </div>
                       {rankingOpen ? (
-                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                        <ChevronUp className="h-5 w-5 text-indigo-600" />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                        <ChevronDown className="h-5 w-5 text-indigo-600" />
                       )}
                     </div>
                   </CardHeader>
@@ -923,18 +923,18 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
 
             {/* Mapa de Localização - Collapsible */}
             <Collapsible open={distribuicaoGeoOpen} onOpenChange={setDistribuicaoGeoOpen}>
-              <Card>
+              <Card className="border-l-4 border-l-sky-600/90 shadow-md">
                 <CollapsibleTrigger className="w-full">
-                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <CardHeader className="cursor-pointer bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-sky-50/60 hover:to-sky-100/40 dark:hover:from-sky-900/20 dark:hover:to-sky-800/20 transition-all duration-200">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <MapPin className="h-5 w-5 text-primary" />
+                      <CardTitle className="flex items-center gap-2 text-sky-800 dark:text-sky-100 font-semibold">
+                        <MapPin className="h-5 w-5 text-sky-700 dark:text-sky-500" />
                         Distribuição Geográfica
                       </CardTitle>
                       {distribuicaoGeoOpen ? (
-                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                        <ChevronUp className="h-5 w-5 text-sky-600" />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                        <ChevronDown className="h-5 w-5 text-sky-600" />
                       )}
                     </div>
                   </CardHeader>
@@ -1167,10 +1167,10 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
 
           {/* Análise CEO */}
           <TabsContent value="ceo" className="space-y-4">
-            <Card className="border-purple-500/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-purple-500" />
+            <Card className="border-l-4 border-l-purple-600/90 shadow-md">
+              <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20">
+                <CardTitle className="flex items-center gap-2 text-purple-800 dark:text-purple-100 font-semibold">
+                  <Zap className="h-5 w-5 text-purple-700 dark:text-purple-500" />
                   Análise Estratégica do CEO
                 </CardTitle>
                 <CardDescription>

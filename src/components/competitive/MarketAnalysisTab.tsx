@@ -7,7 +7,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Package, Building2, Target, Award } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import CompetitorIntensityAnalysis from './CompetitorIntensityAnalysis';
 import AutoSWOTAnalysis from './AutoSWOTAnalysis';
 import { calculateProductMatch, findBestMatches } from '@/lib/matching/productMatcher';
@@ -170,43 +171,71 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
         </div>
       ) : (
         <>
-          {/* 🔥 MÉTRICAS - Design Corporativo Profissional */}
+          {/* 🔥 MÉTRICAS - CORES IDÊNTICAS à aba "Comparação Produtos" */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Card 1: Seus Produtos */}
-            <div className="bg-gradient-to-br from-emerald-600/90 to-emerald-700/90 text-white p-5 rounded-xl shadow-md border border-emerald-500/20">
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Seu Portfólio</p>
-              <p className="text-4xl font-bold mt-2">{tenantProducts.length}</p>
-              <p className="text-xs font-medium opacity-80 mt-2">
-                {tenantProducts.length > 0 ? `${Math.round((tenantProducts.length / totalProdutos) * 100)}% da amostra analisada` : 'Cadastre produtos'}
-              </p>
-            </div>
+            {/* Card 1: Seus Produtos - AZUL (igual Produtos Tenant) */}
+            <Card className="bg-gradient-to-br from-slate-50 to-blue-50/50 dark:from-slate-900 dark:to-blue-950/30 border-slate-300 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Seu Portfólio</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{tenantProducts.length}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {tenantProducts.length > 0 ? `${Math.round((tenantProducts.length / totalProdutos) * 100)}% da amostra` : 'Cadastre produtos'}
+                    </p>
+                  </div>
+                  <Package className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+              </CardContent>
+            </Card>
             
-            {/* Card 2: Concorrentes */}
-            <div className="bg-gradient-to-br from-slate-600/90 to-slate-700/90 text-white p-5 rounded-xl shadow-md border border-slate-500/20">
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Concorrentes Cadastrados</p>
-              <p className="text-4xl font-bold mt-2">{totalCompetidores}</p>
-              <p className="text-xs font-medium opacity-80 mt-2">
-                {totalCompetidores > 0 ? 'empresas no radar competitivo' : 'Nenhum cadastrado'}
-              </p>
-            </div>
+            {/* Card 2: Concorrentes - LARANJA (igual Produtos Concorrentes) */}
+            <Card className="bg-gradient-to-br from-slate-50 to-orange-50/50 dark:from-slate-900 dark:to-orange-950/30 border-slate-300 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Concorrentes</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{totalCompetidores}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {totalCompetidores > 0 ? 'no radar' : 'Nenhum'}
+                    </p>
+                  </div>
+                  <Building2 className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                </div>
+              </CardContent>
+            </Card>
             
-            {/* Card 3: Produtos Concorrentes */}
-            <div className="bg-gradient-to-br from-sky-600/90 to-sky-700/90 text-white p-5 rounded-xl shadow-md border border-sky-500/20">
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Portfólio Concorrentes</p>
-              <p className="text-4xl font-bold mt-2">{competitorProducts.length}</p>
-              <p className="text-xs font-medium opacity-80 mt-2">
-                {competitorProducts.length > 0 ? `${Math.round((competitorProducts.length / totalProdutos) * 100)}% da amostra analisada` : 'Aguarde extração'}
-              </p>
-            </div>
+            {/* Card 3: Produtos Concorrentes - VERDE (igual Matches) */}
+            <Card className="bg-gradient-to-br from-slate-50 to-emerald-50/50 dark:from-slate-900 dark:to-emerald-950/30 border-slate-300 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Portfólio Concorrentes</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{competitorProducts.length}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {competitorProducts.length > 0 ? `${Math.round((competitorProducts.length / totalProdutos) * 100)}% da amostra` : 'Aguarde'}
+                    </p>
+                  </div>
+                  <Target className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                </div>
+              </CardContent>
+            </Card>
             
-            {/* Card 4: Mercado Analisado */}
-            <div className="bg-gradient-to-br from-indigo-600/90 to-indigo-700/90 text-white p-5 rounded-xl shadow-md border border-indigo-500/20">
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-90">Amostra Competitiva</p>
-              <p className="text-4xl font-bold mt-2">{totalProdutos}</p>
-              <p className="text-xs font-medium opacity-80 mt-2">
-                produtos em {Array.from(new Set([...tenantProducts.map(p => p.categoria), ...competitorProducts.map(p => p.categoria)].filter(Boolean))).length} categorias analisadas
-              </p>
-            </div>
+            {/* Card 4: Amostra Competitiva - ROXO (igual Produtos Únicos) */}
+            <Card className="bg-gradient-to-br from-slate-50 to-indigo-50/50 dark:from-slate-900 dark:to-indigo-950/30 border-slate-300 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Amostra Competitiva</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{totalProdutos}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {Array.from(new Set([...tenantProducts.map(p => p.categoria), ...competitorProducts.map(p => p.categoria)].filter(Boolean))).length} categorias
+                    </p>
+                  </div>
+                  <Award className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* 🔥 1. SWOT AUTOMÁTICO (PRIMEIRO) */}
