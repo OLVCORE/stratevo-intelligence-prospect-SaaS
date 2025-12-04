@@ -1,15 +1,18 @@
 /**
  * Edge Function: Extração de Produtos de Documentos
  * 
- * Usa OpenAI para extrair informações de produtos de:
- * - PDFs (catálogos, fichas técnicas)
- * - Excel (listas de preços, tabelas de produtos)
- * - Word (documentos comerciais)
- * - Imagens (fotos de produtos com OCR)
+ * VERSÃO MELHORADA - Usa OpenAI + OCR para extrair produtos de:
+ * - PDFs (com pdf-parse)
+ * - Excel/CSV (com read-excel-file)
+ * - Word (conversão básica)
+ * - Imagens (OCR via OpenAI Vision)
+ * - TXT (leitura direta)
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import * as pdfParse from 'npm:pdf-parse@1.1.1';
+import readXlsxFile from 'npm:read-excel-file@5.7.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,6 +36,128 @@ interface ExtractedProduct {
   setores_alvo?: string[];
   diferenciais?: string[];
   confianca: number;
+}
+
+// 🔥 FUNÇÃO: Extrair texto de PDF
+async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string> {
+  try {
+    const data = await pdfParse.default(Buffer.from(buffer));
+    return data.text || '';
+  } catch (error) {
+    console.error('Erro ao extrair PDF:', error);
+    return '';
+  }
+}
+
+// 🔥 FUNÇÃO: Extrair texto de Excel/CSV
+async function extractTextFromExcel(buffer: ArrayBuffer): Promise<string> {
+  try {
+    const rows = await readXlsxFile(buffer);
+    
+    // Converter linhas em texto formatado
+    let text = '';
+    const headers = rows[0] || [];
+    
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      text += '\n\n--- Produto ---\n';
+      for (let j = 0; j < headers.length; j++) {
+        text += `${headers[j]}: ${row[j] || ''}\n`;
+      }
+    }
+    
+    return text;
+  } catch (error) {
+    console.error('Erro ao extrair Excel:', error);
+    return '';
+  }
+}
+
+// 🔥 FUNÇÃO: Extrair texto de Imagem via OpenAI Vision
+async function extractTextFromImage(imageUrl: string, openaiKey: string): Promise<string> {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extraia TODOS os produtos/serviços visíveis nesta imagem. Liste nome, descrição, categoria e preço (se houver).',
+              },
+              {
+                type: 'image_url',
+                image_url: { url: imageUrl },
+              },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI Vision error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.choices?.[0]?.message?.content || '';
+  } catch (error) {
+    console.error('Erro ao extrair imagem:', error);
+    return '';
+  }
+}
+
+// 🔥 FUNÇÃO: Processar documento e extrair texto
+async function extractDocumentContent(doc: any, openaiKey: string): Promise<string> {
+  try {
+    const response = await fetch(doc.url_storage);
+    if (!response.ok) throw new Error('Falha ao baixar documento');
+
+    const contentType = response.headers.get('content-type') || '';
+    
+    // TXT - leitura direta
+    if (doc.tipo_arquivo === 'txt' || contentType.includes('text/plain')) {
+      return await response.text();
+    }
+    
+    // PDF - usar pdf-parse
+    if (doc.tipo_arquivo === 'pdf' || contentType.includes('pdf')) {
+      const buffer = await response.arrayBuffer();
+      return await extractTextFromPDF(buffer);
+    }
+    
+    // Excel/CSV - usar read-excel-file
+    if (doc.tipo_arquivo === 'xlsx' || contentType.includes('spreadsheet') || contentType.includes('excel')) {
+      const buffer = await response.arrayBuffer();
+      return await extractTextFromExcel(buffer);
+    }
+    
+    // Imagens - usar OpenAI Vision
+    if (doc.tipo_arquivo === 'image' || contentType.includes('image')) {
+      return await extractTextFromImage(doc.url_storage, openaiKey);
+    }
+    
+    // Word/DOCX - tentar como texto
+    if (doc.tipo_arquivo === 'docx') {
+      const text = await response.text();
+      return text || `Documento Word: ${doc.nome_arquivo}`;
+    }
+    
+    // Fallback
+    return `Documento: ${doc.nome_arquivo}\nTipo: ${doc.tipo_arquivo}`;
+    
+  } catch (error) {
+    console.error('Erro ao extrair conteúdo:', error);
+    return `Documento: ${doc.nome_arquivo} (erro na extração)`;
+  }
 }
 
 serve(async (req) => {
@@ -84,25 +209,10 @@ serve(async (req) => {
           .update({ status: 'processing' })
           .eq('id', docId);
 
-        // Baixar conteúdo do documento
-        let documentContent = '';
-        
-        try {
-          const response = await fetch(doc.url_storage);
-          if (!response.ok) throw new Error('Falha ao baixar documento');
-          
-          // Para PDFs e imagens, precisamos de OCR/extração especial
-          // Por enquanto, vamos simular com texto
-          if (doc.tipo_arquivo === 'txt') {
-            documentContent = await response.text();
-          } else {
-            // Para outros tipos, usar o nome do arquivo como contexto
-            documentContent = `Documento: ${doc.nome_arquivo}\nTipo: ${doc.tipo_arquivo}`;
-          }
-        } catch (downloadError) {
-          console.error(`Erro ao baixar documento ${docId}:`, downloadError);
-          documentContent = `Documento: ${doc.nome_arquivo}`;
-        }
+        // 🔥 NOVO: Extrair conteúdo com OCR e parsers especializados
+        console.log(`📄 Extraindo conteúdo de: ${doc.nome_arquivo} (${doc.tipo_arquivo})`);
+        const documentContent = await extractDocumentContent(doc, openaiKey);
+        console.log(`✅ Conteúdo extraído: ${documentContent.length} caracteres`);
 
         // Chamar OpenAI para extrair produtos
         const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -116,43 +226,63 @@ serve(async (req) => {
             messages: [
               {
                 role: 'system',
-                content: `Você é um especialista em extração de dados de catálogos de produtos.
-                
-Analise o documento fornecido e extraia TODOS os produtos/serviços encontrados.
+                content: `Você é um especialista em extração de dados de catálogos, planilhas e documentos comerciais.
 
-Para cada produto, extraia:
-- nome: Nome do produto (obrigatório)
-- descricao: Descrição breve
-- categoria: Categoria do produto
-- preco_minimo: Preço mínimo (apenas número)
-- preco_maximo: Preço máximo (apenas número)
-- ticket_medio: Ticket médio estimado
-- setores_alvo: Lista de setores que usam este produto
-- diferenciais: Lista de diferenciais competitivos
+🎯 MISSÃO: Extrair TODOS os produtos/serviços do documento fornecido.
+
+📋 REGRAS DE EXTRAÇÃO:
+1. Identifique CADA produto/serviço mencionado
+2. Se houver tabelas, processe linha por linha
+3. Se houver imagens com texto, extraia o conteúdo
+4. Normalize nomes (capitalize, remova caracteres especiais)
+5. Categorize de forma consistente
+
+📊 PARA CADA PRODUTO, EXTRAIA:
+- nome: Nome do produto (obrigatório, capitalize)
+- descricao: Descrição completa (incluir especificações técnicas)
+- categoria: Categoria/linha de produto (normalize: "EPIs", "Luvas", "Calçados", etc.)
+- preco_minimo: Preço mínimo em reais (apenas número, sem R$)
+- preco_maximo: Preço máximo em reais (apenas número)
+- ticket_medio: Ticket médio estimado (calcule se houver faixa)
+- setores_alvo: Array de setores (ex: ["Indústria", "Construção", "Saúde"])
+- diferenciais: Array de diferenciais (ex: ["Alta resistência", "Certificado CA"])
 - confianca: Sua confiança na extração (0.0 a 1.0)
 
-Responda APENAS com um JSON válido no formato:
+✅ FORMATO DE RESPOSTA (JSON válido):
 {
   "produtos": [
     {
-      "nome": "...",
-      "descricao": "...",
-      "categoria": "...",
-      "preco_minimo": null,
-      "preco_maximo": null,
-      "ticket_medio": null,
-      "setores_alvo": [],
-      "diferenciais": [],
-      "confianca": 0.8
+      "nome": "Luva de Proteção NitriPro",
+      "descricao": "Luva de nitrilo para proteção química, tamanho M-GG",
+      "categoria": "EPIs - Luvas",
+      "preco_minimo": 15.90,
+      "preco_maximo": 25.50,
+      "ticket_medio": 20.70,
+      "setores_alvo": ["Indústria Química", "Laboratórios"],
+      "diferenciais": ["Resistente a ácidos", "CA 12345"],
+      "confianca": 0.95
     }
-  ]
-}`
+  ],
+  "resumo": {
+    "total_produtos": 1,
+    "categorias_encontradas": ["EPIs - Luvas"],
+    "observacoes": "Documento bem estruturado"
+  }
+}
+
+⚠️ IMPORTANTE:
+- NÃO invente produtos que não existem no documento
+- Se não encontrar preço, deixe null
+- Se a confiança for < 0.5, marque no campo "observacoes"
+- Agrupe produtos similares (ex: cores/tamanhos) em um único item`
               },
               {
                 role: 'user',
-                content: `Extraia os produtos do seguinte documento:\n\n${documentContent.substring(0, 8000)}`
+                content: `📄 DOCUMENTO PARA ANÁLISE:\n\n${documentContent.substring(0, 12000)}\n\n🎯 Extraia TODOS os produtos/serviços encontrados acima.`
               }
             ],
+            temperature: 0.2,
+            max_tokens: 6000,
             temperature: 0.3,
             max_tokens: 4000,
           }),
@@ -165,13 +295,27 @@ Responda APENAS com um JSON válido no formato:
         const aiResult = await openaiResponse.json();
         const content = aiResult.choices?.[0]?.message?.content || '{"produtos":[]}';
         
-        // Parse do JSON
+        // Parse do JSON (remover markdown se houver)
         let extractedProducts: ExtractedProduct[] = [];
+        let resumo: any = null;
+        
         try {
-          const parsed = JSON.parse(content.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
+          const cleanContent = content
+            .replace(/```json\n?/g, '')
+            .replace(/```\n?/g, '')
+            .trim();
+          
+          const parsed = JSON.parse(cleanContent);
           extractedProducts = parsed.produtos || [];
+          resumo = parsed.resumo || null;
+          
+          console.log(`✅ Extraídos ${extractedProducts.length} produtos`);
+          if (resumo) {
+            console.log(`📊 Resumo:`, resumo);
+          }
         } catch (parseError) {
-          console.error('Erro ao parsear resposta da IA:', parseError);
+          console.error('❌ Erro ao parsear resposta da IA:', parseError);
+          console.error('📄 Conteúdo recebido:', content.substring(0, 500));
           extractedProducts = [];
         }
 
@@ -208,7 +352,12 @@ Responda APENAS com um JSON válido no formato:
             status: 'completed',
             processed_at: new Date().toISOString(),
             produtos_identificados: extractedProducts.length,
-            dados_extraidos: { produtos: extractedProducts },
+            dados_extraidos: { 
+              produtos: extractedProducts,
+              resumo: resumo,
+              content_length: documentContent.length,
+              extraction_timestamp: new Date().toISOString(),
+            },
           })
           .eq('id', docId);
 

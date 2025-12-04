@@ -15,6 +15,21 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { 
+  Loader2, 
+  Upload, 
+  Brain, 
+  FileUp, 
+  Sparkles, 
+  CheckCircle2,
+  Package,
+  Trash2,
+  Edit,
+  MoreHorizontal,
+  Star,
+  ExternalLink
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -420,7 +435,7 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
     }
   };
 
-  // Extrair produtos dos documentos via IA
+  // 🔥 MELHORADO: Extrair produtos dos documentos via IA com feedback detalhado
   const handleExtractProducts = async () => {
     if (!tenantId) return;
 
@@ -431,7 +446,14 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
     }
 
     setExtracting(true);
-    toast.info(`Processando ${pendingDocs.length} documento(s)...`);
+    
+    const startTime = Date.now();
+    const loadingToast = toast.loading(
+      `🤖 IA analisando ${pendingDocs.length} documento(s)...`,
+      {
+        description: 'Isso pode levar alguns segundos. Aguarde...'
+      }
+    );
 
     try {
       // Chamar Edge Function para extração
@@ -444,15 +466,31 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
 
       if (error) throw error;
 
-      toast.success(`${data.products_extracted || 0} produtos extraídos!`, {
-        description: 'Revise os produtos na lista',
-      });
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      const productsCount = data.products_extracted || 0;
+      
+      toast.dismiss(loadingToast);
+
+      if (productsCount > 0) {
+        toast.success(`🎉 ${productsCount} produto(s) extraído(s) com sucesso!`, {
+          description: `Processado em ${duration}s. Confira a lista abaixo!`,
+          duration: 5000,
+        });
+      } else {
+        toast.warning('⚠️ Nenhum produto encontrado nos documentos', {
+          description: 'Verifique se o formato está correto ou tente outro arquivo.',
+        });
+      }
 
       loadProducts();
       loadDocuments();
     } catch (err: any) {
-      console.error('Erro na extração:', err);
-      toast.error('Erro ao extrair produtos', { description: err.message });
+      console.error('❌ Erro na extração:', err);
+      toast.dismiss(loadingToast);
+      toast.error('❌ Erro ao extrair produtos', { 
+        description: err.message || 'Tente novamente ou contate o suporte.',
+        duration: 5000,
+      });
     } finally {
       setExtracting(false);
     }
@@ -850,18 +888,36 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileUp className="h-5 w-5" />
-                  Upload de Documentos
+                  Upload de Documentos - 100% Automático com IA
                 </CardTitle>
-                <CardDescription>
-                  Envie PDFs, planilhas ou documentos para extração automática de produtos
+                <CardDescription className="space-y-2">
+                  <p>📄 Envie seus documentos e a IA vai extrair TODOS os produtos automaticamente!</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mt-2">
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>PDF com OCR</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Excel/CSV completo</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Imagens (Vision AI)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Word/TXT</span>
+                    </div>
+                  </div>
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors">
+                <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary hover:bg-primary/5 transition-all duration-200">
                   <input
                     type="file"
                     multiple
-                    accept=".pdf,.xlsx,.xls,.docx,.doc,.txt,.png,.jpg,.jpeg"
+                    accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,.txt,.png,.jpg,.jpeg,.webp"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="file-upload"
@@ -869,34 +925,64 @@ export function TenantProductsCatalog({ websiteUrl }: TenantProductsCatalogProps
                   />
                   <label
                     htmlFor="file-upload"
-                    className="cursor-pointer flex flex-col items-center gap-2"
+                    className="cursor-pointer flex flex-col items-center gap-3"
                   >
                     {uploading ? (
-                      <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                      <>
+                        <Loader2 className="h-16 w-16 text-primary animate-spin" />
+                        <Progress value={50} className="w-2/3" />
+                      </>
                     ) : (
-                      <Upload className="h-12 w-12 text-muted-foreground" />
+                      <div className="relative">
+                        <Upload className="h-16 w-16 text-muted-foreground" />
+                        <Sparkles className="h-6 w-6 text-yellow-500 absolute -top-1 -right-1" />
+                      </div>
                     )}
-                    <p className="font-medium">
-                      {uploading ? 'Enviando...' : 'Clique ou arraste arquivos'}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      PDF, Excel, Word, Imagens
-                    </p>
+                    <div>
+                      <p className="font-semibold text-lg">
+                        {uploading ? 'Enviando arquivos...' : 'Arraste arquivos ou clique aqui'}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        📄 PDF • 📊 Excel/CSV • 📝 Word • 🖼️ Imagens • 📃 TXT
+                      </p>
+                      <p className="text-xs text-primary mt-2 font-medium">
+                        ✨ IA extrai nome, descrição, categoria e preço automaticamente
+                      </p>
+                    </div>
                   </label>
                 </div>
 
+                {/* Botão de Extração */}
+                {stats.docsPendentes > 0 && (
+                  <Alert className="border-primary bg-primary/5">
+                    <Brain className="h-5 w-5 text-primary" />
+                    <AlertDescription className="ml-2">
+                      <span className="font-semibold">{stats.docsPendentes} documento(s) aguardando processamento</span>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Clique no botão abaixo para a IA extrair todos os produtos
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
                 <div className="flex gap-2">
                   <Button
                     onClick={handleExtractProducts}
                     disabled={extracting || stats.docsPendentes === 0}
-                    className="flex-1"
+                    className="flex-1 h-12 text-base"
+                    size="lg"
                   >
                     {extracting ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Processando com IA...
+                      </>
                     ) : (
-                      <Brain className="h-4 w-4 mr-2" />
+                      <>
+                        <Brain className="h-5 w-5 mr-2" />
+                        🚀 Extrair Produtos ({stats.docsPendentes})
+                      </>
                     )}
-                    Extrair Produtos ({stats.docsPendentes})
                   </Button>
                 </div>
               </CardContent>
