@@ -14,6 +14,24 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
+// CSS customizado para popups e modal
+const customStyles = `
+  <style>
+    .custom-popup .leaflet-popup-content-wrapper {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+    .custom-popup .leaflet-popup-tip {
+      background: #3730a3 !important;
+    }
+    .leaflet-container {
+      z-index: 1 !important;
+    }
+  </style>
+`;
+
 // Fix Leaflet default icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -30,6 +48,9 @@ interface Competitor {
   estado: string;
   capitalSocial: number;
   produtosCount?: number;
+  endereco?: string;
+  bairro?: string;
+  cep?: string;
 }
 
 interface CompetitiveMapBrazilProps {
@@ -157,6 +178,7 @@ export default function CompetitiveMapBrazil({
 
   return (
     <>
+      <div dangerouslySetInnerHTML={{ __html: customStyles }} />
       <Collapsible open={isOpen} onOpenChange={onToggle}>
         <Card className="border-l-4 border-l-indigo-600/90 shadow-md">
           <CollapsibleTrigger className="w-full">
@@ -258,31 +280,49 @@ export default function CompetitiveMapBrazil({
                             key={idx}
                             position={[location.lat, location.lng]}
                             icon={createColoredIcon(comp.capitalSocial, false)}
+                            eventHandlers={{
+                              click: () => {
+                                console.log('[Mapa] Clicou em:', comp.razaoSocial);
+                                setSelectedCompetitor(comp);
+                              }
+                            }}
                           >
-                            {/* Popup permanente ao click */}
-                            <Popup>
-                              <div className="min-w-[220px] cursor-pointer" onClick={() => setSelectedCompetitor(comp)}>
-                                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">
-                                  {comp.nomeFantasia || comp.razaoSocial.split(' ').slice(0, 3).join(' ')}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  📍 {comp.cidade}, {comp.estado}
-                                </p>
-                                <p className="text-xs mt-1">
-                                  <strong>CNPJ:</strong> {comp.cnpj}
-                                </p>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <Badge className={threat.color}>{threat.label}</Badge>
-                                  <span className="text-xs font-semibold">{formatCurrency(comp.capitalSocial)}</span>
-                                </div>
-                                {comp.produtosCount && comp.produtosCount > 0 && (
-                                  <p className="text-xs mt-2">
-                                    📦 {comp.produtosCount} produtos
+                            {/* Popup com design corporativo responsivo */}
+                            <Popup className="custom-popup">
+                              <div className="min-w-[260px] p-1">
+                                <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border-2 border-indigo-500 dark:border-indigo-600">
+                                  <p className="font-bold text-base text-slate-900 dark:text-slate-50">
+                                    {comp.nomeFantasia || comp.razaoSocial.split(' ').slice(0, 3).join(' ')}
                                   </p>
-                                )}
-                                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-medium">
-                                  👆 Clique aqui para detalhes completos
-                                </p>
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {comp.cidade}, {comp.estado}
+                                  </p>
+                                  <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">
+                                    <strong>CNPJ:</strong> {comp.cnpj}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-3">
+                                    <Badge className={`${threat.color} text-white`}>{threat.label}</Badge>
+                                    <span className="text-sm font-bold text-slate-900 dark:text-slate-50">{formatCurrency(comp.capitalSocial)}</span>
+                                  </div>
+                                  {comp.produtosCount !== undefined && (
+                                    <p className="text-xs text-orange-700 dark:text-orange-400 mt-2 font-medium flex items-center gap-1">
+                                      <Package className="h-3 w-3" />
+                                      {comp.produtosCount} produtos cadastrados
+                                    </p>
+                                  )}
+                                  <div 
+                                    className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/30 p-2 rounded transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedCompetitor(comp);
+                                    }}
+                                  >
+                                    <p className="text-xs text-indigo-700 dark:text-indigo-300 font-semibold text-center">
+                                      👆 Clique para detalhes completos
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
                             </Popup>
                           </Marker>
@@ -352,10 +392,9 @@ export default function CompetitiveMapBrazil({
         </Card>
       </Collapsible>
 
-      {/* Modal com Detalhes Completos */}
-      {selectedCompetitor && (
-        <Dialog open={!!selectedCompetitor} onOpenChange={() => setSelectedCompetitor(null)}>
-          <DialogContent className="max-w-2xl">
+      {/* Modal com Detalhes Completos - Z-INDEX ALTO */}
+      <Dialog open={!!selectedCompetitor} onOpenChange={() => setSelectedCompetitor(null)}>
+        <DialogContent className="max-w-2xl" style={{ zIndex: 9999 }}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-indigo-600" />
@@ -375,22 +414,30 @@ export default function CompetitiveMapBrazil({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-1">Localização</p>
-                  <p className="text-sm font-semibold flex items-center gap-1">
-                    <MapPin className="h-4 w-4 text-indigo-600" />
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">Localização Completa</p>
+                <p className="text-sm font-semibold flex items-start gap-1">
+                  <MapPin className="h-4 w-4 text-indigo-600 mt-0.5" />
+                  <span>
+                    {selectedCompetitor.endereco && `${selectedCompetitor.endereco}, `}
+                    {selectedCompetitor.bairro && `${selectedCompetitor.bairro}, `}
                     {selectedCompetitor.cidade}, {selectedCompetitor.estado}
-                  </p>
-                </div>
-                <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-1">Produtos Cadastrados</p>
-                  <p className="text-sm font-semibold flex items-center gap-1">
-                    <Package className="h-4 w-4 text-orange-600" />
-                    {selectedCompetitor.produtosCount || 0} produtos
-                  </p>
-                </div>
+                    {selectedCompetitor.cep && ` - CEP: ${selectedCompetitor.cep}`}
+                  </span>
+                </p>
               </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">Produtos Cadastrados</p>
+                <p className="text-sm font-semibold flex items-center gap-1">
+                  <Package className="h-4 w-4 text-orange-600" />
+                  {selectedCompetitor.produtosCount !== undefined && selectedCompetitor.produtosCount > 0 
+                    ? `${selectedCompetitor.produtosCount} produtos extraídos do website`
+                    : 'Aguardando extração de produtos'
+                  }
+                </p>
+              </div>
+            </div>
 
               {/* Classificação de Ameaça */}
               <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 rounded-lg border-2 border-indigo-200 dark:border-indigo-800">

@@ -152,18 +152,52 @@ export default function CompetitiveAnalysis({
   const [kpisOpen, setKpisOpen] = useState(false);
   const [mapaCompetitivoOpen, setMapaCompetitivoOpen] = useState(false);
 
-  // Inicializar com dados dos concorrentes (incluindo refreshTrigger para detectar mudanças)
+  // Inicializar com dados dos concorrentes + BUSCAR CONTAGEM DE PRODUTOS
   useEffect(() => {
-    if (competitors.length > 0) {
-      console.log('[CompetitiveAnalysis] 📊 Concorrentes recebidos:', competitors.length, 'concorrentes');
-      // Converter concorrentes para formato enriquecido
-      const initial: CompetitorEnriched[] = competitors.map(c => ({
-        ...c,
-        ameacaPotencial: classifyThreat(c.capitalSocial || 0, companyCapitalSocial || 1000000)
-      }));
-      setEnrichedCompetitors(initial);
-    }
-  }, [competitors, companyCapitalSocial, refreshTrigger]); // 🔥 Adicionar refreshTrigger
+    const loadCompetitorsWithProducts = async () => {
+      if (competitors.length === 0) return;
+      
+      console.log('[CompetitiveAnalysis] 📊 Carregando concorrentes + produtos');
+      
+      try {
+        // Buscar contagem de produtos para cada concorrente
+        const { data: productCounts } = await supabase
+          .from('tenant_competitor_products' as any)
+          .select('competitor_cnpj, competitor_name')
+          .eq('tenant_id', icpId);
+        
+        // Agrupar por CNPJ
+        const countsMap = (productCounts || []).reduce((acc: Record<string, number>, p: any) => {
+          const cnpj = p.competitor_cnpj?.replace(/\D/g, '');
+          if (cnpj) {
+            acc[cnpj] = (acc[cnpj] || 0) + 1;
+          }
+          return acc;
+        }, {});
+        
+        // Enriquecer com contagem
+        const enriched: CompetitorEnriched[] = competitors.map(c => ({
+          ...c,
+          ameacaPotencial: classifyThreat(c.capitalSocial || 0, companyCapitalSocial || 1000000),
+          produtosCount: countsMap[c.cnpj.replace(/\D/g, '')] || 0
+        }));
+        
+        console.log('[CompetitiveAnalysis] ✅ Produtos carregados:', countsMap);
+        setEnrichedCompetitors(enriched);
+      } catch (error) {
+        console.error('[CompetitiveAnalysis] ❌ Erro ao carregar produtos:', error);
+        // Fallback sem contagem
+        const initial: CompetitorEnriched[] = competitors.map(c => ({
+          ...c,
+          ameacaPotencial: classifyThreat(c.capitalSocial || 0, companyCapitalSocial || 1000000),
+          produtosCount: 0
+        }));
+        setEnrichedCompetitors(initial);
+      }
+    };
+    
+    loadCompetitorsWithProducts();
+  }, [competitors, companyCapitalSocial, refreshTrigger, icpId]); // 🔥 Adicionar refreshTrigger
 
   // Calcular totais
   const totalCapitalConcorrentes = enrichedCompetitors.reduce((sum, c) => sum + (c.capitalSocial || 0), 0);
@@ -856,7 +890,10 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
                 cidade: c.cidade,
                 estado: c.estado,
                 capitalSocial: c.capitalSocial || 0,
-                produtosCount: 0 // TODO: adicionar contagem real
+                produtosCount: c.produtosCount || 0,
+                endereco: (c as any).endereco,
+                bairro: (c as any).bairro,
+                cep: (c as any).cep
               }))}
               tenant={{
                 nome: companyName,
