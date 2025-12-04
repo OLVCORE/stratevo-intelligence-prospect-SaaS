@@ -161,12 +161,21 @@ export default function CompetitiveAnalysis({
       
       try {
         // 1. Buscar produtos de tenant_competitor_products
-        const { data: allProducts } = await supabase
+        console.log('[CompetitiveAnalysis] 🔍 Buscando produtos para tenantId:', tenantId);
+        
+        const { data: allProducts, error: productsError } = await supabase
           .from('tenant_competitor_products' as any)
           .select('competitor_cnpj, competitor_name, nome')
-          .eq('tenant_id', icpId);
+          .eq('tenant_id', tenantId); // 🔥 CORRIGIDO: usar tenantId, não icpId
         
-        console.log('[CompetitiveAnalysis] 📦 Produtos brutos:', allProducts?.length || 0);
+        if (productsError) {
+          console.error('[CompetitiveAnalysis] ❌ Erro ao buscar produtos:', productsError);
+        }
+        
+        console.log('[CompetitiveAnalysis] 📦 Produtos brutos encontrados:', allProducts?.length || 0);
+        if (allProducts && allProducts.length > 0) {
+          console.log('[CompetitiveAnalysis] 📦 Primeiros 3 produtos:', allProducts.slice(0, 3));
+        }
         
         // Agrupar por CNPJ (contagem + lista de nomes)
         const productsMap = (allProducts || []).reduce((acc: Record<string, {count: number, produtos: string[]}>, p: any) => {
@@ -199,32 +208,56 @@ export default function CompetitiveAnalysis({
           };
         });
         
-        // 2. Buscar endereços via CEP (se disponível nos dados do concorrente)
+        // 2. Buscar dados adicionais de onboarding_sessions (CEP, endereço, website)
+        const { data: session } = await supabase
+          .from('onboarding_sessions' as any)
+          .select('step1_data')
+          .eq('tenant_id', tenantId)
+          .single();
+        
+        const concorrentesCadastro = session?.step1_data?.concorrentesDiretos || [];
+        console.log('[CompetitiveAnalysis] 📋 Concorrentes do cadastro:', concorrentesCadastro.length);
+        
+        // Criar mapa de dados extras por CNPJ
+        const dadosExtrasMap = concorrentesCadastro.reduce((acc: any, conc: any) => {
+          const cnpjClean = conc.cnpj?.replace(/\D/g, '');
+          if (cnpjClean) {
+            acc[cnpjClean] = {
+              cep: conc.cep,
+              endereco: conc.endereco,
+              bairro: conc.bairro,
+              numero: conc.numero,
+              website: conc.website
+            };
+          }
+          return acc;
+        }, {});
+        
+        // 3. Enriquecer com dados extras + buscar endereço via CEP se necessário
         const enrichedWithAddress = await Promise.all(enriched.map(async (c) => {
-          // Se já tem endereço, não busca
-          if ((c as any).endereco) return c;
+          const cnpjClean = c.cnpj.replace(/\D/g, '');
+          const dadosExtras = dadosExtrasMap[cnpjClean] || {};
           
-          // Se tem CEP, busca via ViaCEP
-          const cep = (c as any).cep;
-          if (cep) {
+          // Se tem CEP mas não tem endereço, busca via ViaCEP
+          if (dadosExtras.cep && !dadosExtras.endereco) {
             try {
-              const response = await fetch(`https://viacep.com.br/ws/${cep.replace(/\D/g, '')}/json/`);
+              const response = await fetch(`https://viacep.com.br/ws/${dadosExtras.cep.replace(/\D/g, '')}/json/`);
               const data = await response.json();
               
               if (!data.erro) {
-                return {
-                  ...c,
-                  endereco: `${data.logradouro || 'Não disponível'}`,
-                  bairro: data.bairro,
-                  cep: data.cep
-                };
+                dadosExtras.endereco = data.logradouro;
+                dadosExtras.bairro = data.bairro;
+                console.log(`[CompetitiveAnalysis] 📍 Endereço via CEP ${dadosExtras.cep}:`, data.logradouro);
               }
             } catch (error) {
-              console.warn(`[CompetitiveAnalysis] ⚠️ Erro ao buscar CEP ${cep}:`, error);
+              console.warn(`[CompetitiveAnalysis] ⚠️ Erro ao buscar CEP ${dadosExtras.cep}:`, error);
             }
           }
           
-          return c;
+          return {
+            ...c,
+            ...dadosExtras
+          };
         }));
         
         console.log('[CompetitiveAnalysis] ✅ Total enriquecido:', enrichedWithAddress.length, 'concorrentes');
@@ -243,7 +276,7 @@ export default function CompetitiveAnalysis({
     };
     
     loadCompetitorsWithProducts();
-  }, [competitors, companyCapitalSocial, refreshTrigger, icpId]); // 🔥 Adicionar refreshTrigger
+  }, [competitors, companyCapitalSocial, refreshTrigger, tenantId]); // 🔥 CORRIGIDO: tenantId
 
   // Calcular totais
   const totalCapitalConcorrentes = enrichedCompetitors.reduce((sum, c) => sum + (c.capitalSocial || 0), 0);
