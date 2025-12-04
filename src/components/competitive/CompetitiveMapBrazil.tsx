@@ -454,11 +454,11 @@ export default function CompetitiveMapBrazil({
               {/* Produtos */}
               <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg col-span-2">
                 <p className="text-xs text-muted-foreground mb-2">Produtos Cadastrados</p>
-                {selectedCompetitor.produtosCount !== undefined && selectedCompetitor.produtosCount > 0 ? (
-                  <>
+                {selectedCompetitor?.produtosCount && selectedCompetitor.produtosCount > 0 ? (
+                  <div>
                     <p className="text-sm font-semibold flex items-center gap-1 mb-3">
                       <Package className="h-4 w-4 text-orange-600" />
-                      {selectedCompetitor.produtosCount} produtos extraídos do website
+                      {String(selectedCompetitor.produtosCount)} produtos extraídos do website
                     </p>
                     {selectedCompetitor.produtos && selectedCompetitor.produtos.length > 0 && (
                       <div className="mt-2 max-h-[150px] overflow-y-auto">
@@ -477,7 +477,7 @@ export default function CompetitiveMapBrazil({
                         </ul>
                       </div>
                     )}
-                  </>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Aguardando extração de produtos do website</p>
                 )}
