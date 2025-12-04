@@ -135,6 +135,13 @@ const menuGroups: MenuGroup[] = [
     icon: Crosshair,
     items: [
       {
+        title: "⚡ Motor de Qualificação",
+        icon: Zap,
+        url: "/prospecting/qualification-engine",
+        highlighted: true,
+        description: "Triagem inteligente com IA - Upload em massa e classificação automática (A+, A, B, C, D)"
+      },
+      {
         title: "Base de Empresas",
         icon: Building2,
         url: "/companies",
