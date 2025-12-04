@@ -274,6 +274,12 @@ export default function CommandCenter() {
                     <h3 className="font-bold text-base text-sky-800 dark:text-sky-100">Importadas</h3>
                     <p className="text-sm text-muted-foreground">Total no sistema</p>
                   </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Base completa:</span>
+                    <span className="font-bold text-sky-700 dark:text-sky-400">
+                      100%
+                    </span>
+                  </div>
                   <Button variant="ghost" size="sm" className="w-full text-sm font-medium text-sky-700 dark:text-sky-400 hover:text-sky-800 hover:bg-sky-600/10">
                     Ver Todas
                     <ArrowRight className="ml-2 h-4 w-4" />
