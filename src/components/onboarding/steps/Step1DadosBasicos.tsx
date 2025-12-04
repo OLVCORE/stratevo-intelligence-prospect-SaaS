@@ -433,7 +433,29 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
 
       // O serviço retorna um objeto merged com campos adicionais (email, telefone, etc.)
       // que não estão no tipo ReceitaWSResponse, então fazemos cast para any
-      const data = result.data as any;
+      let data = result.data as any;
+      
+      // 🔥 NOVO: Se só tem CEP mas falta endereço, buscar no ViaCEP
+      if (data.cep && !data.logradouro) {
+        console.log('[Step1] 🔍 Tenant: Buscando endereço no ViaCEP para CEP:', data.cep);
+        try {
+          const viaCepResponse = await fetch(`https://viacep.com.br/ws/${data.cep.replace(/\D/g, '')}/json/`);
+          const viaCepData = await viaCepResponse.json();
+          
+          if (!viaCepData.erro) {
+            data = {
+              ...data,
+              logradouro: viaCepData.logradouro || data.logradouro || '',
+              bairro: viaCepData.bairro || data.bairro || '',
+              cep: viaCepData.cep,
+            };
+            console.log('[Step1] ✅ Tenant: Endereço enriquecido via ViaCEP');
+          }
+        } catch (viaCepError) {
+          console.warn('[Step1] ⚠️ Tenant: Erro ao buscar ViaCEP:', viaCepError);
+        }
+      }
+      
       setCnpjData(data);
       
       // Preencher campos automaticamente se disponíveis
@@ -808,6 +830,32 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           cnpjFormatado = `${cnpjClean.substring(0, 2)}.${cnpjClean.substring(2, 5)}.${cnpjClean.substring(5, 8)}/${cnpjClean.substring(8, 12)}-${cnpjClean.substring(12, 14)}`;
         }
 
+        // 🔥 NOVO: Se só tem CEP mas falta endereço, buscar no ViaCEP
+        let enderecoEnriquecido = {
+          cep: data.cep || '',
+          endereco: data.logradouro || '',
+          bairro: data.bairro || '',
+          numero: data.numero || '',
+        };
+
+        if (data.cep && !data.logradouro) {
+          try {
+            const viaCepResponse = await fetch(`https://viacep.com.br/ws/${data.cep.replace(/\D/g, '')}/json/`);
+            const viaCepData = await viaCepResponse.json();
+            
+            if (!viaCepData.erro) {
+              enderecoEnriquecido = {
+                cep: viaCepData.cep,
+                endereco: viaCepData.logradouro || data.logradouro || '',
+                bairro: viaCepData.bairro || data.bairro || '',
+                numero: data.numero || '',
+              };
+            }
+          } catch (viaCepError) {
+            console.warn('[Step1] ⚠️ Erro ao buscar ViaCEP:', viaCepError);
+          }
+        }
+
         novosConcorrentes.push({
           cnpj: cnpjFormatado,
           razaoSocial: data.nome || data.fantasia || '',
@@ -820,10 +868,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           cnaePrincipalDescricao: data.atividade_principal?.[0]?.text || '',
           website: '',
           urlParaScan: '',
-          cep: data.cep || '', // 🔥 NOVO: CEP da Receita Federal
-          endereco: data.logradouro || '', // 🔥 NOVO: Endereço completo
-          bairro: data.bairro || '', // 🔥 NOVO: Bairro
-          numero: data.numero || '', // 🔥 NOVO: Número
+          cep: enderecoEnriquecido.cep,
+          endereco: enderecoEnriquecido.endereco,
+          bairro: enderecoEnriquecido.bairro,
+          numero: enderecoEnriquecido.numero,
         });
         
         sucesso++;
@@ -912,6 +960,34 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         setorExtraido = setores[secao] || 'Outros';
       }
 
+      // 🔥 NOVO: Se só tem CEP mas falta endereço, buscar no ViaCEP
+      let enderecoEnriquecido = {
+        cep: data.cep || '',
+        endereco: data.logradouro || '',
+        bairro: data.bairro || '',
+        numero: data.numero || '',
+      };
+
+      if (data.cep && !data.logradouro) {
+        console.log('[Step1] 🔍 Buscando endereço no ViaCEP para CEP:', data.cep);
+        try {
+          const viaCepResponse = await fetch(`https://viacep.com.br/ws/${data.cep.replace(/\D/g, '')}/json/`);
+          const viaCepData = await viaCepResponse.json();
+          
+          if (!viaCepData.erro) {
+            enderecoEnriquecido = {
+              cep: viaCepData.cep,
+              endereco: viaCepData.logradouro || data.logradouro || '',
+              bairro: viaCepData.bairro || data.bairro || '',
+              numero: data.numero || '',
+            };
+            console.log('[Step1] ✅ Endereço enriquecido via ViaCEP:', enderecoEnriquecido);
+          }
+        } catch (viaCepError) {
+          console.warn('[Step1] ⚠️ Erro ao buscar ViaCEP:', viaCepError);
+        }
+      }
+
       setNovoConcorrente({
         cnpj: novoConcorrente.cnpj,
         razaoSocial: data.nome || data.fantasia || '',
@@ -924,10 +1000,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         cnaePrincipalDescricao: data.atividade_principal?.[0]?.text || '',
         website: novoConcorrente.website || '',
         urlParaScan: novoConcorrente.urlParaScan || '',
-        cep: data.cep || '', // 🔥 NOVO: CEP da Receita Federal
-        endereco: data.logradouro || '', // 🔥 NOVO: Logradouro
-        bairro: data.bairro || '', // 🔥 NOVO: Bairro
-        numero: data.numero || '', // 🔥 NOVO: Número
+        cep: enderecoEnriquecido.cep,
+        endereco: enderecoEnriquecido.endereco,
+        bairro: enderecoEnriquecido.bairro,
+        numero: enderecoEnriquecido.numero,
       });
 
       setCnpjConcorrenteEncontrado(true);
@@ -1355,6 +1431,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                       {cnpjData.logradouro}
                       {cnpjData.numero && `, ${cnpjData.numero}`}
                       {cnpjData.bairro && ` - ${cnpjData.bairro}`}
+                      {(cnpjData.municipio || cnpjData.uf) && ` - ${cnpjData.municipio}, ${cnpjData.uf}`}
                     </span>
                   </p>
                 </div>
@@ -1838,6 +1915,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                             {novoConcorrente.endereco}
                             {novoConcorrente.numero && `, ${novoConcorrente.numero}`}
                             {novoConcorrente.bairro && ` - ${novoConcorrente.bairro}`}
+                            {(novoConcorrente.cidade || novoConcorrente.estado) && ` - ${novoConcorrente.cidade}, ${novoConcorrente.estado}`}
                           </span>
                         </p>
                       </div>
@@ -1991,6 +2069,30 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                           <div className="col-span-2 md:col-span-3">
                             <span className="font-medium text-muted-foreground">Descrição CNAE:</span>
                             <div className="text-xs text-foreground">{concorrente.cnaePrincipalDescricao}</div>
+                          </div>
+                        )}
+                        {/* 🔥 NOVO: CEP e Endereço Completo */}
+                        {concorrente.cep && (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <div>
+                              <span className="font-medium text-muted-foreground text-xs">CEP:</span>
+                              <div className="text-foreground">{concorrente.cep}</div>
+                            </div>
+                          </div>
+                        )}
+                        {concorrente.endereco && (
+                          <div className="col-span-2">
+                            <span className="font-medium text-muted-foreground text-xs">Endereço Completo:</span>
+                            <div className="text-foreground flex items-start gap-1.5">
+                              <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                              <span>
+                                {concorrente.endereco}
+                                {concorrente.numero && `, ${concorrente.numero}`}
+                                {concorrente.bairro && ` - ${concorrente.bairro}`}
+                                {(concorrente.cidade || concorrente.estado) && ` - ${concorrente.cidade}, ${concorrente.estado}`}
+                              </span>
+                            </div>
                           </div>
                         )}
                         {concorrente.website && (
