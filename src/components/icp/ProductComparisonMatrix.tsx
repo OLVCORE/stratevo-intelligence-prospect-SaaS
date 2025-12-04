@@ -770,7 +770,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                 </div>
                 
                 {/* 🔥 NOVA TABELA: Agrupada por Categoria */}
-                <div className="w-full border-2 rounded-lg">
+                <div className="w-full border-2 rounded-lg overflow-x-auto custom-scrollbar">
                     <Table className="relative min-w-[1200px]">
                       {/* 🔥 HEADER FIXO - SEMPRE VISÍVEL */}
                       <TableHeader className="sticky top-0 bg-background z-20 shadow-md">
@@ -789,10 +789,15 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                                       {(tenant as any)?.nome?.split(' ').slice(0, 2).join(' ') || 'TENANT'}
                                     </span>
                                     <Badge className="mt-1 bg-green-600 text-[10px]">VOCÊ</Badge>
+                                    {/* 🔥 CONTADOR DE PRODUTOS */}
+                                    <div className="mt-2 px-2 py-1 bg-green-600 text-white rounded-full text-xs font-bold">
+                                      {tenantProducts.length} produtos
+                                    </div>
                                   </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p className="text-xs max-w-[200px] font-semibold">{(tenant as any)?.nome || 'Seu Tenant'}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">{tenantProducts.length} produtos cadastrados</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -800,6 +805,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                           {/* Header com concorrentes */}
                           {Array.from(new Set(competitorProducts.map(p => p.competitor_name))).map((competitorName, idx) => {
                             const nomesCurtos = competitorName.split(' ').slice(0, 2).join(' ');
+                            const produtosCount = competitorProducts.filter(p => p.competitor_name === competitorName).length;
                             return (
                               <TableHead key={idx} className="text-center min-w-[130px] border-r">
                                 <TooltipProvider>
@@ -808,10 +814,15 @@ export function ProductComparisonMatrix({ icpId }: Props) {
                                       <div className="flex flex-col items-center cursor-help">
                                         <Building2 className="h-4 w-4 mb-1 text-orange-600" />
                                         <span className="text-xs font-semibold">{nomesCurtos}</span>
+                                        {/* 🔥 CONTADOR DE PRODUTOS */}
+                                        <div className="mt-2 px-2 py-1 bg-orange-600 text-white rounded-full text-xs font-bold">
+                                          {produtosCount} produtos
+                                        </div>
                                       </div>
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       <p className="text-xs max-w-[200px]">{competitorName}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">{produtosCount} produtos cadastrados</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
