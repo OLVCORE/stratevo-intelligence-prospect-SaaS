@@ -449,5 +449,3 @@ export default function AutoSWOTAnalysis({
     </Collapsible>
   );
 }
-
-}
