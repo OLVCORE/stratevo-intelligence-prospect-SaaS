@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Download, AlertCircle, CheckCircle2, Loader2, Link as LinkIcon, Folder, Sheet, Zap, Target } from "lucide-react";
+import { Upload, Download, AlertCircle, CheckCircle2, Loader2, Link as LinkIcon, Folder, Sheet, Zap, Target, Building2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
@@ -37,6 +37,55 @@ const navigate = useNavigate();
 const [sourceName, setSourceName] = useState("");
 const [sourceCampaign, setSourceCampaign] = useState("");
 const [enableQualification, setEnableQualification] = useState(true); // 🔥 NOVO: Qualificação automática
+const [selectedIcpId, setSelectedIcpId] = useState<string>(''); // 🔥 NOVO: ICP selecionado
+const [availableIcps, setAvailableIcps] = useState<any[]>([]); // 🔥 NOVO: Lista de ICPs
+
+  // Carregar ICPs do tenant
+  useEffect(() => {
+    const loadIcps = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('auth_user_id', user.id)
+        .single();
+      
+      if (!userProfile?.tenant_id) return;
+      
+      // Buscar ICPs via onboarding_sessions
+      const { data: icps, error } = await supabase
+        .from('onboarding_sessions' as any)
+        .select('id, step1_data, created_at')
+        .eq('tenant_id', userProfile.tenant_id)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.warn('Erro ao carregar ICPs:', error);
+        return;
+      }
+      
+      const icpList = (icps || []).map(icp => ({
+        id: icp.id,
+        nome: icp.step1_data?.cnpjData?.fantasia || icp.step1_data?.cnpjData?.nome || 'ICP sem nome',
+        cnpj: icp.step1_data?.cnpj || '',
+        criado: new Date(icp.created_at).toLocaleDateString('pt-BR')
+      }));
+      
+      setAvailableIcps(icpList);
+      
+      // Auto-selecionar o mais recente
+      if (icpList.length > 0) {
+        setSelectedIcpId(icpList[0].id);
+      }
+    };
+    
+    if (isOpen) {
+      loadIcps();
+    }
+  }, [isOpen]);
 
   // Fecha automaticamente após sucesso
   useEffect(() => {
@@ -656,6 +705,7 @@ if (insertedCompanies.length > 0) {
           .from('prospect_qualification_jobs' as any)
           .insert({
             tenant_id: tenantId,
+            icp_id: selectedIcpId || null, // 🔥 NOVO: ICP selecionado
             job_name: sourceName || `Upload ${new Date().toLocaleDateString('pt-BR')}`,
             source_type: 'upload_csv',
             source_file_name: file.name,
@@ -671,6 +721,7 @@ if (insertedCompanies.length > 0) {
             body: {
               tenant_id: tenantId,
               job_id: job.id,
+              icp_id: selectedIcpId || null, // 🔥 NOVO: Passar ICP para Edge Function
               cnpjs: cnpjs,
             },
           }).then(({ data: qualData, error: qualError }) => {
@@ -774,13 +825,49 @@ try {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
-            Upload em Massa de Leads
+          <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+            <Zap className="h-6 w-6 text-indigo-600" />
+            Motor de Qualificação • Upload em Massa
           </DialogTitle>
           <DialogDescription>
-            Importe até {MAX_COMPANIES} empresas via arquivo ou Google Sheets
+            Importe até {MAX_COMPANIES} empresas • Triagem automática com IA
           </DialogDescription>
         </DialogHeader>
+
+        {/* 🔥 NOVO: Seletor de ICP */}
+        {availableIcps.length > 0 && enableQualification && (
+          <Alert className="border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20">
+            <Target className="h-4 w-4 text-indigo-600" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <p className="font-semibold text-indigo-900 dark:text-indigo-100">
+                  🎯 Selecione o ICP para Calcular FIT Score:
+                </p>
+                <Select value={selectedIcpId} onValueChange={setSelectedIcpId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Escolha o ICP de referência..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableIcps.map(icp => (
+                      <SelectItem key={icp.id} value={icp.id}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          <span className="font-medium">{icp.nome}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({icp.cnpj}) • {icp.criado}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-indigo-700 dark:text-indigo-300">
+                  Os prospects serão comparados com este ICP para calcular compatibilidade
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Tabs defaultValue="file" className="w-full">
           <TabsList className="grid w-full grid-cols-2">

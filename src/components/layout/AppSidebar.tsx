@@ -123,10 +123,11 @@ const menuGroups: MenuGroup[] = [
         description: "Controle de APIs, métricas estratégicas e governança"
       },
       {
-        title: "Busca Global",
-        icon: Search,
+        title: "⚡ Motor de Qualificação",
+        icon: Zap,
         url: "/search",
-        description: "Importar empresas (CSV ou CNPJ individual)"
+        highlighted: true,
+        description: "Upload em massa + Triagem inteligente com IA • Classificação automática (A+, A, B, C, D)"
       }
     ]
   },

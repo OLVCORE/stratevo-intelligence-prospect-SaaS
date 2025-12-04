@@ -794,11 +794,13 @@ export default function SearchPage() {
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-4xl font-bold text-foreground mb-2 flex items-center gap-3">
-            <Sparkles className="h-8 w-8 text-primary" />
-            Busca Inteligente de Empresas
+            <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
+              <Zap className="h-8 w-8 text-white" />
+            </div>
+            ⚡ Motor de Qualificação Inteligente
           </h1>
           <p className="text-muted-foreground">
-            Sistema unificado de busca com detecção automática e enriquecimento 360°
+            Upload em massa + Triagem automática com IA • Apenas prospects qualificados entram na base
           </p>
         </div>
         <div className="flex items-center gap-2">
