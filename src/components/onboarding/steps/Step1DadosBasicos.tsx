@@ -96,6 +96,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     cnaePrincipalDescricao: '',
     website: '',
     urlParaScan: '',
+    cep: '', // 🔥 NOVO: CEP
+    endereco: '', // 🔥 NOVO: Endereço
+    bairro: '', // 🔥 NOVO: Bairro
+    numero: '', // 🔥 NOVO: Número
   });
   
   const [buscandoCNPJConcorrente, setBuscandoCNPJConcorrente] = useState(false);
@@ -869,8 +873,13 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         cnaePrincipalDescricao: '',
         website: '',
         urlParaScan: '',
+        cep: '', // 🔥 RESET CEP
+        endereco: '', // 🔥 RESET Endereço
+        bairro: '', // 🔥 RESET Bairro
+        numero: '', // 🔥 RESET Número
       });
       setCnpjConcorrenteEncontrado(false);
+      setDadosConcorrenteOpen(false); // 🔥 FECHAR card verde
     }
     // Se for só 1 CNPJ, deixar o paste normal acontecer
   };
@@ -1085,6 +1094,15 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     const updatedConcorrentes = [...concorrentes, { ...novoConcorrente }];
     setConcorrentes(updatedConcorrentes);
     
+    // 🔥 LOG: Verificar se CEP/endereço estão sendo salvos
+    console.log('[Step1] ✅ Adicionando concorrente com endereço:', {
+      razaoSocial: novoConcorrente.razaoSocial,
+      cep: novoConcorrente.cep,
+      endereco: novoConcorrente.endereco,
+      bairro: novoConcorrente.bairro,
+      numero: novoConcorrente.numero,
+    });
+    
     // 🔥 CRÍTICO: Salvar imediatamente para persistência
     if (onSave) {
       const dataToSave = {
@@ -1094,7 +1112,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       onSave(dataToSave);
     }
     
-    // Limpar formulário
+    // Limpar formulário (incluindo CEP/endereço)
     setNovoConcorrente({
       cnpj: '',
       razaoSocial: '',
@@ -1107,11 +1125,18 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       cnaePrincipalDescricao: '',
       website: '',
       urlParaScan: '',
+      cep: '', // 🔥 RESET CEP
+      endereco: '', // 🔥 RESET Endereço
+      bairro: '', // 🔥 RESET Bairro
+      numero: '', // 🔥 RESET Número
     });
     setCnpjConcorrenteEncontrado(false);
+    setDadosConcorrenteOpen(false); // 🔥 FECHAR card verde
     cnpjConcorrenteUltimoBuscadoRef.current = '';
     
-    toast.success('Concorrente adicionado!');
+    toast.success('✅ Concorrente adicionado com sucesso!', {
+      description: 'CEP e endereço salvos no banco de dados'
+    });
   };
 
   // 🔥 NOVO: Remover concorrente
