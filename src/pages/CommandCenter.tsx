@@ -137,6 +137,19 @@ export default function CommandCenter() {
         ? Math.round(((inPipeline || 0) / totalImported) * 100)
         : 0;
 
+      // 🔍 LOG DETALHADO DAS MÉTRICAS
+      console.log('📊 [FUNIL] Métricas Calculadas:', {
+        importadas: totalImported,
+        quarentena: inQuarantine,
+        aprovadas: approved,
+        pipeline: inPipeline,
+        taxas: {
+          'Aprovação (Quar→Aprov)': `${quarantineToApproved}% = (${approved} / ${totalImported}) × 100`,
+          'Pipeline (Aprov→Pipe)': `${approvedToPipeline}% = (${inPipeline} / ${approved}) × 100`,
+          'Global (Import→Pipe)': `${overall}% = (${inPipeline} / ${totalImported}) × 100`,
+        }
+      });
+
       // SUGESTÕES INTELIGENTES BASEADAS EM IA
       const suggestions: string[] = [];
       

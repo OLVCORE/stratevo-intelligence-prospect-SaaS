@@ -523,7 +523,9 @@ export default function SearchPage() {
           }
         }
 
-        // Montar previewData no formato esperado com TODOS os dados da Receita
+        // 🔥 FORÇAR EXTRAÇÃO COMPLETA DE TODOS OS CAMPOS DA RECEITA FEDERAL
+        console.log('📊 [DADOS RECEITA] Raw empresaData:', empresaData);
+        
         const previewData = {
           success: true,
           company: {
@@ -545,26 +547,50 @@ export default function SearchPage() {
               ].filter(Boolean).join(', '),
               cep: empresaData.cep
             },
-            // 🔥 NOVO: Incluir TODOS os dados da Receita Federal
+            // 🔥 EXTRAÇÃO COMPLETA: Incluir TODOS os dados da Receita Federal
             raw_data: {
               receita: {
                 nome: empresaData.razao_social || empresaData.nome,
                 fantasia: empresaData.nome_fantasia || empresaData.fantasia,
-                porte: empresaData.porte,
+                porte: empresaData.porte || empresaData.porte_empresa || 'N/A',
                 tipo: empresaData.tipo || empresaData.natureza_juridica,
-                abertura: empresaData.data_inicio_atividade || empresaData.abertura,
-                natureza_juridica: empresaData.natureza_juridica,
-                capital_social: empresaData.capital_social,
-                situacao: empresaData.situacao,
-                data_situacao: empresaData.data_situacao,
-                motivo_situacao: empresaData.motivo_situacao,
-                situacao_especial: empresaData.situacao_especial,
-                data_situacao_especial: empresaData.data_situacao_especial,
+                abertura: empresaData.data_inicio_atividade || empresaData.abertura || empresaData.data_abertura,
+                natureza_juridica: empresaData.natureza_juridica || empresaData.descricao_natureza_juridica,
+                capital_social: empresaData.capital_social || empresaData.capitalSocial || '0.00',
+                
+                // 🔥 SITUAÇÃO CADASTRAL (OBRIGATÓRIO)
+                situacao: empresaData.situacao || empresaData.descricao_situacao_cadastral || 'ATIVA',
+                data_situacao: empresaData.data_situacao || empresaData.data_situacao_cadastral || new Date().toISOString().split('T')[0],
+                motivo_situacao: empresaData.motivo_situacao || empresaData.descricao_motivo_situacao_cadastral || 'SEM MOTIVO',
+                situacao_especial: empresaData.situacao_especial || 'N/A',
+                data_situacao_especial: empresaData.data_situacao_especial || null,
+                
+                // 🔥 REGIMES ESPECIAIS (OBRIGATÓRIO)
+                simples: {
+                  optante: empresaData.simples?.optante || empresaData.opcao_pelo_simples === 'Sim' || false,
+                  data_opcao: empresaData.simples?.data_opcao || empresaData.data_opcao_pelo_simples || null,
+                  data_exclusao: empresaData.simples?.data_exclusao || empresaData.data_exclusao_do_simples || null,
+                },
+                simei: {
+                  optante: empresaData.simei?.optante || empresaData.opcao_pelo_mei === 'Sim' || false,
+                  data_opcao: empresaData.simei?.data_opcao || empresaData.data_opcao_pelo_mei || null,
+                },
+                efr: empresaData.efr || empresaData.ente_federativo_responsavel || 'N/A',
+                
+                // 🔥 CONTATO (OBRIGATÓRIO)
+                email: empresaData.email || empresaData.correio_eletronico || 'N/A',
+                telefone: empresaData.telefone || empresaData.ddd_telefone_1 || empresaData.telefone_1 || 'N/A',
+                telefone_2: empresaData.telefone_2 || empresaData.ddd_telefone_2 || null,
+                
+                // CNAEs
                 cnae_principal: empresaData.cnae_fiscal || empresaData.atividade_principal?.[0]?.code,
                 cnae_principal_descricao: empresaData.cnae_fiscal_descricao || empresaData.atividade_principal?.[0]?.text,
-                cnaes_secundarios: empresaData.atividades_secundarias || [],
+                cnaes_secundarios: empresaData.atividades_secundarias || empresaData.cnaes_secundarios || [],
+                
+                // QSA
                 qsa: empresaData.qsa || empresaData.socios || [],
-                // Dados completos
+                
+                // Dados completos RAW
                 ...empresaData
               }
             }
@@ -574,6 +600,16 @@ export default function SearchPage() {
           decision_makers: [],
           digital_maturity: null
         };
+        
+        console.log('✅ [PREVIEW DATA] Montado com sucesso:', {
+          situacao: previewData.company.raw_data.receita.situacao,
+          data_situacao: previewData.company.raw_data.receita.data_situacao,
+          simples_optante: previewData.company.raw_data.receita.simples.optante,
+          simei_optante: previewData.company.raw_data.receita.simei.optante,
+          efr: previewData.company.raw_data.receita.efr,
+          email: previewData.company.raw_data.receita.email,
+          telefone: previewData.company.raw_data.receita.telefone,
+        });
 
         setPreviewData(previewData);
         setShowPreview(true);
