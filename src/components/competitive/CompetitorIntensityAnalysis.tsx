@@ -8,9 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, TrendingUp, Shield, Target, Flame, Award, Info } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Shield, Target, Flame, Award, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useState } from 'react';
 
 interface CompetitorIntensityProps {
   tenantProducts: Array<{ nome: string; categoria?: string }>;
@@ -35,6 +37,11 @@ export default function CompetitorIntensityAnalysis({
   competitorProducts,
   matches
 }: CompetitorIntensityProps) {
+  
+  // Estados para dropdowns
+  const [radarOpen, setRadarOpen] = useState(false);
+  const [rankingOpen, setRankingOpen] = useState(false);
+  const [resumoOpen, setResumoOpen] = useState(false);
   
   // 🔥 NOVO: Calcular SCORE DE AMEAÇA COMPOSTO para cada concorrente
   const calculateThreatScore = (competitorName: string) => {
@@ -150,17 +157,26 @@ export default function CompetitorIntensityAnalysis({
     <div className="space-y-6">
       {/* 🔥 GRÁFICO RADAR - Comparação Visual */}
       {competitorAnalysis.length > 0 && (
-        <Card className="border-purple-500/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-purple-500" />
-              Análise Multidimensional de Ameaça (Top 5)
-            </CardTitle>
-            <CardDescription>
-              Comparação visual em 5 dimensões estratégicas
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Collapsible open={radarOpen} onOpenChange={setRadarOpen}>
+          <Card className="border-purple-500/30">
+            <CollapsibleTrigger className="w-full">
+              <CardHeader className="cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-left">
+                      <Target className="h-5 w-5 text-purple-500" />
+                      Análise Multidimensional de Ameaça (Top 5)
+                    </CardTitle>
+                    <CardDescription className="text-left">
+                      Comparação visual em 5 dimensões estratégicas
+                    </CardDescription>
+                  </div>
+                  {radarOpen ? <ChevronUp className="h-5 w-5 text-purple-500" /> : <ChevronDown className="h-5 w-5 text-purple-500" />}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
             <ResponsiveContainer width="100%" height={400}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="#cbd5e1" className="opacity-30" />
@@ -190,21 +206,32 @@ export default function CompetitorIntensityAnalysis({
               </RadarChart>
             </ResponsiveContainer>
           </CardContent>
-        </Card>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
       )}
       
       {/* 🔥 RANKING DE AMEAÇA COMPETITIVA */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Flame className="h-5 w-5 text-orange-500" />
-            Ranking de Ameaça Competitiva
-          </CardTitle>
-          <CardDescription>
-            Score composto baseado em 4 dimensões estratégicas
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <Collapsible open={rankingOpen} onOpenChange={setRankingOpen}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-colors">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-left">
+                    <Flame className="h-5 w-5 text-orange-500" />
+                    Ranking de Ameaça Competitiva
+                  </CardTitle>
+                  <CardDescription className="text-left">
+                    Score composto baseado em 4 dimensões estratégicas
+                  </CardDescription>
+                </div>
+                {rankingOpen ? <ChevronUp className="h-5 w-5 text-orange-500" /> : <ChevronDown className="h-5 w-5 text-orange-500" />}
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-3">
           {competitorAnalysis.length === 0 ? (
             <p className="text-sm text-muted-foreground italic text-center py-8">
               Nenhum concorrente cadastrado.
@@ -309,17 +336,26 @@ export default function CompetitorIntensityAnalysis({
             })
           )}
         </CardContent>
-      </Card>
+      </CollapsibleContent>
+    </Card>
+  </Collapsible>
       
       {/* 🔥 RESUMO EXECUTIVO */}
-      <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-            <Info className="h-5 w-5" />
-            Resumo Executivo - Análise de Intensidade
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Collapsible open={resumoOpen} onOpenChange={setResumoOpen}>
+        <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+          <CollapsibleTrigger className="w-full">
+            <CardHeader className="cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400 text-left">
+                  <Info className="h-5 w-5" />
+                  Resumo Executivo - Análise de Intensidade
+                </CardTitle>
+                {resumoOpen ? <ChevronUp className="h-5 w-5 text-blue-500" /> : <ChevronDown className="h-5 w-5 text-blue-500" />}
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent>
           <div className="space-y-3 text-sm">
             {(() => {
               const criticos = competitorAnalysis.filter(c => c.totalScore >= 80);
@@ -383,7 +419,9 @@ export default function CompetitorIntensityAnalysis({
             })()}
           </div>
         </CardContent>
-      </Card>
+      </CollapsibleContent>
+    </Card>
+  </Collapsible>
     </div>
   );
 }
