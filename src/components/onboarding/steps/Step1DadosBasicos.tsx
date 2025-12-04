@@ -70,6 +70,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     urlParaScan?: string; // NOVO: URL manual para scan
     produtosExtraidos?: number; // NOVO: Contador de produtos
     produtos?: Array<{ id: string; nome: string; descricao?: string; categoria?: string }>; // NOVO: Lista de produtos
+    cep?: string; // 🔥 NOVO: CEP
+    endereco?: string; // 🔥 NOVO: Endereço
+    bairro?: string; // 🔥 NOVO: Bairro
+    numero?: string; // 🔥 NOVO: Número
   }
   
   const [concorrentes, setConcorrentes] = useState<ConcorrenteDireto[]>(
@@ -812,6 +816,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           cnaePrincipalDescricao: data.atividade_principal?.[0]?.text || '',
           website: '',
           urlParaScan: '',
+          cep: data.cep || '', // 🔥 NOVO: CEP da Receita Federal
+          endereco: data.logradouro || '', // 🔥 NOVO: Endereço completo
+          bairro: data.bairro || '', // 🔥 NOVO: Bairro
+          numero: data.numero || '', // 🔥 NOVO: Número
         });
         
         sucesso++;
@@ -907,6 +915,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         cnaePrincipalDescricao: data.atividade_principal?.[0]?.text || '',
         website: novoConcorrente.website || '',
         urlParaScan: novoConcorrente.urlParaScan || '',
+        cep: data.cep || '', // 🔥 NOVO: CEP da Receita Federal
+        endereco: data.logradouro || '', // 🔥 NOVO: Logradouro
+        bairro: data.bairro || '', // 🔥 NOVO: Bairro
+        numero: data.numero || '', // 🔥 NOVO: Número
       });
 
       setCnpjConcorrenteEncontrado(true);
