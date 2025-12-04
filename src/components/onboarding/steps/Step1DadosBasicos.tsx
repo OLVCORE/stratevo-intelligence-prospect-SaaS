@@ -105,6 +105,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   const [buscandoCNPJConcorrente, setBuscandoCNPJConcorrente] = useState(false);
   const [cnpjConcorrenteEncontrado, setCnpjConcorrenteEncontrado] = useState(false);
   const [erroCNPJConcorrente, setErroCNPJConcorrente] = useState<string | null>(null);
+  const [reprocessandoEnderecos, setReprocessandoEnderecos] = useState(false);
   const [scanningConcorrente, setScanningConcorrente] = useState<Record<string, boolean>>({});
   const cnpjConcorrenteUltimoBuscadoRef = useRef<string>('');
   const [bulkExtracting, setBulkExtracting] = useState(false); // 🔥 NOVO: Estado para extração em massa
@@ -1153,6 +1154,108 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     }
   };
 
+  // 🔥 NOVO: Reprocessar endereços de concorrentes existentes
+  const reprocessarEnderecosConcorrentes = async () => {
+    if (!tenant?.id) {
+      toast.error('Tenant não identificado');
+      return;
+    }
+
+    // Filtrar concorrentes sem CEP ou endereço
+    const concorrentesSemEndereco = concorrentes.filter(
+      c => !c.cep || !c.endereco
+    );
+
+    if (concorrentesSemEndereco.length === 0) {
+      toast.info('Todos os concorrentes já têm endereço completo!');
+      return;
+    }
+
+    setReprocessandoEnderecos(true);
+    toast.info(`Reprocessando ${concorrentesSemEndereco.length} concorrente(s)...`);
+
+    let sucesso = 0;
+    let erros = 0;
+    const concorrentesAtualizados = [...concorrentes];
+
+    for (const concorrente of concorrentesSemEndereco) {
+      try {
+        const cnpjClean = concorrente.cnpj.replace(/\D/g, '');
+        const result = await consultarReceitaFederal(cnpjClean);
+
+        if (!result.success || !result.data) {
+          erros++;
+          continue;
+        }
+
+        const data = result.data;
+
+        // Enriquecer com ViaCEP se necessário
+        let enderecoEnriquecido = {
+          cep: data.cep || concorrente.cep || '',
+          endereco: data.logradouro || concorrente.endereco || '',
+          bairro: data.bairro || concorrente.bairro || '',
+          numero: data.numero || concorrente.numero || '',
+        };
+
+        if (data.cep && !data.logradouro) {
+          try {
+            const viaCepResponse = await fetch(`https://viacep.com.br/ws/${data.cep.replace(/\D/g, '')}/json/`);
+            const viaCepData = await viaCepResponse.json();
+
+            if (!viaCepData.erro) {
+              enderecoEnriquecido = {
+                cep: viaCepData.cep,
+                endereco: viaCepData.logradouro || data.logradouro || '',
+                bairro: viaCepData.bairro || data.bairro || '',
+                numero: data.numero || '',
+              };
+            }
+          } catch (viaCepError) {
+            console.warn('[Step1] ⚠️ Erro ao buscar ViaCEP:', viaCepError);
+          }
+        }
+
+        // Atualizar concorrente no array
+        const index = concorrentesAtualizados.findIndex(
+          c => c.cnpj.replace(/\D/g, '') === cnpjClean
+        );
+
+        if (index !== -1) {
+          concorrentesAtualizados[index] = {
+            ...concorrentesAtualizados[index],
+            ...enderecoEnriquecido,
+          };
+          sucesso++;
+        }
+      } catch (error) {
+        console.error(`[Step1] Erro ao reprocessar ${concorrente.razaoSocial}:`, error);
+        erros++;
+      }
+    }
+
+    // Atualizar estado e salvar
+    if (sucesso > 0) {
+      setConcorrentes(concorrentesAtualizados);
+
+      if (onSave) {
+        const dataToSave = {
+          ...formData,
+          concorrentesDiretos: concorrentesAtualizados,
+        };
+        await onSave(dataToSave);
+      }
+
+      toast.success(`✅ ${sucesso} endereço(s) atualizado(s)!`, {
+        description: erros > 0 ? `${erros} erro(s) encontrado(s)` : 'Todos os endereços foram atualizados',
+      });
+    } else {
+      toast.error(`Nenhum endereço foi atualizado. ${erros} erro(s) encontrado(s).`);
+    }
+
+    setReprocessandoEnderecos(false);
+  };
+
   // 🔥 NOVO: Adicionar concorrente
   const adicionarConcorrente = () => {
     const cnpjClean = novoConcorrente.cnpj.replace(/\D/g, '');
@@ -1771,6 +1874,29 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
                   <>
                     <ChevronDown className="h-4 w-4" />
                     Abrir Todos
+                  </>
+                )}
+              </Button>
+            )}
+            {/* 🔥 NOVO: Botão para reprocessar endereços */}
+            {concorrentes.some(c => !c.cep || !c.endereco) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={reprocessarEnderecosConcorrentes}
+                disabled={reprocessandoEnderecos}
+                className="flex items-center gap-2 border-yellow-500 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20"
+              >
+                {reprocessandoEnderecos ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Reprocessando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    Atualizar Endereços
                   </>
                 )}
               </Button>
