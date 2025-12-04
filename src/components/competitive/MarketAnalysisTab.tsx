@@ -59,7 +59,8 @@ export default function MarketAnalysisTab({ icpId }: MarketAnalysisTabProps) {
   }, [swotOpen]);
 
   useEffect(() => {
-    if (tenant?.id) {
+    // Só carrega se realmente mudou o tenant ou ainda não tem dados
+    if (tenant?.id && (tenantProducts.length === 0 || competitorProducts.length === 0)) {
       loadData();
     }
   }, [tenant?.id, icpId]);

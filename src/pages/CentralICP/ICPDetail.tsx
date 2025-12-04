@@ -37,17 +37,29 @@ export default function ICPDetail() {
     }
   }, [id, setCurrentIcpId]);
   
-  // 🔥 NOVO: Invalidar cache quando retornar à página (sincronização em tempo real)
+  // 🔥 OTIMIZADO: Invalidar cache APENAS se usuário voltou após 5+ segundos (evita piscamento)
   useEffect(() => {
-    const handleFocus = () => {
-      console.log('[ICPDetail] 🔄 Página focada - Invalidando cache para atualizar dados');
-      queryClient.invalidateQueries({ queryKey: ['onboarding_sessions'] });
-      queryClient.invalidateQueries({ queryKey: ['tenant_competitor_products'] });
-      loadProfile(); // Recarregar dados
+    let lastInvalidation = Date.now();
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const timeSinceLastInvalidation = Date.now() - lastInvalidation;
+        
+        // Só invalida se passou 5+ segundos (evita piscamento ao tirar print/trocar aba rápido)
+        if (timeSinceLastInvalidation > 5000) {
+          console.log('[ICPDetail] 🔄 Página visível após >5s - Atualizando dados');
+          queryClient.invalidateQueries({ queryKey: ['onboarding_sessions'] });
+          queryClient.invalidateQueries({ queryKey: ['tenant_competitor_products'] });
+          loadProfile();
+          lastInvalidation = Date.now();
+        } else {
+          console.log('[ICPDetail] ⏭️ Mudança rápida de aba - Mantendo cache para evitar piscamento');
+        }
+      }
     };
     
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [queryClient]);
 
   useEffect(() => {
