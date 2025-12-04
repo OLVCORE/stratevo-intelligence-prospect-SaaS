@@ -1285,7 +1285,15 @@ export default function SearchPage() {
                 <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium">Upload em Massa</p>
-                  <p className="text-xs text-muted-foreground">CSV com até 500 empresas</p>
+                  <p className="text-xs text-muted-foreground">CSV com até 1.000 empresas</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">⚡ Qualificação com IA</p>
+                  <p className="text-xs text-muted-foreground">Triagem automática (A+, A, B, C, D)</p>
                 </div>
               </div>
             </CardContent>

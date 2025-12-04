@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Download, AlertCircle, CheckCircle2, Loader2, Link as LinkIcon, Folder, Sheet } from "lucide-react";
+import { Upload, Download, AlertCircle, CheckCircle2, Loader2, Link as LinkIcon, Folder, Sheet, Zap, Target } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +35,7 @@ const [result, setResult] = useState<{ success: number; errors: string[] } | nul
 const navigate = useNavigate();
 const [sourceName, setSourceName] = useState("");
 const [sourceCampaign, setSourceCampaign] = useState("");
+const [enableQualification, setEnableQualification] = useState(true); // 🔥 NOVO: Qualificação automática
 
   // Fecha automaticamente após sucesso
   useEffect(() => {
@@ -624,11 +626,73 @@ if (insertedCompanies.length > 0) {
   
   toast.success(`✅ Auto-enriquecimento concluído!`, {
     description: `${enriched}/${insertedCompanies.length} empresas enriquecidas com Receita Federal`,
-    action: {
-      label: 'Ir para Gerenciar Empresas',
-      onClick: () => navigate('/companies')
-    }
   });
+  
+  // 🔥 NOVO: Qualificação Automática com IA
+  if (enableQualification && insertedCompanies.length > 0) {
+    toast.info('🤖 Iniciando qualificação automática com IA...', {
+      description: 'Calculando FIT score e classificando prospects...'
+    });
+    
+    try {
+      // Extrair CNPJs das empresas inseridas
+      const cnpjs = insertedCompanies
+        .filter(c => c.cnpj)
+        .map(c => c.cnpj.replace(/\D/g, ''));
+      
+      // Criar job de qualificação
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('auth_user_id', user?.id)
+        .single();
+      
+      const tenantId = userProfile?.tenant_id;
+      
+      if (tenantId && cnpjs.length > 0) {
+        const { data: job, error: jobError } = await supabase
+          .from('prospect_qualification_jobs' as any)
+          .insert({
+            tenant_id: tenantId,
+            job_name: sourceName || `Upload ${new Date().toLocaleDateString('pt-BR')}`,
+            source_type: 'upload_csv',
+            source_file_name: file.name,
+            total_cnpjs: cnpjs.length,
+            status: 'pending',
+          })
+          .select()
+          .single();
+        
+        if (!jobError && job) {
+          // Chamar Edge Function (assíncrono - não bloqueia)
+          supabase.functions.invoke('qualify-prospects-bulk', {
+            body: {
+              tenant_id: tenantId,
+              job_id: job.id,
+              cnpjs: cnpjs,
+            },
+          }).then(({ data: qualData, error: qualError }) => {
+            if (qualError) {
+              console.error('Erro na qualificação:', qualError);
+              toast.warning('⚠️ Qualificação em background', {
+                description: 'As empresas foram importadas mas a qualificação teve problemas.'
+              });
+            } else {
+              console.log('✅ Qualificação concluída:', qualData);
+              toast.success('✅ Qualificação concluída!', {
+                description: `${qualData?.enriched || 0} prospects qualificados e classificados.`,
+                duration: 5000,
+              });
+            }
+          });
+        }
+      }
+    } catch (qualError) {
+      console.error('Erro ao iniciar qualificação:', qualError);
+      // Não bloqueia o fluxo principal
+    }
+  }
 }
 
 setIsUploading(false);
@@ -871,6 +935,33 @@ try {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* 🔥 NOVO: Opção de Qualificação Automática */}
+            <div className="flex items-center justify-between p-4 border-2 border-indigo-200 dark:border-indigo-800 rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-indigo-600 rounded-lg">
+                  <Zap className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <div className="font-semibold text-indigo-900 dark:text-indigo-100 flex items-center gap-2">
+                    ⚡ Qualificação Automática com IA
+                    <Badge className="bg-gradient-to-r from-indigo-600 to-purple-600">NOVO!</Badge>
+                  </div>
+                  <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
+                    Calcular FIT score e classificar (A+, A, B, C, D) automaticamente após importar
+                  </p>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+                    <Target className="h-3 w-3 inline mr-1" />
+                    Apenas prospects com FIT &gt; 70% entram na Base de Empresas
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={enableQualification}
+                onCheckedChange={setEnableQualification}
+                className="data-[state=checked]:bg-indigo-600"
+              />
             </div>
 
             <div className="flex justify-end gap-3">

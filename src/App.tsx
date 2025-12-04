@@ -39,7 +39,6 @@ const PWAInstallPage = lazy(() => import("./pages/PWAInstallPage"));
 // Lazy load all dashboard pages for code splitting
 // Dashboard eagerly loaded via direct import above
 const SearchPage = lazy(() => import("./pages/SearchPage"));
-const ProspectQualificationEngine = lazy(() => import("./pages/Prospecting/ProspectQualificationEngine"));
 const IntelligencePage = lazy(() => import("./pages/IntelligencePage"));
 const Intelligence360Page = lazy(() => import("./pages/Intelligence360Page"));
 const CompaniesManagementPage = lazy(() => import("./pages/CompaniesManagementPage"));
@@ -259,16 +258,6 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <SearchPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/prospecting/qualification-engine"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <ProspectQualificationEngine />
                   </AppLayout>
                 </ProtectedRoute>
               }
