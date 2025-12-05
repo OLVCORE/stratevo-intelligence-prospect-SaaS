@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Activity, Inbox, CheckSquare, Zap, BarChart3,
-  Phone, Mail, MessageSquare, Users, TrendingUp, AlertCircle, Clock, Bell, BookOpen
+  Phone, Mail, MessageSquare, Users, TrendingUp, AlertCircle, Clock, Bell, BookOpen, Mic
 } from 'lucide-react';
+import { VoiceCallManager } from '@/modules/crm/components/ai-voice/VoiceCallManager';
+import { VoiceAgentConfig } from '@/modules/crm/components/ai-voice/VoiceAgentConfig';
 import { EnhancedKanbanBoard } from '@/components/sdr/EnhancedKanbanBoard';
 import { WorkspaceInboxMini } from '@/components/sdr/WorkspaceInboxMini';
 import { WorkspaceTasksMini } from '@/components/sdr/WorkspaceTasksMini';
@@ -177,10 +179,14 @@ export default function SDRWorkspacePage() {
 
         {/* Main Workspace Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-11 max-w-full">
+          <TabsList className="grid w-full grid-cols-12 max-w-full">
             <TabsTrigger value="executive" className="gap-2 bg-gradient-to-r from-primary/10 to-blue-500/10">
               <BarChart3 className="h-4 w-4" />
               Executivo
+            </TabsTrigger>
+            <TabsTrigger value="ai-voice" className="gap-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+              <Mic className="h-4 w-4" />
+              AI Voice
             </TabsTrigger>
             <TabsTrigger value="pipeline" className="gap-2">
               <Activity className="h-4 w-4" />
@@ -231,6 +237,21 @@ export default function SDRWorkspacePage() {
 
           <TabsContent value="executive" className="flex-1 mt-4 overflow-auto">
             <ExecutiveView />
+          </TabsContent>
+
+          <TabsContent value="ai-voice" className="flex-1 mt-4 overflow-auto">
+            <Tabs defaultValue="calls" className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="calls">📞 Chamadas</TabsTrigger>
+                <TabsTrigger value="config">⚙️ Configuração</TabsTrigger>
+              </TabsList>
+              <TabsContent value="calls">
+                <VoiceCallManager />
+              </TabsContent>
+              <TabsContent value="config">
+                <VoiceAgentConfig />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="pipeline" className="flex-1 mt-4">

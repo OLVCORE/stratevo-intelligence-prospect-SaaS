@@ -104,6 +104,26 @@ export default function ICPProfiles() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => navigate(`/central-icp/view/${profile.id}`)}
+                  >
+                    <Target className="w-4 h-4 mr-2" />
+                    Ver Perfil Completo
+                  </Button>
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => navigate(`/central-icp/reports/${profile.id}?type=resumo`)}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Relatórios
+                  </Button>
+                </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Calendar className="h-4 w-4" />
                   <span>

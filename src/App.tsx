@@ -58,6 +58,7 @@ const BatchUsageAnalysis = lazy(() => import("./pages/CentralICP/BatchUsageAnaly
 const ICPProfiles = lazy(() => import("./pages/CentralICP/ICPProfiles"));
 const CreateNewICP = lazy(() => import("./pages/CentralICP/CreateNewICP"));
 const ICPDetail = lazy(() => import("./pages/CentralICP/ICPDetail"));
+const ICPProfileView = lazy(() => import("./pages/CentralICP/ICPProfileView"));
 const ICPReports = lazy(() => import("./pages/CentralICP/ICPReports"));
 const ResultsDashboard = lazy(() => import("./pages/CentralICP/ResultsDashboard"));
 const StrategicPlanPage = lazy(() => import("./pages/CentralICP/StrategicPlanPage"));
@@ -450,14 +451,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/sdr/workspace"
-              element={
-                <ProtectedRoute>
-                  <SDRWorkspacePage />
-                </ProtectedRoute>
-              }
-            />
+                  <Route
+                    path="/sdr/workspace"
+                    element={
+                      <ProtectedRoute>
+                        <SDRWorkspacePage />
+                      </ProtectedRoute>
+                    }
+                  />
             <Route path="/sdr" element={<Navigate to="/sdr/workspace" replace />} />
             <Route path="/sdr/dashboard" element={<Navigate to="/sdr/workspace" replace />} />
             <Route
@@ -698,6 +699,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <ICPDetail />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/view/:icpId"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ICPProfileView />
                   </AppLayout>
                 </ProtectedRoute>
               }

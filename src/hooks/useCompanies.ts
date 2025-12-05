@@ -14,13 +14,22 @@ export function useCompanies(options?: {
   sortOrder?: 'asc' | 'desc';
 }) {
   const { page = 0, pageSize = 50, search = '', sortBy = 'created_at', sortOrder = 'desc' } = options || {};
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   
   return useQuery({
-    queryKey: [...COMPANIES_QUERY_KEY, page, pageSize, search, sortBy, sortOrder],
+    queryKey: [...COMPANIES_QUERY_KEY, tenantId, page, pageSize, search, sortBy, sortOrder],
     queryFn: async () => {
+      console.log('[useCompanies] 🔍 Buscando empresas para tenant:', tenantId);
+      
       let query = supabase
         .from('companies')
         .select('*', { count: 'exact' });
+      
+      // 🔥 CRÍTICO: Filtrar por tenant_id
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
 
       // Filtro de busca
       if (search) {
@@ -39,7 +48,7 @@ export function useCompanies(options?: {
       
       if (error) {
         console.error('[useCompanies] ❌ Query error:', error);
-        console.error('[useCompanies] 📝 Query details:', { search, sortBy, sortOrder, page, pageSize });
+        console.error('[useCompanies] 📝 Query details:', { tenantId, search, sortBy, sortOrder, page, pageSize });
         // Retornar vazio em vez de quebrar
         return { 
           data: [] as Company[], 
@@ -49,6 +58,9 @@ export function useCompanies(options?: {
           totalPages: 0
         };
       }
+      
+      console.log('[useCompanies] ✅ Encontradas:', count, 'empresas para tenant:', tenantId);
+      
       return { 
         data: data as Company[], 
         count: count || 0,
@@ -57,6 +69,7 @@ export function useCompanies(options?: {
         totalPages: Math.ceil((count || 0) / pageSize)
       };
     },
+    enabled: !!tenantId, // 🔥 Só buscar se tiver tenant
     staleTime: 5 * 1000, // ✅ 5 segundos (atualiza mais rápido)
     gcTime: 5 * 60 * 1000, // 5 minutos
     refetchOnWindowFocus: true, // ✅ Revalida ao focar janela
@@ -65,17 +78,33 @@ export function useCompanies(options?: {
 
 // Hook para buscar todas as empresas (usar com cuidado)
 export function useAllCompanies() {
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
+  
   return useQuery({
-    queryKey: ['companies', 'all'],
+    queryKey: ['companies', 'all', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      console.log('[useAllCompanies] 🔍 Buscando TODAS empresas para tenant:', tenantId);
+      
+      let query = supabase
         .from('companies')
         .select('*')
         .order('created_at', { ascending: false });
       
+      // 🔥 CRÍTICO: Filtrar por tenant_id
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+      
+      const { data, error } = await query;
+      
       if (error) throw error;
+      
+      console.log('[useAllCompanies] ✅ Total encontrado:', data?.length || 0);
+      
       return data as Company[];
     },
+    enabled: !!tenantId,
     staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }

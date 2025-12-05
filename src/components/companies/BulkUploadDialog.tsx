@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTenant } from "@/contexts/TenantContext";
 
 const GoogleIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -27,6 +28,8 @@ const GoogleIcon = () => (
 const MAX_COMPANIES = 1000;
 
 export function BulkUploadDialog({ children }: { children?: ReactNode }) {
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [googleSheetUrl, setGoogleSheetUrl] = useState("");
@@ -503,6 +506,21 @@ const [availableIcps, setAvailableIcps] = useState<any[]>([]); // 🔥 NOVO: Lis
                               row.instagram || row.linkedin;
         
         if (hasIdentifier) {
+          // 🔍 DETECTAR DUPLICADOS NO ARQUIVO
+          const cnpjNormalizado = row.CNPJ?.replace(/\D/g, '') || row.cnpj?.replace(/\D/g, '');
+          if (cnpjNormalizado) {
+            const jaTem = rows.find(r => {
+              const cnpjExistente = r.CNPJ?.replace(/\D/g, '') || r.cnpj?.replace(/\D/g, '');
+              return cnpjExistente === cnpjNormalizado;
+            });
+            
+            if (jaTem) {
+              console.warn(`⚠️ DUPLICADO no arquivo - Linha ${i + 1}: ${cnpjNormalizado}`);
+              results.errors.push(`Linha ${i + 1}: CNPJ ${cnpjNormalizado} duplicado no arquivo`);
+              continue; // Pular
+            }
+          }
+          
           rows.push(row);
           console.log(`✓ Linha ${i + 1}:`, row['Nome da Empresa'] || row.CNPJ || 'Sem nome');
         } else {
@@ -609,30 +627,97 @@ console.log('📦 Body payload (primeiros 500 chars):', JSON.stringify(bodyPaylo
 console.log('📊 Número de empresas:', companiesWithMetadata.length);
 console.log('📊 Primeira empresa:', JSON.stringify(companiesWithMetadata[0]).substring(0, 200));
 
-// ✅ SOLUÇÃO DEFINITIVA: Usar bulk-upload-companies (sem headers customizados)
-// Supabase Client gerencia automaticamente serialização e autorização
-const { data, error } = await supabase.functions.invoke('bulk-upload-companies', {
-  body: bodyPayload
-});
-
-setProgress(90); // Atualizar progresso após requisição
-
-if (error) {
-  console.error('Erro ao importar:', error);
-  toast.error('Falha ao importar', { description: error?.message || 'Erro desconhecido' });
+// 🔥 VALIDAR TENANT
+if (!tenantId) {
+  toast.error('Erro: Tenant não identificado', {
+    description: 'Recarregue a página e tente novamente'
+  });
   setIsUploading(false);
   setProgress(0);
   return;
 }
 
-const imported = (data?.success as number) ?? (Array.isArray(data?.inserted) ? data.inserted.length : 0);
-const insertedCompanies = data?.inserted || [];
+console.log('💾 Salvando diretamente no banco de dados para tenant:', tenantId);
+
+const insertedCompanies = [];
+let imported = 0;
+
+for (let i = 0; i < companiesWithMetadata.length; i++) {
+  const row = companiesWithMetadata[i];
+  
+  try {
+    const cnpj = row.cnpj?.replace(/\D/g, '');
+    
+    if (!cnpj || cnpj.length !== 14) {
+      console.warn(`⚠️ CNPJ inválido na linha ${i + 1}:`, row.cnpj);
+      continue;
+    }
+    
+    // Dados da empresa (APENAS CAMPOS QUE EXISTEM)
+    const nomeDaEmpresa = row.nome_empresa || row.Razão || row['Razão Social'] || row['Raz�o'] || row.CNPJ || 'Empresa Importada';
+    
+    const companyData = {
+      tenant_id: tenantId,
+      cnpj: cnpj,
+      name: nomeDaEmpresa,
+      company_name: nomeDaEmpresa,
+      industry: row.setor_amigavel || row.Setor || null,
+      // 🎯 STATUS DE QUALIFICAÇÃO: Empresa entra em QUARENTENA
+      qualification_status: 'quarantine', // 🆕 NOVO: pending_analysis, quarantine, approved, rejected
+      imported_from: 'bulk_upload', // 🆕 NOVO: Rastreabilidade
+      needs_qualification: true, // 🆕 NOVO: Flag para análise
+      raw_data: {
+        imported_at: new Date().toISOString(),
+        csv_row: i + 1,
+        source_name: sourceName || 'Import CSV',
+        import_batch_id: import_batch_id,
+        destination: 'quarantine', // 🎯 Destino claro
+        ...row
+      }
+    };
+    
+    // 🔥 INSERT SIMPLES (sem UPSERT)
+    const { data: company, error: insertError } = await supabase
+      .from('companies')
+      .insert([companyData])
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error(`❌ Erro ao salvar linha ${i + 1}:`, insertError);
+      continue;
+    }
+    
+    insertedCompanies.push(company);
+    imported++;
+    
+    setProgress(10 + (i / companiesWithMetadata.length) * 80);
+    
+  } catch (err) {
+    console.error(`❌ Erro na linha ${i + 1}:`, err);
+  }
+}
+
+setProgress(90);
 
 setProgress(100); // Completar barra
 
-toast.success('✅ Importação concluída!', {
-  description: `${imported} empresas importadas. Auto-enriquecendo Receita Federal...`,
+console.log(`✅ SUCESSO: ${imported} empresas salvas no banco!`);
+
+toast.success(`✅ ${imported} empresas importadas com sucesso!`, {
+  description: '🎯 Empresas enviadas para QUARENTENA ICP - Aguardando qualificação',
+  action: {
+    label: 'Ver Quarentena →',
+    onClick: () => {
+      setIsOpen(false);
+      navigate('/command-center');
+    }
+  },
+  duration: 6000
 });
+
+// Fechar dialog
+setTimeout(() => setIsOpen(false), 2000);
 
 // 🤖 AUTO-ENRIQUECIMENTO RECEITA FEDERAL (GRÁTIS!)
 if (insertedCompanies.length > 0) {
@@ -676,6 +761,10 @@ if (insertedCompanies.length > 0) {
   
   toast.success(`✅ Auto-enriquecimento concluído!`, {
     description: `${enriched}/${insertedCompanies.length} empresas enriquecidas com Receita Federal`,
+    action: {
+      label: 'Ver na Base de Empresas',
+      onClick: () => navigate('/companies')
+    }
   });
   
   // 🔥 NOVO: Qualificação Automática com IA

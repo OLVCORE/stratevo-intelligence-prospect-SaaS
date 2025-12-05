@@ -51,7 +51,9 @@ import {
   Briefcase,
   Play,
   Plus,
-  Package
+  Package,
+  Mic,
+  Phone
 } from "lucide-react";
 import {
   Sidebar,
@@ -112,7 +114,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Central de Comando",
-        icon: Rocket,
+        icon: Activity,
         url: "/comando",
         description: "Mission Control: Funil operacional e ações priorizadas"
       },
@@ -121,74 +123,47 @@ const menuGroups: MenuGroup[] = [
         icon: LayoutDashboard,
         url: "/dashboard",
         description: "Controle de APIs, métricas estratégicas e governança"
-      },
-      {
-        title: "⚡ Motor de Qualificação",
-        icon: Zap,
-        url: "/search",
-        highlighted: true,
-        description: "Upload em massa + Triagem inteligente com IA • Classificação automática (A+, A, B, C, D)"
       }
     ]
   },
   {
     label: "Prospecção",
-    icon: Crosshair,
-    items: [
-      {
-        title: "Base de Empresas",
-        icon: Building2,
-        url: "/companies",
-        description: "Gestão completa da base de prospectos e qualificação inicial"
-      },
-      {
-        title: "Intelligence 360°",
-        icon: Brain,
-        url: "/intelligence-360",
-        highlighted: true,
-        description: "Análise completa automatizada com IA de múltiplas dimensões",
-        submenu: [
-          { title: "Visão Geral 360°", icon: Brain, url: "/intelligence-360", description: "Dashboard consolidado de inteligência estratégica" },
-          { title: "Fit TOTVS Score", icon: Target, url: "/fit-totvs", description: "Score de aderência aos produtos TOTVS" },
-          { title: "Maturidade Digital", icon: TrendingUp, url: "/maturity", description: "Nível de transformação digital da empresa" },
-          { title: "Digital Health", icon: Activity, url: "/digital-presence", description: "Saúde da presença digital e engajamento" },
-          { title: "Tech Stack", icon: Code, url: "/tech-stack", description: "Tecnologias em uso: ERP, CRM, e-commerce" },
-          { title: "Análise Geográfica", icon: MapPin, url: "/geographic-analysis", description: "Distribuição territorial e insights regionais" },
-          { title: "Benchmark Setorial", icon: Award, url: "/benchmark", description: "Comparação com mercado e concorrentes diretos" },
-        ],
-      },
-    ]
-  },
-  {
-    label: "ICP",
     icon: Filter,
     items: [
       {
-        title: "Central ICP",
-        icon: Target,
-        url: "/central-icp",
+        title: "1. Motor de Qualificação",
+        icon: Zap,
+        url: "/search",
         highlighted: true,
-        description: "Hub central de análise e gestão de ICP",
-        submenu: [
-          { title: "Home", icon: LayoutDashboard, url: "/central-icp", description: "Visão geral da Central ICP" },
-          { title: "Meus ICPs", icon: FileText, url: "/central-icp/profiles", description: "Visualizar e gerenciar ICPs configurados" },
-          { title: "Qualificação", icon: Filter, url: "/central-icp/qualification", description: "Motor Go/No-Go: Upload, Busca e Qualificação automática" },
-          { title: "Plano Estratégico", icon: Briefcase, url: "/central-icp/strategic-plan", description: "Kanban, KPIs e ações com investimentos proporcionais" },
-        ],
+        description: "Upload CSV + Qualificação automática contra ICPs"
       },
       {
-        title: "Quarentena ICP",
+        title: "2. Base de Empresas",
+        icon: Database,
+        url: "/companies",
+        highlighted: true,
+        description: "Pool permanente de empresas qualificadas (histórico)"
+      },
+      {
+        title: "3. Quarentena ICP",
         icon: Inbox,
         url: "/leads/icp-quarantine",
         highlighted: true,
-        description: "Analisar e aprovar empresas importadas"
+        description: "Enriquecimento profundo e análise manual"
       },
       {
-        title: "Leads Aprovados",
+        title: "4. Leads Aprovados",
         icon: CheckCircle2,
         url: "/leads/approved",
         highlighted: true,
-        description: "Empresas qualificadas prontas para criar deals"
+        description: "100% enriquecidos, prontos para Pipeline"
+      },
+      {
+        title: "5. Pipeline de Vendas",
+        icon: Rocket,
+        url: "/sdr/workspace",
+        highlighted: true,
+        description: "Deals ativos - SDR Workspace"
       },
       {
         title: "Empresas Descartadas",
@@ -199,22 +174,40 @@ const menuGroups: MenuGroup[] = [
     ]
   },
   {
+    label: "Configuração ICP",
+    icon: Target,
+    items: [
+      {
+        title: "Central ICP",
+        icon: Target,
+        url: "/central-icp",
+        description: "Hub central de análise e gestão de ICP",
+        submenu: [
+          { title: "Home", icon: LayoutDashboard, url: "/central-icp", description: "Visão geral da Central ICP" },
+          { title: "Meus ICPs", icon: FileText, url: "/central-icp/profiles", description: "Visualizar e gerenciar ICPs configurados" },
+          { title: "Plano Estratégico", icon: Briefcase, url: "/central-icp/strategic-plan", description: "Kanban, KPIs e ações com investimentos proporcionais" },
+        ],
+      },
+    ]
+  },
+  {
     label: "Execução",
     icon: Rocket,
     items: [
       {
-        title: "SDR Sales Suite",
-        icon: MessageSquare,
+        title: "SDR Workspace",
+        icon: Activity,
         url: "/sdr/workspace",
         highlighted: true,
-        description: "Plataforma completa de automação de prospecção e vendas",
+        special: true,
+        description: "SDR + CRM + AI Voice unificado - Hub completo de vendas",
         submenu: [
-          { title: "Sales Workspace", icon: Activity, url: "/sdr/workspace", description: "Centro de comando unificado do vendedor" },
-          { title: "Inbox Unificado", icon: Inbox, url: "/sdr/inbox", description: "Central de mensagens multi-canal consolidada" },
-          { title: "Sequências", icon: Repeat, url: "/sdr/sequences", description: "Cadências automatizadas de follow-up" },
-          { title: "Tarefas", icon: ListChecks, url: "/sdr/tasks", description: "Gestão de tarefas e lembretes inteligentes" },
-          { title: "Sales Coaching", icon: Award, url: "/sdr/coaching", description: "Análise de calls com IA e coaching personalizado" },
-          { title: "Integrações", icon: Zap, url: "/sdr/integrations", description: "Conecte com CRM, e-mail e ferramentas externas" },
+          { title: "Pipeline Kanban", icon: Activity, url: "/sdr/workspace", description: "Gestão visual de deals" },
+          { title: "AI Voice SDR", icon: Mic, url: "/sdr/workspace?tab=ai-voice", description: "Chamadas automáticas 24/7 com IA" },
+          { title: "Inbox Unificado", icon: Inbox, url: "/sdr/inbox", description: "Central de mensagens multi-canal" },
+          { title: "Sequências", icon: Repeat, url: "/sdr/sequences", description: "Cadências automatizadas" },
+          { title: "Tarefas", icon: ListChecks, url: "/sdr/tasks", description: "Gestão de tarefas inteligentes" },
+          { title: "Integrações", icon: Zap, url: "/sdr/integrations", description: "Twilio, WhatsApp, Email, APIs" },
         ],
       },
       {

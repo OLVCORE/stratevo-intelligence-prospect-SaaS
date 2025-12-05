@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { BackButton } from '@/components/common/BackButton';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { logger } from '@/lib/utils/logger';
-import { BulkUploadDialog } from '@/components/companies/BulkUploadDialog';
+// ❌ REMOVIDO: Upload agora é APENAS no Motor de Qualificação (SearchPage)
+// import { BulkUploadDialog } from '@/components/companies/BulkUploadDialog';
 import { ApolloImportDialog } from '@/components/companies/ApolloImportDialog';
 import { BulkActionsToolbar } from '@/components/companies/BulkActionsToolbar';
 import { CompanyRowActions } from '@/components/companies/CompanyRowActions';
@@ -358,15 +359,54 @@ export default function CompaniesManagementPage() {
   const handleBulkDelete = async () => {
     if (selectedCompanies.length === 0) return;
 
+    // 🔐 PROTEÇÃO: Requer senha de gestor para deletar da Base Permanente
+    const adminPassword = prompt(
+      `⚠️ ATENÇÃO: Deletar da Base de Empresas é PERMANENTE!\n\n` +
+      `${selectedCompanies.length} empresas serão DELETADAS do histórico.\n\n` +
+      `Digite a senha de gestor para confirmar:`
+    );
+    
+    if (!adminPassword) {
+      toast.info('Exclusão cancelada');
+      return;
+    }
+    
+    // ✅ VALIDAR SENHA (usando email do usuário atual como senha de gestor)
+    // TODO: Implementar sistema de senha de gestor real no futuro
+    const { data: { user } } = await supabase.auth.getUser();
+    const expectedPassword = user?.email?.split('@')[0] || 'admin'; // Temporário: usa parte do email
+    
+    if (adminPassword !== expectedPassword) {
+      toast.error('❌ Senha de gestor incorreta!', {
+        description: 'Exclusão bloqueada por segurança'
+      });
+      return;
+    }
+
+    // ✅ SEGUNDA CONFIRMAÇÃO
+    const finalConfirm = confirm(
+      `ÚLTIMA CONFIRMAÇÃO:\n\n` +
+      `Deletar ${selectedCompanies.length} empresas PERMANENTEMENTE da Base?\n\n` +
+      `Esta ação NÃO PODE ser desfeita!`
+    );
+    
+    if (!finalConfirm) {
+      toast.info('Exclusão cancelada');
+      return;
+    }
+
     try {
       setIsDeleting(true);
       
       // Delete all selected companies
+      const count = selectedCompanies.length;
       for (const companyId of selectedCompanies) {
         await deleteCompany.mutateAsync(companyId);
       }
       
-      toast.success(`${selectedCompanies.length} empresa(s) excluída(s) com sucesso`);
+      toast.success(`✅ ${count} empresas deletadas da Base`, {
+        description: '🔒 Ação protegida por senha de gestor'
+      });
       setSelectedCompanies([]);
       await refetch();
     } catch (error) {
@@ -1236,15 +1276,37 @@ export default function CompaniesManagementPage() {
             
             <HeaderActionsMenu
               onUploadClick={() => {
-                const uploadBtn = document.getElementById('hidden-bulk-upload-trigger');
-                uploadBtn?.click();
+                // ❌ REMOVIDO: Upload agora é APENAS no Motor de Qualificação
+                toast.info('Upload movido para Motor de Qualificação', {
+                  description: 'Vá para "Motor de Qualificação" → Upload CSV para importar empresas',
+                  action: {
+                    label: 'Ir Agora →',
+                    onClick: () => navigate('/search')
+                  },
+                  duration: 6000
+                });
               }}
               onBatchEnrichReceita={handleBatchEnrichReceitaWS}
               onBatchEnrich360={handleBatchEnrich360}
               onBatchEnrichApollo={handleBatchEnrichApollo}
               onSendToQuarantine={async () => {
                 try {
-                  toast.info('🎯 Integrando TODAS as empresas ao ICP...', {
+                  // 🎯 USAR EMPRESAS SELECIONADAS OU FILTRADAS
+                  const companiesToSend = selectedCompanies.length > 0
+                    ? companies.filter(c => selectedCompanies.includes(c.id))
+                    : companies; // Se nenhuma selecionada, usar todas as filtradas
+                  
+                  // ✅ CONFIRMAÇÃO ANTES DE ENVIAR
+                  const confirmMessage = selectedCompanies.length > 0
+                    ? `Enviar ${selectedCompanies.length} empresas SELECIONADAS para Quarentena ICP?`
+                    : `Enviar TODAS as ${companiesToSend.length} empresas FILTRADAS para Quarentena ICP?\n\nFiltros ativos:\n${filterOrigin.length > 0 ? `• Origem: ${filterOrigin.join(', ')}\n` : ''}${filterStatus.length > 0 ? `• Status: ${filterStatus.join(', ')}\n` : ''}${filterSector.length > 0 ? `• Setor: ${filterSector.join(', ')}\n` : ''}${filterRegion.length > 0 ? `• UF: ${filterRegion.join(', ')}` : ''}`;
+                  
+                  if (!confirm(confirmMessage)) {
+                    toast.info('Envio cancelado pelo usuário');
+                    return;
+                  }
+                  
+                  toast.info(`🎯 Integrando ${companiesToSend.length} empresas ao ICP...`, {
                     description: 'Todos os dados enriquecidos serão mantidos · Powered by OLV Internacional'
                   });
 
@@ -1252,7 +1314,7 @@ export default function CompaniesManagementPage() {
                   let skipped = 0;
                   let errors = 0;
 
-                  for (const company of companies) {
+                  for (const company of companiesToSend) {
                       try {
                         // Verifica se já existe no ICP
                         const { data: existing, error: checkError } = await supabase
@@ -1333,8 +1395,20 @@ export default function CompaniesManagementPage() {
 
                   toast.success(
                     `✅ ${sent} empresas integradas ao ICP!`,
-                    { description: `${skipped} já estavam · ${errors} erros · Acesse "Leads > ICP Quarentena"` }
+                    { 
+                      description: `${skipped} já estavam · ${errors} erros · Acesse "Leads > ICP Quarentena"`,
+                      action: {
+                        label: 'Ver Quarentena →',
+                        onClick: () => navigate('/leads/icp-quarantine')
+                      },
+                      duration: 6000
+                    }
                   );
+
+                  // Limpar seleção após enviar
+                  if (selectedCompanies.length > 0) {
+                    setSelectedCompanies([]);
+                  }
 
                   refetch();
                 } catch (error) {
@@ -1348,10 +1422,7 @@ export default function CompaniesManagementPage() {
               isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
             />
             
-            {/* Hidden trigger for BulkUploadDialog */}
-            <BulkUploadDialog>
-              <button id="hidden-bulk-upload-trigger" className="hidden" aria-hidden="true" />
-            </BulkUploadDialog>
+            {/* ❌ REMOVIDO: Upload agora é APENAS no Motor de Qualificação (SearchPage) */}
           </div>
         </div>
 
@@ -1810,8 +1881,8 @@ export default function CompaniesManagementPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedCompanies.map((company) => (
-                    <>
-                    <TableRow key={company.id} className={expandedRow === company.id ? 'bg-muted/30' : ''}>
+                    <React.Fragment key={company.id}>
+                    <TableRow className={expandedRow === company.id ? 'bg-muted/30' : ''}>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -2080,7 +2151,7 @@ export default function CompaniesManagementPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </TableBody>
               </Table>

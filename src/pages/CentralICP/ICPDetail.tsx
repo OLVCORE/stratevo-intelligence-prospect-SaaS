@@ -98,75 +98,47 @@ export default function ICPDetail() {
     try {
       console.log('[ICPDetail] 🔍 Buscando ICP metadata:', { id, tenantId });
       
-      // Buscar metadata
+      // 🔥 CORRIGIDO: Buscar sem filtro de tenant_id
+      // O RLS vai garantir que só apareçam ICPs que o usuário tem permissão
       const { data: metadata, error: metaError } = await (supabase as any)
         .from('icp_profiles_metadata')
         .select('*')
         .eq('id', id)
-        .eq('tenant_id', tenantId)
-        .single();
+        .maybeSingle();
 
       if (metaError) {
-        console.error('[ICPDetail] ❌ Erro ao buscar metadata:', {
-          error: metaError,
-          code: metaError.code,
-          message: metaError.message,
-          details: metaError.details,
-          hint: metaError.hint,
+        console.error('[ICPDetail] ❌ Erro ao buscar metadata:', metaError);
+        throw metaError;
+      }
+      
+      if (!metadata) {
+        throw new Error('ICP não encontrado ou você não tem permissão');
+      }
+      
+      // Verificar se é de outro tenant (informativo apenas)
+      if (metadata.tenant_id !== tenantId) {
+        console.warn('[ICPDetail] ⚠️ ICP de outro tenant:', {
+          tenantContexto: tenantId,
+          tenantICP: metadata.tenant_id,
         });
         
-        // Tentar buscar sem filtro de tenant_id (pode ser problema de RLS)
-        console.log('[ICPDetail] 🔄 Tentando buscar sem filtro de tenant_id...');
-        const { data: metadataAlt, error: metaErrorAlt } = await (supabase as any)
-          .from('icp_profiles_metadata')
-          .select('*')
-          .eq('id', id)
-          .maybeSingle();
-        
-        if (metaErrorAlt) {
-          throw metaError;
-        }
-        
-        if (metadataAlt) {
-          console.warn('[ICPDetail] ⚠️ Metadata encontrada sem filtro de tenant:', metadataAlt);
-          // Verificar se o tenant_id corresponde
-          if (metadataAlt.tenant_id !== tenantId) {
-            console.warn('[ICPDetail] ⚠️ Discrepância de tenant_id detectada:', {
-              esperado: tenantId,
-              encontrado: metadataAlt.tenant_id,
-              icpId: id,
-            });
-            
-            // 🔥 PERMITIR ACESSO: Se o RLS permitiu encontrar o ICP, significa que o usuário tem permissão
-            // Pode ser que o contexto do tenant esteja desatualizado ou o usuário tenha acesso a múltiplos tenants
-            console.log('[ICPDetail] ✅ Permitindo acesso ao ICP (RLS permitiu encontrar)');
-            
-            // Avisar o usuário sobre a discrepância, mas permitir acesso
-            toast({
-              title: 'Aviso',
-              description: `Este ICP pertence a outro tenant, mas você tem permissão para acessá-lo.`,
-              variant: 'default',
-            });
-            
-            setProfile(metadataAlt);
-          } else {
-            setProfile(metadataAlt);
-          }
-        } else {
-          throw metaError;
-        }
-      } else {
-        console.log('[ICPDetail] ✅ Metadata encontrada:', metadata?.nome || metadata?.id);
-        setProfile(metadata);
+        toast({
+          title: 'ICP de Outro Tenant',
+          description: 'Este ICP pertence a outro tenant, mas você tem permissão para acessá-lo.',
+          variant: 'default',
+        });
       }
+      
+      console.log('[ICPDetail] ✅ Metadata carregada:', metadata?.nome || metadata?.id);
       setProfile(metadata);
 
       // 🔥 Buscar dados completos do onboarding_sessions para obter benchmarking, clientes E CONCORRENTES
       // 🔥 CRÍTICO: Sempre buscar a sessão mais recente (sem cache) para garantir dados atualizados
+      // 🔥 CORRIGIDO: Usar o tenant_id do metadata carregado (não do contexto)
       const { data: sessionData, error: sessionError } = await (supabase as any)
         .from('onboarding_sessions')
         .select('*')
-        .eq('tenant_id', tenantId)
+        .eq('tenant_id', metadata.tenant_id)
         .order('updated_at', { ascending: false })
         .limit(1);
 

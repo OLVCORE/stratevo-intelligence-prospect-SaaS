@@ -100,7 +100,7 @@ export default function CommandCenter() {
       ] = await Promise.all([
         supabase.from('companies').select('*', { count: 'exact', head: true }),
         supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente'),
-        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovado'),
+        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada'),
         supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']),
         supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovado'),
         supabase.from('stc_verification_history').select('*', { count: 'exact', head: true }).eq('status', 'processing'),
