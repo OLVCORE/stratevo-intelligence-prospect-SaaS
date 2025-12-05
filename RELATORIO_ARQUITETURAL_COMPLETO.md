@@ -22,7 +22,7 @@ Este relatório mapeia a arquitetura completa do sistema STRATEVO Intelligence, 
 
 ## 🎯 1. MAPEAMENTO DOS MÓDULOS PRINCIPAIS
 
-### 1.1 ICP ENGINE (Motor de Qualificação)
+### 1.1 ICP ENGINE (Motor de Qualificação + Inteligência Mercadológica)
 
 **📍 LOCALIZAÇÃO:**
 - **Serviço Principal:** `src/services/icpQualificationEngine.ts` (770 linhas)
@@ -39,6 +39,64 @@ Este relatório mapeia a arquitetura completa do sistema STRATEVO Intelligence, 
 - ✅ ICP Quarantine Flow (`ICPQuarantinePage.tsx`)
 - ✅ Análise individual e em massa
 - ✅ Metadata e rastreabilidade
+
+**🧠 CAMADA DE INTELIGÊNCIA MERCADOLÓGICA (NÚCLEO BLINDADO):**
+
+O ICP não é apenas um cadastro simples. É um **motor completo de inteligência de mercado** com múltiplos módulos integrados:
+
+**Aba Critérios** (`ICPAnalysisCriteriaConfig`):
+- ✅ Análise Macroeconômica
+- ✅ Setores e Nichos
+- ✅ CNAEs Alvo e Excluídos
+- ✅ Estatística e Projeções
+- ✅ Análise Competitiva
+- ✅ Tendências de Mercado
+- ✅ Comércio Exterior
+- ✅ Critérios Personalizados
+
+**Aba 360°** (Análise Completa):
+- ✅ Análise multidimensional
+- ✅ Integração com múltiplas fontes de dados
+
+**Aba Competitiva** (`CompetitiveAnalysis`):
+- ✅ **Matriz BCG** (`BCGMatrix`) - Priorização de Nichos e Clientes
+- ✅ **Perfil Financeiro Alvo** - Análise de capital social
+- ✅ **Cobertura Geográfica** - Mapa de Localização (`CompaniesMapWithGeocoding`)
+- ✅ **Diferenciais Competitivos** - Análise de vantagens
+- ✅ **Concorrentes Diretos** - Detalhes completos (CNPJ, capital, CNAE, produtos, localização, classificação de ameaça)
+- ✅ **Mapa Competitivo do Brasil** - Ranking por capital social + distribuição geográfica
+- ✅ **Análise SWOT/SACT** - Ranking de ameaça, análise multidimensional
+- ✅ **Descobrir Concorrentes Automaticamente** - IA + web scraping
+
+**Métricas de Produtos** (`ProductComparisonMatrix`):
+- ✅ **Tabela Comparativa de Produtos** - 19 categorias, 254 produtos
+- ✅ **Seus Diferenciais** - Produtos únicos do tenant
+- ✅ **Alta Concorrência** - Categorias competitivas
+- ✅ **Oportunidades de Expansão** - Gaps identificados
+- ✅ **Mapa de Calor por Categoria** (`ProductHeatmap`)
+- ✅ **Análise Estratégica de IA** - Conclusões geradas automaticamente
+
+**Aba Plano** (`StrategicActionPlan`):
+- ✅ **Plano Estratégico de Ação** - Curto, médio e longo prazo
+- ✅ Baseado em capital social e análise competitiva
+- ✅ KPIs e métricas de impacto
+- ✅ Gestão de riscos
+
+**Aba Análise CEO**:
+- ✅ Recomendações estratégicas geradas por IA
+- ✅ Baseadas em dados REAIS dos concorrentes cadastrados
+- ✅ Quick wins e decisões críticas
+
+**🔗 INTEGRAÇÕES EXISTENTES (PROTEGIDAS):**
+- ✅ APIs Receita Federal
+- ✅ Web Scraping (concorrentes, produtos)
+- ✅ OpenAI GPT-4o-mini (análises estratégicas)
+- ✅ Geocodificação (mapas)
+- ✅ Banco de dados multi-tenant
+
+**⚠️ REGRA CRÍTICA:**
+> **NENHUM desses módulos pode ser apagado, refatorado globalmente ou simplificado.**  
+> Eles são parte do "cérebro" do ICP e devem ser **consumidos e orquestrados**, não reinventados.
 
 **📊 ROTAS ICP:**
 ```
@@ -68,6 +126,141 @@ Este relatório mapeia a arquitetura completa do sistema STRATEVO Intelligence, 
 2. ❌ **ICP não é visível antes da análise** - Usuário não vê perfil do ICP ativo
 3. ❌ **Distribuição estatística não é exibida** - Sem painel de resultados pós-análise
 4. ❌ **Sem conexão visual ICP → CRM → SDR** - Fluxo não está explícito na UI
+5. ❌ **Inteligência mercadológica não é exposta** - Módulos complexos não são visíveis antes do upload
+
+---
+
+### 1.1.1 CAMADA DE INTELIGÊNCIA MERCADOLÓGICA DO ICP (NÚCLEO BLINDADO)
+
+**🚨 IMPORTANTE:** O ICP não é apenas um cadastro simples. É um **motor completo de inteligência de mercado** que deve ser tratado como **fonte oficial de inteligência** para construção da persona e motor de qualificação.
+
+**📍 COMPONENTES IDENTIFICADOS:**
+
+**1. Aba Critérios** (`ICPAnalysisCriteriaConfig`):
+- **Localização:** `src/components/icp/ICPAnalysisCriteriaConfig.tsx`
+- **Funcionalidades:**
+  - Análise Macroeconômica
+  - Setores e Nichos
+  - CNAEs Alvo e Excluídos
+  - Estatística e Projeções
+  - Análise Competitiva
+  - Tendências de Mercado
+  - Comércio Exterior
+  - Critérios Personalizados
+
+**2. Aba 360°** (Análise Completa):
+- **Localização:** Integrado em `ICPDetail.tsx`
+- **Funcionalidades:**
+  - Análise multidimensional
+  - Integração com múltiplas fontes de dados
+
+**3. Aba Competitiva** (`CompetitiveAnalysis`):
+- **Localização:** `src/components/icp/CompetitiveAnalysis.tsx` (1.353 linhas)
+- **Componentes Integrados:**
+  - **Matriz BCG** (`BCGMatrix`) - `src/components/reports/BCGMatrix.tsx`
+    - Priorização de Nichos e Clientes
+    - Baseada em dados do tenant
+    - Análise de IA integrada
+  - **Perfil Financeiro Alvo**
+    - Análise de capital social
+    - Classificação de ameaça
+  - **Cobertura Geográfica**
+    - Mapa de Localização (`CompaniesMapWithGeocoding`)
+    - Distribuição por região
+  - **Diferenciais Competitivos**
+    - Análise de vantagens competitivas
+  - **Concorrentes Diretos**
+    - Detalhes completos: CNPJ, capital, CNAE, produtos, localização
+    - Classificação de ameaça (alta/média/baixa)
+    - Ranking por capital social
+  - **Mapa Competitivo do Brasil**
+    - Ranking por capital social
+    - Distribuição geográfica
+  - **Análise SWOT/SACT**
+    - Ranking de ameaça
+    - Análise multidimensional
+  - **Descobrir Concorrentes Automaticamente**
+    - IA + web scraping
+    - Descoberta dinâmica
+
+**4. Métricas de Produtos** (`ProductComparisonMatrix`):
+- **Localização:** `src/components/icp/ProductComparisonMatrix.tsx` (1.336 linhas)
+- **Funcionalidades:**
+  - **Tabela Comparativa de Produtos**
+    - 19 categorias padrão
+    - 254 produtos mapeados
+    - Comparação tenant vs concorrentes
+  - **Seus Diferenciais**
+    - Produtos únicos do tenant
+    - Blocos destacados
+  - **Alta Concorrência**
+    - Categorias competitivas identificadas
+  - **Oportunidades de Expansão**
+    - Gaps identificados
+    - Produtos não cobertos
+  - **Mapa de Calor por Categoria** (`ProductHeatmap`)
+    - Visualização de cobertura
+  - **Análise Estratégica de IA**
+    - Conclusões geradas automaticamente
+    - Recomendações baseadas em dados
+
+**5. Aba Plano** (`StrategicActionPlan`):
+- **Localização:** `src/components/icp/StrategicActionPlan.tsx` (1.043 linhas)
+- **Funcionalidades:**
+  - **Plano Estratégico de Ação**
+    - Curto prazo (0-6 meses)
+    - Médio prazo (6-12 meses)
+    - Longo prazo (12+ meses)
+  - **Baseado em Capital Social**
+    - Investimentos proporcionais
+    - Priorização estratégica
+  - **KPIs e Métricas**
+    - Impacto mensurável
+    - Deadlines
+  - **Gestão de Riscos**
+    - Probabilidade e impacto
+    - Mitigações
+
+**6. Aba Análise CEO:**
+- **Localização:** Integrado em `ICPDetail.tsx`
+- **Funcionalidades:**
+  - Recomendações estratégicas geradas por IA
+  - Baseadas em dados REAIS dos concorrentes cadastrados
+  - Quick wins identificados
+  - Decisões críticas destacadas
+
+**🔗 INTEGRAÇÕES EXISTENTES (PROTEGIDAS):**
+- ✅ APIs Receita Federal (dados cadastrais)
+- ✅ Web Scraping (concorrentes, produtos, websites)
+- ✅ OpenAI GPT-4o-mini (análises estratégicas, recomendações)
+- ✅ Geocodificação (mapas, localização)
+- ✅ Banco de dados multi-tenant (isolamento por tenant)
+
+**📊 TABELAS E DADOS:**
+- `icp_profiles_metadata` - Metadata do ICP
+- `onboarding_sessions` - Dados do onboarding (step1-step5)
+- `tenant_competitor_products` - Produtos dos concorrentes
+- `tenant_products` - Produtos do tenant
+- `companies` - Empresas de benchmarking
+
+**⚠️ REGRA CRÍTICA DE BLINDAGEM:**
+> **NENHUM desses módulos pode ser apagado, refatorado globalmente ou simplificado para meia dúzia de campos.**  
+> Eles são parte do "cérebro" do ICP e devem ser **consumidos e orquestrados**, não reinventados.
+
+**✅ O QUE PODE SER FEITO:**
+- ✅ Consumir dados já calculados
+- ✅ Exibir resumos executivos
+- ✅ Criar visualizações consolidadas
+- ✅ Orquestrar múltiplos módulos
+- ✅ Encapsular chamadas em serviços (sem quebrar comportamento)
+
+**❌ O QUE NÃO PODE SER FEITO:**
+- ❌ Remover integrações existentes
+- ❌ Simplificar análises complexas
+- ❌ Reduzir a 254 produtos para poucos campos
+- ❌ Eliminar matriz BCG, SWOT, mapas
+- ❌ Quebrar experiência atual
+- ❌ Mudar comportamento de negócio
 
 ---
 
