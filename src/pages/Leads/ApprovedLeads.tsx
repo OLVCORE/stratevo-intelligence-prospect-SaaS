@@ -833,8 +833,8 @@ export default function ApprovedLeads() {
       return;
     }
     // approveBatch(selectedIds, {
-      onSuccess: () => setSelectedIds([]),
-    });
+    //   onSuccess: () => setSelectedIds([]),
+    // });
   };
 
   const handleAutoApprove = () => {
