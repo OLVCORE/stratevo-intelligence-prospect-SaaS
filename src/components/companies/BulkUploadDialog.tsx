@@ -516,7 +516,6 @@ const [availableIcps, setAvailableIcps] = useState<any[]>([]); // 🔥 NOVO: Lis
             
             if (jaTem) {
               console.warn(`⚠️ DUPLICADO no arquivo - Linha ${i + 1}: ${cnpjNormalizado}`);
-              results.errors.push(`Linha ${i + 1}: CNPJ ${cnpjNormalizado} duplicado no arquivo`);
               continue; // Pular
             }
           }
@@ -639,14 +638,36 @@ if (!tenantId) {
 
 console.log('💾 Salvando diretamente no banco de dados para tenant:', tenantId);
 
-// 🔥 FLUXO CORRETO: Usar Edge Function mc9-import-csv
-if (!selectedIcpIds || selectedIcpIds.length === 0) {
-  toast.error('Erro: Selecione pelo menos um ICP', {
-    description: 'É necessário selecionar um ICP para qualificar as empresas'
+// 🔥 FLUXO CORRETO: Usar ICP selecionado OU buscar ICP principal automaticamente
+// Se o usuário não selecionou ICP, buscar o ICP principal do tenant
+let icpIdToUse: string | null = null;
+
+if (selectedIcpIds && selectedIcpIds.length > 0) {
+  icpIdToUse = selectedIcpIds[0]; // Usar o primeiro ICP selecionado
+} else {
+  // Se nenhum ICP foi selecionado, buscar o ICP principal automaticamente
+  const { data: icpData, error: icpError } = await supabase
+    .from('icp_profiles_metadata' as any)
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .order('icp_principal', { ascending: false })
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (icpError || !icpData) {
+    toast.error('Erro: Nenhum ICP encontrado para o tenant', {
+      description: 'Crie um ICP antes de importar empresas ou selecione um ICP no card de upload'
+    });
+    setIsUploading(false);
+    setProgress(0);
+    return;
+  }
+  
+  icpIdToUse = icpData.id;
+  toast.info('Usando ICP principal automaticamente', {
+    description: 'Você pode selecionar outro ICP no card de upload ou depois na página de qualificação'
   });
-  setIsUploading(false);
-  setProgress(0);
-  return;
 }
 
 // Preparar columnMapping
@@ -675,135 +696,388 @@ toast.info(`📤 Importando ${companies.length} empresas via Motor de Qualifica�
 
 let totalInserted = 0;
 let totalDuplicates = 0;
-const insertedCompanies: any[] = [];
 
-for (const icpId of selectedIcpIds) {
+// 🔥 SOLUÇÃO: Inserir diretamente em prospecting_candidates (evita CORS)
+// Funções auxiliares para normalização
+const normalizeCNPJ = (cnpj: string | null | undefined): string | null => {
+  if (!cnpj) return null;
+  const cleaned = String(cnpj).replace(/\D/g, '');
+  return cleaned.length === 14 ? cleaned : cleaned.length > 0 ? cleaned : null;
+};
+
+const normalizeWebsite = (website: string | null | undefined): string | null => {
+  if (!website) return null;
+  let cleaned = String(website).trim().replace(/\s+/g, '');
+  if (!cleaned) return null;
+  if (!cleaned.match(/^https?:\/\//i)) {
+    cleaned = `https://${cleaned}`;
+  }
   try {
-    setProgress(20 + (selectedIcpIds.indexOf(icpId) / selectedIcpIds.length) * 60);
+    const url = new URL(cleaned);
+    return `${url.protocol}//${url.hostname}`;
+  } catch {
+    return cleaned;
+  }
+};
+
+const normalizeUF = (uf: string | null | undefined): string | null => {
+  if (!uf) return null;
+  const cleaned = String(uf).trim().toUpperCase();
+  return cleaned.length === 2 ? cleaned : null;
+};
+
+const normalizeEmail = (email: string | null | undefined): string | null => {
+  if (!email) return null;
+  const cleaned = String(email).trim().toLowerCase();
+  return cleaned.includes('@') && cleaned.includes('.') ? cleaned : null;
+};
+
+const normalizePhone = (phone: string | null | undefined): string | null => {
+  if (!phone) return null;
+  const cleaned = String(phone).replace(/\D/g, '');
+  return cleaned.length > 0 ? cleaned : null;
+};
+
+// Normalizar e preparar candidatos para inserção
+const getValue = (row: any, field: string, columnMapping: Record<string, string>): string | null => {
+  const csvColumn = columnMapping[field];
+  if (!csvColumn) return null;
+  const value = row[csvColumn] || row[field];
+  return value ? String(value).trim() : null;
+};
+
+// Usar ICP selecionado ou o principal encontrado
+const icpIdsToProcess = selectedIcpIds && selectedIcpIds.length > 0 ? selectedIcpIds : [icpIdToUse!];
+
+// Função auxiliar para fallback direto - REFATORADA COM LOGS DETALHADOS
+const insertDirectlyToProspectingCandidates = async ({
+  supabase,
+  companies,
+  tenantId,
+  icpId,
+  sourceBatchId,
+  columnMapping,
+}: {
+  supabase: any;
+  companies: any[];
+  tenantId: string;
+  icpId: string;
+  sourceBatchId: string;
+  columnMapping: Record<string, string>;
+}): Promise<{ insertedCount: number; duplicateCount: number }> => {
+  console.log('[BulkUpload][fallback] 🔍 Recebidas empresas para fallback:', {
+    totalCompanies: companies.length,
+    tenantId,
+    icpId,
+  });
+
+  // 1) Normalizar/filtrar empresas válidas (garantindo CNPJ de 14 dígitos)
+  const validCompanies = companies
+    .map((c) => {
+      const rawCnpj = c.cnpj || c.CNPJ || getValue(c, 'cnpj', columnMapping);
+      const normalizedCnpj = rawCnpj
+        ? String(rawCnpj).replace(/[^\d]/g, '')
+        : null;
+      return {
+        ...c,
+        cnpj: normalizedCnpj && normalizedCnpj.length === 14 ? normalizedCnpj : null,
+      };
+    })
+    .filter((c) => c.cnpj && c.cnpj.length === 14);
+
+  console.log('[BulkUpload][fallback] ✅ Empresas válidas após normalização:', {
+    totalValid: validCompanies.length,
+    totalOriginal: companies.length,
+  });
+
+  if (validCompanies.length === 0) {
+    console.warn('[BulkUpload][fallback] ⚠️ Nenhuma empresa válida após normalização de CNPJ.');
+    return { insertedCount: 0, duplicateCount: 0 };
+  }
+
+  // 2) Buscar CNPJs já existentes para esse tenant + ICP
+  const cnpjs = validCompanies.map((c) => c.cnpj).filter(Boolean);
+  const { data: existingRows, error: existingError } = await supabase
+    .from('prospecting_candidates' as any)
+    .select('cnpj')
+    .in('cnpj', cnpjs)
+    .eq('tenant_id', tenantId)
+    .eq('icp_id', icpId);
+
+  if (existingError) {
+    console.error('[BulkUpload][fallback] ❌ Erro ao buscar CNPJs existentes:', existingError);
+    throw existingError;
+  }
+
+  const existingCnpjs = new Set((existingRows || []).map((r: any) => r.cnpj));
+  console.log('[BulkUpload][fallback] ℹ️ CNPJs já existentes no banco:', {
+    countExisting: existingCnpjs.size,
+  });
+
+  // 3) Filtrar apenas os que NÃO existem ainda
+  const companiesToInsert = validCompanies.filter(
+    (c) => !existingCnpjs.has(c.cnpj)
+  );
+
+  console.log('[BulkUpload][fallback] 📦 Preparando insert:', {
+    candidates: validCompanies.length,
+    toInsert: companiesToInsert.length,
+    duplicates: validCompanies.length - companiesToInsert.length,
+  });
+
+  if (companiesToInsert.length === 0) {
+    return {
+      insertedCount: 0,
+      duplicateCount: validCompanies.length,
+    };
+  }
+
+  // 4) Montar payload do insert respeitando o schema de prospecting_candidates
+  const rows = companiesToInsert.map((c) => {
+    // ✅ CORRIGIDO: Mapear corretamente razão social e nome fantasia
+    const razao = 
+      c['Razão'] || 
+      c['Razão Social'] || 
+      c['Razo'] ||
+      c['Razao Social'] ||
+      c['Razao'] ||
+      c['Nome da Empresa'] || 
+      c['Nome'] ||
+      getValue(c, 'razao_social', columnMapping) ||
+      getValue(c, 'companyName', columnMapping) ||
+      null;
     
-    const { data, error } = await supabase.functions.invoke('mc9-import-csv', {
-      body: {
+    const fantasia = 
+      c['Fantasia'] ||
+      c['Nome Fantasia'] ||
+      getValue(c, 'nome_fantasia', columnMapping) ||
+      getValue(c, 'fantasia', columnMapping) ||
+      null;
+    
+    // Usar razão social, se não tiver, usar fantasia, se não tiver, deixar null
+    const companyName = razao || fantasia || null;
+
+    // Buscar website - tentar múltiplas fontes
+    const websiteRaw = c['Site'] || c['sites'] || getValue(c, 'website', columnMapping) || getValue(c, 'site', columnMapping);
+    
+    // ✅ CORRIGIDO: Mapear setor corretamente (Setor, CNAE, etc.)
+    const sectorRaw = 
+      c['Setor'] || 
+      c['Texto CNAE Principal'] ||
+      c['Atividade Econômica'] ||
+      getValue(c, 'setor', columnMapping) || 
+      getValue(c, 'sector', columnMapping) ||
+      null;
+    
+    // Buscar UF
+    const ufRaw = c['UF'] || c['Estado'] || getValue(c, 'uf', columnMapping);
+    
+    // Buscar cidade
+    const cityRaw = c['Cidade'] || c['Município'] || c['municipio'] || getValue(c, 'city', columnMapping) || getValue(c, 'cidade', columnMapping) || getValue(c, 'municipio', columnMapping);
+    
+    // Buscar email
+    const emailRaw = c['E-mail'] || c['Email'] || getValue(c, 'contactEmail', columnMapping) || getValue(c, 'contato_email', columnMapping);
+    
+    // Buscar telefone
+    const phoneRaw = c['Telefone 1'] || c['Telefone'] || getValue(c, 'contactPhone', columnMapping) || getValue(c, 'contato_telefone', columnMapping);
+
+    // ✅ CORRIGIDO: Mapear setor corretamente
+    const sector = 
+      sectorRaw ? String(sectorRaw).trim() : 
+      c['Setor'] ? String(c['Setor']).trim() :
+      c['Texto CNAE Principal'] ? String(c['Texto CNAE Principal']).trim() :
+      getValue(c, 'setor', columnMapping) ? String(getValue(c, 'setor', columnMapping)).trim() :
+      null;
+
+    return {
+      tenant_id: tenantId,
+      icp_id: icpId,
+      cnpj: c.cnpj,
+      company_name: companyName ? String(companyName).trim() : null, // ✅ Nunca usar "Empresa sem nome"
+      website: normalizeWebsite(websiteRaw),
+      sector: sector,
+      uf: normalizeUF(ufRaw),
+      city: cityRaw ? String(cityRaw).trim() : null,
+      country: 'Brasil',
+      contact_name: null, // Não temos esse campo no CSV atual
+      contact_role: null, // Não temos esse campo no CSV atual
+      contact_email: normalizeEmail(emailRaw),
+      contact_phone: normalizePhone(phoneRaw),
+      linkedin_url: null, // Não temos esse campo no CSV atual
+      notes: null,
+      source: 'MANUAL', // Valores permitidos: 'EMPRESAS_AQUI', 'APOLLO', 'PHANTOMBUSTER', 'GOOGLE_SHEETS', 'MANUAL'
+      source_batch_id: sourceBatchId,
+      status: 'pending',
+      // ✅ Salvar linha original em raw_source se o campo existir
+      raw_source: c, // Salvar objeto completo para referência futura
+    };
+  });
+
+  console.log('[BulkUpload][fallback] 📤 Tentando inserir', rows.length, 'registros...');
+  console.log('[BulkUpload][fallback] 📋 Primeiro registro exemplo:', rows[0]);
+
+  const { data: insertData, error: insertError } = await supabase
+    .from('prospecting_candidates' as any)
+    .insert(rows)
+    .select('id');
+
+  if (insertError) {
+    console.error('[BulkUpload][fallback] ❌ Erro ao inserir em prospecting_candidates:', insertError);
+    console.error('[BulkUpload][fallback] ❌ Detalhes do erro:', {
+      message: insertError.message,
+      details: insertError.details,
+      hint: insertError.hint,
+      code: insertError.code,
+    });
+    throw insertError;
+  }
+
+  const insertedCount = insertData?.length ?? rows.length;
+  const duplicateCount = validCompanies.length - insertedCount;
+
+  console.log('[BulkUpload][fallback] ✅ Insert concluído:', {
+    insertedCount,
+    duplicateCount,
+    rowsInserted: insertData?.length,
+  });
+
+  return { insertedCount, duplicateCount };
+};
+
+// Processar cada ICP
+for (const icpId of icpIdsToProcess) {
+  try {
+    setProgress(20 + (icpIdsToProcess.indexOf(icpId) / icpIdsToProcess.length) * 60);
+    
+    let insertedCount = 0;
+    let duplicatesCount = 0;
+    
+    // TODO: Reativar mc9-import-csv quando CORS estiver resolvido
+    // Por enquanto, vamos direto para o fallback para validar o fluxo banco → telas
+    /*
+    // TENTATIVA 1: Chamar Edge Function mc9-import-csv
+    try {
+      const { data, error } = await supabase.functions.invoke('mc9-import-csv', {
+        body: {
+          tenantId,
+          icpId,
+          source: 'upload_csv',
+          sourceBatchId,
+          rows: companies,
+          columnMapping,
+        },
+      });
+
+      if (error) {
+        console.error('[BulkUpload] ❌ Erro na Edge Function mc9-import-csv', error);
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('Resposta inválida da Edge Function');
+      }
+
+      insertedCount = data.insertedCount || data.importedCount || 0;
+      duplicatesCount = data.duplicatesCount || data.duplicatedCount || 0;
+      
+      console.log(`✅ [BulkUpload] Edge Function processou: ${insertedCount} inseridas, ${duplicatesCount} duplicadas`);
+      
+    } catch (edgeFunctionError: any) {
+      console.error('[BulkUpload] ❌ Falha ao chamar mc9-import-csv', edgeFunctionError);
+      // Fallback será acionado abaixo
+    }
+    */
+    
+    // TENTATIVA 2: Fallback direto (sempre ativo por enquanto)
+    try {
+      const fallbackResult = await insertDirectlyToProspectingCandidates({
+        supabase,
+        companies,
         tenantId,
         icpId,
-        source: 'GOOGLE_SHEETS',
         sourceBatchId,
-        rows: companies,
         columnMapping,
-      },
-    });
-
-    if (error) {
-      console.error(`❌ Erro ao importar para ICP ${icpId}:`, error);
+      });
+      insertedCount = fallbackResult.insertedCount;
+      duplicatesCount = fallbackResult.duplicateCount;
+      console.log(`✅ [BulkUpload] Fallback processou: ${insertedCount} inseridas, ${duplicatesCount} duplicadas`);
+    } catch (fallbackError: any) {
+      console.error('[BulkUpload] ❌ Fallback também falhou', fallbackError);
+      toast.error(`Erro ao importar para ICP ${icpId}`, {
+        description: fallbackError.message || 'Erro ao inserir empresas. Veja o console para detalhes.'
+      });
       continue;
     }
-
-    if (data) {
-      totalInserted += data.insertedCount || 0;
-      totalDuplicates += data.duplicatesCount || 0;
-    }
+    
+    totalInserted += insertedCount;
+    totalDuplicates += duplicatesCount;
+    
   } catch (err: any) {
     console.error(`❌ Erro ao processar ICP ${icpId}:`, err);
-  }
-}
-
-let imported = totalInserted;
-
-// Remover loop antigo - substituído acima
-for (let i = 0; i < 0; i++) {
-  const row = companiesWithMetadata[i];
-  
-  try {
-    const cnpj = row.cnpj?.replace(/\D/g, '');
-    
-    if (!cnpj || cnpj.length !== 14) {
-      console.warn(`⚠️ CNPJ inválido na linha ${i + 1}:`, row.cnpj);
-      continue;
-    }
-    
-    // Dados da empresa (APENAS CAMPOS QUE EXISTEM)
-    const nomeDaEmpresa = row.nome_empresa || row.Razão || row['Razão Social'] || row['Raz�o'] || row.CNPJ || 'Empresa Importada';
-    
-    const companyData = {
-      tenant_id: tenantId,
-      cnpj: cnpj,
-      name: nomeDaEmpresa,
-      company_name: nomeDaEmpresa,
-      industry: row.setor_amigavel || row.Setor || null,
-      // 🎯 STATUS DE QUALIFICAÇÃO: Empresa entra em QUARENTENA
-      qualification_status: 'quarantine', // 🆕 NOVO: pending_analysis, quarantine, approved, rejected
-      imported_from: 'bulk_upload', // 🆕 NOVO: Rastreabilidade
-      needs_qualification: true, // 🆕 NOVO: Flag para análise
-      raw_data: {
-        imported_at: new Date().toISOString(),
-        csv_row: i + 1,
-        source_name: sourceName || 'Import CSV',
-        import_batch_id: import_batch_id,
-        destination: 'quarantine', // 🎯 Destino claro
-        ...row
-      }
-    };
-    
-    // ❌ REMOVIDO: Inserção direta em companies não funciona
-    // ✅ USAR: Edge Function mc9-import-csv em vez disso
-    // TODO: Migrar para usar mc9-import-csv
-    const insertError = { message: 'Use Edge Function mc9-import-csv para importar empresas' };
-    const company = null;
-    
-    if (insertError) {
-      console.error(`❌ Erro ao salvar linha ${i + 1}:`, insertError);
-      continue;
-    }
-    
-    insertedCompanies.push(company);
-    imported++;
-    
-    setProgress(10 + (i / companiesWithMetadata.length) * 80);
-    
-  } catch (err) {
-    console.error(`❌ Erro na linha ${i + 1}:`, err);
+    toast.error(`Erro ao processar ICP ${icpId}`, {
+      description: err.message || 'Erro desconhecido'
+    });
   }
 }
 
 setProgress(90);
 
-setProgress(100); // Completar barra
-
-console.log(`✅ SUCESSO: ${imported} empresas salvas no banco!`);
-
-// Criar job de qualificação automaticamente
-if (totalInserted > 0) {
-  for (const icpId of selectedIcpIds) {
+// Criar job de qualificação automaticamente após importação bem-sucedida
+if (totalInserted > 0 && tenantId) {
+  for (const icpId of icpIdsToProcess) {
     try {
-      await supabase.rpc('create_qualification_job_after_import', {
-        p_tenant_id: tenantId,
-        p_icp_id: icpId,
-        p_source_type: 'upload_csv',
-        p_source_batch_id: sourceBatchId,
-        p_job_name: `Importação ${new Date().toLocaleDateString('pt-BR')} - ${totalInserted} empresas`,
-      });
-    } catch (err) {
-      console.warn('Erro ao criar job de qualificação:', err);
+      const { data: jobData, error: jobError } = await supabase.rpc(
+        'create_qualification_job_after_import' as any,
+        {
+          p_tenant_id: tenantId,
+          p_icp_id: icpId,
+          p_source_type: 'upload_csv',
+          p_source_batch_id: sourceBatchId,
+          p_job_name: `Importação ${new Date().toLocaleDateString('pt-BR')} - ${totalInserted} empresas`,
+        }
+      );
+
+      if (jobError) {
+        console.error('[BulkUpload] ⚠️ Job de qualificação não criado automaticamente', jobError);
+      } else {
+        console.log('[BulkUpload] ✅ Job de qualificação criado:', jobData);
+      }
+    } catch (jobEx: any) {
+      console.error('[BulkUpload] ⚠️ Erro ao chamar create_qualification_job_after_import', jobEx);
     }
   }
 }
 
-toast.success(`✅ ${totalInserted} empresas importadas com sucesso!`, {
-  description: `🎯 Empresas enviadas para Motor de Qualificação. ${totalDuplicates > 0 ? `${totalDuplicates} duplicadas ignoradas.` : ''} Job de qualificação criado automaticamente.`,
-  action: {
-    label: 'Ver Motor de Qualificação →',
-    onClick: () => {
-      setIsOpen(false);
-      navigate('/leads/qualification-engine');
-    }
-  },
-  duration: 6000
-});
+setProgress(100);
+
+// Mensagens de sucesso/erro corretas
+if (totalInserted > 0) {
+  console.log(`✅ SUCESSO: ${totalInserted} empresas importadas, ${totalDuplicates} duplicadas ignoradas!`);
+  
+  toast.success(`✅ ${totalInserted} empresas importadas com sucesso!`, {
+    description: `🎯 Empresas salvas em prospecting_candidates. ${totalDuplicates > 0 ? `${totalDuplicates} duplicadas ignoradas.` : ''} Job de qualificação criado automaticamente.`,
+    action: {
+      label: 'Ver Motor de Qualificação →',
+      onClick: () => {
+        setIsOpen(false);
+        navigate('/leads/qualification-engine');
+      }
+    },
+    duration: 6000
+  });
+} else {
+  console.error(`❌ ERRO: Nenhuma empresa foi importada. Total duplicadas/inválidas: ${totalDuplicates}`);
+  
+  toast.error('Nenhuma empresa foi importada', {
+    description: totalDuplicates > 0 
+      ? `${totalDuplicates} empresas foram ignoradas (duplicadas ou CNPJ inválido). Veja o console para detalhes.`
+      : 'Verifique se o arquivo contém dados válidos com CNPJs corretos. Veja o console para detalhes.',
+    duration: 8000
+  });
+}
 
 // Fechar dialog
 setTimeout(() => setIsOpen(false), 2000);
-
-// 🤖 AUTO-ENRIQUECIMENTO será feito pelo job de qualificação
-// Removido: auto-enriquecimento manual aqui
 
     } catch (error) {
       console.error('Erro no upload:', error);
@@ -884,17 +1158,22 @@ try {
           </DialogDescription>
         </DialogHeader>
 
-        {/* 🔥 NOVO: Seletor de ICP */}
-        {availableIcps.length > 0 && enableQualification && (
+        {/* 🔥 NOVO: Seletor de ICP - SEMPRE VISÍVEL (opcional) */}
+        {availableIcps.length > 0 && (
           <Alert className="border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20">
             <Target className="h-4 w-4 text-indigo-600" />
             <AlertDescription>
               <div className="space-y-2">
-                <p className="font-semibold text-indigo-900 dark:text-indigo-100">
-                  🎯 Selecione os ICPs para Calcular FIT Score:
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-indigo-900 dark:text-indigo-100">
+                    🎯 Selecione o ICP (Opcional):
+                  </p>
+                  <Badge variant="outline" className="text-xs">
+                    {selectedIcpIds.length > 0 ? `${selectedIcpIds.length} selecionado(s)` : 'Usará ICP principal'}
+                  </Badge>
+                </div>
                 <p className="text-xs text-indigo-700 dark:text-indigo-300 mb-2">
-                  ✨ Pode selecionar múltiplos ICPs • Um prospect pode se encaixar em vários perfis
+                  ✨ Se não selecionar, usaremos o ICP principal automaticamente. Você pode escolher outro depois na página de qualificação.
                 </p>
                 <div className="space-y-2 max-h-[200px] overflow-y-auto">
                   {availableIcps.map(icp => {

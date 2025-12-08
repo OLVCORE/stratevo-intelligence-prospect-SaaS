@@ -109,7 +109,8 @@ export default function CompanyDetailPage() {
       let base: any = null;
       
       try {
-        // ✅ ESTRATÉGIA: Buscar empresa básica primeiro (evita erro 406 com joins)
+        // ✅ FLUXO OFICIAL: Buscar empresa básica primeiro (evita erro 406 com joins)
+        // Esta página só deve ser usada para registros que já estão em companies
         const { data: companyData, error: companyErr } = await supabase
           .from('companies')
           .select('*')
@@ -117,20 +118,20 @@ export default function CompanyDetailPage() {
           .single();
         
         if (companyErr) {
-          // ✅ Se erro 406 ou não encontrado, verificar se é ID de quarentena
+          // ✅ FLUXO OFICIAL: CompanyDetailPage só aceita company_id real
+          // Se erro 406 ou não encontrado, mostrar mensagem clara
           if (companyErr.code === 'PGRST116' || companyErr.message?.includes('406') || companyErr.message?.includes('not found')) {
-            console.warn('[CompanyDetail] ⚠️ Empresa não encontrada na tabela companies, verificando quarentena:', id);
+            console.warn('[CompanyDetail] ⚠️ Empresa não encontrada na tabela companies:', id);
             
-            // Buscar na quarentena para verificar se existe
-            const { data: quarantineData } = await supabase
-              .from('icp_analysis_results')
-              .select('*')
+            // ✅ Verificar se é um ID de qualified_prospect (não deve navegar daqui)
+            const { data: qualifiedData } = await ((supabase as any).from('qualified_prospects'))
+              .select('id, company_id')
               .eq('id', id!)
               .maybeSingle();
             
-            if (quarantineData && quarantineData.company_id) {
-              // Empresa existe na quarentena mas não foi aprovada ainda - redirecionar
-              throw new Error('EMPREZA_NAO_APROVADA');
+            if (qualifiedData) {
+              // É um qualified_prospect - redirecionar para Estoque
+              throw new Error('QUALIFIED_PROSPECT_ID');
             }
             
             throw new Error('Empresa não encontrada');
@@ -255,9 +256,26 @@ export default function CompanyDetailPage() {
     );
   }
 
-  // ✅ TRATAR ERRO DE EMPRESA NÃO APROVADA
+  // ✅ FLUXO OFICIAL: Tratar erros específicos
   if (queryError) {
     const errorMessage = (queryError as any)?.message || '';
+    
+    // ✅ Se for ID de qualified_prospect, redirecionar para Estoque
+    if (errorMessage.includes('QUALIFIED_PROSPECT_ID')) {
+      return (
+        <div className="p-8 text-center space-y-4">
+          <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold">Empresa ainda no Estoque Qualificado</h2>
+          <p className="text-muted-foreground">
+            Esta empresa ainda está no Estoque de Empresas Qualificadas. Envie-a para o Banco de Empresas para acessar os detalhes completos.
+          </p>
+          <Button onClick={() => navigate('/leads/qualified-stock')}>
+            Ir para Estoque Qualificado
+          </Button>
+        </div>
+      );
+    }
+    
     if (errorMessage.includes('EMPREZA_NAO_APROVADA') || errorMessage.includes('não foi aprovada')) {
       return (
         <div className="p-8 text-center space-y-4">

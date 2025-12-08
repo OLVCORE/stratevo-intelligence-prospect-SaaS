@@ -133,46 +133,60 @@ const menuGroups: MenuGroup[] = [
     icon: Filter,
     items: [
       {
-        title: "1. Motor de Qualificação",
-        icon: Zap,
-        url: "/search",
-        highlighted: true,
-        description: "Upload CSV + Qualificação automática contra ICPs"
-      },
-      {
-        title: "2. Base de Empresas",
-        icon: Database,
-        url: "/companies",
-        highlighted: true,
-        description: "Pool permanente de empresas qualificadas (histórico)"
-      },
-      {
-        title: "Importação Hunter",
+        title: "1. Importação Hunter",
         icon: FileSpreadsheet,
         url: "/leads/prospecting-import",
         highlighted: true,
-        description: "Importar empresas via CSV ou API Empresas Aqui para hunting externo"
+        description: "Importar empresas via CSV para qualificação"
       },
       {
-        title: "3. Quarentena ICP",
+        title: "2. Motor de Qualificação",
+        icon: Zap,
+        url: "/leads/qualification-engine",
+        highlighted: true,
+        description: "Processar lotes importados através do motor de qualificação",
+        submenu: [
+          {
+            title: "2.1 Estoque Qualificado",
+            icon: Package,
+            url: "/leads/qualified-stock",
+            description: "Empresas qualificadas prontas para revisão e aprovação"
+          }
+        ]
+      },
+      {
+        title: "3. Base de Empresas",
+        icon: Database,
+        url: "/companies",
+        highlighted: true,
+        description: "Gerenciar empresas cadastradas - visualizar, editar, enriquecer"
+      },
+      {
+        title: "4. Quarentena ICP",
         icon: Inbox,
         url: "/leads/icp-quarantine",
         highlighted: true,
-        description: "Enriquecimento profundo e análise manual"
+        description: "Enriquecimento profundo e análise manual antes do CRM"
       },
       {
-        title: "4. Leads Aprovados",
+        title: "5. Leads Aprovados",
         icon: CheckCircle2,
         url: "/leads/approved",
         highlighted: true,
         description: "100% enriquecidos, prontos para Pipeline"
       },
       {
-        title: "5. Pipeline de Vendas",
+        title: "6. Pipeline de Vendas",
         icon: Rocket,
         url: "/sdr/workspace",
         highlighted: true,
         description: "Deals ativos - SDR Workspace"
+      },
+      {
+        title: "Sequências Comerciais",
+        icon: Repeat,
+        url: "/sequences",
+        description: "Criar e gerenciar sequências de comunicação automatizadas"
       },
       {
         title: "Empresas Descartadas",
@@ -459,10 +473,10 @@ export function AppSidebar() {
                                      )}
                                    >
                                      <CollapsibleTrigger className="w-full">
-                                         <div className="flex items-center gap-3 py-1 group-data-[collapsible=icon]:justify-center">
+                                         <div className="flex items-center gap-2 py-1 group-data-[collapsible=icon]:justify-center">
                                            <div className="relative flex-shrink-0">
                                              <item.icon className={cn(
-                                               "h-5 w-5",
+                                               "h-4 w-4",
                                                item.special && "text-[hsl(var(--accent-gold))]",
                                                item.competitive && "text-red-500"
                                              )} />
@@ -475,7 +489,7 @@ export function AppSidebar() {
                                            </div>
                                            {(open || isMobile) && (
                                               <span className={cn(
-                                                "font-normal text-sm flex-1 text-left",
+                                                "font-normal text-sm flex-1 text-left truncate whitespace-nowrap",
                                                 item.special && "text-[hsl(var(--accent-gold))]",
                                                 item.competitive && "text-red-500 font-bold"
                                               )}>
@@ -511,9 +525,9 @@ export function AppSidebar() {
                                                        const isAS = base.startsWith('/account-strategy');
                                                        const url = isAS && company ? `${base}${base.includes('?') ? '&' : '?'}company=${company}` : base;
                                                         return (
-                                                          <Link to={url}>
-                                                            <subItem.icon className="h-5 w-5" />
-                                                            <span className="text-sm">{subItem.title}</span>
+                                                          <Link to={url} className="flex items-center gap-2 min-w-0">
+                                                            <subItem.icon className="h-4 w-4 flex-shrink-0" />
+                                                            <span className="text-sm truncate whitespace-nowrap">{subItem.title}</span>
                                                           </Link>
                                                         );
                                                      })()}
@@ -555,10 +569,10 @@ export function AppSidebar() {
                                  isActive && !item.competitive && "bg-primary/10 border-l-2 border-primary font-semibold"
                                )}
                              >
-                               <Link to={item.url} className="flex items-center gap-3">
+                               <Link to={item.url} className="flex items-center gap-2 min-w-0">
                                  <div className="relative flex-shrink-0">
                                    <item.icon className={cn(
-                                     "h-5 w-5",
+                                     "h-4 w-4",
                                      item.competitive && "text-red-500"
                                    )} />
                                    {item.competitive && (
@@ -567,7 +581,7 @@ export function AppSidebar() {
                                  </div>
                                  {(open || isMobile) && (
                                    <span className={cn(
-                                     "text-sm flex-1 text-left",
+                                     "text-sm flex-1 text-left truncate whitespace-nowrap",
                                      item.competitive && "text-red-500 font-bold"
                                    )}>
                                      {item.title}
