@@ -703,13 +703,30 @@ setProgress(100); // Completar barra
 
 console.log(`✅ SUCESSO: ${imported} empresas salvas no banco!`);
 
-toast.success(`✅ ${imported} empresas importadas com sucesso!`, {
-  description: '🎯 Empresas enviadas para QUARENTENA ICP - Aguardando qualificação',
+// Criar job de qualificação automaticamente
+if (totalInserted > 0) {
+  for (const icpId of selectedIcpIds) {
+    try {
+      await supabase.rpc('create_qualification_job_after_import', {
+        p_tenant_id: tenantId,
+        p_icp_id: icpId,
+        p_source_type: 'upload_csv',
+        p_source_batch_id: sourceBatchId,
+        p_job_name: `Importação ${new Date().toLocaleDateString('pt-BR')} - ${totalInserted} empresas`,
+      });
+    } catch (err) {
+      console.warn('Erro ao criar job de qualificação:', err);
+    }
+  }
+}
+
+toast.success(`✅ ${totalInserted} empresas importadas com sucesso!`, {
+  description: `🎯 Empresas enviadas para Motor de Qualificação. ${totalDuplicates > 0 ? `${totalDuplicates} duplicadas ignoradas.` : ''} Job de qualificação criado automaticamente.`,
   action: {
-    label: 'Ver Quarentena →',
+    label: 'Ver Motor de Qualificação →',
     onClick: () => {
       setIsOpen(false);
-      navigate('/command-center');
+      navigate('/leads/qualification-engine');
     }
   },
   duration: 6000
@@ -718,149 +735,8 @@ toast.success(`✅ ${imported} empresas importadas com sucesso!`, {
 // Fechar dialog
 setTimeout(() => setIsOpen(false), 2000);
 
-// 🤖 AUTO-ENRIQUECIMENTO RECEITA FEDERAL (GRÁTIS!)
-if (insertedCompanies.length > 0) {
-  console.log(`🤖 [AUTO-ENRICH] Iniciando auto-enriquecimento de ${insertedCompanies.length} empresas...`);
-  
-  let enriched = 0;
-  for (const company of insertedCompanies) {
-    if (company.cnpj) {
-      try {
-        const { consultarReceitaFederal } = await import('@/services/receitaFederal');
-        const result = await consultarReceitaFederal(company.cnpj);
-        
-        if (result.success && result.data) {
-          const { data: currentCompany } = await supabase
-            .from('companies')
-            .select('raw_data')
-            .eq('id', company.id)
-            .single();
-          
-          const existingRaw = currentCompany?.raw_data || {};
-          
-          await supabase
-            .from('companies')
-            .update({
-              raw_data: {
-                ...existingRaw,
-                receita_federal: result.data,
-                receita_source: result.source,
-              }
-            })
-            .eq('id', company.id);
-          
-          enriched++;
-          console.log(`✅ [AUTO-ENRICH] ${company.name}: Receita Federal OK`);
-        }
-      } catch (e) {
-        console.warn(`⚠️ [AUTO-ENRICH] ${company.name}: Falhou`, e);
-      }
-    }
-  }
-  
-  toast.success(`✅ Auto-enriquecimento concluído!`, {
-    description: `${enriched}/${insertedCompanies.length} empresas enriquecidas com Receita Federal`,
-    action: {
-      label: 'Ver na Base de Empresas',
-      onClick: () => navigate('/companies')
-    }
-  });
-  
-  // 🔥 NOVO: Qualificação Automática com IA
-  if (enableQualification && insertedCompanies.length > 0) {
-    toast.info('🤖 Iniciando qualificação automática com IA...', {
-      description: 'Calculando FIT score e classificando prospects...'
-    });
-    
-    try {
-      // Extrair CNPJs das empresas inseridas
-      const cnpjs = insertedCompanies
-        .filter(c => c.cnpj)
-        .map(c => c.cnpj.replace(/\D/g, ''));
-      
-      // Criar job de qualificação
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: userProfile } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('auth_user_id', user?.id)
-        .single();
-      
-      const tenantId = userProfile?.tenant_id;
-      
-      if (tenantId && cnpjs.length > 0) {
-        // 🔥 NOVO: Criar um job para CADA ICP selecionado
-        const jobIds: string[] = [];
-        
-        for (const icpId of (selectedIcpIds.length > 0 ? selectedIcpIds : [null])) {
-          const { data: job, error: jobError } = await supabase
-            .from('prospect_qualification_jobs' as any)
-            .insert({
-              tenant_id: tenantId,
-              icp_id: icpId,
-              job_name: `${sourceName || `Upload ${new Date().toLocaleDateString('pt-BR')}`}${icpId ? ` - ICP ${availableIcps.find(i => i.id === icpId)?.nome}` : ''}`,
-              source_type: 'upload_csv',
-              source_file_name: file.name,
-              total_cnpjs: cnpjs.length,
-              status: 'pending',
-            })
-            .select()
-            .single();
-          
-          if (!jobError && job) {
-            jobIds.push(job.id);
-          }
-        }
-        
-        // Processar qualificação para cada job/ICP
-        if (jobIds.length > 0) {
-          toast.info(`🤖 Qualificação iniciada para ${jobIds.length} ICP(s)`, {
-            description: 'Processamento em background...'
-          });
-          
-          for (let i = 0; i < jobIds.length; i++) {
-            const jobId = jobIds[i];
-            const icpId = selectedIcpIds[i] || null;
-            
-            // Chamar Edge Function (assíncrono - não bloqueia)
-            supabase.functions.invoke('qualify-prospects-bulk', {
-              body: {
-                tenant_id: tenantId,
-                job_id: jobId,
-                icp_id: icpId,
-                cnpjs: cnpjs,
-              },
-            }).then(({ data: qualData, error: qualError }) => {
-              if (qualError) {
-                console.error(`Erro na qualificação (ICP ${i+1}):`, qualError);
-              } else {
-                console.log(`✅ Qualificação concluída (ICP ${i+1}/${jobIds.length}):`, qualData);
-                if (i === jobIds.length - 1) {
-                  // Última qualificação
-                  toast.success('✅ Qualificação concluída para todos os ICPs!', {
-                    description: `${qualData?.enriched || 0} prospects qualificados e classificados.`,
-                    duration: 5000,
-                  });
-                }
-              }
-            });
-          }
-        }
-      }
-    } catch (qualError) {
-      console.error('Erro ao iniciar qualificação:', qualError);
-      // Não bloqueia o fluxo principal
-    }
-  }
-}
-
-setIsUploading(false);
-setIsOpen(false);
-
-// Redirecionar para Gerenciar Empresas
-setTimeout(() => {
-  navigate('/companies');
-}, 2000);
+// 🤖 AUTO-ENRIQUECIMENTO será feito pelo job de qualificação
+// Removido: auto-enriquecimento manual aqui
 
     } catch (error) {
       console.error('Erro no upload:', error);
