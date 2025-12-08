@@ -13,7 +13,8 @@ import { TrevoAssistant } from "@/components/trevo/TrevoAssistant";
 import { TenantSelector } from "./TenantSelector";
 
 import { Button } from "@/components/ui/button";
-import { Sparkles, Home } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -30,17 +31,24 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Top Bar - Fixo no topo */}
         <header className="fixed top-0 left-0 right-0 h-16 border-b flex items-center justify-between px-3 md:px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
           <div className="flex items-center gap-2 md:gap-4">
-            <SidebarTrigger />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate('/dashboard')}
-              className="hover:bg-primary/10"
+            <Link 
+              to="/dashboard" 
+              className="hidden sm:flex items-center justify-center group/logo"
               title="Ir para Dashboard"
             >
-              <Home className="h-5 w-5" />
-            </Button>
-            <h2 className="font-semibold text-sm md:text-lg hidden sm:block">STRATEVO Intelligence</h2>
+              <div className="relative flex items-center justify-center rounded-full bg-gradient-to-br from-primary/10 via-primary/5 to-primary/10 w-14 h-14 md:w-18 md:h-18 transition-all duration-300 hover:shadow-xl hover:shadow-primary/30 hover:scale-110 hover:from-primary/25 hover:via-primary/15 hover:to-primary/25 border-2 border-primary/30 hover:border-primary/60 ring-2 ring-primary/10 hover:ring-primary/30 overflow-hidden cursor-pointer">
+                <img 
+                  src="/LOGO Stratevo One.png" 
+                  alt="STRATEVO One" 
+                  className="w-full h-full object-cover transition-all duration-300 group-hover/logo:drop-shadow-2xl group-hover/logo:drop-shadow-primary/60 group-hover/logo:brightness-110"
+                  style={{ filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))' }}
+                />
+              </div>
+            </Link>
+            <SidebarTrigger 
+              title="Recolher/Expandir Sidebar"
+              className="hover:bg-primary/10"
+            />
           </div>
           <div className="flex items-center gap-2 md:gap-3 flex-1 max-w-2xl mx-2 md:mx-4">
             <GlobalSearch />

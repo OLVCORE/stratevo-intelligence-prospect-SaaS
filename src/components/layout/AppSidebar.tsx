@@ -16,6 +16,8 @@ import {
   FileText,
   Radio,
   MessageSquare,
+  Upload,
+  FileSpreadsheet,
   ChevronRight,
   ChevronLeft,
   ChevronsLeft,
@@ -73,7 +75,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -145,6 +147,13 @@ const menuGroups: MenuGroup[] = [
         description: "Pool permanente de empresas qualificadas (histórico)"
       },
       {
+        title: "Importação Hunter",
+        icon: FileSpreadsheet,
+        url: "/leads/prospecting-import",
+        highlighted: true,
+        description: "Importar empresas via CSV ou API Empresas Aqui para hunting externo"
+      },
+      {
         title: "3. Quarentena ICP",
         icon: Inbox,
         url: "/leads/icp-quarantine",
@@ -171,6 +180,12 @@ const menuGroups: MenuGroup[] = [
         url: "/leads/discarded",
         description: "Histórico de empresas descartadas"
       },
+      {
+        title: "Empresas Similares",
+        icon: Target,
+        url: "/expansao/empresas-similares",
+        description: "Buscar empresas com perfil semelhante para expansão de mercado"
+      },
     ]
   },
   {
@@ -184,7 +199,10 @@ const menuGroups: MenuGroup[] = [
         description: "Hub central de análise e gestão de ICP",
         submenu: [
           { title: "Home", icon: LayoutDashboard, url: "/central-icp", description: "Visão geral da Central ICP" },
+          { title: "ICP Ativo", icon: Target, url: "/central-icp/active", description: "Perfil ideal do ICP ativo com inteligência consolidada" },
+          { title: "Biblioteca de ICPs", icon: FileText, url: "/central-icp/library", description: "Lista completa de ICPs do tenant" },
           { title: "Meus ICPs", icon: FileText, url: "/central-icp/profiles", description: "Visualizar e gerenciar ICPs configurados" },
+          { title: "Relatórios ICP", icon: FileText, url: "/central-icp/reports", description: "Relatórios completos e resumos do ICP" },
           { title: "Plano Estratégico", icon: Briefcase, url: "/central-icp/strategic-plan", description: "Kanban, KPIs e ações com investimentos proporcionais" },
         ],
       },
@@ -335,27 +353,42 @@ const menuGroups: MenuGroup[] = [
 
 export function AppSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { open, isMobile, setOpen } = useSidebar();
+  const { open, isMobile, toggleSidebar } = useSidebar();
   
   return (
     <Sidebar 
       collapsible="icon" 
       className="border-r pt-12 md:pt-16"
     >
-      <SidebarHeader className="border-b border-sidebar-border p-3 md:p-4 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center">
-        <Link to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity touch-manipulation active:scale-95 group-data-[collapsible=icon]:justify-center">
-          <Building2 className="h-8 w-8 text-sidebar-primary flex-shrink-0" />
-          {(open || isMobile) && (
-            <div className="min-w-0">
-              <h1 className="text-lg font-bold text-sidebar-foreground truncate">STRATEVO Intelligence</h1>
-              <p className="text-sm text-sidebar-foreground/70 truncate">A Plataforma Definitiva de Inteligência de Vendas</p>
-            </div>
-          )}
-        </Link>
+      <SidebarHeader className="border-b border-sidebar-border p-2 md:p-3 group-data-[collapsible=icon]:p-2">
+        {/* Logo removido - apenas no header superior */}
       </SidebarHeader>
       <SidebarContent className="px-1 py-1">
         <TooltipProvider delayDuration={200}>
+          {/* Guia STRATEVO One - Item Fixo */}
+          <SidebarGroup className="mb-2">
+            <SidebarMenuItem>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location.pathname.startsWith('/guide')}
+                    className="touch-manipulation active:scale-95 py-3 px-3 bg-primary/5 hover:bg-primary/10 border-l-4 border-primary"
+                  >
+                    <Link to="/guide">
+                      {(open || isMobile) && <span className="text-sm font-semibold">Guia STRATEVO One</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[280px]">
+                  <p className="text-xs">Guia interativo completo da plataforma - Aprenda e pratique em tempo real</p>
+                </TooltipContent>
+              </Tooltip>
+            </SidebarMenuItem>
+          </SidebarGroup>
+
           {menuGroups.map((group) => {
             const isGroupActive = group.items.some(item => 
               location.pathname === item.url || 
@@ -394,8 +427,15 @@ export function AppSidebar() {
                   <SidebarGroupContent>
                     <SidebarMenu className="space-y-0.5">
                       {group.items.map((item) => {
-                    const isActive = location.pathname === item.url;
+                    // 🔒 PROTEGIDO: NÃO ALTERAR SEM AUTORIZAÇÃO
+                    // Verificar se o item está ativo OU se algum subitem está ativo
                     const hasSubmenu = (item as any).submenu;
+                    const isSubItemActive = hasSubmenu && (item as any).submenu?.some((sub: any) => {
+                      const subUrl = sub.url.split('?')[0];
+                      const currentPath = location.pathname.split('?')[0];
+                      return currentPath === subUrl || currentPath.startsWith(subUrl + '/');
+                    });
+                    const isActive = location.pathname === item.url || isSubItemActive;
                     
                     if (hasSubmenu) {
                       return (
@@ -413,7 +453,9 @@ export function AppSidebar() {
                                        "touch-manipulation active:scale-95 py-3 px-3 mb-1",
                                        item.special && "relative overflow-hidden bg-[hsl(var(--accent-gold))]/15 border-l-4 border-[hsl(var(--accent-gold))] shadow-lg shadow-[hsl(var(--accent-gold))]/20 hover:shadow-[hsl(var(--accent-gold))]/40 transition-all duration-300",
                                        item.competitive && "relative overflow-hidden bg-red-500/10 border-l-4 border-red-500 shadow-lg shadow-red-500/20 hover:shadow-red-500/40 transition-all duration-300 animate-pulse-subtle",
-                                       item.highlighted && !item.special && !item.competitive && "font-semibold bg-primary/5 border-l-2 border-primary"
+                                       item.highlighted && !item.special && !item.competitive && "font-semibold bg-primary/5 border-l-2 border-primary",
+                                       // 🔒 PROTEGIDO: Highlight quando item ou subitem está ativo
+                                       isActive && !item.special && !item.competitive && "bg-primary/10 border-l-2 border-primary font-semibold"
                                      )}
                                    >
                                      <CollapsibleTrigger className="w-full">
@@ -456,8 +498,9 @@ export function AppSidebar() {
                                                    <SidebarMenuSubButton 
                                                      asChild 
                                                      isActive={
-                                                       location.pathname === subItem.url.split('?')[0] && 
-                                                       (!subItem.url.includes('?tab=') || location.search.includes(subItem.url.split('?tab=')[1]))
+                                                       location.pathname === subItem.url.split('?')[0] || 
+                                                       location.pathname.startsWith(subItem.url.split('?')[0] + '/') ||
+                                                       (subItem.url.includes('?tab=') && location.search.includes(subItem.url.split('?tab=')[1]))
                                                      } 
                                                      className="touch-manipulation active:scale-95 py-3 px-3"
                                                    >
@@ -507,7 +550,9 @@ export function AppSidebar() {
                                className={cn(
                                  "touch-manipulation active:scale-95 py-3 px-3",
                                  item.competitive && "relative overflow-hidden bg-red-500/10 border-l-4 border-red-500 shadow-lg shadow-red-500/20 hover:shadow-red-500/40 transition-all duration-300 animate-pulse-subtle",
-                                 item.highlighted && !item.competitive && "font-semibold bg-primary/5 border-l-2 border-primary"
+                                 item.highlighted && !item.competitive && "font-semibold bg-primary/5 border-l-2 border-primary",
+                                 // 🔒 PROTEGIDO: Highlight quando item está ativo
+                                 isActive && !item.competitive && "bg-primary/10 border-l-2 border-primary font-semibold"
                                )}
                              >
                                <Link to={item.url} className="flex items-center gap-3">
@@ -584,8 +629,12 @@ export function AppSidebar() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setOpen(!open)}
-              className="w-full h-11 flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary font-semibold transition-all"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSidebar();
+              }}
+              className="w-full h-11 flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary font-semibold transition-all touch-manipulation active:scale-95"
             >
               {open ? (
                 <>

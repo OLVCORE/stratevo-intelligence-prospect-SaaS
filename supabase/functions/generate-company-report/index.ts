@@ -13,8 +13,10 @@ serve(async (req) => {
     return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
+  let companyId: string | undefined;
   try {
-    const { companyId } = await req.json();
+    const body = await req.json();
+    companyId = body.companyId;
     const startTime = Date.now();
 
     const supabase = createClient(
@@ -111,10 +113,161 @@ serve(async (req) => {
     // 4. Calcular métricas (agora assíncrono)
     const metrics = await calculateCompanyMetrics(company, decisors, maturity, signals, financial, legal, supabase);
 
-    // 5. Gerar insights com IA
-    const insights = await generateInsightsWithAI(company, metrics, maturity);
+    // 5. Gerar insights com IA (tenant-safe)
+    const tenantId = company.tenant_id || undefined;
+    const insights = await generateInsightsWithAI(company, metrics, maturity, tenantId);
     if (insights) sourcesSucceeded.push('ai');
     else sourcesFailed.push('ai');
+
+    // 5.5 MC4-EDGE: Match & Fit Engine (integração completa)
+    let matchFitResult: any = null;
+    if (tenantId) {
+      try {
+        console.log('[generate-company-report] MC4-EDGE: Calculando Match & Fit para tenant:', tenantId);
+        
+        // Importar engine Deno
+        const { runMatchFitEngineDeno } = await import('../_shared/matchFitEngineDeno.ts');
+        
+        // Buscar lead associado (se houver) - tentar por company_name ou cnpj
+        const { data: leadData } = await supabase
+          .from('leads')
+          .select('business_data, company_name, email')
+          .eq('tenant_id', tenantId)
+          .or(`company_name.ilike.%${company.name || ''}%,email.ilike.%${company.email || ''}%`)
+          .limit(1)
+          .maybeSingle();
+        
+        // Montar lead B2B a partir de business_data ou dados da empresa
+        let leadB2B: any = leadData?.business_data || null;
+        
+        // Se não houver lead, criar estrutura básica a partir dos dados da empresa
+        if (!leadB2B && company) {
+          leadB2B = {
+            companyName: company.name || null,
+            companyLegalName: company.legal_name || null,
+            cnpj: company.cnpj || null,
+            cnae: company.cnae_principal || null,
+            companySize: company.size || null,
+            capitalSocial: company.capital_social || null,
+            companyWebsite: company.website || null,
+            companyRegion: company.state || null,
+            companySector: company.sector || null,
+          };
+        }
+        
+        // Buscar ICP do tenant
+        const { data: icpProfile } = await supabase
+          .from('icp_profiles_metadata')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .or('icp_principal.eq.true,ativo.eq.true')
+          .order('icp_principal', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        // Buscar dados do onboarding para persona e critérios
+        const { data: onboardingData } = await supabase
+          .from('onboarding_sessions')
+          .select('step3_data')
+          .eq('tenant_id', tenantId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        // Montar ICP completo
+        let icpDeno: any = null;
+        if (icpProfile) {
+          const step3 = onboardingData?.step3_data || {};
+          icpDeno = {
+            profile: {
+              id: icpProfile.id,
+              nome: icpProfile.nome || 'ICP Principal',
+              descricao: icpProfile.descricao,
+              setor_foco: icpProfile.setor_foco,
+              nicho_foco: icpProfile.nicho_foco,
+            },
+            persona: step3.persona ? {
+              decisor: step3.persona.decisor || null,
+              dor_principal: step3.dores?.[0] || step3.dorPrincipal || null,
+              objeções: step3.objeções || step3.objecoes || [],
+              desejos: step3.desejos || [],
+              stack_tech: step3.stackTech || step3.stack_tech || null,
+              maturidade_digital: step3.maturidadeDigital || step3.maturidade_digital || null,
+            } : null,
+            criteria: step3 ? {
+              setores_alvo: step3.setoresAlvo || step3.setores_alvo || [],
+              cnaes_alvo: step3.cnaesAlvo || step3.cnaes_alvo || [],
+              porte: step3.porteAlvo || step3.porte_alvo || [],
+              regioes_alvo: step3.localizacaoAlvo?.regioes || step3.localizacaoAlvo?.estados || [],
+              faturamento_min: step3.faturamentoAlvo?.minimo || null,
+              faturamento_max: step3.faturamentoAlvo?.maximo || null,
+              funcionarios_min: step3.funcionariosAlvo?.minimo || null,
+              funcionarios_max: step3.funcionariosAlvo?.maximo || null,
+            } : null,
+          };
+        }
+        
+        // Buscar portfólio do tenant
+        const { data: tenantProducts } = await supabase
+          .from('tenant_products')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('ativo', true);
+        
+        // Montar input para o engine
+        const matchFitInput = {
+          lead: leadB2B,
+          icp: icpDeno,
+          portfolio: (tenantProducts || []).map((p: any) => ({
+            id: p.id,
+            nome: p.nome,
+            descricao: p.descricao,
+            categoria: p.categoria,
+            subcategoria: p.subcategoria,
+            cnaes_alvo: p.cnaes_alvo || [],
+            setores_alvo: p.setores_alvo || [],
+            portes_alvo: p.portes_alvo || [],
+            capital_social_minimo: p.capital_social_minimo,
+            capital_social_maximo: p.capital_social_maximo,
+            regioes_alvo: p.regioes_alvo || [],
+            diferenciais: p.diferenciais || [],
+            casos_uso: p.casos_uso || [],
+            dores_resolvidas: p.dores_resolvidas || [],
+            beneficios: p.beneficios || [],
+            ativo: p.ativo !== false,
+            destaque: p.destaque || false,
+          })),
+          tenantId,
+          tenantName: company.name || undefined,
+        };
+        
+        // Executar engine
+        matchFitResult = runMatchFitEngineDeno(matchFitInput);
+        
+        console.log('[generate-company-report] MC4-EDGE: Match & Fit calculado', {
+          scoresCount: matchFitResult.scores.length,
+          recommendationsCount: matchFitResult.recommendations.length,
+          bestScore: matchFitResult.metadata.bestFitScore,
+        });
+      } catch (matchFitError) {
+        console.warn('[generate-company-report] MC4-EDGE: Erro ao calcular Match & Fit:', matchFitError);
+        // Não falhar o relatório por causa do Match & Fit
+        // Retornar estrutura vazia mas consistente
+        matchFitResult = {
+          scores: [],
+          recommendations: [],
+          executiveSummary: 'Não foi possível calcular Match & Fit devido a erro interno.',
+          metadata: {
+            totalIcpEvaluated: 0,
+            totalProductsEvaluated: 0,
+            bestFitScore: 0,
+            bestFitType: 'none' as const,
+            dataCompleteness: 'insufficient' as const,
+            missingData: ['Erro ao processar dados'],
+          },
+        };
+      }
+    }
 
     // 6. Compilar relatório USANDO DADOS DE company_enrichment
     const report = {
@@ -128,6 +281,8 @@ serve(async (req) => {
       insights,
       decisors,
       signals,
+      // MC4: Match & Fit (se disponível)
+      matchFit: matchFitResult,
       generatedAt: new Date().toISOString(),
       sources: {
         used: sourcesSucceeded,
@@ -199,12 +354,11 @@ serve(async (req) => {
     
     // Marcar run como failed se existir runId
     try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-      const body = await req.json();
-      if (body.companyId) {
+      if (companyId) {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
         await supabase
           .from('analysis_runs')
           .update({
@@ -212,7 +366,7 @@ serve(async (req) => {
             completed_at: new Date().toISOString(),
             error_log: { message: errorMessage, stack: error instanceof Error ? error.stack : undefined }
           })
-          .eq('company_id', body.companyId)
+          .eq('company_id', companyId)
           .eq('status', 'running');
       }
     } catch (e) {
@@ -350,12 +504,71 @@ async function calculateCompanyMetrics(company: any, decisors: any[], maturity: 
   };
 }
 
-async function generateInsightsWithAI(company: any, metrics: any, maturity: any) {
+async function generateInsightsWithAI(company: any, metrics: any, maturity: any, tenantId?: string) {
   try {
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY not configured');
     }
+
+    // 🎯 SYSTEM PROMPT STRATEVO ONE (tenant-safe, multi-tenant neutro - MC3)
+    const stratevoOneSystemPrompt = `Você é o motor de análise STRATEVO One.
+
+REGRAS CRÍTICAS (NÃO QUEBRE ISTO):
+
+1) Você está analisando APENAS um tenant específico${tenantId ? `, identificado por tenant_id: ${tenantId}` : ''}.
+
+2) Você é um motor de inteligência estratégico MULTI-TENANT.
+   - Cada tenant possui seu próprio portfólio de produtos, soluções e serviços.
+   - Você SÓ pode recomendar produtos, soluções, marcas ou plataformas que estejam:
+     (a) no portfólio declarado do tenant, OU
+     (b) explicitamente mencionados nos dados analisados (texto do lead, contexto externo etc.).
+   - Você NUNCA deve recomendar marcas ou soluções que não tenham relação clara com o contexto ou com o portfólio do tenant.
+   - Não trate NENHUMA marca como padrão global. Não há marca "preferida".
+   - Se não houver dados suficientes para recomendar uma solução específica, explique a limitação e sugira que o tenant complemente o cadastro ou refine o ICP.
+
+3) Use SOMENTE os dados que vieram das seguintes fontes já processadas para este tenant:
+   - Perfil do tenant (dados cadastrais, segmento, porte, região)
+   - Portfólio do tenant (produtos, soluções, marcas que o tenant oferece)
+   - Sessão de onboarding mais recente (onboarding_sessions)
+   - Perfis ICP associados (icp_profiles_metadata)
+   - Produtos do tenant e produtos concorrentes
+   - Planos estratégicos anteriores (strategic_action_plans), SE existirem.
+
+4) É TERMINANTEMENTE PROIBIDO:
+   - Reutilizar qualquer texto, exemplo ou diagnóstico de outros tenants.
+   - Fazer suposições vagas ou genéricas que não estejam sustentadas nos dados recebidos.
+   - Inventar histórico, tamanho de equipe, faturamento ou stack de sistemas.
+   - Recomendar marcas ou soluções que não estejam no portfólio do tenant ou mencionadas explicitamente nos dados.
+
+5) Se ALGUM dado não estiver presente nas estruturas recebidas:
+   - NÃO invente.
+   - Marque como "não informado" ou "não disponível para este tenant".
+   - Mas continue o relatório com os dados que existem.
+
+6) Seu trabalho NÃO é decidir "qual é o tipo de empresa" de forma abstrata.
+   Seu trabalho é:
+   - Ler o perfil do tenant que já foi DIAGNOSTICADO pelo sistema.
+   - Organizar esse diagnóstico em um relatório claro, estratégico e pronto para impressão,
+     mostrando o que já foi mapeado e recomendado para ESTE tenant específico.
+   - Se o tenant for parceiro de uma marca específica (ex: TOTVS, SAP, etc.) e isso estiver no contexto/portfólio,
+     você pode mencionar essa marca como uma das opções, sempre justificando pelo fit com o setor e o problema do cliente.
+   - Nunca como recomendação automática ou default.
+
+7) Toda recomendação deve ser vinculada explicitamente a:
+   - Dados do tenant (segmento, porte, região, problemas mapeados)
+   - Portfólio do tenant (produtos/soluções que o tenant oferece)
+   - E/ou seções específicas do diagnóstico (ICP, Onboarding, Planos).
+
+8) Você é um consultor especialista em transformação digital e vendas B2B.
+   - Analise os dados da empresa e forneça insights acionáveis
+   - Seja preciso e factual, não exagere ou especule
+   - Retorne APENAS JSON válido, sem markdown
+
+Saída esperada:
+- Insights 100% orientados ao tenant atual${tenantId ? ` (tenant_id: ${tenantId})` : ''},
+- Sem trechos genéricos que poderiam valer para "qualquer empresa",
+- Sem recomendações de marcas que não estejam no portfólio do tenant ou mencionadas explicitamente.`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -368,7 +581,7 @@ async function generateInsightsWithAI(company: any, metrics: any, maturity: any)
         messages: [
           {
             role: 'system',
-            content: 'Você é um consultor especialista em transformação digital e vendas B2B. Analise os dados da empresa e forneça insights acionáveis em formato JSON.'
+            content: stratevoOneSystemPrompt
           },
           {
             role: 'user',

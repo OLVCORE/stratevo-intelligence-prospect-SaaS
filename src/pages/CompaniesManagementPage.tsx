@@ -341,10 +341,44 @@ export default function CompaniesManagementPage() {
   const handleDelete = async () => {
     if (!companyToDelete) return;
 
+    // 🔐 PROTEÇÃO: Requer senha de gestor para deletar da Base Permanente
+    const adminPassword = prompt(
+      `⚠️ ATENÇÃO: Deletar da Base de Empresas é PERMANENTE!\n\n` +
+      `A empresa "${companyToDelete.name}" será DELETADA do histórico.\n\n` +
+      `Digite sua senha de login para confirmar:`
+    );
+    
+    if (!adminPassword) {
+      toast.info('Exclusão cancelada');
+      return;
+    }
+    
+    // ✅ VALIDAR SENHA REAL DO USUÁRIO
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+
+    // Validar senha tentando fazer login
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: adminPassword,
+    });
+
+    if (authError) {
+      toast.error('❌ Senha de gestor incorreta!', {
+        description: 'Exclusão bloqueada por segurança'
+      });
+      return;
+    }
+
     try {
       setIsDeleting(true);
       await deleteCompany.mutateAsync(companyToDelete.id);
-      toast.success('Empresa excluída com sucesso');
+      toast.success('Empresa excluída com sucesso', {
+        description: '🔒 Ação protegida por senha de gestor'
+      });
       setDeleteDialogOpen(false);
       setCompanyToDelete(null);
       await refetch();
@@ -363,7 +397,7 @@ export default function CompaniesManagementPage() {
     const adminPassword = prompt(
       `⚠️ ATENÇÃO: Deletar da Base de Empresas é PERMANENTE!\n\n` +
       `${selectedCompanies.length} empresas serão DELETADAS do histórico.\n\n` +
-      `Digite a senha de gestor para confirmar:`
+      `Digite sua senha de login para confirmar:`
     );
     
     if (!adminPassword) {
@@ -371,12 +405,20 @@ export default function CompaniesManagementPage() {
       return;
     }
     
-    // ✅ VALIDAR SENHA (usando email do usuário atual como senha de gestor)
-    // TODO: Implementar sistema de senha de gestor real no futuro
+    // ✅ VALIDAR SENHA REAL DO USUÁRIO
     const { data: { user } } = await supabase.auth.getUser();
-    const expectedPassword = user?.email?.split('@')[0] || 'admin'; // Temporário: usa parte do email
-    
-    if (adminPassword !== expectedPassword) {
+    if (!user?.email) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+
+    // Validar senha tentando fazer login
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: adminPassword,
+    });
+
+    if (authError) {
       toast.error('❌ Senha de gestor incorreta!', {
         description: 'Exclusão bloqueada por segurança'
       });

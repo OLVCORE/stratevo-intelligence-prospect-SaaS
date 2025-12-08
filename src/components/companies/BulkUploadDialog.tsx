@@ -676,12 +676,11 @@ for (let i = 0; i < companiesWithMetadata.length; i++) {
       }
     };
     
-    // 🔥 INSERT SIMPLES (sem UPSERT)
-    const { data: company, error: insertError } = await supabase
-      .from('companies')
-      .insert([companyData])
-      .select()
-      .single();
+    // ❌ REMOVIDO: Inserção direta em companies não funciona
+    // ✅ USAR: Edge Function mc9-import-csv em vez disso
+    // TODO: Migrar para usar mc9-import-csv
+    const insertError = { message: 'Use Edge Function mc9-import-csv para importar empresas' };
+    const company = null;
     
     if (insertError) {
       console.error(`❌ Erro ao salvar linha ${i + 1}:`, insertError);

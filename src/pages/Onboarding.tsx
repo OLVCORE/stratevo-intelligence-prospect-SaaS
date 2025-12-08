@@ -182,9 +182,9 @@ const steps = [
                   <Filter className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <h4 className="font-bold mb-1">2. Detecta TOTVS</h4>
+                  <h4 className="font-bold mb-1">2. Qualifica com ICP</h4>
                   <p className="text-sm text-muted-foreground">
-                    Descarta empresas que já são clientes TOTVS
+                    Analisa empresas contra seu perfil de cliente ideal (ICP) configurado
                   </p>
                 </div>
               </div>
@@ -441,7 +441,7 @@ const steps = [
             <div className="space-y-3">
               {[
                 { icon: Upload, text: 'Upload do CSV com empresas', color: 'text-blue-500' },
-                { icon: Sparkles, text: 'IA analisa + detecta TOTVS', color: 'text-purple-500' },
+                { icon: Sparkles, text: 'IA analisa e qualifica com ICP', color: 'text-purple-500' },
                 { icon: CheckCircle, text: 'Revisa na Quarentena', color: 'text-orange-500' },
                 { icon: Target, text: 'Aprova para Pool de Leads', color: 'text-green-500' },
                 { icon: TrendingUp, text: 'Vende focando em Hot Leads', color: 'text-red-500' },
@@ -470,7 +470,7 @@ const steps = [
             <CardContent className="pt-6 text-center">
               <div className="text-3xl mb-2">🎯</div>
               <p className="font-bold mb-1">Preciso</p>
-              <p className="text-xs text-muted-foreground">IA detecta TOTVS</p>
+              <p className="text-xs text-muted-foreground">IA qualifica com ICP</p>
             </CardContent>
           </Card>
           <Card className="border-2">
