@@ -60,7 +60,8 @@ interface QualifiedProspect {
   id: string;
   tenant_id: string;
   job_id: string;
-  cnpj: string;
+  cnpj: string; // ✅ CNPJ normalizado (14 dígitos)
+  cnpj_raw?: string; // ✅ CNPJ original (com máscara)
   razao_social: string;
   nome_fantasia?: string;
   cidade?: string;
@@ -521,10 +522,10 @@ export default function QualifiedProspectsStock() {
       setSelectedIds(new Set());
       loadProspects();
     } catch (error: any) {
-      console.error('Erro ao promover para companies:', error);
+      console.error('[Qualified → Companies] ❌ Erro inesperado ao enviar', error);
       toast({
-        title: 'Erro',
-        description: error.message || 'Não foi possível enviar para o Banco de Empresas',
+        title: 'Erro inesperado',
+        description: error?.message ?? 'Erro desconhecido ao enviar para Banco de Empresas.',
         variant: 'destructive',
       });
     } finally {
@@ -897,10 +898,36 @@ export default function QualifiedProspectsStock() {
             <div className="space-y-4">
               {/* Cabeçalho */}
               <div className="border-b pb-4">
-                <h3 className="text-lg font-semibold">{previewProspect.razao_social || previewProspect.nome_fantasia || 'Não informado'}</h3>
-                <p className="text-sm text-muted-foreground font-mono">{previewProspect.cnpj}</p>
+                <h3 className="text-lg font-semibold">
+                  {previewProspect.razao_social || previewProspect.nome_fantasia || 'Razão social não informada'}
+                </h3>
+                
+                {/* ✅ CNPJ: Mostrar origem e normalizado */}
+                <div className="mt-2 space-y-1">
+                  {previewProspect.cnpj_raw ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">CNPJ de origem (Excel):</p>
+                      <p className="text-sm font-mono text-muted-foreground">{previewProspect.cnpj_raw}</p>
+                      <p className="text-xs text-muted-foreground mt-1">CNPJ normalizado usado na análise:</p>
+                      <p className="text-sm font-mono font-semibold">{previewProspect.cnpj}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">CNPJ normalizado:</p>
+                      <p className="text-sm font-mono font-semibold">{previewProspect.cnpj}</p>
+                    </>
+                  )}
+                </div>
+                
                 {previewProspect.nome_fantasia && (
-                  <p className="text-sm text-muted-foreground mt-1">Nome Fantasia: {previewProspect.nome_fantasia}</p>
+                  <p className="text-sm text-muted-foreground mt-2">Nome Fantasia: {previewProspect.nome_fantasia}</p>
+                )}
+                
+                {/* ✅ Mensagem sobre dados faltantes */}
+                {(!previewProspect.razao_social && !previewProspect.nome_fantasia) && (
+                  <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-800 dark:text-amber-200">
+                    ⚠️ Razão social não informada no lote e não encontrada nas fontes externas. Apenas CNPJ disponível.
+                  </div>
                 )}
               </div>
 
@@ -937,9 +964,28 @@ export default function QualifiedProspectsStock() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Setor</p>
-                  <p className="text-base">{previewProspect.setor || 'Não informado'}</p>
+                  <p className="text-base">
+                    {previewProspect.setor || (
+                      <span className="text-muted-foreground italic">
+                        Não informado no lote / não encontrado nas fontes externas
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
+              
+              {/* ✅ Mensagem sobre enrich (se dados faltarem) */}
+              {(!previewProspect.setor || !previewProspect.cidade || !previewProspect.website) && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded">
+                  <p className="text-xs text-blue-800 dark:text-blue-200 font-medium mb-1">
+                    ℹ️ Informação sobre dados faltantes
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    Esta empresa não foi localizada nas bases externas para o CNPJ {previewProspect.cnpj}.
+                    A qualificação foi feita apenas com os dados internos do lote de importação.
+                  </p>
+                </div>
+              )}
 
               {/* Origem do Lote */}
               <div>

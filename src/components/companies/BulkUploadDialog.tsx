@@ -768,16 +768,24 @@ const insertDirectlyToProspectingCandidates = async ({
     icpId,
   });
 
-  // 1) Normalizar/filtrar empresas válidas (garantindo CNPJ de 14 dígitos)
+  // 1) ✅ NORMALIZAÇÃO OBRIGATÓRIA: Normalizar/filtrar empresas válidas usando função central
   const validCompanies = companies
     .map((c) => {
       const rawCnpj = c.cnpj || c.CNPJ || getValue(c, 'cnpj', columnMapping);
-      const normalizedCnpj = rawCnpj
-        ? String(rawCnpj).replace(/[^\d]/g, '')
-        : null;
+      const normalizedCnpj = normalizeCnpj(rawCnpj);
+      
+      // ✅ LOG DE DIAGNÓSTICO
+      if (rawCnpj && !normalizedCnpj) {
+        console.warn('[BulkUpload][fallback] ⚠️ CNPJ inválido após normalização', {
+          raw: rawCnpj,
+          normalized: normalizedCnpj,
+        });
+      }
+      
       return {
         ...c,
-        cnpj: normalizedCnpj && normalizedCnpj.length === 14 ? normalizedCnpj : null,
+        cnpj_raw: rawCnpj, // ✅ Salvar valor original
+        cnpj: normalizedCnpj, // ✅ Salvar normalizado
       };
     })
     .filter((c) => c.cnpj && c.cnpj.length === 14);
@@ -916,7 +924,8 @@ const insertDirectlyToProspectingCandidates = async ({
     return {
       tenant_id: tenantId,
       icp_id: icpId,
-      cnpj: normalizedCnpj,
+      cnpj: normalizedCnpj, // ✅ CNPJ normalizado (14 dígitos)
+      cnpj_raw: c.cnpj_raw || c.cnpj || c.CNPJ || getValue(c, 'cnpj', columnMapping), // ✅ CNPJ original (com máscara)
       company_name: companyName.trim(),
       website: normalizeWebsite(website),
       sector: sector ? String(sector).trim() : null,
