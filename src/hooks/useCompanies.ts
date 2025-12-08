@@ -47,7 +47,7 @@ export function useCompanies(options?: {
       const { data, error, count } = await query;
       
       if (error) {
-        console.error('[useCompanies] ❌ Query error:', error);
+        console.error('[useCompanies] ❌ Erro ao buscar empresas', error);
         console.error('[useCompanies] 📝 Query details:', { tenantId, search, sortBy, sortOrder, page, pageSize });
         // Retornar vazio em vez de quebrar
         return { 
@@ -59,7 +59,7 @@ export function useCompanies(options?: {
         };
       }
       
-      console.log('[useCompanies] ✅ Encontradas:', count, 'empresas para tenant:', tenantId);
+      console.log('[useCompanies] ✅ Encontradas:', count || 0, 'empresas para tenant:', tenantId);
       
       return { 
         data: data as Company[], 

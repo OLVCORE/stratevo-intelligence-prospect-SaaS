@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { normalizeCnpj } from '@/lib/format';
 import * as XLSX from 'xlsx';
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -699,11 +700,7 @@ let totalDuplicates = 0;
 
 // 🔥 SOLUÇÃO: Inserir diretamente em prospecting_candidates (evita CORS)
 // Funções auxiliares para normalização
-const normalizeCNPJ = (cnpj: string | null | undefined): string | null => {
-  if (!cnpj) return null;
-  const cleaned = String(cnpj).replace(/\D/g, '');
-  return cleaned.length === 14 ? cleaned : cleaned.length > 0 ? cleaned : null;
-};
+// ✅ REMOVIDO: Usar normalizeCnpj de src/lib/format.ts (importado no topo)
 
 const normalizeWebsite = (website: string | null | undefined): string | null => {
   if (!website) return null;
@@ -832,86 +829,111 @@ const insertDirectlyToProspectingCandidates = async ({
     };
   }
 
-  // 4) Montar payload do insert respeitando o schema de prospecting_candidates
+  // 4) ✅ CORREÇÃO DEFINITIVA: Montar payload do insert com mapeamento estruturado
   const rows = companiesToInsert.map((c) => {
-    // ✅ CORRIGIDO: Mapear corretamente razão social e nome fantasia
+    // ✅ Mapeamento estruturado de razão social (múltiplas variações)
     const razao = 
-      c['Razão'] || 
-      c['Razão Social'] || 
-      c['Razo'] ||
-      c['Razao Social'] ||
-      c['Razao'] ||
-      c['Nome da Empresa'] || 
-      c['Nome'] ||
-      getValue(c, 'razao_social', columnMapping) ||
-      getValue(c, 'companyName', columnMapping) ||
+      c['Razão Social'] ??
+      c['Razao Social'] ??
+      c['Razão'] ??
+      c['Razo'] ??
+      c['RAZAO_SOCIAL'] ??
+      c['Nome da Empresa'] ??
+      c['Nome'] ??
+      getValue(c, 'razao_social', columnMapping) ??
+      getValue(c, 'companyName', columnMapping) ??
       null;
     
+    // ✅ Mapeamento estruturado de nome fantasia
     const fantasia = 
-      c['Fantasia'] ||
-      c['Nome Fantasia'] ||
-      getValue(c, 'nome_fantasia', columnMapping) ||
-      getValue(c, 'fantasia', columnMapping) ||
+      c['Nome Fantasia'] ??
+      c['Fantasia'] ??
+      c['NOME_FANTASIA'] ??
+      getValue(c, 'nome_fantasia', columnMapping) ??
+      getValue(c, 'fantasia', columnMapping) ??
       null;
     
-    // Usar razão social, se não tiver, usar fantasia, se não tiver, deixar null
+    // ✅ Usar razão social, se não tiver, usar fantasia, se não tiver, deixar null
     const companyName = razao || fantasia || null;
 
-    // Buscar website - tentar múltiplas fontes
-    const websiteRaw = c['Site'] || c['sites'] || getValue(c, 'website', columnMapping) || getValue(c, 'site', columnMapping);
-    
-    // ✅ CORRIGIDO: Mapear setor corretamente (Setor, CNAE, etc.)
-    const sectorRaw = 
-      c['Setor'] || 
-      c['Texto CNAE Principal'] ||
-      c['Atividade Econômica'] ||
-      getValue(c, 'setor', columnMapping) || 
-      getValue(c, 'sector', columnMapping) ||
+    // ✅ Mapeamento estruturado de cidade
+    const city = 
+      c['Cidade'] ??
+      c['Municipio'] ??
+      c['Município'] ??
+      c['CIDADE'] ??
+      getValue(c, 'city', columnMapping) ??
+      getValue(c, 'cidade', columnMapping) ??
+      getValue(c, 'municipio', columnMapping) ??
       null;
     
-    // Buscar UF
-    const ufRaw = c['UF'] || c['Estado'] || getValue(c, 'uf', columnMapping);
+    // ✅ Mapeamento estruturado de estado/UF
+    const state = 
+      c['UF'] ??
+      c['Estado'] ??
+      c['ESTADO'] ??
+      getValue(c, 'uf', columnMapping) ??
+      getValue(c, 'estado', columnMapping) ??
+      null;
     
-    // Buscar cidade
-    const cityRaw = c['Cidade'] || c['Município'] || c['municipio'] || getValue(c, 'city', columnMapping) || getValue(c, 'cidade', columnMapping) || getValue(c, 'municipio', columnMapping);
-    
-    // Buscar email
-    const emailRaw = c['E-mail'] || c['Email'] || getValue(c, 'contactEmail', columnMapping) || getValue(c, 'contato_email', columnMapping);
-    
-    // Buscar telefone
-    const phoneRaw = c['Telefone 1'] || c['Telefone'] || getValue(c, 'contactPhone', columnMapping) || getValue(c, 'contato_telefone', columnMapping);
-
-    // ✅ CORRIGIDO: Mapear setor corretamente
+    // ✅ Mapeamento estruturado de setor
     const sector = 
-      sectorRaw ? String(sectorRaw).trim() : 
-      c['Setor'] ? String(c['Setor']).trim() :
-      c['Texto CNAE Principal'] ? String(c['Texto CNAE Principal']).trim() :
-      getValue(c, 'setor', columnMapping) ? String(getValue(c, 'setor', columnMapping)).trim() :
+      c['Setor'] ??
+      c['Segmento'] ??
+      c['Texto CNAE Principal'] ??
+      c['CNAE_DESC'] ??
+      c['Atividade Econômica'] ??
+      getValue(c, 'setor', columnMapping) ??
+      getValue(c, 'sector', columnMapping) ??
       null;
+    
+    // ✅ Mapeamento estruturado de website
+    const website = 
+      c['Site'] ??
+      c['Website'] ??
+      c['URL'] ??
+      getValue(c, 'website', columnMapping) ??
+      getValue(c, 'site', columnMapping) ??
+      null;
+    
+    // ✅ Normalizar CNPJ usando helper centralizado
+    const normalizedCnpj = normalizeCnpj(c.cnpj);
+    
+    // ✅ VALIDAÇÃO: Se não houver CNPJ ou company_name, marcar como inválido
+    if (!normalizedCnpj || !companyName) {
+      // Retornar objeto com flag de inválido (será filtrado antes do insert)
+      return {
+        _invalid: true,
+        _reason: !normalizedCnpj ? 'CNPJ ausente ou inválido' : 'Nome da empresa ausente',
+      } as any;
+    }
+    
+    // Buscar email e telefone (mantendo lógica existente)
+    const emailRaw = c['E-mail'] ?? c['Email'] ?? getValue(c, 'contactEmail', columnMapping) ?? getValue(c, 'contato_email', columnMapping);
+    const phoneRaw = c['Telefone 1'] ?? c['Telefone'] ?? getValue(c, 'contactPhone', columnMapping) ?? getValue(c, 'contato_telefone', columnMapping);
 
+    // ✅ Montar candidato com dados estruturados
     return {
       tenant_id: tenantId,
       icp_id: icpId,
-      cnpj: c.cnpj,
-      company_name: companyName ? String(companyName).trim() : null, // ✅ Nunca usar "Empresa sem nome"
-      website: normalizeWebsite(websiteRaw),
-      sector: sector,
-      uf: normalizeUF(ufRaw),
-      city: cityRaw ? String(cityRaw).trim() : null,
+      cnpj: normalizedCnpj,
+      company_name: companyName.trim(),
+      website: normalizeWebsite(website),
+      sector: sector ? String(sector).trim() : null,
+      uf: normalizeUF(state),
+      city: city ? String(city).trim() : null,
       country: 'Brasil',
-      contact_name: null, // Não temos esse campo no CSV atual
-      contact_role: null, // Não temos esse campo no CSV atual
+      contact_name: null,
+      contact_role: null,
       contact_email: normalizeEmail(emailRaw),
       contact_phone: normalizePhone(phoneRaw),
-      linkedin_url: null, // Não temos esse campo no CSV atual
+      linkedin_url: null,
       notes: null,
-      source: 'MANUAL', // Valores permitidos: 'EMPRESAS_AQUI', 'APOLLO', 'PHANTOMBUSTER', 'GOOGLE_SHEETS', 'MANUAL'
+      source: 'MANUAL',
       source_batch_id: sourceBatchId,
       status: 'pending',
-      // ✅ Salvar linha original em raw_source se o campo existir
-      raw_source: c, // Salvar objeto completo para referência futura
     };
-  });
+  }).filter((row: any) => !row._invalid); // ✅ Filtrar registros inválidos
 
   console.log('[BulkUpload][fallback] 📤 Tentando inserir', rows.length, 'registros...');
   console.log('[BulkUpload][fallback] 📋 Primeiro registro exemplo:', rows[0]);

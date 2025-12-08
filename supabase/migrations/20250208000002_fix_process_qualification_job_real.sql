@@ -125,6 +125,21 @@ BEGIN
     LIMIT 1000
   LOOP
     BEGIN
+      -- ✅ VALIDAÇÃO: Pular candidatos sem CNPJ ou sem nome de empresa
+      IF v_candidate.cnpj IS NULL OR v_candidate.company_name IS NULL THEN
+        -- Marcar como failed e continuar
+        UPDATE public.prospecting_candidates
+        SET status = 'failed', error_message = 'CNPJ ou nome da empresa ausente'
+        WHERE id = v_candidate.id;
+        
+        -- Incrementar contador de falhas
+        UPDATE public.prospect_qualification_jobs qj
+        SET failed_count = COALESCE(qj.failed_count, 0) + 1
+        WHERE qj.id = p_job_id;
+        
+        CONTINUE; -- Pular para próximo candidato
+      END IF;
+      
       -- ✅ Calcular fit_score baseado em critérios reais com match_breakdown
       v_fit_score := 0;
       v_match_breakdown := '[]'::jsonb;
