@@ -639,10 +639,77 @@ if (!tenantId) {
 
 console.log('💾 Salvando diretamente no banco de dados para tenant:', tenantId);
 
-const insertedCompanies = [];
-let imported = 0;
+// 🔥 FLUXO CORRETO: Usar Edge Function mc9-import-csv
+if (!selectedIcpIds || selectedIcpIds.length === 0) {
+  toast.error('Erro: Selecione pelo menos um ICP', {
+    description: 'É necessário selecionar um ICP para qualificar as empresas'
+  });
+  setIsUploading(false);
+  setProgress(0);
+  return;
+}
 
-for (let i = 0; i < companiesWithMetadata.length; i++) {
+// Preparar columnMapping
+const firstRow = companies[0] || {};
+const csvHeaders = Object.keys(firstRow);
+const columnMapping: Record<string, string> = {};
+
+csvHeaders.forEach(header => {
+  const headerLower = header.toLowerCase();
+  if (headerLower.includes('cnpj')) columnMapping['cnpj'] = header;
+  else if (headerLower.includes('razao') || headerLower.includes('razão')) columnMapping['razao_social'] = header;
+  else if (headerLower.includes('nome') && headerLower.includes('fantasia')) columnMapping['nome_fantasia'] = header;
+  else if (headerLower.includes('nome') && (headerLower.includes('empresa') || headerLower.includes('fantasia'))) columnMapping['companyName'] = header;
+  else if (headerLower.includes('site') || headerLower.includes('website')) columnMapping['website'] = header;
+  else if (headerLower.includes('setor') || headerLower.includes('sector')) columnMapping['sector'] = header;
+  else if (headerLower.includes('uf') || headerLower.includes('estado')) columnMapping['uf'] = header;
+  else if (headerLower.includes('cidade') || headerLower.includes('municipio')) columnMapping['city'] = header;
+  else if (headerLower.includes('email')) columnMapping['contactEmail'] = header;
+  else if (headerLower.includes('telefone') || headerLower.includes('phone')) columnMapping['contactPhone'] = header;
+  else if (headerLower.includes('linkedin')) columnMapping['linkedinUrl'] = header;
+});
+
+const sourceBatchId = `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+setProgress(10);
+toast.info(`📤 Importando ${companies.length} empresas via Motor de Qualificação...`);
+
+let totalInserted = 0;
+let totalDuplicates = 0;
+const insertedCompanies: any[] = [];
+
+for (const icpId of selectedIcpIds) {
+  try {
+    setProgress(20 + (selectedIcpIds.indexOf(icpId) / selectedIcpIds.length) * 60);
+    
+    const { data, error } = await supabase.functions.invoke('mc9-import-csv', {
+      body: {
+        tenantId,
+        icpId,
+        source: 'GOOGLE_SHEETS',
+        sourceBatchId,
+        rows: companies,
+        columnMapping,
+      },
+    });
+
+    if (error) {
+      console.error(`❌ Erro ao importar para ICP ${icpId}:`, error);
+      continue;
+    }
+
+    if (data) {
+      totalInserted += data.insertedCount || 0;
+      totalDuplicates += data.duplicatesCount || 0;
+    }
+  } catch (err: any) {
+    console.error(`❌ Erro ao processar ICP ${icpId}:`, err);
+  }
+}
+
+let imported = totalInserted;
+
+// Remover loop antigo - substituído acima
+for (let i = 0; i < 0; i++) {
   const row = companiesWithMetadata[i];
   
   try {
