@@ -63,7 +63,11 @@ export function ExplainabilityButton({
               variant={variant}
               size={size}
               onClick={() => setOpen(true)}
-              className="gap-2"
+              className={`gap-2 ${
+                variant === 'default' 
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white border-0 shadow-md hover:shadow-lg transition-all duration-200 font-semibold' 
+                  : ''
+              }`}
             >
               <Info className="h-4 w-4" />
               {buttonText}

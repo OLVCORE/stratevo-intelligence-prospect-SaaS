@@ -72,11 +72,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { STCAgent } from '@/components/intelligence/STCAgent';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 import { QualifiedStockActionsMenu } from '@/components/qualification/QualifiedStockActionsMenu';
 import { ExplainabilityButton } from '@/components/common/ExplainabilityButton';
-import { Info } from 'lucide-react';
+import { Info, HelpCircle } from 'lucide-react';
 
 interface QualifiedProspect {
   id: string;
