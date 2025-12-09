@@ -779,7 +779,11 @@ export default function QualifiedProspectsStock() {
             currentItem: prospect.razao_social || prospect.cnpj 
           });
 
-          const enriched = await consultarReceitaFederal(prospect.cnpj);
+          const enriched = await consultarReceitaFederal(prospect.cnpj, {
+            stockId: prospectId,
+            tenantId: tenantId!,
+            saveEnrichment: true, // ✅ PERSISTIR automaticamente
+          });
           
           if (enriched && enriched.success && enriched.data) {
             const data = enriched.data;
