@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +29,7 @@ interface InlineCompanySearchProps {
 
 export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps) {
   const { tenant } = useTenant();
+  const navigate = useNavigate();
   const tenantId = tenant?.id;
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -143,18 +145,21 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
 
     setIsSaving(true);
     try {
-      // Verificar se já existe
-      const { data: existing } = await supabase
-        .from('companies')
-        .select('id, company_name')
-        .eq('cnpj', previewData.cnpj)
+      // ✅ Verificar se já existe em qualified_prospects (não em companies)
+      const normalizedCnpj = previewData.cnpj.replace(/\D/g, '');
+      const { data: existing } = await ((supabase as any).from('qualified_prospects'))
+        .select('id, razao_social')
+        .eq('cnpj', normalizedCnpj)
+        .eq('tenant_id', tenantId)
         .maybeSingle();
 
       if (existing) {
-        toast.info(`Empresa já existe: ${existing.company_name}`);
+        toast.info(`Empresa já está no estoque qualificado: ${existing.razao_social}`);
         setShowPreview(false);
         setPreviewData(null);
         setSearchQuery('');
+        // ✅ Navegar para o estoque mesmo assim
+        navigate('/leads/qualified-stock');
         return;
       }
 
@@ -163,8 +168,11 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
       let temperatura: 'hot' | 'warm' | 'cold' | 'out' = 'out';
       let decision = 'discard';
       let decisionReason = 'Não encontrou ICPs configurados';
+      let bestIcpId = null;
       let bestIcpName = null;
       let qualificationBreakdown = null;
+      let fitScore = 0;
+      let grade: 'A+' | 'A' | 'B' | 'C' | 'D' = 'D';
 
       if (tenantId) {
         try {
@@ -193,6 +201,15 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
           decision = result.decision;
           decisionReason = result.decision_reason;
           bestIcpName = result.best_icp_name;
+          bestIcpId = result.best_icp_id || null;
+          
+          // Calcular fit_score e grade baseado no icp_score
+          fitScore = icpScore; // Usar icp_score como fit_score inicial
+          if (fitScore >= 90) grade = 'A+';
+          else if (fitScore >= 75) grade = 'A';
+          else if (fitScore >= 60) grade = 'B';
+          else if (fitScore >= 40) grade = 'C';
+          else grade = 'D';
           
           // Guardar breakdown para análise
           if (result.icp_scores && result.icp_scores.length > 0) {
@@ -210,13 +227,17 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
             temperatura,
             decision,
             bestIcp: bestIcpName,
+            fitScore,
+            grade,
             breakdown: qualificationBreakdown
           });
           
         } catch (qualErr) {
           console.warn('[InlineSearch] ⚠️ Erro na qualificação, usando padrão:', qualErr);
           // Fallback para score básico se qualificação falhar
-          icpScore = 30; // Score baixo por padrão
+          icpScore = 30;
+          fitScore = 30;
+          grade = 'D';
           temperatura = 'cold';
           decision = 'quarantine';
           decisionReason = 'Erro na qualificação - enviado para análise manual';
@@ -224,49 +245,133 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
       } else {
         // Sem tenant, usar score neutro
         icpScore = 30;
+        fitScore = 30;
+        grade = 'D';
         temperatura = 'cold';
         decision = 'quarantine';
         decisionReason = 'Tenant não identificado';
       }
 
-      // Salvar em companies com dados de qualificação
-      const { error } = await supabase
-        .from('companies')
-        .insert({
-          name: previewData.razao_social,
-          cnpj: previewData.cnpj,
-          company_name: previewData.razao_social,
-          industry: previewData.cnae_descricao,
-          headquarters_city: previewData.municipio,
-          headquarters_state: previewData.uf,
-          headquarters_country: 'Brasil',
-          tenant_id: tenantId,
-          location: {
-            city: previewData.municipio,
-            state: previewData.uf,
-            country: 'Brasil'
-          },
-          raw_data: {
-            ...previewData.raw_data,
-            icp_score: icpScore,
-            temperatura: temperatura,
-            decision: decision,
-            decision_reason: decisionReason,
-            best_icp_name: bestIcpName,
-            qualification_breakdown: qualificationBreakdown,
-            qualification_source: 'inline_search',
-            qualified_at: new Date().toISOString()
-          }
-        });
+      // ✅ Garantir que fit_score e grade sejam válidos (campos obrigatórios)
+      const finalFitScore = Number(fitScore) || 0;
+      const finalGrade = (grade && ['A+', 'A', 'B', 'C', 'D'].includes(grade)) ? grade : 'D';
 
-      if (error) throw error;
+      // ✅ Preparar payload para inserção
+      const insertPayload: any = {
+        tenant_id: tenantId,
+        cnpj: normalizedCnpj,
+        razao_social: previewData.razao_social || 'Empresa Sem Nome',
+        // ✅ Campos obrigatórios
+        fit_score: finalFitScore,
+        grade: finalGrade,
+        pipeline_status: 'new',
+      };
+
+      // ✅ Campos opcionais (adicionar apenas se tiverem valores)
+      if (previewData.nome_fantasia) {
+        insertPayload.nome_fantasia = previewData.nome_fantasia;
+      }
+      if (previewData.municipio) {
+        insertPayload.cidade = previewData.municipio;
+      }
+      if (previewData.uf) {
+        insertPayload.estado = previewData.uf;
+      }
+      if (previewData.cep) {
+        insertPayload.cep = previewData.cep;
+      }
+      if (previewData.cnae_descricao) {
+        insertPayload.setor = previewData.cnae_descricao;
+        insertPayload.cnae_descricao = previewData.cnae_descricao;
+      }
+      if (previewData.cnae_principal) {
+        insertPayload.cnae_principal = previewData.cnae_principal;
+      }
+      if (previewData.situacao) {
+        insertPayload.situacao_cnpj = previewData.situacao;
+      }
+      if (previewData.porte) {
+        insertPayload.porte = previewData.porte;
+      }
+      if (previewData.capital_social) {
+        const capitalValue = parseFloat(String(previewData.capital_social).replace(/[^\d,.-]/g, '').replace(',', '.'));
+        if (!isNaN(capitalValue)) {
+          insertPayload.capital_social = capitalValue;
+        }
+      }
+      if (previewData.website) {
+        insertPayload.website = previewData.website;
+      }
+      if (previewData.data_abertura) {
+        insertPayload.data_abertura = previewData.data_abertura;
+      }
+      if (bestIcpId) {
+        insertPayload.icp_id = bestIcpId;
+      }
+      // ✅ Sempre definir source_name para busca individual
+      insertPayload.source_name = 'Motor de Qualificação - Busca Individual';
+
+      // ✅ Salvar dados de enriquecimento em enrichment_data (dados brutos da Receita Federal)
+      if (previewData.raw_data) {
+        insertPayload.enrichment_data = previewData.raw_data;
+      }
+
+      // ✅ Salvar análise de qualificação em ai_analysis
+      const aiAnalysis: any = {
+        icp_score: icpScore,
+        temperatura: temperatura,
+        qualification_source: 'inline_search',
+        qualified_at: new Date().toISOString(),
+        decision: decision,
+        decision_reason: decisionReason,
+      };
+      
+      if (bestIcpName) {
+        aiAnalysis.best_icp_name = bestIcpName;
+      }
+      if (qualificationBreakdown) {
+        aiAnalysis.qualification_breakdown = qualificationBreakdown;
+      }
+      
+      insertPayload.ai_analysis = aiAnalysis;
+
+      // ✅ Log detalhado antes de inserir
+      console.log('[InlineSearch] 📦 Payload para qualified_prospects:', {
+        tenant_id: insertPayload.tenant_id,
+        cnpj: insertPayload.cnpj,
+        razao_social: insertPayload.razao_social,
+        fit_score: insertPayload.fit_score,
+        grade: insertPayload.grade,
+        pipeline_status: insertPayload.pipeline_status,
+        has_icp_id: !!insertPayload.icp_id,
+        payload_keys: Object.keys(insertPayload),
+      });
+
+      // ✅ SALVAR EM qualified_prospects (não em companies) - Fluxo correto
+      const { error } = await ((supabase as any).from('qualified_prospects'))
+        .insert(insertPayload);
+
+      if (error) {
+        console.error('[InlineSearch] ❌ Erro detalhado ao inserir:', {
+          error,
+          error_code: error.code,
+          error_message: error.message,
+          error_details: error.details,
+          error_hint: error.hint,
+          payload: insertPayload,
+        });
+        throw error;
+      }
 
       // Toast com resultado real da qualificação
       const tempEmoji = temperatura === 'hot' ? '🔥' : temperatura === 'warm' ? '🌡️' : '❄️';
-      const decisionEmoji = decision === 'approve' ? '✅' : decision === 'quarantine' ? '⏳' : decision === 'nurturing' ? '📈' : '❌';
       
-      toast.success(`${decisionEmoji} Empresa qualificada!`, {
-        description: `${tempEmoji} ${temperatura.toUpperCase()} | Score: ${icpScore}${bestIcpName ? ` | ICP: ${bestIcpName}` : ''}`
+      toast.success('✅ Empresa adicionada ao Estoque Qualificado!', {
+        description: `${tempEmoji} ${temperatura.toUpperCase()} | Fit Score: ${fitScore}% | Grade: ${grade}${bestIcpName ? ` | ICP: ${bestIcpName}` : ''}`,
+        action: {
+          label: 'Ver Estoque',
+          onClick: () => navigate('/leads/qualified-stock')
+        }
       });
       
       // Mostrar motivos se for COLD ou OUT
@@ -277,15 +382,23 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
       setShowPreview(false);
       setPreviewData(null);
       setSearchQuery('');
+      
+      // ✅ NAVEGAR PARA ESTOQUE DE EMPRESAS QUALIFICADAS (fluxo correto)
+      navigate('/leads/qualified-stock');
       onCompanyAdded?.();
 
     } catch (error: any) {
       console.error('Erro ao salvar:', error);
       
       if (error.message?.includes('duplicate') || error.code === '23505') {
-        toast.error('Empresa já existe na base');
+        toast.error('Empresa já existe no estoque qualificado', {
+          action: {
+            label: 'Ver Estoque',
+            onClick: () => navigate('/leads/qualified-stock')
+          }
+        });
       } else {
-        toast.error('Erro ao adicionar empresa', {
+        toast.error('Erro ao adicionar empresa ao estoque', {
           description: error.message
         });
       }
@@ -536,7 +649,6 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
                             municipio={previewData.municipio}
                             estado={previewData.uf}
                             cep={previewData.raw_data?.cep}
-                            pais="Brasil"
                           />
                         </div>
                       )}
