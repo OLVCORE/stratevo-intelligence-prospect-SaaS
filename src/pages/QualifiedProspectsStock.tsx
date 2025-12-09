@@ -43,11 +43,17 @@ import {
   TrendingUp,
   Zap,
   Inbox,
+  Settings,
+  MoreVertical,
+  Trash2,
+  Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
   DialogContent,
@@ -55,6 +61,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { STCAgent } from '@/components/intelligence/STCAgent';
+import { consultarReceitaFederal } from '@/services/receitaFederal';
+import { QualifiedStockActionsMenu } from '@/components/qualification/QualifiedStockActionsMenu';
 
 interface QualifiedProspect {
   id: string;
@@ -68,13 +88,19 @@ interface QualifiedProspect {
   estado?: string;
   setor?: string;
   website?: string;
-  fit_score: number;
-  grade: string;
+  fit_score: number | null;
+  grade: string | null;
   pipeline_status: string;
   created_at: string;
+  source_name?: string; // ✅ Nome da Fonte
+  source_metadata?: {
+    campaign?: string; // ✅ Campanha
+    [key: string]: any;
+  };
   job?: {
     job_name: string;
     source_type: string;
+    source_file_name?: string;
   };
   icp?: {
     nome: string;
@@ -88,6 +114,16 @@ interface QualifiedProspect {
     matched: boolean;
     score: number;
   }>;
+  enrichment?: {
+    fantasia?: string | null;
+    cnae_principal?: string | null;
+    cnae_tipo?: string | null;
+    data_quality?: string | null;
+    fit_score?: number | null;
+    grade?: string | null;
+    origem?: string | null;
+    raw?: any;
+  } | null;
 }
 
 export default function QualifiedProspectsStock() {
@@ -104,8 +140,14 @@ export default function QualifiedProspectsStock() {
   const [sectorFilter, setSectorFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [processing, setProcessing] = useState(false);
+  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [previewProspect, setPreviewProspect] = useState<QualifiedProspect | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{
+    current: number;
+    total: number;
+    currentItem?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (tenantId) {
@@ -118,14 +160,14 @@ export default function QualifiedProspectsStock() {
 
     setLoading(true);
     try {
-      // ✅ CORRIGIDO: Query simplificada sem join problemático com icp_profiles_metadata
-      // O icp_id não tem FK, então buscamos ICP separadamente se necessário
+      // ✅ CORRIGIDO: Query simplificada (JOIN será feito depois se a tabela existir)
       let query = ((supabase as any).from('qualified_prospects'))
         .select(`
           *,
           prospect_qualification_jobs (
             job_name,
-            source_type
+            source_type,
+            source_file_name
           )
         `)
         .eq('tenant_id', tenantId)
@@ -164,19 +206,52 @@ export default function QualifiedProspectsStock() {
       const icpIds = [...new Set(prospectsData.map(p => p.icp_id).filter(Boolean))];
       
       const icpMap: Record<string, { nome: string; description?: string }> = {};
-      if (icpIds.length > 0) {
-        const { data: icps } = await ((supabase as any).from('icp_profiles_metadata'))
-          .select('id, nome, description')
-          .in('id', icpIds);
-        
-        if (icps) {
-          icps.forEach((icp: any) => {
-            icpMap[icp.id] = { nome: icp.nome, description: icp.description };
-          });
+      if (icpIds.length > 0 && tenantId) {
+        try {
+          // ✅ CORRIGIDO: Filtrar por tenant_id para evitar erro 400 e garantir RLS
+          const { data: icps, error: icpError } = await ((supabase as any).from('icp_profiles_metadata'))
+            .select('id, nome, descricao')
+            .eq('tenant_id', tenantId)
+            .in('id', icpIds);
+          
+          if (icpError) {
+            console.warn('[Estoque] Erro ao buscar ICPs (continuando sem ICP):', icpError);
+          } else if (icps) {
+            icps.forEach((icp: any) => {
+              icpMap[icp.id] = { nome: icp.nome, description: icp.descricao };
+            });
+          }
+        } catch (icpErr: any) {
+          console.warn('[Estoque] Erro ao buscar ICPs (continuando sem ICP):', icpErr);
         }
       }
 
-      // ✅ Enriquecer prospects com dados do ICP e parsear match_breakdown
+      // ✅ Buscar dados de enriquecimento separadamente (tabela pode não existir ainda)
+      const prospectsDataWithIds = prospectsData.map(p => p.id);
+      const enrichmentMap: Record<string, any> = {};
+      
+      if (prospectsDataWithIds.length > 0 && tenantId) {
+        try {
+          const { data: enrichments, error: enrichError } = await ((supabase as any)
+            .from('qualified_stock_enrichment'))
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .in('stock_id', prospectsDataWithIds);
+          
+          if (!enrichError && enrichments) {
+            enrichments.forEach((e: any) => {
+              enrichmentMap[e.stock_id] = e;
+            });
+          } else if (enrichError && enrichError.code !== 'PGRST116') {
+            // PGRST116 = tabela não existe (OK, migration não aplicada ainda)
+            console.warn('[Estoque] Tabela qualified_stock_enrichment não encontrada (aplicar migration):', enrichError);
+          }
+        } catch (enrichErr: any) {
+          console.warn('[Estoque] Erro ao buscar enriquecimentos (continuando sem):', enrichErr);
+        }
+      }
+
+      // ✅ Enriquecer prospects com dados do ICP, enriquecimento e parsear match_breakdown
       const enrichedProspects = prospectsData.map(p => {
         let matchBreakdown = null;
         if (p.match_breakdown) {
@@ -190,10 +265,28 @@ export default function QualifiedProspectsStock() {
           }
         }
         
+        // ✅ Buscar dados de enriquecimento do mapa
+        const enrichment = enrichmentMap[p.id] || null;
+        
         return {
           ...p,
           icp: p.icp_id ? icpMap[p.icp_id] : undefined,
           match_breakdown: matchBreakdown,
+          enrichment: enrichment ? {
+            fantasia: enrichment.fantasia,
+            cnae_principal: enrichment.cnae_principal,
+            cnae_tipo: enrichment.cnae_tipo,
+            data_quality: enrichment.data_quality,
+            fit_score: enrichment.fit_score,
+            grade: enrichment.grade,
+            origem: enrichment.origem,
+            raw: enrichment.raw,
+          } : null,
+          // ✅ Usar fantasia do enriquecimento se disponível
+          nome_fantasia: enrichment?.fantasia || p.nome_fantasia || null,
+          // ✅ Usar fit_score e grade do enriquecimento se disponível
+          fit_score: enrichment?.fit_score ?? p.fit_score ?? null,
+          grade: enrichment?.grade || p.grade || null,
         };
       });
 
@@ -533,7 +626,293 @@ export default function QualifiedProspectsStock() {
     }
   };
 
-  const getGradeBadge = (grade: string) => {
+  // ✅ Ações em massa
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) {
+      toast({
+        title: 'Atenção',
+        description: 'Selecione pelo menos uma empresa para deletar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja deletar ${selectedIds.size} empresa(s) selecionada(s)?`)) {
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const { error } = await ((supabase as any).from('qualified_prospects'))
+        .delete()
+        .in('id', Array.from(selectedIds));
+
+      if (error) throw error;
+
+      toast({
+        title: '✅ Empresas deletadas com sucesso!',
+        description: `${selectedIds.size} empresa(s) foram removidas do estoque qualificado`,
+      });
+
+      setSelectedIds(new Set());
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Bulk Delete] Erro:', error);
+      toast({
+        title: 'Erro ao deletar',
+        description: error.message || 'Não foi possível deletar as empresas',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (prospects.length === 0) {
+      toast({
+        title: 'Atenção',
+        description: 'Não há empresas para deletar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const confirmMessage = `⚠️ ATENÇÃO: Esta ação é IRREVERSÍVEL!\n\nVocê está prestes a deletar TODAS as ${prospects.length} empresas do estoque qualificado.\n\nIsso também deletará:\n- Todos os candidatos relacionados\n- Todos os jobs de qualificação\n\nTem CERTEZA ABSOLUTA que deseja continuar?`;
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // Confirmação dupla
+    if (!confirm('⚠️ ÚLTIMA CONFIRMAÇÃO: Você realmente deseja deletar TUDO? Esta ação não pode ser desfeita!')) {
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // Deletar todos os prospects
+      const { error: prospectsError } = await ((supabase as any).from('qualified_prospects'))
+        .delete()
+        .eq('tenant_id', tenantId)
+        .eq('pipeline_status', 'new');
+
+      if (prospectsError) throw prospectsError;
+
+      // Deletar todos os candidatos relacionados
+      const { error: candidatesError } = await ((supabase as any).from('prospecting_candidates'))
+        .delete()
+        .eq('tenant_id', tenantId);
+
+      if (candidatesError) {
+        console.warn('[Delete All] Erro ao deletar candidatos:', candidatesError);
+      }
+
+      // Deletar todos os jobs
+      const { error: jobsError } = await ((supabase as any).from('prospect_qualification_jobs'))
+        .delete()
+        .eq('tenant_id', tenantId);
+
+      if (jobsError) {
+        console.warn('[Delete All] Erro ao deletar jobs:', jobsError);
+      }
+
+      toast({
+        title: '✅ Todas as empresas foram deletadas!',
+        description: `${prospects.length} empresa(s), candidatos e jobs foram removidos`,
+        variant: 'destructive',
+      });
+
+      setSelectedIds(new Set());
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Delete All] Erro:', error);
+      toast({
+        title: 'Erro ao deletar',
+        description: error.message || 'Não foi possível deletar todas as empresas',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleBulkEnrichment = async () => {
+    const idsToEnrich = selectedIds.size > 0 
+      ? Array.from(selectedIds) 
+      : prospects.filter(p => p.data_quality_status !== 'ok').map(p => p.id);
+
+    if (idsToEnrich.length === 0) {
+      toast({
+        title: 'Atenção',
+        description: selectedIds.size > 0 
+          ? 'Nenhuma empresa selecionada para enriquecer'
+          : 'Todas as empresas já estão enriquecidas',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    setBulkProgress({ current: 0, total: idsToEnrich.length });
+    try {
+      toast({
+        title: 'Enriquecendo empresas...',
+        description: `Processando ${idsToEnrich.length} empresa(s)`,
+      });
+
+      let enrichedCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < idsToEnrich.length; i++) {
+        const prospectId = idsToEnrich[i];
+        try {
+          const prospect = prospects.find(p => p.id === prospectId);
+          if (!prospect) {
+            setBulkProgress({ current: i + 1, total: idsToEnrich.length, currentItem: 'Pulando...' });
+            continue;
+          }
+
+          setBulkProgress({ 
+            current: i + 1, 
+            total: idsToEnrich.length, 
+            currentItem: prospect.razao_social || prospect.cnpj 
+          });
+
+          const enriched = await consultarReceitaFederal(prospect.cnpj);
+          
+          if (enriched && enriched.success && enriched.data) {
+            const data = enriched.data;
+            const nomeFantasia = data.fantasia || data.nome_fantasia || null;
+            
+            const updateData: any = {
+              razao_social: data.nome || data.razao_social || prospect.razao_social,
+              nome_fantasia: nomeFantasia || prospect.nome_fantasia,
+              cidade: data.municipio || prospect.cidade,
+              estado: data.uf || prospect.estado,
+              setor: data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor,
+              website: data.website || prospect.website,
+              data_quality_status: 'ok',
+              updated_at: new Date().toISOString(),
+            };
+
+            const { error } = await ((supabase as any).from('qualified_prospects'))
+              .update(updateData)
+              .eq('id', prospectId);
+
+            if (error) throw error;
+
+            // ✅ RECALCULAR FIT_SCORE E GRADE após enriquecimento
+            // Nota: O recálculo completo requer process_qualification_job, mas podemos atualizar dados básicos
+            // O usuário deve rodar o motor de qualificação novamente para recalcular fit_score/grade completo
+            
+            enrichedCount++;
+          }
+        } catch (error: any) {
+          const prospect = prospects.find(p => p.id === prospectId);
+          console.error(`[Bulk Enrichment] Erro ao enriquecer prospect ${prospectId}:`, error);
+          errors.push(`CNPJ ${prospect?.cnpj || prospectId}: ${error.message || 'Erro desconhecido'}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        toast({
+          title: '⚠️ Enriquecimento parcial',
+          description: `${enrichedCount} empresa(s) enriquecida(s). ${errors.length} erro(s).`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: '✅ Empresas enriquecidas com sucesso!',
+          description: `${enrichedCount} empresa(s) foram atualizadas da Receita Federal. Para recalcular Fit Score e Grade, execute o Motor de Qualificação novamente.`,
+          duration: 6000,
+        });
+      }
+
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Bulk Enrichment] Erro:', error);
+      toast({
+        title: 'Erro ao enriquecer',
+        description: error.message || 'Não foi possível enriquecer as empresas',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+      setBulkProgress(null);
+    }
+  };
+
+  const handleExportSelected = () => {
+    const dataToExport = selectedIds.size > 0
+      ? prospects.filter(p => selectedIds.has(p.id))
+      : prospects;
+
+    if (dataToExport.length === 0) {
+      toast({
+        title: 'Atenção',
+        description: 'Não há dados para exportar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const headers = [
+      'CNPJ',
+      'Razão Social',
+      'Nome Fantasia',
+      'Cidade',
+      'Estado',
+      'Setor',
+      'Website',
+      'Fit Score',
+      'Grade',
+      'ICP',
+      'Origem',
+      'Campanha',
+    ];
+
+    const rows = dataToExport.map(p => [
+      p.cnpj || '',
+      p.razao_social || '',
+      p.nome_fantasia || '',
+      p.cidade || '',
+      p.estado || '',
+      p.setor || '',
+      p.website || '',
+      p.fit_score?.toFixed(2) || 'Não calculado',
+      p.grade || '-',
+      p.icp?.nome || '-',
+      p.source_name || p.job?.job_name || '-',
+      p.source_metadata?.campaign || '-',
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `empresas-qualificadas-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: '✅ Exportação concluída!',
+      description: `${dataToExport.length} empresa(s) exportada(s)`,
+    });
+  };
+
+  const getGradeBadge = (grade: string | null | undefined) => {
+    if (!grade || grade === '-' || grade === 'null') {
+      return <Badge variant="outline">-</Badge>;
+    }
+    
     const colors: Record<string, string> = {
       'A+': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
       'A': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
@@ -547,6 +926,99 @@ export default function QualifiedProspectsStock() {
         {grade}
       </Badge>
     );
+  };
+
+  // ✅ Ações individuais
+  const handleIndividualEnrich = async (prospectId: string) => {
+    const prospect = prospects.find(p => p.id === prospectId);
+    if (!prospect || !tenantId) return;
+
+    setEnrichingIds(prev => new Set(prev).add(prospectId));
+    try {
+      toast({
+        title: 'Enriquecendo empresa...',
+        description: 'Buscando dados atualizados da Receita Federal',
+      });
+      
+      const enriched = await consultarReceitaFederal(prospect.cnpj, {
+        stockId: prospectId,
+        tenantId: tenantId!,
+        saveEnrichment: true, // ✅ PERSISTIR automaticamente
+      });
+      
+      if (enriched && enriched.success && enriched.data) {
+        const data = enriched.data;
+        // ✅ CRITÉRIO IGUAL AO INLINESEARCH: usar fantasia da Receita Federal
+        const nomeFantasia = data.fantasia || data.nome_fantasia || null;
+        
+        const updateData: any = {
+          razao_social: data.nome || data.razao_social || prospect.razao_social,
+          nome_fantasia: nomeFantasia || prospect.nome_fantasia, // ✅ Usar fantasia da Receita Federal
+          cidade: data.municipio || prospect.cidade,
+          estado: data.uf || prospect.estado,
+          setor: data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor,
+          website: data.website || prospect.website,
+          data_quality_status: 'ok',
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await ((supabase as any).from('qualified_prospects'))
+          .update(updateData)
+          .eq('id', prospectId);
+
+        if (error) throw error;
+
+        toast({
+          title: '✅ Empresa enriquecida com sucesso!',
+          description: 'Dados atualizados da Receita Federal',
+        });
+        await loadProspects();
+      }
+    } catch (error: any) {
+      console.error('[Enriquecimento Individual] Erro:', error);
+      toast({
+        title: 'Erro ao enriquecer',
+        description: error.message || 'Não foi possível enriquecer a empresa',
+        variant: 'destructive',
+      });
+    } finally {
+      setEnrichingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(prospectId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleUpdateReceitaFederal = async (prospectId: string) => {
+    await handleIndividualEnrich(prospectId);
+  };
+
+  const handleDeleteIndividual = async (prospectId: string) => {
+    if (!confirm('Tem certeza que deseja deletar esta empresa do estoque qualificado?')) {
+      return;
+    }
+
+    try {
+      const { error } = await ((supabase as any).from('qualified_prospects'))
+        .delete()
+        .eq('id', prospectId);
+
+      if (error) throw error;
+
+      toast({
+        title: '✅ Empresa deletada com sucesso!',
+        description: 'A empresa foi removida do estoque qualificado',
+      });
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Delete Individual] Erro:', error);
+      toast({
+        title: 'Erro ao deletar',
+        description: error.message || 'Não foi possível deletar a empresa',
+        variant: 'destructive',
+      });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -619,7 +1091,7 @@ export default function QualifiedProspectsStock() {
             <Database className="w-4 h-4 mr-2" />
             Banco de Empresas
           </Button>
-          <Button onClick={() => navigate('/leads/prospecting-import')}>
+          <Button onClick={() => navigate('/leads/qualification-engine')}>
             <Database className="w-4 h-4 mr-2" />
             Importar Empresas
           </Button>
@@ -760,22 +1232,36 @@ export default function QualifiedProspectsStock() {
               <span className="font-medium">
                 {selectedIds.size} empresa(s) selecionada(s)
               </span>
-              <div className="flex gap-2">
-                {/* ✅ FLUXO OFICIAL: Única ação permitida */}
-                <Button
-                  onClick={handlePromoteToCompanies}
-                  disabled={processing}
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  {processing ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Database className="w-4 h-4 mr-2" />
-                  )}
-                  Enviar para Banco de Empresas
-                </Button>
-              </div>
+              <QualifiedStockActionsMenu
+                selectedCount={selectedIds.size}
+                totalCount={prospects.length}
+                onBulkDelete={handleBulkDelete}
+                onDeleteAll={handleDeleteAll}
+                onBulkEnrichment={handleBulkEnrichment}
+                onPromoteToCompanies={handlePromoteToCompanies}
+                onExportSelected={handleExportSelected}
+                isProcessing={processing}
+              />
             </div>
+            {/* Barra de Progresso para Ações em Massa */}
+            {bulkProgress && bulkProgress.total > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {bulkProgress.currentItem && (
+                      <span className="font-medium">Processando: {bulkProgress.currentItem}</span>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {bulkProgress.current} / {bulkProgress.total}
+                  </span>
+                </div>
+                <Progress 
+                  value={(bulkProgress.current / bulkProgress.total) * 100} 
+                  className="h-2"
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -837,7 +1323,18 @@ export default function QualifiedProspectsStock() {
                       <TableCell className="font-medium">
                         {prospect.razao_social}
                       </TableCell>
-                      <TableCell>{prospect.nome_fantasia || '-'}</TableCell>
+                      <TableCell>
+                        {/* ✅ Usar fantasia do enriquecimento ou do prospect */}
+                        {(() => {
+                          const fantasia = prospect.enrichment?.fantasia || prospect.nome_fantasia;
+                          if (fantasia && 
+                              fantasia.trim() !== '' && 
+                              fantasia.trim().toUpperCase() !== prospect.razao_social?.trim().toUpperCase()) {
+                            return fantasia;
+                          }
+                          return '-';
+                        })()}
+                      </TableCell>
                       <TableCell>
                         {prospect.cidade && prospect.estado
                           ? `${prospect.cidade}/${prospect.estado}`
@@ -854,27 +1351,115 @@ export default function QualifiedProspectsStock() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                          <span className="font-medium">{prospect.fit_score.toFixed(1)}%</span>
-                        </div>
+                        {/* ✅ Usar fit_score do enriquecimento ou do prospect */}
+                        {(() => {
+                          const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
+                          if (fitScore != null && fitScore > 0) {
+                            return (
+                              <div className="flex items-center gap-2">
+                                <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                                <span className="font-medium">{fitScore.toFixed(1)}%</span>
+                              </div>
+                            );
+                          }
+                          return <span className="text-muted-foreground text-sm">Não calculado</span>;
+                        })()}
                       </TableCell>
-                      <TableCell>{getGradeBadge(prospect.grade)}</TableCell>
                       <TableCell>
-                        {prospect.job?.job_name || '-'}
+                        {/* ✅ Usar grade do enriquecimento ou do prospect */}
+                        {(() => {
+                          const grade = prospect.enrichment?.grade || prospect.grade;
+                          return grade ? getGradeBadge(grade) : <Badge variant="outline">-</Badge>;
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        {/* ✅ Usar origem do enriquecimento ou source_name/job */}
+                        {(() => {
+                          const origem = prospect.enrichment?.origem;
+                          if (origem) {
+                            return <Badge variant="outline" className="text-xs">{origem}</Badge>;
+                          }
+                          
+                          return (
+                            <div className="flex flex-col gap-1">
+                              {prospect.source_name && (
+                                <span className="text-sm font-medium">{prospect.source_name}</span>
+                              )}
+                              {prospect.source_metadata?.campaign && (
+                                <Badge variant="outline" className="text-xs w-fit">
+                                  {prospect.source_metadata.campaign}
+                                </Badge>
+                              )}
+                              {!prospect.source_name && !prospect.source_metadata?.campaign && (
+                                <span className="text-sm text-muted-foreground">
+                                  {prospect.job?.job_name || '-'}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            // ✅ FLUXO OFICIAL: Abrir modal de preview ao invés de navegar
-                            setPreviewProspect(prospect);
-                            setIsPreviewOpen(true);
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          {/* ✅ Botão STC */}
+                          <STCAgent
+                            companyId={prospect.id}
+                            companyName={prospect.razao_social || prospect.nome_fantasia || 'Empresa'}
+                            cnpj={prospect.cnpj}
+                          />
+                          
+                          {/* ✅ Botão Eye (Preview) */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setPreviewProspect(prospect);
+                              setIsPreviewOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          
+                          {/* ✅ Gear Icon com Dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={enrichingIds.has(prospect.id)}
+                              >
+                                {enrichingIds.has(prospect.id) ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Settings className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleIndividualEnrich(prospect.id)}
+                                disabled={enrichingIds.has(prospect.id)}
+                              >
+                                <Sparkles className="w-4 h-4 mr-2" />
+                                Enriquecer
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleUpdateReceitaFederal(prospect.id)}
+                                disabled={enrichingIds.has(prospect.id)}
+                              >
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Atualizar Receita Federal
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteIndividual(prospect.id)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Deletar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -946,10 +1531,14 @@ export default function QualifiedProspectsStock() {
               {/* Fit Score */}
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Fit Score</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  <span className="text-2xl font-bold">{previewProspect.fit_score.toFixed(1)}%</span>
-                </div>
+                {previewProspect.fit_score != null ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <TrendingUp className="w-5 h-5 text-primary" />
+                    <span className="text-2xl font-bold">{previewProspect.fit_score.toFixed(1)}%</span>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm mt-1">Não calculado</p>
+                )}
               </div>
 
               {/* Dados Básicos */}

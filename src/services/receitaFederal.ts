@@ -1,5 +1,14 @@
 // ✅ Serviço para consultar Receita Federal SEM Edge Function
 // Funciona diretamente no frontend
+// ⚠️ ReceitaWS desabilitada temporariamente (CORS) - usando apenas BrasilAPI
+
+import { 
+  saveQualifiedEnrichment, 
+  classifyCnaeType, 
+  calculateDataQuality, 
+  calculateBasicFitScore, 
+  calculateGrade 
+} from './qualifiedEnrichment.service';
 
 interface ReceitaWSResponse {
   status: string;
@@ -29,7 +38,14 @@ interface ReceitaWSResponse {
   }>;
 }
 
-export async function consultarReceitaFederal(cnpj: string): Promise<{
+export async function consultarReceitaFederal(
+  cnpj: string,
+  options?: {
+    stockId?: string;
+    tenantId?: string;
+    saveEnrichment?: boolean;
+  }
+): Promise<{
   success: boolean;
   data?: ReceitaWSResponse;
   source?: 'receitaws' | 'brasilapi';
@@ -48,20 +64,10 @@ export async function consultarReceitaFederal(cnpj: string): Promise<{
   let receitaWSData: any = null;
   let brasilAPIData: any = null;
 
-  // Tentar ReceitaWS primeiro
-  try {
-    console.log('[ReceitaFederal] 🔍 1/2 Consultando ReceitaWS:', cnpjClean);
-    
-    const receitaUrl = `https://receitaws.com.br/v1/cnpj/${cnpjClean}`;
-    const response = await fetch(receitaUrl);
-    
-    if (response.ok) {
-      receitaWSData = await response.json();
-      console.log('[ReceitaFederal] ✅ ReceitaWS sucesso:', Object.keys(receitaWSData).length, 'campos');
-    }
-  } catch (error: any) {
-    console.log('[ReceitaFederal] ⚠️ ReceitaWS erro:', error.message);
-  }
+  // ✅ DESABILITADO: ReceitaWS causa CORS no frontend
+  // TODO: Mover para backend (Edge Function) no futuro
+  // Por enquanto, usar apenas BrasilAPI que não tem CORS
+  console.log('[ReceitaFederal] ⚠️ ReceitaWS desabilitada (CORS). Usando apenas BrasilAPI.');
 
   // SEMPRE buscar BrasilAPI também (para ter MAIS campos)
   try {
@@ -137,6 +143,36 @@ export async function consultarReceitaFederal(cnpj: string): Promise<{
     tem_qsa: !!merged.qsa?.length,
     tem_cnae: !!merged.atividade_principal?.length
   });
+
+  // ✅ PERSISTIR ENRIQUECIMENTO se solicitado
+  if (options?.saveEnrichment && options.stockId && options.tenantId) {
+    try {
+      const cnaePrincipal = merged.atividade_principal?.[0]?.code || merged.cnae_fiscal || null;
+      const cnaeTipo = classifyCnaeType(cnaePrincipal);
+      const dataQuality = calculateDataQuality(merged);
+      const fitScore = calculateBasicFitScore(merged);
+      const grade = calculateGrade(fitScore);
+
+      await saveQualifiedEnrichment({
+        stockId: options.stockId,
+        tenantId: options.tenantId,
+        cnpj: cnpjClean,
+        fantasia: merged.fantasia || merged.nome_fantasia || null,
+        cnae_principal: cnaePrincipal,
+        cnae_tipo: cnaeTipo,
+        data_quality: dataQuality,
+        fit_score: fitScore,
+        grade: grade,
+        origem: 'BrasilAPI', // ✅ ReceitaWS desabilitada (CORS)
+        raw: merged,
+      });
+
+      console.log('[ReceitaFederal] ✅ Enriquecimento persistido no banco');
+    } catch (enrichError: any) {
+      console.warn('[ReceitaFederal] ⚠️ Erro ao persistir enriquecimento (continuando):', enrichError);
+      // Não falhar o enriquecimento se a persistência falhar
+    }
+  }
 
   return {
     success: true,
