@@ -1085,6 +1085,26 @@ export default function QualifiedProspectsStock() {
           </p>
         </div>
         <div className="flex gap-2">
+          <ExplainabilityButton
+            title="Metodologia de Qualificação"
+            description="Entenda como as empresas são classificadas e qualificadas no sistema"
+            analysisType="Qualificação de Empresas"
+            dataSources={[
+              { name: "Receita Federal", description: "Dados cadastrais, CNAE, localização, porte" },
+              { name: "BrasilAPI", description: "Enriquecimento de dados públicos e complementares" },
+              { name: "ICP (Ideal Customer Profile)", description: "Perfil do cliente ideal configurado pelo usuário" }
+            ]}
+            criteria={[
+              { name: "Fit Score", description: "Pontuação de 0-100 baseada em 5 critérios ponderados: Setor (40%), Localização (30%), Dados completos (20%), Website (5%), Contato (5%)" },
+              { name: "Grade", description: "Classificação de A+ a D baseada no Fit Score: A+ (90-100), A (75-89), B (60-74), C (40-59), D (0-39)" },
+              { name: "Data Quality", description: "Avaliação da completude dos dados: COMPLETO (≥8 pontos), PARCIAL (5-7 pontos), RUIM (<5 pontos)" }
+            ]}
+            methodology="O Fit Score é calculado através de uma fórmula ponderada que avalia 5 dimensões principais da empresa em relação ao ICP configurado. Cada dimensão recebe um peso específico e o resultado final é uma pontuação de 0 a 100. A Grade é atribuída automaticamente baseada no Fit Score calculado. Empresas com Fit Score > 0 e data_quality_status = 'ok' são inseridas na tabela qualified_prospects."
+            interpretation="Use o Fit Score e Grade para priorizar empresas com maior potencial de conversão. Empresas com Grade A+ ou A devem ser priorizadas no processo de qualificação. O enriquecimento automático via BrasilAPI melhora a qualidade dos dados e aumenta o Fit Score."
+            buttonText="Ver Metodologia"
+            variant="outline"
+            size="default"
+          />
           <Button variant="outline" onClick={loadProspects} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
