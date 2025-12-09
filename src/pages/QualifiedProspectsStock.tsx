@@ -75,6 +75,8 @@ import {
 import { STCAgent } from '@/components/intelligence/STCAgent';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 import { QualifiedStockActionsMenu } from '@/components/qualification/QualifiedStockActionsMenu';
+import { ExplainabilityButton } from '@/components/common/ExplainabilityButton';
+import { Info } from 'lucide-react';
 
 interface QualifiedProspect {
   id: string;
