@@ -1383,25 +1383,131 @@ export default function QualifiedProspectsStock() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {/* ✅ Usar fit_score do enriquecimento ou do prospect */}
+                        {/* ✅ Usar fit_score do enriquecimento ou do prospect com tooltip explicativo */}
                         {(() => {
                           const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
+                          const matchBreakdown = prospect.match_breakdown;
+                          
                           if (fitScore != null && fitScore > 0) {
+                            // Calcular breakdown se disponível
+                            let breakdownText = '';
+                            if (matchBreakdown && Array.isArray(matchBreakdown)) {
+                              const breakdown = matchBreakdown.map((item: any) => 
+                                `${item.label}: ${item.score.toFixed(1)}% (peso ${item.weight}%)`
+                              ).join('\n');
+                              breakdownText = `Breakdown do Fit Score:\n${breakdown}\n\nTotal: ${fitScore.toFixed(1)}%`;
+                            } else {
+                              breakdownText = `Fit Score: ${fitScore.toFixed(1)}%\n\nCálculo baseado em:\n• Setor (40%): Match com ICP\n• Localização (30%): UF/Cidade\n• Dados completos (20%): Qualidade dos dados\n• Website (5%): Presença digital\n• Contato (5%): Email/Telefone`;
+                            }
+                            
                             return (
-                              <div className="flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                                <span className="font-medium">{fitScore.toFixed(1)}%</span>
-                              </div>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2 cursor-help group">
+                                      <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                      <span className="font-medium">{fitScore.toFixed(1)}%</span>
+                                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-sm p-4">
+                                    <div className="space-y-2">
+                                      <p className="font-semibold text-sm border-b pb-2">
+                                        Por que esta empresa tem Fit Score {fitScore.toFixed(1)}%?
+                                      </p>
+                                      <div className="text-xs space-y-1.5 whitespace-pre-line">
+                                        {breakdownText}
+                                      </div>
+                                      {prospect.enrichment?.data_quality && (
+                                        <div className="pt-2 border-t mt-2">
+                                          <p className="text-xs font-medium">Qualidade dos Dados: {prospect.enrichment.data_quality}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             );
                           }
-                          return <span className="text-muted-foreground text-sm">Não calculado</span>;
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-muted-foreground text-sm cursor-help">
+                                    Não calculado
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-xs">
+                                  <p className="text-sm">
+                                    O Fit Score será calculado quando você executar o Motor de Qualificação para esta empresa.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
                         })()}
                       </TableCell>
                       <TableCell>
-                        {/* ✅ Usar grade do enriquecimento ou do prospect */}
+                        {/* ✅ Usar grade do enriquecimento ou do prospect com tooltip explicativo */}
                         {(() => {
                           const grade = prospect.enrichment?.grade || prospect.grade;
-                          return grade ? getGradeBadge(grade) : <Badge variant="outline">-</Badge>;
+                          const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
+                          
+                          if (grade) {
+                            const gradeRanges: Record<string, string> = {
+                              'A+': '90-100%: Excelente fit com ICP. Prioridade máxima.',
+                              'A': '75-89%: Bom fit com ICP. Alta prioridade.',
+                              'B': '60-74%: Fit moderado. Considerar qualificação adicional.',
+                              'C': '40-59%: Fit baixo. Requer análise manual.',
+                              'D': '0-39%: Fit muito baixo. Não recomendado para abordagem imediata.'
+                            };
+                            
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="cursor-help inline-block">
+                                      {getGradeBadge(grade)}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-xs p-4">
+                                    <div className="space-y-2">
+                                      <p className="font-semibold text-sm border-b pb-2">
+                                        Grade {grade} - O que significa?
+                                      </p>
+                                      <div className="text-xs space-y-1.5">
+                                        <p>{gradeRanges[grade]}</p>
+                                        {fitScore != null && (
+                                          <p className="pt-2 border-t mt-2 text-muted-foreground">
+                                            Fit Score: {fitScore.toFixed(1)}%
+                                          </p>
+                                        )}
+                                        <p className="pt-2 border-t mt-2 font-medium">
+                                          A Grade é atribuída automaticamente baseada no Fit Score calculado.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          }
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="cursor-help">
+                                    -
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-xs">
+                                  <p className="text-sm">
+                                    A Grade será atribuída quando o Fit Score for calculado pelo Motor de Qualificação.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
                         })()}
                       </TableCell>
                       <TableCell>
