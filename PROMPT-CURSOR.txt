@@ -1,0 +1,60 @@
+OTIMIZAR DOCUMENTO MARKDOWN PARA LOVABLE.DEV
+
+CONTEXTO:
+- Arquivo: docs/EBOOK-STRATEVO-ONE-COMPLETO.md (1234 linhas, 12 seções)
+- Status: Será usado no Lovable.dev para criar apresentação
+- Objetivo: Otimizar para melhor apresentação visual no Lovable.dev sem perder conteúdo
+
+TAREFAS:
+
+1. ADICIONAR QUEBRAS ESTRATÉGICAS:
+   - Adicionar "---" (três hífens) antes de cada seção principal (#)
+   - Adicionar "---" antes de subseções importantes (##) especialmente:
+     * Antes de cada grupo de módulos (4.1, 4.2, 4.3, etc.)
+     * Antes de cada fluxo de trabalho (5.1, 5.2, 5.3)
+     * Antes de mapas mentais (9.1, 9.2, 9.3)
+   - Manter "---" existente após índice
+
+2. MELHORAR FORMATAÇÃO DE FLUXOS (Seção 5):
+   - Usar numeração clara: 1. 2. 3.
+   - Adicionar setas visuais: → ou ↓
+   - Destacar resultados com **negrito**
+   - Adicionar espaçamento entre passos
+
+3. OTIMIZAR MAPAS MENTAIS (Seção 9):
+   - Garantir que diagramas ASCII sejam legíveis
+   - Adicionar espaçamento adequado
+   - Manter emojis para visualização
+   - Se necessário, simplificar mantendo informação
+
+4. ADICIONAR ESPAÇAMENTO ESTRATÉGICO:
+   - Adicionar linha em branco antes de títulos principais
+   - Adicionar linha em branco após seções longas
+   - Garantir que listas tenham espaçamento adequado
+
+5. REVISAR DENSIDADE:
+   - Dividir parágrafos muito longos (>5 linhas)
+   - Converter texto corrido em listas quando apropriado
+   - Destacar informações-chave com **negrito**
+
+REGRAS CRÍTICAS:
+✅ MANTER todo conteúdo original
+✅ MANTER todas as rotas (/leads/qualification-engine, etc.)
+✅ MANTER todas as funcionalidades descritas
+✅ MANTER estrutura de 12 seções principais
+✅ NÃO remover nenhum módulo ou submódulo
+✅ NÃO alterar informações técnicas
+✅ NÃO simplificar demais (perder detalhes)
+
+RESULTADO:
+- Arquivo otimizado mantendo 100% do conteúdo
+- Melhor organização visual para slides
+- Quebras estratégicas facilitando navegação
+- Formatação melhorada para apresentação
+
+EXECUTAR:
+1. Ler: docs/EBOOK-STRATEVO-ONE-COMPLETO.md
+2. Aplicar todas as otimizações acima
+3. Salvar: docs/EBOOK-STRATEVO-ONE-COMPLETO.md (atualizar original)
+4. Validar: Confirmar que todas as 12 seções estão presentes e completas
+

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import type { MC8MatchAssessment, ICPReportRow } from '@/types/icp';
 
 export const ICP_QUARANTINE_QUERY_KEY = ['icp-quarantine'];
 
@@ -58,6 +59,49 @@ export function useSaveToQuarantine() {
   });
 }
 
+// MC8: Função auxiliar para buscar ICP Report por CNPJ e extrair mc8Assessment
+async function fetchMC8AssessmentForCNPJ(cnpj: string, tenantId: string): Promise<MC8MatchAssessment | undefined> {
+  if (!cnpj || !tenantId) return undefined;
+
+  try {
+    // Buscar ICP Reports do tenant
+    const { data: reports, error } = await supabase
+      .from('icp_reports')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'completed')
+      .order('generated_at', { ascending: false })
+      .limit(50); // Limitar para performance
+
+    if (error || !reports) return undefined;
+
+    // Procurar report que tenha o CNPJ no report_data
+    const cnpjClean = cnpj.replace(/\D/g, '');
+    
+    for (const report of reports as ICPReportRow[]) {
+      const reportData = report.report_data as any;
+      
+      // Verificar em diferentes lugares do report_data
+      const reportCNPJ = 
+        reportData?.icp_metadata?.cnpj ||
+        reportData?.onboarding_data?.step1_DadosBasicos?.cnpj;
+      
+      if (reportCNPJ) {
+        const reportCNPJClean = String(reportCNPJ).replace(/\D/g, '');
+        if (reportCNPJClean === cnpjClean) {
+          // Encontrou! Retornar mc8Assessment se existir
+          return reportData?.mc8Assessment as MC8MatchAssessment | undefined;
+        }
+      }
+    }
+
+    return undefined;
+  } catch (error) {
+    console.error('[MC8] Erro ao buscar assessment:', error);
+    return undefined;
+  }
+}
+
 // Hook para buscar empresas na quarentena
 export function useQuarantineCompanies(filters?: {
   status?: string;
@@ -67,6 +111,38 @@ export function useQuarantineCompanies(filters?: {
   return useQuery({
     queryKey: [...ICP_QUARANTINE_QUERY_KEY, filters],
     queryFn: async () => {
+      // MC8: Obter tenantId do contexto
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        let query = supabase
+          .from('icp_analysis_results')
+          .select('*')
+          .order('icp_score', { ascending: false });
+
+        if (filters?.status) {
+          query = query.eq('status', filters.status);
+        }
+        if (filters?.temperatura) {
+          query = query.eq('temperatura', filters.temperatura);
+        }
+        if (filters?.minScore) {
+          query = query.gte('icp_score', filters.minScore);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+      }
+
+      // Buscar tenant_id do usuário
+      const { data: userData } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      const tenantId = userData?.tenant_id;
+
       let query = supabase
         .from('icp_analysis_results')
         .select('*')
@@ -85,13 +161,70 @@ export function useQuarantineCompanies(filters?: {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Retornar dados diretamente (sem JOIN com companies)
+      // MC8: Enriquecer com mc8Assessment para cada empresa
+      if (tenantId && data && data.length > 0) {
+        const enrichedData = await Promise.all(
+          data.map(async (item: any) => {
+            // Buscar mc8Assessment se houver CNPJ
+            if (item.cnpj) {
+              const mc8Assessment = await fetchMC8AssessmentForCNPJ(item.cnpj, tenantId);
+              return {
+                ...item,
+                mc8Assessment,
+                // MC8: Tentar encontrar icpReportId (buscar o report mais recente com esse CNPJ)
+                icpReportId: mc8Assessment ? await findICPReportIdByCNPJ(item.cnpj, tenantId) : undefined,
+              };
+            }
+            return item;
+          })
+        );
+        return enrichedData;
+      }
+
       return data || [];
     },
     staleTime: 5 * 1000,
     refetchInterval: 10 * 1000,
     refetchOnWindowFocus: true,
   });
+}
+
+// MC8: Função auxiliar para encontrar icpReportId por CNPJ
+async function findICPReportIdByCNPJ(cnpj: string, tenantId: string): Promise<string | undefined> {
+  if (!cnpj || !tenantId) return undefined;
+
+  try {
+    const { data: reports } = await supabase
+      .from('icp_reports')
+      .select('id, report_data')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'completed')
+      .order('generated_at', { ascending: false })
+      .limit(50);
+
+    if (!reports) return undefined;
+
+    const cnpjClean = cnpj.replace(/\D/g, '');
+    
+    for (const report of reports as ICPReportRow[]) {
+      const reportData = report.report_data as any;
+      const reportCNPJ = 
+        reportData?.icp_metadata?.cnpj ||
+        reportData?.onboarding_data?.step1_DadosBasicos?.cnpj;
+      
+      if (reportCNPJ) {
+        const reportCNPJClean = String(reportCNPJ).replace(/\D/g, '');
+        if (reportCNPJClean === cnpjClean) {
+          return report.id;
+        }
+      }
+    }
+
+    return undefined;
+  } catch (error) {
+    console.error('[MC8] Erro ao buscar icpReportId:', error);
+    return undefined;
+  }
 }
 
 // Hook para aprovar empresas em batch

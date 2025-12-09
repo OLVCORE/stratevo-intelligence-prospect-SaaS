@@ -60,6 +60,9 @@ const CreateNewICP = lazy(() => import("./pages/CentralICP/CreateNewICP"));
 const ICPDetail = lazy(() => import("./pages/CentralICP/ICPDetail"));
 const ICPProfileView = lazy(() => import("./pages/CentralICP/ICPProfileView"));
 const ICPReports = lazy(() => import("./pages/CentralICP/ICPReports"));
+const CentralICPReportsRedirect = lazy(() => import("./pages/CentralICP/CentralICPReportsRedirect"));
+const ActiveICPProfile = lazy(() => import("./pages/CentralICP/ActiveICPProfile"));
+const ICPLibrary = lazy(() => import("./pages/CentralICP/ICPLibrary"));
 const ResultsDashboard = lazy(() => import("./pages/CentralICP/ResultsDashboard"));
 const StrategicPlanPage = lazy(() => import("./pages/CentralICP/StrategicPlanPage"));
 const QualificationDashboard = lazy(() => import("./pages/QualificationDashboard"));
@@ -118,6 +121,20 @@ const EmailSequencesPage = lazy(() => import("./pages/EmailSequencesPage"));
 const SmartTasksPage = lazy(() => import("./pages/SmartTasksPage"));
 const SalesCoachingDashboard = lazy(() => import("./pages/SalesCoachingDashboard"));
 const CSVUploadWithMapping = lazy(() => import("./components/leads/CSVUploadWithMapping"));
+const ProspectingImport = lazy(() => import("./pages/Leads/ProspectingImport"));
+const QualifiedProspectsStock = lazy(() => import("./pages/QualifiedProspectsStock"));
+const QualificationEnginePage = lazy(() => import("./pages/QualificationEnginePage"));
+const SequencesPage = lazy(() => import("./pages/SequencesPage"));
+const SimilarCompaniesPage = lazy(() => import("./pages/Expansion/SimilarCompaniesPage"));
+// Guide Pages
+const GuideHome = lazy(() => import("./pages/Guide/GuideHome"));
+const IntroSection = lazy(() => import("./pages/Guide/sections/IntroSection"));
+const TenantIcpSection = lazy(() => import("./pages/Guide/sections/TenantIcpSection"));
+const ImportQualificacaoSection = lazy(() => import("./pages/Guide/sections/ImportQualificacaoSection"));
+const EstoqueQuarentenaSection = lazy(() => import("./pages/Guide/sections/EstoqueQuarentenaSection"));
+const CrmSequenciasSection = lazy(() => import("./pages/Guide/sections/CrmSequenciasSection"));
+const RelatoriosSection = lazy(() => import("./pages/Guide/sections/RelatoriosSection"));
+const AtalhosFaqSection = lazy(() => import("./pages/Guide/sections/AtalhosFaqSection"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Error500 = lazy(() => import("./pages/Error500"));
 const OfflinePage = lazy(() => import("./pages/OfflinePage"));
@@ -704,11 +721,41 @@ const App = () => (
               }
             />
             <Route
+              path="/central-icp/active"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ActiveICPProfile />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/library"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ICPLibrary />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/central-icp/view/:icpId"
               element={
                 <ProtectedRoute>
                   <AppLayout>
                     <ICPProfileView />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-icp/reports"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CentralICPReportsRedirect />
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -901,6 +948,137 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <CSVUploadWithMapping />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/leads/prospecting-import"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Navigate to="/leads/qualification-engine" replace />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/leads/qualified-stock"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <QualifiedProspectsStock />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/leads/qualification-engine"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <QualificationEnginePage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/sequences"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <SequencesPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            {/* Guide Routes */}
+            <Route
+              path="/guide"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <GuideHome />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/introducao"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <IntroSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/tenant-icp"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <TenantIcpSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/importacao-qualificacao"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ImportQualificacaoSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/estoque-quarentena"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <EstoqueQuarentenaSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/crm-sequencias"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CrmSequenciasSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/relatorios"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <RelatoriosSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/atalhos-faq"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <AtalhosFaqSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/expansao/empresas-similares"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <SimilarCompaniesPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

@@ -137,7 +137,6 @@ function extractEventType(text: string): string | null {
     'festa': 'festa',
     'festa de 15 anos': 'festa_15_anos',
     '15 anos': 'festa_15_anos',
-    'bodas': 'bodas',
   };
 
   for (const [key, value] of Object.entries(eventTypes)) {

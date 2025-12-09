@@ -25,7 +25,7 @@ export default function PlansPage() {
           </h1>
           <p className="text-xl text-white/70 max-w-3xl mx-auto">
             Compare e escolha o plano ideal para o seu negócio. 
-            A STRATEVO Intelligence é a plataforma de dados ideal para seu time de vendas encontrar os melhores mercados e prospectar as empresas certas.
+            O STRATEVO One é a plataforma de dados ideal para seu time de vendas encontrar os melhores mercados e prospectar as empresas certas.
           </p>
         </div>
 

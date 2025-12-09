@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { useUserRole } from '@/hooks/useUserRole';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -137,6 +138,122 @@ function KPICard({
   );
 }
 
+/**
+ * 🔥 MAPEAMENTO DE ROLES DO BANCO → MARCADORES DO MARKDOWN
+ * 
+ * Roles do banco (app_role enum):
+ * - 'sdr' → [SDR]
+ * - 'vendedor' ou 'sales' → [CLOSER]
+ * - 'gerencia' ou 'gestor' → [GERENTE]
+ * - 'direcao' → [DIRETOR_CEO]
+ * - 'admin' → VÊ TUDO (sem filtro)
+ * - 'viewer' → VÊ TUDO (somente leitura)
+ */
+function mapRoleToMarkdownMarker(role: string): string[] {
+  const roleLower = role.toLowerCase();
+  
+  // Admin e viewer veem tudo
+  if (roleLower === 'admin' || roleLower === 'viewer') {
+    return ['SDR', 'CLOSER', 'GERENTE', 'DIRETOR_CEO']; // Todos os marcadores
+  }
+  
+  // Mapeamento específico
+  if (roleLower === 'sdr') return ['SDR'];
+  if (roleLower === 'vendedor' || roleLower === 'sales') return ['CLOSER'];
+  if (roleLower === 'gerencia' || roleLower === 'gestor') return ['GERENTE'];
+  if (roleLower === 'direcao' || roleLower === 'diretor' || roleLower === 'ceo') return ['DIRETOR_CEO'];
+  
+  // Default: se não mapear, vê tudo (compatibilidade)
+  return ['SDR', 'CLOSER', 'GERENTE', 'DIRETOR_CEO'];
+}
+
+/**
+ * 🔥 FILTRAR MARKDOWN POR ROLE
+ * Remove seções que não são do role do usuário
+ */
+function filterMarkdownByRole(content: string, userRoles: string[]): string {
+  // Se não tem roles ou é admin/viewer, retorna tudo
+  if (!userRoles || userRoles.length === 0) {
+    return content; // Sem role = vê tudo (developer mode)
+  }
+  
+  // Verificar se é admin ou viewer
+  const isAdmin = userRoles.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'viewer');
+  if (isAdmin) {
+    return content; // Admin/viewer vê tudo
+  }
+  
+  // Obter marcadores permitidos para os roles do usuário
+  const allowedMarkers = new Set<string>();
+  userRoles.forEach(role => {
+    const markers = mapRoleToMarkdownMarker(role);
+    markers.forEach(m => allowedMarkers.add(m));
+  });
+  
+  // Se não tem marcadores permitidos, retorna tudo (fallback)
+  if (allowedMarkers.size === 0) {
+    return content;
+  }
+  
+  // Dividir conteúdo por linhas
+  const lines = content.split('\n');
+  const filteredLines: string[] = [];
+  let inRoleSection = false;
+  let currentRole: string | null = null;
+  let buffer: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Verificar se é início de seção de role: ## [SDR], ## [CLOSER], etc.
+    const roleMatch = line.match(/^##+\s*\[(SDR|CLOSER|GERENTE|DIRETOR_CEO)\]/i);
+    
+    if (roleMatch) {
+      // Processar buffer anterior se houver
+      if (inRoleSection && currentRole && allowedMarkers.has(currentRole)) {
+        filteredLines.push(...buffer);
+      }
+      
+      // Nova seção de role
+      currentRole = roleMatch[1].toUpperCase();
+      inRoleSection = true;
+      buffer = [line]; // Incluir a linha do título
+      
+      // Verificar se esta seção deve ser mostrada
+      if (!allowedMarkers.has(currentRole)) {
+        inRoleSection = false; // Não mostrar esta seção
+        buffer = [];
+      }
+    } else if (inRoleSection) {
+      // Verificar se é fim da seção (próximo ## sem [ROLE] ou fim do arquivo)
+      const nextSectionMatch = line.match(/^##+\s+/);
+      if (nextSectionMatch && !line.match(/\[(SDR|CLOSER|GERENTE|DIRETOR_CEO)\]/i)) {
+        // Fim da seção de role, próxima seção genérica
+        if (currentRole && allowedMarkers.has(currentRole)) {
+          filteredLines.push(...buffer);
+        }
+        inRoleSection = false;
+        currentRole = null;
+        buffer = [];
+        filteredLines.push(line); // Incluir a próxima seção genérica
+      } else {
+        // Continuar na seção atual
+        buffer.push(line);
+      }
+    } else {
+      // Linha fora de seção de role (conteúdo geral) - sempre incluir
+      filteredLines.push(line);
+    }
+  }
+  
+  // Processar último buffer se houver
+  if (inRoleSection && currentRole && allowedMarkers.has(currentRole)) {
+    filteredLines.push(...buffer);
+  }
+  
+  return filteredLines.join('\n');
+}
+
 // Parser para identificar seções do relatório
 function parseReportSections(content: string) {
   const sections: { type: string; title: string; content: string }[] = [];
@@ -211,8 +328,16 @@ function getSectionMeta(title: string): { variant: 'default' | 'success' | 'warn
 }
 
 export default function StrategicReportRenderer({ content, type, className }: StrategicReportRendererProps) {
+  // 🔥 OBTER ROLE DO USUÁRIO
+  const { roles: userRoles, isLoading: isLoadingRole } = useUserRole();
+  
+  // 🔥 FILTRAR CONTEÚDO POR ROLE (se não for admin/viewer)
+  const filteredContent = isLoadingRole 
+    ? content // Enquanto carrega role, mostra tudo
+    : filterMarkdownByRole(content, userRoles);
+  
   // Parsear seções para determinar quantas existem
-  const sections = parseReportSections(content);
+  const sections = parseReportSections(filteredContent);
   const collapsibleSections = sections.filter(s => s.type !== 'h1');
   
   // Estado para controlar abertura/fechamento de cada seção
@@ -254,10 +379,15 @@ export default function StrategicReportRenderer({ content, type, className }: St
   };
 
   // Se o conteúdo for muito curto ou vazio
-  if (!content || content.trim().length < 50) {
+  if (!filteredContent || filteredContent.trim().length < 50) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         <p>Conteúdo do relatório não disponível ou ainda não foi gerado.</p>
+        {userRoles.length > 0 && !isLoadingRole && (
+          <p className="text-xs mt-2 text-muted-foreground/70">
+            Role atual: {userRoles.join(', ')} | Conteúdo filtrado por role
+          </p>
+        )}
       </div>
     );
   }
@@ -394,6 +524,11 @@ export default function StrategicReportRenderer({ content, type, className }: St
         <p className="text-sm text-muted-foreground">
           📊 Relatório gerado por STRATEVO Intelligence • Análise de CEO/Estrategista de Mercado
         </p>
+        {userRoles.length > 0 && !isLoadingRole && (
+          <p className="text-xs mt-2 text-muted-foreground/50">
+            Visualização filtrada por role: {userRoles.join(', ')}
+          </p>
+        )}
       </div>
     </div>
   );

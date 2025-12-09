@@ -252,116 +252,45 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
         decisionReason = 'Tenant não identificado';
       }
 
-      // ✅ Garantir que fit_score e grade sejam válidos (campos obrigatórios)
-      const finalFitScore = Number(fitScore) || 0;
-      const finalGrade = (grade && ['A+', 'A', 'B', 'C', 'D'].includes(grade)) ? grade : 'D';
-
-      // ✅ Preparar payload para inserção
-      const insertPayload: any = {
-        tenant_id: tenantId,
-        cnpj: normalizedCnpj,
-        razao_social: previewData.razao_social || 'Empresa Sem Nome',
-        // ✅ Campos obrigatórios
-        fit_score: finalFitScore,
-        grade: finalGrade,
-        pipeline_status: 'new',
-      };
-
-      // ✅ Campos opcionais (adicionar apenas se tiverem valores)
-      if (previewData.nome_fantasia) {
-        insertPayload.nome_fantasia = previewData.nome_fantasia;
-      }
-      if (previewData.municipio) {
-        insertPayload.cidade = previewData.municipio;
-      }
-      if (previewData.uf) {
-        insertPayload.estado = previewData.uf;
-      }
-      if (previewData.cep) {
-        insertPayload.cep = previewData.cep;
-      }
-      if (previewData.cnae_descricao) {
-        insertPayload.setor = previewData.cnae_descricao;
-        insertPayload.cnae_descricao = previewData.cnae_descricao;
-      }
-      if (previewData.cnae_principal) {
-        insertPayload.cnae_principal = previewData.cnae_principal;
-      }
-      if (previewData.situacao) {
-        insertPayload.situacao_cnpj = previewData.situacao;
-      }
-      if (previewData.porte) {
-        insertPayload.porte = previewData.porte;
-      }
-      if (previewData.capital_social) {
-        const capitalValue = parseFloat(String(previewData.capital_social).replace(/[^\d,.-]/g, '').replace(',', '.'));
-        if (!isNaN(capitalValue)) {
-          insertPayload.capital_social = capitalValue;
-        }
-      }
-      if (previewData.website) {
-        insertPayload.website = previewData.website;
-      }
-      if (previewData.data_abertura) {
-        insertPayload.data_abertura = previewData.data_abertura;
-      }
-      if (bestIcpId) {
-        insertPayload.icp_id = bestIcpId;
-      }
-      // ✅ Sempre definir source_name para busca individual
-      insertPayload.source_name = 'Motor de Qualificação - Busca Individual';
-
-      // ✅ Salvar dados de enriquecimento em enrichment_data (dados brutos da Receita Federal)
-      if (previewData.raw_data) {
-        insertPayload.enrichment_data = previewData.raw_data;
-      }
-
-      // ✅ Salvar análise de qualificação em ai_analysis
-      const aiAnalysis: any = {
-        icp_score: icpScore,
-        temperatura: temperatura,
-        qualification_source: 'inline_search',
-        qualified_at: new Date().toISOString(),
-        decision: decision,
-        decision_reason: decisionReason,
-      };
-      
-      if (bestIcpName) {
-        aiAnalysis.best_icp_name = bestIcpName;
-      }
-      if (qualificationBreakdown) {
-        aiAnalysis.qualification_breakdown = qualificationBreakdown;
-      }
-      
-      insertPayload.ai_analysis = aiAnalysis;
-
-      // ✅ Log detalhado antes de inserir
-      console.log('[InlineSearch] 📦 Payload para qualified_prospects:', {
-        tenant_id: insertPayload.tenant_id,
-        cnpj: insertPayload.cnpj,
-        razao_social: insertPayload.razao_social,
-        fit_score: insertPayload.fit_score,
-        grade: insertPayload.grade,
-        pipeline_status: insertPayload.pipeline_status,
-        has_icp_id: !!insertPayload.icp_id,
-        payload_keys: Object.keys(insertPayload),
-      });
-
       // ✅ SALVAR EM qualified_prospects (não em companies) - Fluxo correto
       const { error } = await ((supabase as any).from('qualified_prospects'))
-        .insert(insertPayload);
-
-      if (error) {
-        console.error('[InlineSearch] ❌ Erro detalhado ao inserir:', {
-          error,
-          error_code: error.code,
-          error_message: error.message,
-          error_details: error.details,
-          error_hint: error.hint,
-          payload: insertPayload,
+        .insert({
+          tenant_id: tenantId,
+          cnpj: normalizedCnpj,
+          razao_social: previewData.razao_social || 'Empresa Sem Nome',
+          nome_fantasia: previewData.nome_fantasia,
+          cidade: previewData.municipio,
+          estado: previewData.uf,
+          cep: previewData.cep,
+          setor: previewData.cnae_descricao,
+          cnae_principal: previewData.cnae_principal,
+          cnae_descricao: previewData.cnae_descricao,
+          situacao_cnpj: previewData.situacao,
+          porte: previewData.porte,
+          capital_social: previewData.capital_social ? parseFloat(String(previewData.capital_social).replace(/[^\d,.-]/g, '').replace(',', '.')) : null,
+          website: previewData.website,
+          data_abertura: previewData.data_abertura,
+          // ✅ Dados de qualificação (campos obrigatórios)
+          icp_id: bestIcpId,
+          fit_score: fitScore,
+          grade: grade,
+          pipeline_status: 'new', // ✅ Status 'new' para aparecer no estoque
+          source_name: 'Motor de Qualificação - Busca Individual',
+          // ✅ Salvar breakdown e dados adicionais em raw_data
+          raw_data: {
+            ...previewData.raw_data,
+            icp_score: icpScore,
+            temperatura: temperatura,
+            qualification_breakdown: qualificationBreakdown,
+            qualification_source: 'inline_search',
+            qualified_at: new Date().toISOString(),
+            decision: decision,
+            decision_reason: decisionReason,
+            best_icp_name: bestIcpName,
+          }
         });
-        throw error;
-      }
+
+      if (error) throw error;
 
       // Toast com resultado real da qualificação
       const tempEmoji = temperatura === 'hot' ? '🔥' : temperatura === 'warm' ? '🌡️' : '❄️';

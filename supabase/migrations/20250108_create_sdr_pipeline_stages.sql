@@ -12,14 +12,15 @@ CREATE TABLE IF NOT EXISTS sdr_pipeline_stages (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Insert default stages
+-- Insert default stages (com ON CONFLICT para evitar duplicatas)
 INSERT INTO sdr_pipeline_stages (name, key, order_index, color, probability_default, is_closed, is_won) VALUES
   ('Discovery', 'discovery', 1, '#3b82f6', 10, FALSE, FALSE),
   ('Qualification', 'qualification', 2, '#8b5cf6', 30, FALSE, FALSE),
   ('Proposal', 'proposal', 3, '#f59e0b', 50, FALSE, FALSE),
   ('Negotiation', 'negotiation', 4, '#10b981', 70, FALSE, FALSE),
   ('Closed Won', 'won', 5, '#22c55e', 100, TRUE, TRUE),
-  ('Closed Lost', 'lost', 6, '#ef4444', 0, TRUE, FALSE);
+  ('Closed Lost', 'lost', 6, '#ef4444', 0, TRUE, FALSE)
+ON CONFLICT (key) DO NOTHING;
 
 -- Create index
 CREATE INDEX IF NOT EXISTS idx_sdr_pipeline_stages_order ON sdr_pipeline_stages(order_index);

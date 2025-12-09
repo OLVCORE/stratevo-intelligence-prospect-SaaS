@@ -38,7 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp, TrendingUp, HelpCircle } from 'lucide-react';
 import { TableSkeleton } from '@/components/ui/skeletons';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -83,6 +83,9 @@ export default function CompaniesManagementPage() {
   const [filterRegion, setFilterRegion] = useState<string[]>([]);
   const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
   const [filterEnrichment, setFilterEnrichment] = useState<string[]>([]); // ✅ NOVO: Filtro por enriquecimento
+  const [filterICP, setFilterICP] = useState<string[]>([]);
+  const [filterFitScore, setFilterFitScore] = useState<string[]>([]);
+  const [filterGrade, setFilterGrade] = useState<string[]>([]);
   
   // 🔥 DEBOUNCE: Só busca após 500ms de inatividade
   useEffect(() => {
@@ -200,8 +203,40 @@ export default function CompaniesManagementPage() {
       });
     }
     
+    // ✅ Filtro por ICP
+    if (filterICP.length > 0) {
+      filtered = filtered.filter(c => {
+        const rawData = (c as any).raw_data || {};
+        const icpName = rawData.best_icp_name || rawData.icp_name || 'Sem ICP';
+        return filterICP.includes(icpName);
+      });
+    }
+    
+    // ✅ Filtro por Fit Score
+    if (filterFitScore.length > 0) {
+      filtered = filtered.filter(c => {
+        const rawData = (c as any).raw_data || {};
+        const fitScore = rawData.fit_score ?? (c as any).fit_score ?? (c as any).icp_score ?? 0;
+        if (fitScore >= 90) return filterFitScore.includes('90-100');
+        if (fitScore >= 75) return filterFitScore.includes('75-89');
+        if (fitScore >= 60) return filterFitScore.includes('60-74');
+        if (fitScore >= 40) return filterFitScore.includes('40-59');
+        return filterFitScore.includes('0-39');
+      });
+    }
+    
+    // ✅ Filtro por Grade
+    if (filterGrade.length > 0) {
+      filtered = filtered.filter(c => {
+        const rawData = (c as any).raw_data || {};
+        const grade = rawData.grade || (c as any).grade || null;
+        if (!grade || grade === '-' || grade === 'null') return filterGrade.includes('Sem Grade');
+        return filterGrade.includes(grade);
+      });
+    }
+    
     return filtered;
-  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion, filterAnalysisStatus, filterEnrichment]);
+  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion, filterAnalysisStatus, filterEnrichment, filterICP, filterFitScore, filterGrade]);
   
   // 🔢 ALIASES PARA COMPATIBILIDADE COM QUARENTENA
   const filteredCompanies = companies;
@@ -1892,32 +1927,36 @@ export default function CompaniesManagementPage() {
                         onFilterChange={setFilterRegion}
                       />
                      </TableHead>
-                     <TableHead>Score ICP</TableHead>
                      <TableHead>
                       <ColumnFilter
-                        column="analysis_status"
-                        title="Status Análise"
-                        values={allCompanies.map(c => {
+                        column="icp"
+                        title="ICP"
+                        values={[...new Set(allCompanies.map(c => {
                           const rawData = (c as any).raw_data || {};
-                          const hasReceitaWS = !!(rawData.receita_federal || rawData.cnpj);
-                          const hasDecisionMakers = ((c as any).decision_makers_count || 0) > 0;
-                          const hasDigitalPresence = !!(rawData.digital_intelligence);
-                          const hasLegalData = !!(rawData.totvs_report);
-                          
-                          const checks = [hasReceitaWS, hasDecisionMakers, hasDigitalPresence, hasLegalData];
-                          const percentage = Math.round((checks.filter(Boolean).length / checks.length) * 100);
-                          
-                          if (percentage > 75) return '76-100%';
-                          if (percentage > 50) return '51-75%';
-                          if (percentage > 25) return '26-50%';
-                          return '0-25%';
-                        })}
-                        selectedValues={filterAnalysisStatus}
-                        onFilterChange={setFilterAnalysisStatus}
+                          return rawData.best_icp_name || rawData.icp_name || 'Sem ICP';
+                        }).filter(Boolean))]}
+                        selectedValues={filterICP}
+                        onFilterChange={setFilterICP}
                       />
                      </TableHead>
-                     <TableHead>TOTVS Check</TableHead>
-                     <TableHead>Website</TableHead>
+                     <TableHead>
+                      <ColumnFilter
+                        column="fit_score"
+                        title="Fit Score"
+                        values={['90-100', '75-89', '60-74', '40-59', '0-39']}
+                        selectedValues={filterFitScore}
+                        onFilterChange={setFilterFitScore}
+                      />
+                     </TableHead>
+                     <TableHead>
+                      <ColumnFilter
+                        column="grade"
+                        title="Grade"
+                        values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
+                        selectedValues={filterGrade}
+                        onFilterChange={setFilterGrade}
+                      />
+                     </TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2105,63 +2144,102 @@ export default function CompaniesManagementPage() {
                             <span className="text-xs text-muted-foreground">N/A</span>
                           )}
                         </TableCell>
+                       {/* ✅ COLUNA ICP */}
                        <TableCell>
-                          {/* ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA */}
-                          <QuarantineEnrichmentStatusBadge 
-                            rawAnalysis={(company as any).raw_data || {}}
-                            totvsStatus={company.totvs_status}
-                            showProgress={true}
-                          />
-                        </TableCell>
+                         {(() => {
+                           const rawData = (company as any).raw_data || {};
+                           // ✅ LER icp_id de raw_data (onde foi salvo durante a migração)
+                           const icpId = rawData.icp_id || (company as any).icp_id;
+                           const icpName = rawData.best_icp_name || rawData.icp_name;
+                           
+                           // Se tiver icp_id mas não tiver nome, buscar do metadata
+                           if (icpId && !icpName) {
+                             // Tentar buscar do contexto ou usar fallback
+                             return (
+                               <Badge variant="outline" className="text-xs">
+                                 ICP Principal
+                               </Badge>
+                             );
+                           }
+                           
+                           if (icpName) {
+                             return (
+                               <Badge variant="outline" className="text-xs">
+                                 {icpName}
+                               </Badge>
+                             );
+                           }
+                           
+                           return <span className="text-xs text-muted-foreground">N/A</span>;
+                         })()}
+                       </TableCell>
+                       {/* ✅ COLUNA FIT SCORE */}
                        <TableCell>
-                       <Badge variant="secondary">
-                         Verificar
-                       </Badge>
-                     </TableCell>
-                        <TableCell>
-                          {editingWebsiteId === company.id ? (
-                            <div className="flex items-center gap-2 max-w-[180px]">
-                              <Input
-                                value={websiteInput}
-                                onChange={(e) => setWebsiteInput(e.target.value)}
-                                placeholder="empresa.com.br"
-                                className="h-8 text-xs"
-                              />
-                              <Button size="sm" variant="secondary" className="h-8 px-2"
-                                onClick={() => saveWebsite(company.id, websiteInput)}
-                              >Salvar</Button>
-                              <Button size="sm" variant="ghost" className="h-8 px-2"
-                                onClick={() => { setEditingWebsiteId(null); setWebsiteInput(''); }}
-                              >Cancelar</Button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 max-w-[180px]">
-                              {(() => {
-                                const domain = sanitizeDomain(company.website || company.domain || null);
-                                return domain ? (
-                                  <a
-                                    href={`https://${domain}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-primary hover:underline inline-flex items-center gap-1 truncate"
-                                    onClick={(e) => e.stopPropagation()}
-                                    title={domain}
-                                  >
-                                    {domain}
-                                    <Globe className="h-3 w-3 flex-shrink-0" />
-                                  </a>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">N/A</span>
-                                );
-                              })()}
-                              <Button size="sm" variant="ghost" className="h-7 px-2"
-                                onClick={() => { 
-                                  setEditingWebsiteId(company.id); 
-                                  setWebsiteInput(sanitizeDomain(company.website || company.domain || null) || ''); 
-                                }}
-                              >Editar</Button>
-                            </div>
-                          )}
+                         {(() => {
+                           const rawData = (company as any).raw_data || {};
+                           // ✅ LER fit_score de raw_data (onde foi salvo durante a migração)
+                           const fitScore = rawData.fit_score ?? (company as any).fit_score ?? (company as any).icp_score ?? 0;
+                           
+                           if (fitScore != null && fitScore > 0) {
+                             return (
+                               <TooltipProvider>
+                                 <Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <div className="flex items-center gap-2 cursor-help group">
+                                       <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                       <span className="font-medium">{fitScore.toFixed(1)}%</span>
+                                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                     </div>
+                                   </TooltipTrigger>
+                                   <TooltipContent side="left" className="max-w-sm p-4">
+                                     <div className="space-y-2">
+                                       <p className="font-semibold text-sm border-b pb-2">
+                                         Fit Score: {fitScore.toFixed(1)}%
+                                       </p>
+                                       <div className="text-xs space-y-1.5">
+                                         <p>Cálculo baseado em:</p>
+                                         <ul className="list-disc list-inside space-y-1">
+                                           <li>Setor (40%): Match com ICP</li>
+                                           <li>Localização (30%): UF/Cidade</li>
+                                           <li>Dados completos (20%): Qualidade dos dados</li>
+                                           <li>Website (5%): Presença digital</li>
+                                           <li>Contato (5%): Email/Telefone</li>
+                                         </ul>
+                                       </div>
+                                     </div>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               </TooltipProvider>
+                             );
+                           }
+                           return <span className="text-xs text-muted-foreground">N/A</span>;
+                         })()}
+                       </TableCell>
+                       {/* ✅ COLUNA GRADE */}
+                       <TableCell>
+                         {(() => {
+                           const rawData = (company as any).raw_data || {};
+                           // ✅ LER grade de raw_data (onde foi salvo durante a migração)
+                           const grade = rawData.grade || (company as any).grade;
+                           
+                           if (!grade || grade === '-' || grade === 'null') {
+                             return <Badge variant="outline">-</Badge>;
+                           }
+                           
+                           const colors: Record<string, string> = {
+                             'A+': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+                             'A': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+                             'B': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+                             'C': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+                             'D': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+                           };
+                           
+                           return (
+                             <Badge className={colors[grade] || 'bg-gray-100 text-gray-800'}>
+                               {grade}
+                             </Badge>
+                           );
+                         })()}
                        </TableCell>
                        <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">

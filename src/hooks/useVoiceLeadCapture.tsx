@@ -13,6 +13,17 @@ import {
   hasEssentialData,
   type ExtractedLeadData,
 } from '@/utils/localLeadExtractor';
+// MC2: Novo extrator B2B (STRATEVO One)
+import {
+  extractLeadDataB2B,
+  type LeadB2B,
+  type TenantLeadContext,
+} from '@/utils/stratevoLeadExtractor';
+import {
+  mergeLeadB2B,
+  hasNewB2BData,
+  hasEssentialB2BData,
+} from '@/utils/leadMergeEngine';
 
 interface UseVoiceLeadCaptureOptions {
   sessionId?: string;
@@ -55,14 +66,64 @@ export function useVoiceLeadCapture(options: UseVoiceLeadCaptureOptions = {}) {
           }
         : {};
 
-      // 2. Extração LOCAL (backup - imediata)
+      // 2. Extração LOCAL (backup - imediata) - LEGADO (eventos)
       const localData = extractLeadDataLocally(transcript);
+      console.log('MC2[data]: Extração local legado concluída');
 
-      // 3. MERGE (agent primeiro, local como fallback)
+      // 2.1. Extração LOCAL B2B (backup - imediata) - MC2/MC3 (STRATEVO One)
+      // MC3: Criar contexto do tenant para extração neutra
+      const tenantLeadContext: TenantLeadContext | undefined = tenant
+        ? {
+            tenantId: tenant.id,
+            tenantName: tenant.nome,
+            // MC3: Por enquanto arrays vazios - será preenchido quando tenant tiver portfólio cadastrado
+            // Futuramente pode vir de tenant.portfolio, tenant.products, etc.
+            solutionKeywords: [], // TODO: Buscar do tenant quando disponível
+            vendorKeywords: [], // TODO: Buscar do tenant quando disponível
+            interestKeywords: [], // TODO: Buscar do tenant quando disponível
+          }
+        : undefined;
+
+      const localDataB2B = extractLeadDataB2B(transcript, tenantLeadContext);
+      console.log('MC2[data]: Extração local B2B concluída', {
+        hasTenantContext: !!tenantLeadContext,
+        tenantId: tenantLeadContext?.tenantId,
+      });
+
+      // 3. MERGE (agent primeiro, local como fallback) - LEGADO
       const merged = mergeLeadData(agentData, localData);
 
-      // 4. UPDATE com validação e debounce
+      // 3.1. MERGE B2B (agent primeiro, local B2B como fallback) - MC2
+      // Normalizar agentEntities para formato B2B se disponível
+      const agentDataB2B: Partial<LeadB2B> = agentEntities
+        ? {
+            companyName: agentEntities.empresa || agentEntities.company_name || null,
+            cnpj: agentEntities.cnpj || null,
+            contactName: agentEntities.nome || agentEntities.name || null,
+            contactEmail: agentEntities.email || null,
+            contactPhone: agentEntities.telefone || agentEntities.phone || null,
+            contactTitle: agentEntities.cargo || agentEntities.title || null,
+            totvsProducts: agentEntities.produtos_totvs || agentEntities.totvs_products || [],
+            olvSolutions: agentEntities.solucoes_olv || agentEntities.olv_solutions || [],
+            source: 'ai',
+          }
+        : {};
+
+      const mergedB2B = mergeLeadB2B(agentDataB2B, localDataB2B);
+      console.log('MC2[data]: Merge B2B concluído', {
+        hasCompany: !!(mergedB2B.companyName || mergedB2B.cnpj),
+        hasContact: !!(mergedB2B.contactName || mergedB2B.contactEmail),
+      });
+
+      // 4. UPDATE com validação e debounce - LEGADO (mantido para compatibilidade)
       updateLeadData(merged);
+
+      // 4.1. Log resultado final B2B - MC2
+      console.log('MC2[data]: Resultado final B2B', {
+        company: mergedB2B.companyName || mergedB2B.cnpj || 'não identificado',
+        contact: mergedB2B.contactName || mergedB2B.contactEmail || 'não identificado',
+        hasEssential: hasEssentialB2BData(mergedB2B),
+      });
     },
     []
   );

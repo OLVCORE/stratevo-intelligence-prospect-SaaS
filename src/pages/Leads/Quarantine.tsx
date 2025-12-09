@@ -4,15 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { CheckCircle, XCircle, ArrowRight, AlertCircle, Search, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, ArrowRight, AlertCircle, Search, RefreshCw, Building2, User, Briefcase } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useTenant } from '@/contexts/TenantContext';
 
 export default function LeadsQuarantine() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -80,19 +83,51 @@ export default function LeadsQuarantine() {
 
   const approveLead = useMutation({
     mutationFn: async (leadId: string) => {
-      const { error } = await supabase
-        .from('leads_quarantine')
-        .update({
-          validation_status: 'approved',
-          approved_at: new Date().toISOString()
-        })
-        .eq('id', leadId)
-      
+      if (!tenantId) {
+        throw new Error('Tenant ID não encontrado')
+      }
+
+      // Chamar função RPC que cria empresas, leads e deals
+      const { data, error } = await supabase.rpc('approve_quarantine_to_crm', {
+        p_quarantine_id: leadId,
+        p_tenant_id: tenantId
+      })
+
       if (error) throw error
+      
+      // A função retorna um array com um objeto
+      const result = Array.isArray(data) ? data[0] : data
+      
+      if (!result || !result.success) {
+        throw new Error(result?.message || 'Erro ao aprovar lead')
+      }
+
+      return result
     },
-    onSuccess: () => {
-      toast.success('Lead aprovado')
+    onSuccess: (result) => {
+      const createdItems = []
+      if (result.empresa_id) createdItems.push('✅ Empresa')
+      if (result.lead_id) createdItems.push('✅ Lead')
+      if (result.deal_id) createdItems.push('✅ Oportunidade (Deal)')
+      
+      toast.success(
+        `✅ Lead aprovado e movido para CRM!`,
+        {
+          description: createdItems.length > 0 
+            ? createdItems.join('\n')
+            : 'Processamento concluído',
+          duration: 6000,
+        }
+      )
+      
       queryClient.invalidateQueries({ queryKey: ['leads-quarantine'] })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      queryClient.invalidateQueries({ queryKey: ['deals'] })
+    },
+    onError: (error: any) => {
+      toast.error('Erro ao aprovar lead', {
+        description: error.message || 'Não foi possível aprovar o lead',
+      })
     }
   })
 
@@ -227,7 +262,7 @@ export default function LeadsQuarantine() {
                   {lead.cnpj && (
                     <div>
                       <div className="text-xs text-muted-foreground">CNPJ</div>
-                      <div className="text-sm font-medium">{lead.cnpj}</div>
+                      <div className="text-sm font-medium font-mono">{lead.cnpj}</div>
                     </div>
                   )}
                   {lead.sector && (
@@ -249,6 +284,36 @@ export default function LeadsQuarantine() {
                     </div>
                   )}
                 </div>
+
+                {/* Grade e ICP Score */}
+                {(lead.icp_score !== null && lead.icp_score !== undefined) && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground">ICP Score</div>
+                        <div className="text-lg font-bold text-blue-700">{lead.icp_score}/100</div>
+                      </div>
+                      {lead.icp_name && (
+                        <div>
+                          <div className="text-xs text-muted-foreground">ICP</div>
+                          <div className="text-sm font-medium">{lead.icp_name}</div>
+                        </div>
+                      )}
+                      {lead.temperatura && (
+                        <div>
+                          <div className="text-xs text-muted-foreground">Temperatura</div>
+                          <Badge className={
+                            lead.temperatura === 'hot' ? 'bg-red-100 text-red-800' :
+                            lead.temperatura === 'warm' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }>
+                            {lead.temperatura.toUpperCase()}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-3 mb-4">
                   {lead.cnpj_valid && (
@@ -347,13 +412,23 @@ export default function LeadsQuarantine() {
                 )}
 
                 {lead.validation_status === 'approved' && (
-                  <Button
-                    size="sm"
-                    onClick={() => navigate(`/leads/icp-analysis?leadId=${lead.id}`)}
-                  >
-                    <ArrowRight className="w-4 h-4 mr-1" />
-                    Qualificar ICP
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate('/leads/pipeline')}
+                    >
+                      <Briefcase className="w-4 h-4 mr-1" />
+                      Ver Pipeline
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(`/leads/icp-analysis?leadId=${lead.id}`)}
+                    >
+                      <ArrowRight className="w-4 h-4 mr-1" />
+                      Qualificar ICP
+                    </Button>
+                  </div>
                 )}
 
                 {lead.validation_status === 'validating' && (

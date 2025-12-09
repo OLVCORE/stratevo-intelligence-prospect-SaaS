@@ -51,7 +51,7 @@ export default function DocumentationPage() {
             </p>
           </div>
           <Badge variant="outline" className="text-lg px-4 py-2">
-            v1.0 - STRATEVO Intelligence
+            v1.0 - STRATEVO One
           </Badge>
         </div>
 

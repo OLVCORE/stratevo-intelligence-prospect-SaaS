@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import MatchFitDashboard from "@/components/MatchFitDashboard";
 
 interface CompanyReportProps {
   companyId: string;
@@ -285,6 +286,11 @@ export function CompanyReport({ companyId }: CompanyReportProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* MC5: Match & Fit Dashboard */}
+      {report.matchFit && (
+        <MatchFitDashboard matchFit={report.matchFit} />
+      )}
 
       {/* Conteúdo em Abas */}
       <Tabs defaultValue="identificacao" className="w-full">

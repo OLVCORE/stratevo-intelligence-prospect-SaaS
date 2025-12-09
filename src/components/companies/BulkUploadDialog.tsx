@@ -801,11 +801,15 @@ const insertDirectlyToProspectingCandidates = async ({
   }
 
   // 2) Buscar CNPJs já existentes para esse tenant + ICP
-  const cnpjs = validCompanies.map((c) => c.cnpj).filter(Boolean);
+  // ✅ NORMALIZAR CNPJs antes de buscar (remover formatação)
+  const normalizedCnpjs = validCompanies
+    .map((c) => normalizeCnpj(c.cnpj))
+    .filter(Boolean);
+  
+  // Buscar TODOS os candidatos do tenant + ICP para comparar normalizados
   const { data: existingRows, error: existingError } = await supabase
     .from('prospecting_candidates' as any)
     .select('cnpj')
-    .in('cnpj', cnpjs)
     .eq('tenant_id', tenantId)
     .eq('icp_id', icpId);
 
@@ -814,15 +818,24 @@ const insertDirectlyToProspectingCandidates = async ({
     throw existingError;
   }
 
-  const existingCnpjs = new Set((existingRows || []).map((r: any) => r.cnpj));
+  // ✅ Normalizar CNPJs do banco também para comparação
+  const existingCnpjsNormalized = new Set(
+    (existingRows || []).map((r: any) => normalizeCnpj(r.cnpj)).filter(Boolean)
+  );
+  
   console.log('[BulkUpload][fallback] ℹ️ CNPJs já existentes no banco:', {
-    countExisting: existingCnpjs.size,
+    countExisting: existingCnpjsNormalized.size,
+    totalNew: normalizedCnpjs.length,
+    sampleExisting: Array.from(existingCnpjsNormalized).slice(0, 3),
+    sampleNew: normalizedCnpjs.slice(0, 3),
+    matches: normalizedCnpjs.filter(cnpj => existingCnpjsNormalized.has(cnpj)).length,
   });
 
-  // 3) Filtrar apenas os que NÃO existem ainda
-  const companiesToInsert = validCompanies.filter(
-    (c) => !existingCnpjs.has(c.cnpj)
-  );
+  // 3) Filtrar apenas os que NÃO existem ainda (comparando normalizados)
+  const companiesToInsert = validCompanies.filter((c) => {
+    const normalized = normalizeCnpj(c.cnpj);
+    return normalized && !existingCnpjsNormalized.has(normalized);
+  });
 
   console.log('[BulkUpload][fallback] 📦 Preparando insert:', {
     candidates: validCompanies.length,
@@ -839,15 +852,39 @@ const insertDirectlyToProspectingCandidates = async ({
 
   // 4) ✅ CORREÇÃO DEFINITIVA: Montar payload do insert com mapeamento estruturado
   const rows = companiesToInsert.map((c) => {
+    // 🔍 DEBUG: Log do objeto completo para entender estrutura
+    if (companiesToInsert.indexOf(c) === 0) {
+      console.log('[BulkUpload][fallback] 🔍 DEBUG Primeira empresa antes do mapeamento:', {
+        keys: Object.keys(c),
+        cnpj: c.cnpj,
+        sampleFields: {
+          'Razão': c['Razão'],
+          'Razao': c['Razao'],
+          'Razão Social': c['Razão Social'],
+          'Razao Social': c['Razao Social'],
+          'Fantasia': c['Fantasia'],
+          'Nome Fantasia': c['Nome Fantasia'],
+        }
+      });
+    }
+    
     // ✅ Mapeamento estruturado de razão social (múltiplas variações)
+    // Buscar em TODOS os campos possíveis, incluindo variações de encoding
     const razao = 
+      // Campos diretos da planilha (com todas variações possíveis)
+      c['Razão'] ??  
+      c['Razao'] ??  
       c['Razão Social'] ??
       c['Razao Social'] ??
-      c['Razão'] ??
-      c['Razo'] ??
       c['RAZAO_SOCIAL'] ??
-      c['Nome da Empresa'] ??
-      c['Nome'] ??
+      c['Razão Social'] ??  // Com encoding diferente
+      c['Razo'] ??  // Encoding ISO-8859-1
+      c['Razão'] ??  // Encoding UTF-8
+      // Campos normalizados
+      c.razao_social ??  
+      c.company_name ??  
+      c.nome_empresa ??
+      // Buscar por getValue
       getValue(c, 'razao_social', columnMapping) ??
       getValue(c, 'companyName', columnMapping) ??
       null;
@@ -863,6 +900,12 @@ const insertDirectlyToProspectingCandidates = async ({
     
     // ✅ Usar razão social, se não tiver, usar fantasia, se não tiver, deixar null
     const companyName = razao || fantasia || null;
+    
+    // ✅ Se houver nome fantasia diferente da razão social, incluir em notes
+    const notesContent = [];
+    if (fantasia && razao && fantasia.trim() !== razao.trim()) {
+      notesContent.push(`Nome fantasia: ${fantasia.trim()}`);
+    }
 
     // ✅ Mapeamento estruturado de cidade
     const city = 
@@ -927,6 +970,8 @@ const insertDirectlyToProspectingCandidates = async ({
       cnpj: normalizedCnpj, // ✅ CNPJ normalizado (14 dígitos)
       cnpj_raw: c.cnpj_raw || c.cnpj || c.CNPJ || getValue(c, 'cnpj', columnMapping), // ✅ CNPJ original (com máscara)
       company_name: companyName.trim(),
+      // ✅ REMOVIDO: nome_fantasia não existe na tabela prospecting_candidates
+      // Se houver nome fantasia diferente, será incluído em notes
       website: normalizeWebsite(website),
       sector: sector ? String(sector).trim() : null,
       uf: normalizeUF(state),
@@ -937,7 +982,7 @@ const insertDirectlyToProspectingCandidates = async ({
       contact_email: normalizeEmail(emailRaw),
       contact_phone: normalizePhone(phoneRaw),
       linkedin_url: null,
-      notes: null,
+      notes: notesContent.length > 0 ? notesContent.join('; ') : null,
       source: 'MANUAL',
       source_batch_id: sourceBatchId,
       status: 'pending',
@@ -1051,64 +1096,135 @@ for (const icpId of icpIdsToProcess) {
   }
 }
 
-setProgress(90);
+      setProgress(90);
 
-// Criar job de qualificação automaticamente após importação bem-sucedida
-if (totalInserted > 0 && tenantId) {
-  for (const icpId of icpIdsToProcess) {
-    try {
-      const { data: jobData, error: jobError } = await supabase.rpc(
-        'create_qualification_job_after_import' as any,
-        {
-          p_tenant_id: tenantId,
-          p_icp_id: icpId,
-          p_source_type: 'upload_csv',
-          p_source_batch_id: sourceBatchId,
-          p_job_name: `Importação ${new Date().toLocaleDateString('pt-BR')} - ${totalInserted} empresas`,
+      // ✅ CRIAR E PROCESSAR JOB APÓS TODAS AS INSERÇÕES (fora do loop de ICPs)
+      if (totalInserted > 0 && tenantId) {
+        console.log(`[BulkUpload] 🎯 Criando jobs para ${icpIdsToProcess.length} ICP(s). Total no arquivo: ${companies.length}, Inseridas: ${totalInserted}, Duplicadas: ${totalDuplicates}`);
+        
+        // Adicionar um pequeno delay para garantir que os inserts foram commitados
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        for (const icpId of icpIdsToProcess) {
+          try {
+            // 1) Contar candidatos pendentes para este batch e ICP
+            const { count: pendingCandidatesCount, error: countError } = await supabase
+              .from('prospecting_candidates' as any)
+              .select('id', { count: 'exact' })
+              .eq('tenant_id', tenantId)
+              .eq('icp_id', icpId)
+              .eq('source_batch_id', sourceBatchId)
+              .eq('status', 'pending');
+
+            if (countError) throw countError;
+
+            if (pendingCandidatesCount === 0) {
+              console.warn(`[BulkUpload] ⚠️ Nenhum candidato pendente encontrado para ICP ${icpId} no batch ${sourceBatchId}. Pulando criação de job.`);
+              continue;
+            }
+
+            // 1) Criar job
+            const { data: jobId, error: jobError } = await supabase.rpc(
+              'create_qualification_job_after_import' as any,
+              {
+                p_tenant_id: tenantId,
+                p_icp_id: icpId,
+                p_source_type: 'upload_csv',
+                p_source_batch_id: sourceBatchId,
+                p_job_name: `Importação ${new Date().toLocaleDateString('pt-BR')} - ${pendingCandidatesCount} empresas`,
+              }
+            );
+
+            if (jobError) {
+              console.error('[BulkUpload] ❌ Erro ao criar job:', jobError);
+              toast.warning('⚠️ Empresas inseridas, mas job não foi criado', {
+                description: `Crie o job manualmente. Erro: ${jobError.message}`,
+                duration: 6000,
+              });
+              continue;
+            }
+
+            if (!jobId) {
+              console.error('[BulkUpload] ❌ jobId é null/undefined!');
+              continue;
+            }
+
+            console.log('[BulkUpload] ✅ Job criado:', jobId);
+            
+            // 2) PROCESSAR job automaticamente (AGUARDAR execução)
+            try {
+              console.log('[BulkUpload] 🔄 Processando job...', jobId);
+              
+              const { data: processData, error: processError } = await (supabase.rpc as any)(
+                'process_qualification_job',
+                {
+                  p_job_id: jobId,
+                  p_tenant_id: tenantId,
+                }
+              );
+
+              if (processError) {
+                console.error('[BulkUpload] ❌ ERRO ao processar:', {
+                  error: processError,
+                  code: processError.code,
+                  message: processError.message,
+                  details: processError.details,
+                });
+                toast.error('⚠️ Job criado, mas processamento falhou', {
+                  description: `Clique em "Rodar Qualificação" para processar. Erro: ${processError.message}`,
+                  duration: 10000,
+                });
+              } else {
+                const result = processData && Array.isArray(processData) ? processData[0] : (processData as any);
+                console.log('[BulkUpload] ✅ Job processado com sucesso!', result);
+                toast.success('✅ Qualificação concluída!', {
+                  description: `${result?.processed_count || 0} processadas, ${result?.qualified_count || 0} qualificadas`,
+                  duration: 5000,
+                });
+              }
+            } catch (processEx: any) {
+              console.error('[BulkUpload] ❌ EXCEÇÃO ao processar:', processEx);
+              toast.error('⚠️ Erro ao processar automaticamente', {
+                description: `Processe manualmente. Erro: ${processEx.message}`,
+                duration: 8000,
+              });
+            }
+          } catch (jobEx: any) {
+            console.error('[BulkUpload] ❌ Erro ao criar job:', jobEx);
+          }
         }
-      );
+      }
 
-      if (jobError) {
-        console.error('[BulkUpload] ⚠️ Job de qualificação não criado automaticamente', jobError);
+      setProgress(100);
+
+      // Mensagens de sucesso/erro corretas
+      if (totalInserted > 0) {
+        console.log(`✅ SUCESSO: ${totalInserted} empresas importadas, ${totalDuplicates} duplicadas ignoradas!`);
+        
+        toast.success(`✅ ${totalInserted} empresas importadas e qualificadas!`, {
+          description: `🎯 Empresas salvas e qualificadas automaticamente. ${totalDuplicates > 0 ? `${totalDuplicates} duplicadas ignoradas.` : ''}`,
+          action: {
+            label: 'Ver Estoque Qualificado →',
+            onClick: () => {
+              setIsOpen(false);
+              navigate('/leads/qualified-stock');
+            }
+          },
+          duration: 6000
+        });
       } else {
-        console.log('[BulkUpload] ✅ Job de qualificação criado:', jobData);
+        console.error(`❌ ERRO: Nenhuma empresa foi importada. Total duplicadas/inválidas: ${totalDuplicates}`);
+        
+        toast.error('Nenhuma empresa foi importada', {
+          description: totalDuplicates > 0 
+            ? `${totalDuplicates} empresas foram ignoradas (duplicadas ou CNPJ inválido). Veja o console para detalhes.`
+            : 'Verifique se o arquivo contém dados válidos com CNPJs corretos. Veja o console para detalhes.',
+          duration: 8000
+        });
       }
-    } catch (jobEx: any) {
-      console.error('[BulkUpload] ⚠️ Erro ao chamar create_qualification_job_after_import', jobEx);
-    }
-  }
-}
 
-setProgress(100);
-
-// Mensagens de sucesso/erro corretas
-if (totalInserted > 0) {
-  console.log(`✅ SUCESSO: ${totalInserted} empresas importadas, ${totalDuplicates} duplicadas ignoradas!`);
-  
-  toast.success(`✅ ${totalInserted} empresas importadas com sucesso!`, {
-    description: `🎯 Empresas salvas em prospecting_candidates. ${totalDuplicates > 0 ? `${totalDuplicates} duplicadas ignoradas.` : ''} Job de qualificação criado automaticamente.`,
-    action: {
-      label: 'Ver Motor de Qualificação →',
-      onClick: () => {
-        setIsOpen(false);
-        navigate('/leads/qualification-engine');
-      }
-    },
-    duration: 6000
-  });
-} else {
-  console.error(`❌ ERRO: Nenhuma empresa foi importada. Total duplicadas/inválidas: ${totalDuplicates}`);
-  
-  toast.error('Nenhuma empresa foi importada', {
-    description: totalDuplicates > 0 
-      ? `${totalDuplicates} empresas foram ignoradas (duplicadas ou CNPJ inválido). Veja o console para detalhes.`
-      : 'Verifique se o arquivo contém dados válidos com CNPJs corretos. Veja o console para detalhes.',
-    duration: 8000
-  });
-}
-
-// Fechar dialog
-setTimeout(() => setIsOpen(false), 2000);
+      // Fechar dialog
+      setTimeout(() => setIsOpen(false), 2000);
 
     } catch (error) {
       console.error('Erro no upload:', error);

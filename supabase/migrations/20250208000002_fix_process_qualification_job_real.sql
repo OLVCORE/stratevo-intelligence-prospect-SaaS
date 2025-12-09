@@ -313,7 +313,7 @@ BEGIN
         v_cnpj_normalized,            -- ✅ CNPJ normalizado (14 dígitos)
         v_cnpj_raw,                   -- ✅ CNPJ original (com máscara se disponível)
         v_candidate.company_name,     -- ✅ razao_social (nunca "Empresa sem nome")
-        NULL,                         -- nome_fantasia
+        v_candidate.nome_fantasia,    -- ✅ nome_fantasia (copiado de prospecting_candidates)
         v_candidate.city,
         v_candidate.uf,
         v_candidate.sector,

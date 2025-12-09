@@ -36,11 +36,24 @@ import {
   TrendingUp,
   ArrowRight,
   Package,
+  Upload,
+  Search,
+  Globe,
+  FileSpreadsheet,
+  Sheet,
+  AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from '@/hooks/use-toast';
 import { useTenantIcps, TenantIcp } from '@/hooks/useTenantIcps';
+import { BulkUploadDialog } from '@/components/companies/BulkUploadDialog';
+import { InlineCompanySearch } from '@/components/qualification/InlineCompanySearch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useICPLibrary } from '@/hooks/useICPLibrary';
+import { importFromEmpresasAquiApi } from '@/services/empresasAquiImport.service';
 
 interface QualificationJob {
   id: string;
@@ -71,6 +84,19 @@ export default function QualificationEnginePage() {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const { icps, loading: icpsLoading } = useTenantIcps();
+  const { data: icpLibrary } = useICPLibrary();
+  
+  // Estados para API Empresas Aqui
+  const [apiFilters, setApiFilters] = useState({
+    cnae: '',
+    uf: '',
+    porte: '',
+    page: 1,
+    pageSize: 50,
+  });
+  const [selectedIcpIdForApi, setSelectedIcpIdForApi] = useState<string>('');
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [apiStats, setApiStats] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<QualificationJob[]>([]);
@@ -371,12 +397,246 @@ export default function QualificationEnginePage() {
             <Package className="w-4 h-4 mr-2" />
             Ver Estoque Qualificado
           </Button>
-          <Button onClick={() => navigate('/leads/prospecting-import')}>
-            <ArrowRight className="w-4 h-4 mr-2" />
-            Importar Empresas
-          </Button>
         </div>
       </div>
+
+      {/* ✅ BUSCA INDIVIDUAL PRIMEIRO */}
+      <Card className="border-l-4 border-l-emerald-500">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="w-5 h-5 text-emerald-600" />
+            Busca Unificada • Empresa Individual
+          </CardTitle>
+          <CardDescription>
+            Busque por CNPJ ou nome da empresa - detecção automática e qualificação instantânea
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <InlineCompanySearch onCompanyAdded={loadJobs} />
+        </CardContent>
+      </Card>
+
+      {/* ✅ CARD DE UPLOAD COM TABS - Motor de Qualificação */}
+      <Card className="border-l-4 border-l-primary">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="w-5 h-5 text-primary" />
+            Motor de Qualificação • Upload em Massa
+          </CardTitle>
+          <CardDescription>
+            Importe até 1000 empresas • Triagem automática com IA • Normalizador Universal
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="file" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="file" className="flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4" />
+                Arquivo
+              </TabsTrigger>
+              <TabsTrigger value="sheets" className="flex items-center gap-2">
+                <Sheet className="w-4 h-4" />
+                Google Sheets
+              </TabsTrigger>
+              <TabsTrigger value="api" className="flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                API Empresas Aqui
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="file" className="mt-4">
+              <BulkUploadDialog>
+                <Button size="lg" className="w-full">
+                  <Upload className="w-5 h-5 mr-2" />
+                  Fazer Upload CSV/Excel
+                </Button>
+              </BulkUploadDialog>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Suporta CSV, TSV, XLSX, XLS • Até 1000 empresas por upload • Normalização automática de colunas
+              </p>
+            </TabsContent>
+
+            <TabsContent value="sheets" className="mt-4">
+              <BulkUploadDialog>
+                <Button size="lg" className="w-full" variant="outline">
+                  <Sheet className="w-5 h-5 mr-2" />
+                  Importar do Google Sheets
+                </Button>
+              </BulkUploadDialog>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Conecte sua planilha do Google Sheets • Sincronização automática • Até 1000 empresas
+              </p>
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Como usar:</strong>
+                </p>
+                <ol className="text-xs text-blue-700 dark:text-blue-300 mt-2 space-y-1 list-decimal list-inside">
+                  <li>Clique no botão acima para abrir o modal de importação</li>
+                  <li>Selecione a aba "Google Sheets" no modal</li>
+                  <li>Cole a URL pública da sua planilha do Google Sheets</li>
+                  <li>Preencha "Nome da Fonte" e "Campanha" (opcional)</li>
+                  <li>Clique em "Importar do Google Sheets"</li>
+                </ol>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="api" className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label>ICP alvo</Label>
+                <Select value={selectedIcpIdForApi} onValueChange={setSelectedIcpIdForApi}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um ICP" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {icpLibrary?.data?.map((icp) => (
+                      <SelectItem key={icp.id} value={icp.id}>
+                        {icp.nome} {icp.icp_principal ? '(Principal)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>CNAE (opcional)</Label>
+                  <Input
+                    placeholder="Ex: 2512-8/00"
+                    value={apiFilters.cnae || ''}
+                    onChange={(e) => setApiFilters(prev => ({ ...prev, cnae: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>UF (opcional)</Label>
+                  <Select
+                    value={apiFilters.uf || 'all'}
+                    onValueChange={(value) => setApiFilters(prev => ({ ...prev, uf: value === 'all' ? undefined : value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas as UFs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as UFs</SelectItem>
+                      {['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+                        'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'].map((uf) => (
+                        <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Porte (opcional)</Label>
+                  <Select
+                    value={apiFilters.porte || 'all'}
+                    onValueChange={(value) => setApiFilters(prev => ({ ...prev, porte: value === 'all' ? undefined : value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os portes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os portes</SelectItem>
+                      <SelectItem value="micro">Micro</SelectItem>
+                      <SelectItem value="pequena">Pequena</SelectItem>
+                      <SelectItem value="media">Média</SelectItem>
+                      <SelectItem value="grande">Grande</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Resultados por página</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={apiFilters.pageSize || 50}
+                    onChange={(e) => setApiFilters(prev => ({ ...prev, pageSize: parseInt(e.target.value) || 50 }))}
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={async () => {
+                  if (!tenantId || !selectedIcpIdForApi) {
+                    toast({
+                      title: 'Erro',
+                      description: 'Tenant e ICP são obrigatórios.',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+
+                  setIsLoadingApi(true);
+                  try {
+                    const stats = await importFromEmpresasAquiApi({
+                      tenantId,
+                      icpId: selectedIcpIdForApi,
+                      filters: apiFilters,
+                    });
+
+                    setApiStats(stats);
+                    await loadJobs();
+
+                    toast({
+                      title: '✅ Importação via API concluída!',
+                      description: `Empresas Aqui: ${stats.totalEncontradas} encontradas, ${stats.totalNovas} novas, ${stats.totalDuplicadas} já existentes.`,
+                    });
+                  } catch (error: any) {
+                    console.error('[QualificationEngine] Erro na importação via API:', error);
+                    toast({
+                      title: 'Erro na importação via API',
+                      description: error.message || 'Ocorreu um erro ao importar empresas via API.',
+                      variant: 'destructive',
+                    });
+                  } finally {
+                    setIsLoadingApi(false);
+                  }
+                }}
+                disabled={isLoadingApi || !tenantId || !selectedIcpIdForApi}
+                className="w-full"
+                size="lg"
+              >
+                {isLoadingApi ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Buscando empresas...
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-5 h-5 mr-2" />
+                    Buscar empresas via Empresas Aqui (API)
+                  </>
+                )}
+              </Button>
+
+              {apiStats && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 dark:bg-green-950/20 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    <span className="font-medium text-green-800 dark:text-green-200">Resultado da Importação:</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">{apiStats.totalEncontradas}</div>
+                      <div className="text-sm text-muted-foreground">Encontradas</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">{apiStats.totalNovas}</div>
+                      <div className="text-sm text-muted-foreground">Novas</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-yellow-600">{apiStats.totalDuplicadas}</div>
+                      <div className="text-sm text-muted-foreground">Duplicadas</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
       {/* Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
@@ -417,6 +677,36 @@ export default function QualificationEnginePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ✅ ALERTA: Jobs Pendentes */}
+      {stats.pending > 0 && (
+        <Card className="border-l-4 border-l-orange-500 bg-orange-50/50 dark:bg-orange-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-orange-900 dark:text-orange-100 mb-1">
+                  {stats.pending} Lote(s) Aguardando Qualificação
+                </h3>
+                <p className="text-sm text-orange-800 dark:text-orange-200 mb-3">
+                  Você fez upload de empresas, mas elas ainda não foram qualificadas. Selecione um lote abaixo e clique em "Rodar Qualificação" para processar as empresas e enviá-las para o Estoque Qualificado.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                    {stats.pending} pendente(s)
+                  </Badge>
+                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                    {stats.totalProcessed} processadas
+                  </Badge>
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                    {stats.totalQualified} qualificadas
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Ação: Rodar Qualificação */}
       <Card>
@@ -641,7 +931,7 @@ export default function QualificationEnginePage() {
               <br />
               <Button
                 variant="link"
-                onClick={() => navigate('/leads/prospecting-import')}
+                onClick={() => navigate('/leads/qualification-engine')}
                 className="mt-2"
               >
                 Importar empresas primeiro

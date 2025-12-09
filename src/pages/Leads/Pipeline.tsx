@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Search, TrendingUp, DollarSign, Calendar, 
-  Flame, Droplet, Snowflake, Clock, ArrowRight, Target 
+  Flame, Droplet, Snowflake, Clock, ArrowRight, Target,
+  Plus, FileText, Play, MoreVertical
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -307,7 +308,7 @@ export default function Pipeline() {
                                 </p>
                               )}
 
-                              <div className="space-y-1 text-xs text-muted-foreground">
+                              <div className="space-y-1 text-xs text-muted-foreground mb-3">
                                 {deal.sector && (
                                   <div className="flex items-center gap-1">
                                     <Badge variant="outline" className="text-xs">
@@ -331,6 +332,47 @@ export default function Pipeline() {
                                     </span>
                                   </div>
                                 )}
+                              </div>
+
+                              {/* Ações Rápidas */}
+                              <div className="flex gap-1 pt-2 border-t">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="flex-1 text-xs h-7"
+                                  onClick={() => {
+                                    toast({
+                                      title: 'Criar Tarefa',
+                                      description: 'Funcionalidade em desenvolvimento',
+                                    });
+                                  }}
+                                  title="Criar Tarefa"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="flex-1 text-xs h-7"
+                                  onClick={() => {
+                                    toast({
+                                      title: 'Adicionar Nota',
+                                      description: 'Funcionalidade em desenvolvimento',
+                                    });
+                                  }}
+                                  title="Adicionar Nota"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="flex-1 text-xs h-7"
+                                  onClick={() => navigate(`/sequences?dealId=${deal.id}`)}
+                                  title="Rodar Sequência"
+                                >
+                                  <Play className="w-3 h-3" />
+                                </Button>
                               </div>
                             </CardContent>
                           </Card>

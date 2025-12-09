@@ -55,7 +55,7 @@ export default function Index() {
           <Building2 className="h-24 w-24 text-primary mb-8 animate-pulse" />
           
           <h1 className="text-6xl md:text-8xl font-bold text-white mb-6 bg-gradient-to-r from-white via-primary/90 to-white bg-clip-text text-transparent leading-tight">
-            STRATEVO Intelligence
+            STRATEVO One
           </h1>
           
           <p className="text-2xl md:text-3xl text-white/90 mb-4 max-w-4xl font-semibold">
@@ -970,7 +970,7 @@ export default function Index() {
       {/* ============================================ */}
       <div className="border-t border-white/10 py-8">
         <div className="container mx-auto px-4 text-center text-white/40 text-sm">
-          <p>© 2025 STRATEVO Intelligence. Powered by OLV Internacional + IA Intelligence 2025 *</p>
+          <p>© 2025 STRATEVO One. Powered by OLV Internacional + IA Intelligence 2025 *</p>
         </div>
       </div>
 

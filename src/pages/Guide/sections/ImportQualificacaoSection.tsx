@@ -278,7 +278,7 @@ export default function ImportQualificacaoSection() {
           <h3 className="text-xl font-bold">Pronto para importar?</h3>
           <div className="flex justify-center gap-4 flex-wrap">
             <Button asChild>
-              <Link to="/leads/prospecting-import">
+              <Link to="/leads/qualification-engine">
                 <Upload className="w-4 h-4 mr-2" />
                 Fazer Importação
               </Link>

@@ -133,26 +133,18 @@ const menuGroups: MenuGroup[] = [
     icon: Filter,
     items: [
       {
-        title: "1. Importação Hunter",
-        icon: FileSpreadsheet,
-        url: "/leads/prospecting-import",
-        highlighted: true,
-        description: "Importar empresas via CSV para qualificação"
-      },
-      {
-        title: "2. Motor de Qualificação",
+        title: "2.1 Motor de Qualificação",
         icon: Zap,
         url: "/leads/qualification-engine",
         highlighted: true,
-        description: "Processar lotes importados através do motor de qualificação",
-        submenu: [
-          {
-            title: "2.1 Estoque Qualificado",
-            icon: Package,
-            url: "/leads/qualified-stock",
-            description: "Empresas qualificadas prontas para revisão e aprovação"
-          }
-        ]
+        description: "Upload em massa com normalizador universal • CSV, Excel, Google Sheets",
+      },
+      {
+        title: "2.2 Estoque Qualificado",
+        icon: Package,
+        url: "/leads/qualified-stock",
+        highlighted: true,
+        description: "Empresas qualificadas prontas para revisão e aprovação"
       },
       {
         title: "3. Base de Empresas",

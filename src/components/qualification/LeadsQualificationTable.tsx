@@ -1221,9 +1221,9 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               </p>
             </div>
           ) : (
-            <Table>
+            <Table className="table-fixed w-full">
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableHead className="w-10"></TableHead>
                   <TableHead className="w-12">
                     <Checkbox
@@ -1231,22 +1231,22 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       onCheckedChange={toggleSelectAll}
                     />
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[26rem]">
                     <Button variant="ghost" size="sm" onClick={() => handleSort('name')} className="h-8 flex items-center gap-1">
                       Empresa <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[9rem]">
                     <Button variant="ghost" size="sm" onClick={() => handleSort('cnpj')} className="h-8 flex items-center gap-1">
                       CNPJ <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[7rem] text-center">
                     <Button variant="ghost" size="sm" onClick={() => handleSort('icp_score')} className="h-8 flex items-center gap-1">
                       Score ICP <ArrowUpDown className="h-3 w-3" />
                     </Button>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[8rem]">
                     <ColumnFilter
                       column="temperatura"
                       title="Temperatura"
@@ -1255,7 +1255,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       onFilterChange={setFilterTemperatura}
                     />
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[8rem]">
                     <ColumnFilter
                       column="cnpj_status"
                       title="Status CNPJ"
@@ -1272,7 +1272,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       onFilterChange={setFilterCnpjStatus}
                     />
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[9rem]">
                     <ColumnFilter
                       column="analysis_status"
                       title="Status Análise"
@@ -1281,7 +1281,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       onFilterChange={setFilterAnalysisStatus}
                     />
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[5rem]">
                     <ColumnFilter
                       column="uf"
                       title="UF"
@@ -1290,7 +1290,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       onFilterChange={setFilterUF}
                     />
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[10rem]">
                     <ColumnFilter
                       column="setor"
                       title="Setor"
@@ -1299,14 +1299,14 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                       onFilterChange={setFilterSetor}
                     />
                   </TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="w-[10rem] text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLeads.slice(0, pageSize).map((lead) => (
                   <React.Fragment key={lead.id}>
                     <TableRow 
-                      className={`${expandedRow === lead.id ? 'bg-muted/30' : ''} ${selectedLeads.includes(lead.id) ? 'bg-primary/5' : ''}`}
+                      className={`h-[3.25rem] align-middle ${expandedRow === lead.id ? 'bg-muted/30' : ''} ${selectedLeads.includes(lead.id) ? 'bg-primary/5' : ''}`}
                     >
                       <TableCell>
                         <Button
@@ -1328,28 +1328,28 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                           onCheckedChange={() => toggleSelectLead(lead.id)}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[26rem] max-w-[26rem] truncate">
                         <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-primary" />
-                          <div>
-                            <p className="font-medium truncate max-w-[200px]" title={lead.name}>
+                          <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-medium truncate" title={lead.name}>
                               {lead.name}
                             </p>
                             {lead.nome_fantasia && lead.nome_fantasia !== lead.name && (
-                              <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                              <p className="text-xs text-muted-foreground truncate">
                                 {lead.nome_fantasia}
                               </p>
                             )}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[9rem]">
                         <Badge variant="outline" className="font-mono text-xs">
                           {lead.cnpj || 'N/A'}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                      <TableCell className="w-[7rem] text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <div className="w-12 h-2 bg-muted rounded-full overflow-hidden">
                             <div 
                               className={`h-full ${lead.icp_score && lead.icp_score >= 70 ? 'bg-green-500' : lead.icp_score && lead.icp_score >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
@@ -1359,10 +1359,10 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                           <span className="text-sm font-medium">{lead.icp_score || 0}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[8rem]">
                         <TemperatureBadge temp={lead.temperatura} score={lead.icp_score} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[8rem]">
                         {/* Badge de Status CNPJ - Igual à tabela de empresas */}
                         {(() => {
                           // Extrair situação da Receita Federal
@@ -1386,27 +1386,27 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                           return <QuarantineCNPJStatusBadge cnpj={lead.cnpj} cnpjStatus={cnpjStatus} />;
                         })()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[9rem]">
                         {/* Badge de Status Análise com progresso 0-100% */}
                         <QuarantineEnrichmentStatusBadge 
                           rawAnalysis={lead.raw_data || {}}
                           showProgress={true}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[5rem]">
                         {lead.uf ? (
                           <Badge variant="outline">{lead.uf}</Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">N/A</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <span className="text-xs truncate max-w-[150px] block" title={lead.setor}>
+                      <TableCell className="w-[10rem] max-w-[10rem] truncate">
+                        <span className="text-xs truncate block" title={lead.setor}>
                           {lead.setor || 'N/A'}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <TableCell className="w-[10rem]">
+                        <div className="flex items-center justify-end gap-2">
                           {/* Barra de Score Visual */}
                           <TooltipProvider>
                             <Tooltip>

@@ -243,17 +243,17 @@ export default function DiscardedCompanies() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="table-fixed w-full">
             <TableHeader>
-              <TableRow>
-                <TableHead>Empresa</TableHead>
-                <TableHead>CNPJ</TableHead>
-                <TableHead>Motivo</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>STC Status</TableHead>
-                <TableHead>Score ICP</TableHead>
-                <TableHead>Data Descarte</TableHead>
-                <TableHead className="w-[80px]">Ações</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[26rem]">Empresa</TableHead>
+                <TableHead className="w-[9rem]">CNPJ</TableHead>
+                <TableHead className="w-[10rem]">Motivo</TableHead>
+                <TableHead className="w-[8rem]">Categoria</TableHead>
+                <TableHead className="w-[9rem]">STC Status</TableHead>
+                <TableHead className="w-[7rem] text-center">Score ICP</TableHead>
+                <TableHead className="w-[9rem]">Data Descarte</TableHead>
+                <TableHead className="w-[10rem] text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -265,29 +265,29 @@ export default function DiscardedCompanies() {
                 </TableRow>
               ) : filteredData && filteredData.length > 0 ? (
                 filteredData.map((company) => (
-                  <TableRow key={company.id}>
-                    <TableCell className="font-medium">{company.company_name}</TableCell>
-                    <TableCell>
+                  <TableRow key={company.id} className="h-[3.25rem] align-middle">
+                    <TableCell className="w-[26rem] max-w-[26rem] truncate font-medium">{company.company_name}</TableCell>
+                    <TableCell className="w-[9rem]">
                       {company.cnpj && (
                         <Badge variant="outline" className="font-mono text-xs">
                           {company.cnpj}
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="max-w-[300px]">
+                    <TableCell className="w-[10rem] max-w-[10rem] truncate">
                       <div>
-                        <p className="text-sm font-medium">{company.discard_reason_label}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm font-medium truncate" title={company.discard_reason_label}>{company.discard_reason_label}</p>
+                        <p className="text-xs text-muted-foreground truncate" title={company.discard_reason_description}>
                           {company.discard_reason_description}
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[8rem]">
                       <Badge variant="outline" className="capitalize">
                         {company.discard_category}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[9rem]">
                       {company.stc_status && (
                         <Badge
                           variant={
@@ -302,9 +302,9 @@ export default function DiscardedCompanies() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[7rem] text-center">
                       {company.original_icp_score && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center gap-2">
                           <span className="font-mono font-semibold">
                             {company.original_icp_score}
                           </span>
@@ -325,37 +325,39 @@ export default function DiscardedCompanies() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="w-[9rem] text-sm text-muted-foreground">
                       {new Date(company.discarded_at).toLocaleDateString('pt-BR', {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric'
                       })}
                     </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            disabled={isRestoring}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => restoreCompany(company.id)}
-                            className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-                          >
-                            <RotateCcw className="h-4 w-4 mr-2 text-primary" />
-                            Restaurar para Quarentena
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    <TableCell className="w-[10rem]">
+                      <div className="flex items-center justify-end gap-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              disabled={isRestoring}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => restoreCompany(company.id)}
+                              className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
+                            >
+                              <RotateCcw className="h-4 w-4 mr-2 text-primary" />
+                              Restaurar para Quarentena
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

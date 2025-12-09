@@ -48,6 +48,20 @@ import {
   Trash2,
   Sparkles,
   AlertTriangle,
+  Info,
+  HelpCircle,
+  Building2,
+  CheckCircle,
+  MapPin,
+  FileText,
+  Briefcase,
+  DollarSign,
+  Scale,
+  Users,
+  Globe,
+  Calendar,
+  Activity,
+  ArrowUpDown,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -82,7 +96,9 @@ import { STCAgent } from '@/components/intelligence/STCAgent';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 import { QualifiedStockActionsMenu } from '@/components/qualification/QualifiedStockActionsMenu';
 import { ExplainabilityButton } from '@/components/common/ExplainabilityButton';
-import { Info, HelpCircle } from 'lucide-react';
+import LocationMap from '@/components/map/LocationMap';
+import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
+import { ColumnFilter } from '@/components/companies/ColumnFilter';
 
 interface QualifiedProspect {
   id: string;
@@ -151,17 +167,27 @@ export default function QualifiedProspectsStock() {
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [previewProspect, setPreviewProspect] = useState<QualifiedProspect | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [fullPreviewData, setFullPreviewData] = useState<any>(null);
+  const [showFullPreview, setShowFullPreview] = useState(false);
+  const [loadingFullPreview, setLoadingFullPreview] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{
     current: number;
     total: number;
     currentItem?: string;
   } | null>(null);
+  
+  // ✅ FILTROS (igual a Gerenciar Empresas)
+  const [filterOrigin, setFilterOrigin] = useState<string[]>([]);
+  const [filterStatusCNPJ, setFilterStatusCNPJ] = useState<string[]>([]);
+  const [filterICP, setFilterICP] = useState<string[]>([]);
+  const [filterFitScore, setFilterFitScore] = useState<string[]>([]);
+  const [filterGrade, setFilterGrade] = useState<string[]>([]);
 
   useEffect(() => {
     if (tenantId) {
       loadProspects();
     }
-  }, [tenantId, gradeFilter, sectorFilter, stateFilter, searchTerm]); // ✅ Removido statusFilter do useEffect (sempre 'new')
+  }, [tenantId, gradeFilter, sectorFilter, stateFilter, searchTerm, filterOrigin, filterStatusCNPJ, filterICP, filterFitScore, filterGrade]); // ✅ Adicionados todos os filtros
 
   const loadProspects = async () => {
     if (!tenantId) return;
@@ -298,7 +324,64 @@ export default function QualifiedProspectsStock() {
         };
       });
 
-      setProspects(enrichedProspects as any);
+      // ✅ APLICAR FILTROS LOCALMENTE (igual a Gerenciar Empresas)
+      let filteredProspects = enrichedProspects;
+      
+      // Filtro por Origem
+      if (filterOrigin.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const origem = p.source_name || p.job?.source_file_name || '';
+          return filterOrigin.includes(origem);
+        });
+      }
+      
+      // Filtro por Status CNPJ
+      if (filterStatusCNPJ.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const receitaData = p.enrichment?.raw || {};
+          let status = receitaData.situacao || receitaData.descricao_situacao_cadastral || 'PENDENTE';
+          
+          // Normalizar status
+          if (status.toUpperCase().includes('ATIVA') || status === '02') status = 'ATIVA';
+          else if (status.toUpperCase().includes('SUSPENSA') || status === '03') status = 'SUSPENSA';
+          else if (status.toUpperCase().includes('INAPTA') || status === '04') status = 'INAPTA';
+          else if (status.toUpperCase().includes('BAIXADA') || status === '08') status = 'BAIXADA';
+          else if (status.toUpperCase().includes('NULA') || status === '01') status = 'NULA';
+          
+          return filterStatusCNPJ.includes(status);
+        });
+      }
+      
+      // ✅ Filtro por ICP
+      if (filterICP.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const icpName = p.icp?.nome || 'Sem ICP';
+          return filterICP.includes(icpName);
+        });
+      }
+      
+      // ✅ Filtro por Fit Score
+      if (filterFitScore.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const fitScore = p.enrichment?.fit_score ?? p.fit_score ?? 0;
+          if (fitScore >= 90) return filterFitScore.includes('90-100');
+          if (fitScore >= 75) return filterFitScore.includes('75-89');
+          if (fitScore >= 60) return filterFitScore.includes('60-74');
+          if (fitScore >= 40) return filterFitScore.includes('40-59');
+          return filterFitScore.includes('0-39');
+        });
+      }
+      
+      // ✅ Filtro por Grade
+      if (filterGrade.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const grade = p.enrichment?.grade || p.grade || null;
+          if (!grade || grade === '-' || grade === 'null') return filterGrade.includes('Sem Grade');
+          return filterGrade.includes(grade);
+        });
+      }
+      
+      setProspects(filteredProspects as any);
     } catch (error: any) {
       console.error('Erro ao carregar prospects:', error);
       toast({
@@ -308,6 +391,105 @@ export default function QualifiedProspectsStock() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+  
+  // ✅ CICLO 1: Função para mostrar preview completo ao clicar no CNPJ
+  const handleShowFullPreview = async (cnpj: string) => {
+    setLoadingFullPreview(true);
+    setShowFullPreview(true);
+    
+    try {
+      // Buscar dados completos da Receita Federal
+      const result = await consultarReceitaFederal(cnpj);
+      
+      if (!result.success || !result.data) {
+        throw new Error('Não foi possível buscar dados completos do CNPJ');
+      }
+      
+      const empresaData = result.data as any;
+      
+      // Montar preview completo igual ao SearchPage
+      const previewData = {
+        success: true,
+        company: {
+          name: empresaData.nome || empresaData.razao_social || empresaData.fantasia,
+          cnpj: cnpj,
+          website: (empresaData.website || null) as string | null,
+          domain: empresaData.website ? new URL(empresaData.website).hostname : null,
+          industry: empresaData.cnae_fiscal_descricao || empresaData.atividade_principal?.[0]?.text,
+          employees: empresaData.qsa?.length || null,
+          location: {
+            city: empresaData.municipio,
+            state: empresaData.uf,
+            country: 'Brasil',
+            address: [
+              empresaData.logradouro,
+              empresaData.numero,
+              empresaData.complemento,
+              empresaData.bairro
+            ].filter(Boolean).join(', '),
+            cep: empresaData.cep
+          },
+          raw_data: {
+            receita: {
+              nome: empresaData.nome || empresaData.razao_social,
+              fantasia: empresaData.fantasia || (empresaData as any).nome_fantasia,
+              porte: empresaData.porte || 'N/A',
+              tipo: empresaData.tipo || empresaData.natureza_juridica,
+              abertura: empresaData.abertura || empresaData.data_inicio_atividade || empresaData.data_abertura,
+              natureza_juridica: empresaData.natureza_juridica || empresaData.descricao_natureza_juridica,
+              capital_social: empresaData.capital_social || '0.00',
+              situacao: empresaData.situacao || empresaData.descricao_situacao_cadastral || 'ATIVA',
+              data_situacao: empresaData.data_situacao || empresaData.data_situacao_cadastral || new Date().toISOString().split('T')[0],
+              motivo_situacao: empresaData.motivo_situacao || empresaData.descricao_motivo_situacao_cadastral || 'SEM MOTIVO',
+              situacao_especial: empresaData.situacao_especial || 'N/A',
+              data_situacao_especial: empresaData.data_situacao_especial || null,
+              simples: {
+                optante: empresaData.simples?.optante || empresaData.opcao_pelo_simples === 'Sim' || false,
+                data_opcao: empresaData.simples?.data_opcao || empresaData.data_opcao_pelo_simples || null,
+                data_exclusao: empresaData.simples?.data_exclusao || empresaData.data_exclusao_do_simples || null,
+              },
+              simei: {
+                optante: empresaData.simei?.optante || empresaData.opcao_pelo_mei === 'Sim' || false,
+                data_opcao: empresaData.simei?.data_opcao || empresaData.data_opcao_pelo_mei || null,
+              },
+              efr: empresaData.efr || empresaData.ente_federativo_responsavel || 'N/A',
+              email: empresaData.email || empresaData.correio_eletronico || 'N/A',
+              telefone: empresaData.telefone || empresaData.ddd_telefone_1 || empresaData.telefone_1 || 'N/A',
+              telefone_2: empresaData.telefone_2 || empresaData.ddd_telefone_2 || null,
+              cnae_principal: empresaData.cnae_fiscal || empresaData.atividade_principal?.[0]?.code,
+              cnae_principal_descricao: empresaData.cnae_fiscal_descricao || empresaData.atividade_principal?.[0]?.text,
+              cnaes_secundarios: empresaData.atividades_secundarias || empresaData.cnaes_secundarios || [],
+              qsa: empresaData.qsa || empresaData.socios || [],
+              logradouro: empresaData.logradouro,
+              numero: empresaData.numero,
+              complemento: empresaData.complemento,
+              bairro: empresaData.bairro,
+              municipio: empresaData.municipio,
+              uf: empresaData.uf,
+              cep: empresaData.cep,
+              ...empresaData
+            }
+          }
+        },
+        cnpj_status: empresaData.situacao === 'ATIVA' ? 'ativo' : 'inativo',
+        cnpj_status_message: empresaData.situacao || empresaData.descricao_situacao_cadastral,
+        decision_makers: [],
+        digital_maturity: null
+      };
+      
+      setFullPreviewData(previewData);
+    } catch (error: any) {
+      console.error('[Full Preview] Erro:', error);
+      toast({
+        title: 'Erro ao buscar dados completos',
+        description: error.message || 'Não foi possível carregar o preview completo',
+        variant: 'destructive',
+      });
+      setShowFullPreview(false);
+    } finally {
+      setLoadingFullPreview(false);
     }
   };
 
@@ -327,6 +509,19 @@ export default function QualifiedProspectsStock() {
       newSet.delete(id);
     }
     setSelectedIds(newSet);
+  };
+
+  // ✅ Função de ordenação (igual a Gerenciar Empresas)
+  const [sortBy, setSortBy] = useState<'razao_social' | 'cnpj' | 'setor' | 'created_at'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  const handleSort = (column: 'razao_social' | 'cnpj' | 'setor' | 'created_at') => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
   };
 
   // ✅ FLUXO OFICIAL: Única ação permitida - "Enviar para Banco de Empresas"
@@ -414,10 +609,23 @@ export default function QualifiedProspectsStock() {
             continue;
           }
 
-          // Buscar se já existe empresa com mesmo CNPJ
+          // ✅ Normalizar CNPJ antes de buscar (apenas dígitos)
+          const normalizedCnpj = prospect.cnpj?.replace(/\D/g, '') || null;
+          
+          if (!normalizedCnpj || normalizedCnpj.length !== 14) {
+            console.warn('[Qualified → Companies] ⚠️ CNPJ inválido, pulando', {
+              prospect_id: prospect.id,
+              cnpj: prospect.cnpj,
+              normalized: normalizedCnpj,
+            });
+            errors.push(`CNPJ ${prospect.cnpj}: formato inválido`);
+            continue;
+          }
+
+          // Buscar se já existe empresa com mesmo CNPJ (usando CNPJ normalizado)
           const { data: existingCompany, error: existingError } = await ((supabase as any).from('companies'))
-            .select('id, company_name')
-            .eq('cnpj', prospect.cnpj)
+            .select('id, company_name, cnpj')
+            .eq('cnpj', normalizedCnpj)
             .eq('tenant_id', tenantId)
             .maybeSingle();
 
@@ -437,25 +645,54 @@ export default function QualifiedProspectsStock() {
               cnpj: prospect.cnpj,
             });
 
+            // ✅ Payload de update simplificado e seguro - apenas campos que EXISTEM na tabela
             const updatePayload: any = {
-              company_name: companyName,
-              name: companyName, // Campo obrigatório
-              headquarters_city: city,
-              headquarters_state: state,
-              industry: sector,
-              website: website,
+              company_name: companyName || existingCompany.company_name || 'Empresa Sem Nome',
+              name: companyName || existingCompany.name || 'Empresa Sem Nome', // Campo obrigatório
               updated_at: new Date().toISOString(),
             };
 
-            // Adicionar campos opcionais se existirem no schema
-            if (prospect.fit_score !== undefined) {
-              updatePayload.fit_score = prospect.fit_score;
+            // Adicionar campos opcionais apenas se tiverem valores válidos
+            if (city) {
+              updatePayload.headquarters_city = city;
             }
-            if (prospect.grade) {
-              updatePayload.grade = prospect.grade;
+            if (state) {
+              updatePayload.headquarters_state = state;
+            }
+            if (sector) {
+              updatePayload.industry = sector;
+            }
+            if (website && website.trim() && !website.includes('exemplo.com')) {
+              updatePayload.website = website;
+            }
+            
+            // ✅ Salvar dados de qualificação em raw_data (fit_score, grade, icp_id não existem como colunas)
+            // IMPORTANTE: raw_data deve ser um objeto JSON válido (JSONB no PostgreSQL)
+            const existingRawData = (existingCompany as any).raw_data || {};
+            // Garantir que existingRawData seja um objeto (pode vir como string JSON)
+            const parsedExisting = typeof existingRawData === 'string' 
+              ? JSON.parse(existingRawData) 
+              : existingRawData;
+            
+            const rawData: any = { ...parsedExisting };
+            const sourceName = prospect.source_name || prospect.job?.source_file_name || 'Qualification Engine';
+            if (sourceName) {
+              rawData.source_name = sourceName;
+            }
+            if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
+              rawData.fit_score = Number(prospect.fit_score);
+            }
+            if (prospect.grade && prospect.grade !== '-' && prospect.grade !== 'null') {
+              rawData.grade = String(prospect.grade);
             }
             if (prospect.icp_id) {
-              updatePayload.icp_id = prospect.icp_id;
+              rawData.icp_id = prospect.icp_id;
+            }
+            
+            // ✅ Garantir que raw_data seja um objeto válido (não null, não undefined)
+            if (Object.keys(rawData).length > 0) {
+              // Converter para JSON e depois parsear para garantir formato válido
+              updatePayload.raw_data = JSON.parse(JSON.stringify(rawData));
             }
 
             const { error: updateError } = await ((supabase as any).from('companies'))
@@ -472,23 +709,27 @@ export default function QualifiedProspectsStock() {
               continue;
             }
 
-            // Atualizar qualified_prospect com company_id e status
-            const { error: prospectUpdateError } = await ((supabase as any).from('qualified_prospects'))
-              .update({
-                company_id: existingCompany.id,
-                pipeline_status: 'sent_to_companies',
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', prospect.id);
-
-            if (prospectUpdateError) {
-              console.warn('[Qualified → Companies] ⚠️ Erro ao atualizar qualified_prospect (empresa já atualizada)', prospectUpdateError);
-            }
-
             console.log('[Qualified → Companies] ✅ Empresa atualizada em companies', {
               company_id: existingCompany.id,
               cnpj: prospect.cnpj,
             });
+
+            // ✅ DELETAR de qualified_prospects (não apenas atualizar status)
+            const { error: deleteErrorUpdate } = await ((supabase as any).from('qualified_prospects'))
+              .delete()
+              .eq('id', prospect.id);
+
+            if (deleteErrorUpdate) {
+              console.error('[Qualified → Companies] ❌ Erro ao deletar de qualified_prospects', {
+                error: deleteErrorUpdate,
+                prospect_id: prospect.id,
+              });
+            } else {
+              console.log('[Qualified → Companies] ✅ Removido de qualified_prospects', {
+                prospect_id: prospect.id,
+                cnpj: prospect.cnpj,
+              });
+            }
 
             updatedCount++;
           } else {
@@ -498,32 +739,67 @@ export default function QualifiedProspectsStock() {
               company_name: companyName,
             });
 
+            // ✅ Payload simplificado e seguro - apenas campos que EXISTEM na tabela companies
             const insertPayload: any = {
               tenant_id: tenantId,
-              cnpj: prospect.cnpj,
-              company_name: companyName,
-              name: companyName, // Campo obrigatório
-              headquarters_city: city,
-              headquarters_state: state,
-              industry: sector,
-              website: website,
+              cnpj: normalizedCnpj, // Usar CNPJ já normalizado
+              company_name: companyName || 'Empresa Sem Nome', // Garantir que não seja null
+              name: companyName || 'Empresa Sem Nome', // Campo obrigatório
             };
 
-            // Adicionar campos opcionais se existirem no schema
-            if (prospect.fit_score !== undefined) {
-              insertPayload.fit_score = prospect.fit_score;
+            // Adicionar campos opcionais apenas se tiverem valores válidos
+            if (city) {
+              insertPayload.headquarters_city = city;
             }
-            if (prospect.grade) {
-              insertPayload.grade = prospect.grade;
+            if (state) {
+              insertPayload.headquarters_state = state;
+            }
+            if (sector) {
+              insertPayload.industry = sector;
+            }
+            if (website && website.trim() && !website.includes('exemplo.com')) {
+              insertPayload.website = website;
+            }
+            
+            // ✅ Salvar dados de qualificação em raw_data (fit_score, grade, icp_id não existem como colunas)
+            // IMPORTANTE: raw_data deve ser um objeto JSON válido (JSONB no PostgreSQL)
+            const rawData: any = {};
+            const sourceName = prospect.source_name || prospect.job?.source_file_name || 'Qualification Engine';
+            if (sourceName) {
+              rawData.source_name = sourceName;
+            }
+            if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
+              rawData.fit_score = Number(prospect.fit_score);
+            }
+            if (prospect.grade && prospect.grade !== '-' && prospect.grade !== 'null') {
+              rawData.grade = String(prospect.grade);
             }
             if (prospect.icp_id) {
-              insertPayload.icp_id = prospect.icp_id;
+              rawData.icp_id = prospect.icp_id;
             }
-            if (prospect.job_id) {
-              insertPayload.origem_job_id = prospect.job_id;
+            
+            // ✅ Garantir que raw_data seja um objeto válido (não null, não undefined)
+            if (Object.keys(rawData).length > 0) {
+              // Converter para JSON e depois parsear para garantir formato válido
+              insertPayload.raw_data = JSON.parse(JSON.stringify(rawData));
             }
-            // Marcar origem
-            insertPayload.origem = 'qualification_engine';
+
+            // ✅ Log detalhado do payload antes de inserir
+            console.log('[Qualified → Companies] 📦 Payload de inserção:', {
+              tenant_id: insertPayload.tenant_id,
+              cnpj: insertPayload.cnpj,
+              company_name: insertPayload.company_name,
+              name: insertPayload.name,
+              has_city: !!insertPayload.headquarters_city,
+              has_state: !!insertPayload.headquarters_state,
+              has_industry: !!insertPayload.industry,
+              has_website: !!insertPayload.website,
+              has_source_name: !!insertPayload.source_name,
+              has_fit_score: insertPayload.fit_score !== undefined,
+              has_grade: !!insertPayload.grade,
+              has_icp_id: !!insertPayload.icp_id,
+              payload_keys: Object.keys(insertPayload),
+            });
 
             const { data: newCompany, error: createError } = await ((supabase as any).from('companies'))
               .insert(insertPayload)
@@ -533,9 +809,23 @@ export default function QualifiedProspectsStock() {
             if (createError) {
               console.error('[Qualified → Companies] ❌ Erro Supabase ao inserir em companies', {
                 error: createError,
+                error_code: createError.code,
+                error_message: createError.message,
+                error_details: createError.details,
+                error_hint: createError.hint,
                 payload: insertPayload,
+                payload_stringified: JSON.stringify(insertPayload, null, 2),
+                raw_data_type: typeof insertPayload.raw_data,
+                raw_data_keys: insertPayload.raw_data ? Object.keys(insertPayload.raw_data) : null,
+                has_name: !!insertPayload.name,
+                has_company_name: !!insertPayload.company_name,
+                has_tenant_id: !!insertPayload.tenant_id,
               });
-              errors.push(`CNPJ ${prospect.cnpj}: ${createError.message}`);
+              
+              // ✅ Exibir erro detalhado para o usuário
+              const errorMsg = createError.message || 'Erro desconhecido';
+              const errorDetails = createError.details || createError.hint || '';
+              errors.push(`CNPJ ${prospect.cnpj}: ${errorMsg}${errorDetails ? ` (${errorDetails})` : ''}`);
               continue;
             }
 
@@ -554,17 +844,23 @@ export default function QualifiedProspectsStock() {
               company_name: newCompany.company_name,
             });
 
-            // Atualizar qualified_prospect com company_id e status
-            const { error: prospectUpdateError } = await ((supabase as any).from('qualified_prospects'))
-              .update({
-                company_id: newCompany.id,
-                pipeline_status: 'sent_to_companies',
-                updated_at: new Date().toISOString(),
-              })
+            // ✅ DELETAR de qualified_prospects (não apenas atualizar status)
+            // Isso garante que a empresa saia do estoque de qualificadas
+            const { error: deleteErrorCreate } = await ((supabase as any).from('qualified_prospects'))
+              .delete()
               .eq('id', prospect.id);
 
-            if (prospectUpdateError) {
-              console.warn('[Qualified → Companies] ⚠️ Erro ao atualizar qualified_prospect (empresa já criada)', prospectUpdateError);
+            if (deleteErrorCreate) {
+              console.error('[Qualified → Companies] ❌ Erro ao deletar de qualified_prospects', {
+                error: deleteErrorCreate,
+                prospect_id: prospect.id,
+              });
+              // Não falhar o processo, apenas logar o erro
+            } else {
+              console.log('[Qualified → Companies] ✅ Removido de qualified_prospects', {
+                prospect_id: prospect.id,
+                cnpj: prospect.cnpj,
+              });
             }
 
             promotedCount++;
@@ -748,7 +1044,7 @@ export default function QualifiedProspectsStock() {
   const handleBulkEnrichment = async () => {
     const idsToEnrich = selectedIds.size > 0 
       ? Array.from(selectedIds) 
-      : prospects.filter(p => p.data_quality_status !== 'ok').map(p => p.id);
+      : prospects.map(p => p.id);
 
     if (idsToEnrich.length === 0) {
       toast({
@@ -794,7 +1090,7 @@ export default function QualifiedProspectsStock() {
           });
           
           if (enriched && enriched.success && enriched.data) {
-            const data = enriched.data;
+            const data = enriched.data as any;
             const nomeFantasia = data.fantasia || data.nome_fantasia || null;
             
             const updateData: any = {
@@ -804,7 +1100,6 @@ export default function QualifiedProspectsStock() {
               estado: data.uf || prospect.estado,
               setor: data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor,
               website: data.website || prospect.website,
-              data_quality_status: 'ok',
               updated_at: new Date().toISOString(),
             };
 
@@ -959,7 +1254,7 @@ export default function QualifiedProspectsStock() {
       });
       
       if (enriched && enriched.success && enriched.data) {
-        const data = enriched.data;
+        const data = enriched.data as any;
         // ✅ CRITÉRIO IGUAL AO INLINESEARCH: usar fantasia da Receita Federal
         const nomeFantasia = data.fantasia || data.nome_fantasia || null;
         
@@ -970,7 +1265,6 @@ export default function QualifiedProspectsStock() {
           estado: data.uf || prospect.estado,
           setor: data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor,
           website: data.website || prospect.website,
-          data_quality_status: 'ok',
           updated_at: new Date().toISOString(),
         };
 
@@ -1078,7 +1372,7 @@ export default function QualifiedProspectsStock() {
   const uniqueSectors = Array.from(new Set(prospects.map(p => p.setor).filter(Boolean))).sort();
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="p-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1306,7 +1600,7 @@ export default function QualifiedProspectsStock() {
             {prospects.length} empresa(s) encontrada(s)
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -1316,28 +1610,96 @@ export default function QualifiedProspectsStock() {
               Nenhuma empresa encontrada
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedIds.size === prospects.length && prospects.length > 0}
-                        onCheckedChange={handleSelectAll}
-                      />
-                    </TableHead>
-                    <TableHead>CNPJ</TableHead>
-                    <TableHead>Razão Social</TableHead>
-                    <TableHead>Nome Fantasia</TableHead>
-                    <TableHead>Cidade/UF</TableHead>
-                    <TableHead>Setor</TableHead>
-                    <TableHead>ICP</TableHead>
-                    <TableHead>Fit Score</TableHead>
-                    <TableHead>Grade</TableHead>
-                    <TableHead>Origem</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedIds.size === prospects.length && prospects.length > 0}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleSort('razao_social')}
+                      className="h-8 flex items-center gap-1"
+                    >
+                      Empresa
+                      <ArrowUpDown className="h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleSort('cnpj')}
+                      className="h-8 flex items-center gap-1"
+                    >
+                      CNPJ
+                      <ArrowUpDown className="h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="origem"
+                      title="Origem"
+                      values={[...new Set(prospects.map(p => p.source_name || p.job?.source_file_name || '').filter(Boolean))]}
+                      selectedValues={filterOrigin}
+                      onFilterChange={setFilterOrigin}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="status_cnpj"
+                      title="Status CNPJ"
+                      values={['ATIVA', 'SUSPENSA', 'INAPTA', 'BAIXADA', 'NULA']}
+                      selectedValues={filterStatusCNPJ}
+                      onFilterChange={setFilterStatusCNPJ}
+                    />
+                  </TableHead>
+                  <TableHead>Nome Fantasia</TableHead>
+                  <TableHead>Cidade/UF</TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="setor"
+                      title="Setor"
+                      values={uniqueSectors}
+                      selectedValues={sectorFilter !== 'all' ? [sectorFilter] : []}
+                      onFilterChange={(values) => setSectorFilter(values.length > 0 ? values[0] : 'all')}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="icp"
+                      title="ICP"
+                      values={[...new Set(prospects.map(p => p.icp?.nome || 'Sem ICP').filter(Boolean))]}
+                      selectedValues={filterICP}
+                      onFilterChange={setFilterICP}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="fit_score"
+                      title="Fit Score"
+                      values={['90-100', '75-89', '60-74', '40-59', '0-39']}
+                      selectedValues={filterFitScore}
+                      onFilterChange={setFilterFitScore}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ColumnFilter
+                      column="grade"
+                      title="Grade"
+                      values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
+                      selectedValues={filterGrade}
+                      onFilterChange={setFilterGrade}
+                    />
+                  </TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
                 <TableBody>
                   {prospects.map((prospect) => (
                     <TableRow key={prospect.id}>
@@ -1349,14 +1711,71 @@ export default function QualifiedProspectsStock() {
                           }
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {prospect.cnpj}
-                      </TableCell>
+                      {/* ✅ ORDEM CORRETA: 1. Empresa (Razão Social) */}
                       <TableCell className="font-medium">
-                        {prospect.razao_social}
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-primary" />
+                          <div>
+                            <button
+                              onClick={() => handleShowFullPreview(prospect.cnpj)}
+                              className="font-medium hover:text-primary hover:underline text-left"
+                            >
+                              {prospect.razao_social || 'Sem nome'}
+                            </button>
+                          </div>
+                        </div>
                       </TableCell>
+                      {/* ✅ ORDEM CORRETA: 2. CNPJ */}
                       <TableCell>
-                        {/* ✅ Usar fantasia do enriquecimento ou do prospect */}
+                        <Badge 
+                          variant="outline" 
+                          className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
+                          onClick={() => handleShowFullPreview(prospect.cnpj)}
+                        >
+                          {prospect.cnpj}
+                        </Badge>
+                      </TableCell>
+                      {/* ✅ ORDEM CORRETA: 3. Origem */}
+                      <TableCell>
+                        {(() => {
+                          const origem = prospect.source_name || prospect.job?.source_file_name || '';
+                          if (origem) {
+                            return (
+                              <Badge 
+                                variant="secondary" 
+                                className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
+                              >
+                                {origem}
+                              </Badge>
+                            );
+                          }
+                          return (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              Legacy
+                            </Badge>
+                          );
+                        })()}
+                      </TableCell>
+                      {/* ✅ ORDEM CORRETA: 4. Status CNPJ */}
+                      <TableCell>
+                        {(() => {
+                          const receitaData = prospect.enrichment?.raw || {};
+                          const situacao = receitaData.situacao || receitaData.descricao_situacao_cadastral || '';
+                          
+                          // Normalizar status para o componente
+                          let cnpjStatus = 'pendente';
+                          if (situacao) {
+                            const sitUpper = situacao.toUpperCase();
+                            if (sitUpper.includes('ATIVA')) cnpjStatus = 'ativa';
+                            else if (sitUpper.includes('INAPTA') || sitUpper.includes('SUSPENSA') || sitUpper.includes('BAIXADA')) cnpjStatus = 'inativo';
+                            else if (sitUpper.includes('NULA')) cnpjStatus = 'inexistente';
+                          }
+                          
+                          return <QuarantineCNPJStatusBadge cnpj={prospect.cnpj || undefined} cnpjStatus={cnpjStatus} />;
+                        })()}
+                      </TableCell>
+                      {/* ✅ ORDEM CORRETA: 5. Nome Fantasia */}
+                      <TableCell>
                         {(() => {
                           const fantasia = prospect.enrichment?.fantasia || prospect.nome_fantasia;
                           if (fantasia && 
@@ -1367,12 +1786,15 @@ export default function QualifiedProspectsStock() {
                           return '-';
                         })()}
                       </TableCell>
+                      {/* ✅ ORDEM CORRETA: 6. Cidade/UF */}
                       <TableCell>
                         {prospect.cidade && prospect.estado
                           ? `${prospect.cidade}/${prospect.estado}`
                           : prospect.estado || '-'}
                       </TableCell>
+                      {/* ✅ ORDEM CORRETA: 7. Setor */}
                       <TableCell>{prospect.setor || '-'}</TableCell>
+                      {/* ✅ ORDEM CORRETA: 8. ICP */}
                       <TableCell>
                         {prospect.icp?.nome ? (
                           <Badge variant="outline" className="text-xs">
@@ -1382,14 +1804,13 @@ export default function QualifiedProspectsStock() {
                           '-'
                         )}
                       </TableCell>
+                      {/* ✅ ORDEM CORRETA: 9. Fit Score */}
                       <TableCell>
-                        {/* ✅ Usar fit_score do enriquecimento ou do prospect com tooltip explicativo */}
                         {(() => {
                           const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
                           const matchBreakdown = prospect.match_breakdown;
                           
                           if (fitScore != null && fitScore > 0) {
-                            // Calcular breakdown se disponível
                             let breakdownText = '';
                             if (matchBreakdown && Array.isArray(matchBreakdown)) {
                               const breakdown = matchBreakdown.map((item: any) => 
@@ -1447,8 +1868,8 @@ export default function QualifiedProspectsStock() {
                           );
                         })()}
                       </TableCell>
+                      {/* ✅ ORDEM CORRETA: 10. Grade */}
                       <TableCell>
-                        {/* ✅ Usar grade do enriquecimento ou do prospect com tooltip explicativo */}
                         {(() => {
                           const grade = prospect.enrichment?.grade || prospect.grade;
                           const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
@@ -1507,33 +1928,6 @@ export default function QualifiedProspectsStock() {
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        {/* ✅ Usar origem do enriquecimento ou source_name/job */}
-                        {(() => {
-                          const origem = prospect.enrichment?.origem;
-                          if (origem) {
-                            return <Badge variant="outline" className="text-xs">{origem}</Badge>;
-                          }
-                          
-                          return (
-                            <div className="flex flex-col gap-1">
-                              {prospect.source_name && (
-                                <span className="text-sm font-medium">{prospect.source_name}</span>
-                              )}
-                              {prospect.source_metadata?.campaign && (
-                                <Badge variant="outline" className="text-xs w-fit">
-                                  {prospect.source_metadata.campaign}
-                                </Badge>
-                              )}
-                              {!prospect.source_name && !prospect.source_metadata?.campaign && (
-                                <span className="text-sm text-muted-foreground">
-                                  {prospect.job?.job_name || '-'}
-                                </span>
-                              )}
-                            </div>
                           );
                         })()}
                       </TableCell>
@@ -1603,12 +1997,189 @@ export default function QualifiedProspectsStock() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* ✅ FLUXO OFICIAL: Modal de Preview da Empresa */}
+      {/* ✅ CICLO 1: Modal de Preview Completo (igual a SearchPage) */}
+      <Dialog open={showFullPreview} onOpenChange={setShowFullPreview}>
+        <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl flex items-center gap-3">
+              <Building2 className="h-6 w-6 text-primary" />
+              Preview Completo dos Dados
+              {fullPreviewData?.cnpj_status === 'ativo' && (
+                <Badge className="ml-2 bg-green-500 hover:bg-green-600 text-white border-green-600 gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  CNPJ ATIVO
+                </Badge>
+              )}
+              {fullPreviewData?.cnpj_status === 'inativo' && (
+                <Badge className="ml-2 bg-orange-500 hover:bg-orange-600 text-white border-orange-600 gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  CNPJ INATIVO
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Revise as informações completas antes de confirmar o cadastro no funil de vendas
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingFullPreview ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : fullPreviewData ? (
+            <div className="space-y-6">
+              {/* Header com dados principais */}
+              <Card className="border-l-4 border-l-primary">
+                <CardHeader>
+                  <div className="space-y-2">
+                    <CardTitle className="text-xl">{fullPreviewData.company.name}</CardTitle>
+                    {fullPreviewData.company.raw_data?.receita?.fantasia && (
+                      <p className="text-sm text-muted-foreground">Nome Fantasia: {fullPreviewData.company.raw_data.receita.fantasia}</p>
+                    )}
+                  </div>
+                  <CardDescription className="space-y-2 pt-2">
+                    {fullPreviewData.company.cnpj && (
+                      <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
+                        <span className="text-sm font-medium text-muted-foreground">CNPJ:</span>
+                        <span className="text-xl font-mono font-bold text-indigo-700 dark:text-indigo-400">
+                          {fullPreviewData.company.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
+                        </span>
+                      </div>
+                    )}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+
+              {/* Grid com 3 colunas - Simplificado para não sobrecarregar */}
+              <div className="grid md:grid-cols-3 gap-6">
+                {/* Coluna 1 - Dados Cadastrais */}
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <FileText className="h-4 w-4" />
+                        Dados Cadastrais
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Porte:</span>
+                        <p className="font-medium">{fullPreviewData.company.raw_data?.receita?.porte || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Abertura:</span>
+                        <p className="font-medium">{fullPreviewData.company.raw_data?.receita?.abertura || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Capital Social:</span>
+                        <p className="font-medium">
+                          {fullPreviewData.company.raw_data?.receita?.capital_social 
+                            ? `R$ ${Number(fullPreviewData.company.raw_data.receita.capital_social).toLocaleString('pt-BR')}` 
+                            : 'N/A'}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Situação Cadastral */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        Situação Cadastral
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Status:</span>
+                        <Badge 
+                          className={`ml-2 ${
+                            fullPreviewData.company.raw_data?.receita?.situacao === 'ATIVA' 
+                              ? 'bg-emerald-500 text-white' 
+                              : 'bg-rose-500 text-white'
+                          }`}
+                        >
+                          {fullPreviewData.company.raw_data?.receita?.situacao || 'N/A'}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Coluna 2 - Localização */}
+                <div className="space-y-4">
+                  {fullPreviewData.company.location && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <MapPin className="h-4 w-4" />
+                          Localização
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="text-xs space-y-1">
+                          {fullPreviewData.company.raw_data?.receita?.logradouro && (
+                            <p>{fullPreviewData.company.raw_data.receita.logradouro}, {fullPreviewData.company.raw_data.receita.numero || 'S/N'}</p>
+                          )}
+                          <p className="font-semibold">
+                            {fullPreviewData.company.raw_data?.receita?.municipio || fullPreviewData.company.location.city}/
+                            {fullPreviewData.company.raw_data?.receita?.uf || fullPreviewData.company.location.state}
+                          </p>
+                          {fullPreviewData.company.raw_data?.receita?.cep && (
+                            <p className="text-muted-foreground">CEP: {fullPreviewData.company.raw_data.receita.cep}</p>
+                          )}
+                        </div>
+                        
+                        {/* Mapa */}
+                        {(fullPreviewData.company.location.cep || fullPreviewData.company.location.city) && (
+                          <div className="h-[180px] rounded-lg overflow-hidden">
+                            <LocationMap
+                              address={fullPreviewData.company.raw_data?.receita?.logradouro}
+                              municipio={fullPreviewData.company.location.city}
+                              estado={fullPreviewData.company.location.state}
+                              cep={fullPreviewData.company.location.cep}
+                            />
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Coluna 3 - Atividades */}
+                <div className="space-y-4">
+                  {fullPreviewData.company.raw_data?.receita?.atividade_principal && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <Briefcase className="h-4 w-4" />
+                          Atividade Principal
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {fullPreviewData.company.raw_data.receita.atividade_principal.map((ativ: any, idx: number) => (
+                            <div key={idx} className="text-xs">
+                              <Badge variant="outline" className="text-[10px] mb-1">{ativ.code}</Badge>
+                              <p className="text-[10px] leading-relaxed">{ativ.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ FLUXO OFICIAL: Modal de Preview da Empresa (mantido para compatibilidade) */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>

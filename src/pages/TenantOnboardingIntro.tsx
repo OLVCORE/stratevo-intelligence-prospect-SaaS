@@ -63,7 +63,7 @@ export default function TenantOnboardingIntro() {
           </Badge>
           
           <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-            Bem-vindo à STRATEVO Intelligence!
+            Bem-vindo ao STRATEVO One!
           </h1>
           
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-6">
