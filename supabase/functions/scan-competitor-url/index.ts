@@ -79,10 +79,13 @@ serve(async (req) => {
           console.log(`[ScanCompetitor] Acessando homepage: ${baseUrl}`);
           const homepageResponse = await fetch(baseUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            signal: AbortSignal.timeout(15000), // 15 segundos de timeout
           });
           
           if (homepageResponse.ok) {
             const html = await homepageResponse.text();
+            console.log(`[ScanCompetitor] HTML recebido (${html.length} caracteres)`);
+            
             const textContent = html
               .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
               .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -93,9 +96,15 @@ serve(async (req) => {
             
             pagesContent.push(`URL: ${baseUrl} (Homepage)\nConteúdo: ${textContent}`);
             console.log(`[ScanCompetitor] ✅ Homepage acessada com sucesso (${textContent.length} caracteres)`);
+            console.log(`[ScanCompetitor] 📄 Preview do conteúdo (primeiros 500 chars):`, textContent.substring(0, 500));
+          } else {
+            console.log(`[ScanCompetitor] ⚠️ Homepage retornou status ${homepageResponse.status}`);
           }
-        } catch (homepageError) {
-          console.error('[ScanCompetitor] Erro ao acessar homepage:', homepageError);
+        } catch (homepageError: any) {
+          console.error('[ScanCompetitor] ❌ Erro ao acessar homepage:', homepageError);
+          if (homepageError.name === 'AbortError') {
+            console.error('[ScanCompetitor] ⏱️ Timeout ao acessar homepage (15s)');
+          }
         }
 
         // 1.1. Buscar páginas do site via SERPER (MESMO DO TENANT) - com mais palavras-chave
@@ -324,52 +333,146 @@ Conteúdo:\n\n${content.substring(0, 20000)}`
     // Parse do JSON (MESMO DO TENANT)
     let extractedProducts: any[] = [];
     try {
-      const parsed = JSON.parse(aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
-      extractedProducts = parsed.produtos || [];
-    } catch (parseError) {
-      console.error('[ScanCompetitor] Erro ao parsear resposta da IA:', parseError);
-      extractedProducts = [];
+      const cleanContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      console.log('[ScanCompetitor] 🧹 Conteúdo limpo (tamanho):', cleanContent.length, 'caracteres');
+      
+      // Tentar encontrar JSON válido mesmo se houver texto antes/depois
+      let jsonStart = cleanContent.indexOf('{');
+      let jsonEnd = cleanContent.lastIndexOf('}') + 1;
+      
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        const jsonContent = cleanContent.substring(jsonStart, jsonEnd);
+        console.log('[ScanCompetitor] 🔍 Tentando parsear JSON extraído (tamanho):', jsonContent.length, 'caracteres');
+        
+        const parsed = JSON.parse(jsonContent);
+        extractedProducts = parsed.produtos || parsed.products || [];
+        
+        console.log('[ScanCompetitor] ✅ Produtos parseados:', extractedProducts.length);
+        if (extractedProducts.length > 0) {
+          console.log('[ScanCompetitor] 📦 Primeiro produto:', JSON.stringify(extractedProducts[0], null, 2));
+        } else {
+          console.log('[ScanCompetitor] ⚠️ NENHUM PRODUTO ENCONTRADO! Resposta completa:', cleanContent.substring(0, 2000));
+        }
+      } else {
+        console.error('[ScanCompetitor] ❌ Não foi possível encontrar JSON válido na resposta');
+        console.error('[ScanCompetitor] 📄 Conteúdo completo (primeiros 2000 chars):', cleanContent.substring(0, 2000));
+        extractedProducts = [];
+      }
+    } catch (parseError: any) {
+      console.error('[ScanCompetitor] ❌ Erro ao parsear resposta da IA:', parseError);
+      console.error('[ScanCompetitor] 📄 Conteúdo que falhou (primeiros 2000 chars):', aiContent.substring(0, 2000));
+      console.error('[ScanCompetitor] 🔍 Tentando extrair JSON manualmente...');
+      
+      // Tentar extrair JSON manualmente usando regex
+      try {
+        const jsonMatch = aiContent.match(/\{[\s\S]*"produtos"[\s\S]*\}/) || aiContent.match(/\{[\s\S]*"products"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          extractedProducts = parsed.produtos || parsed.products || [];
+          console.log('[ScanCompetitor] ✅ Produtos extraídos manualmente:', extractedProducts.length);
+        }
+      } catch (manualParseError) {
+        console.error('[ScanCompetitor] ❌ Falha também no parse manual:', manualParseError);
+        extractedProducts = [];
+      }
     }
 
     // 3. Inserir produtos no banco
     let productsInserted = 0;
+    let productsSkipped = 0;
+    let productsError = 0;
+    
+    console.log(`[ScanCompetitor] 🔄 Tentando inserir ${extractedProducts.length} produtos...`);
     
     for (const product of extractedProducts) {
-      if (!product.nome) continue;
-
-      // Verificar se já existe
-      const { data: existing } = await supabase
-        .from('tenant_competitor_products')
-        .select('id')
-        .eq('tenant_id', tenant_id)
-        .eq('competitor_cnpj', competitor_cnpj)
-        .eq('nome', product.nome)
-        .limit(1);
-
-      if (existing && existing.length > 0) {
+      if (!product.nome) {
+        console.log(`[ScanCompetitor] ⚠️ Produto sem nome, pulando`);
         continue;
       }
 
-      const { error: insertError } = await supabase
-        .from('tenant_competitor_products')
-        .insert({
-          tenant_id,
-          competitor_cnpj,
-          competitor_name,
-          nome: product.nome,
-          descricao: product.descricao || null,
-          categoria: product.categoria || null,
-          source_url,
-          source_type: detectedType,
-          extraido_de: `${detectedType}_scan`,
-          confianca_extracao: product.confianca || 0.7,
-          dados_extraidos: { raw: product, content_preview: content.substring(0, 500) },
-        });
+      // 🔥 CRÍTICO: Verificar se já existe (com tratamento robusto de erros)
+      let produtoJaExiste = false;
+      try {
+        const { data: existing, error: checkError } = await supabase
+          .from('tenant_competitor_products')
+          .select('id')
+          .eq('tenant_id', tenant_id)
+          .eq('competitor_cnpj', competitor_cnpj)
+          .ilike('nome', product.nome.trim()) // Usar ilike para comparação case-insensitive
+          .limit(1);
 
-      if (!insertError) {
-        productsInserted++;
+        if (checkError) {
+          console.error(`[ScanCompetitor] ⚠️ Erro ao verificar produto existente (${product.nome}):`, checkError);
+          // Se erro for de RLS ou tabela não encontrada, tentar inserir mesmo assim
+          if (checkError.code === '42P01' || checkError.message?.includes('permission denied')) {
+            console.warn(`[ScanCompetitor] ⚠️ Erro de permissão na verificação, tentando inserir mesmo assim: ${product.nome}`);
+          }
+        } else if (existing && existing.length > 0) {
+          produtoJaExiste = true;
+          console.log(`[ScanCompetitor] ⏭️ Produto já existe: ${product.nome}`);
+          productsSkipped++;
+        }
+      } catch (checkException: any) {
+        console.error(`[ScanCompetitor] ⚠️ Exceção ao verificar produto (${product.nome}):`, checkException);
+        // Continuar e tentar inserir mesmo assim
+      }
+
+      if (produtoJaExiste) {
+        continue;
+      }
+
+      console.log(`[ScanCompetitor] ➕ Inserindo produto: ${product.nome}`);
+      
+      // 🔥 CRÍTICO: Tentar inserir com tratamento robusto de erros
+      try {
+        const { data: insertData, error: insertError } = await supabase
+          .from('tenant_competitor_products')
+          .insert({
+            tenant_id,
+            competitor_cnpj,
+            competitor_name,
+            nome: product.nome.trim(), // Remover espaços
+            descricao: product.descricao?.trim() || null,
+            categoria: product.categoria?.trim() || null,
+            source_url,
+            source_type: detectedType,
+            extraido_de: `${detectedType}_scan`,
+            confianca_extracao: product.confianca || 0.7,
+            dados_extraidos: { raw: product, content_preview: content.substring(0, 500) },
+          })
+          .select('id'); // Retornar ID para confirmar inserção
+
+        if (!insertError && insertData && insertData.length > 0) {
+          productsInserted++;
+          console.log(`[ScanCompetitor] ✅ Produto inserido com sucesso: ${product.nome} (ID: ${insertData[0].id})`);
+        } else {
+          productsError++;
+          console.error(`[ScanCompetitor] ❌ Erro ao inserir produto (${product.nome}):`, insertError);
+          console.error(`[ScanCompetitor] 📋 Dados do produto que falhou:`, {
+            nome: product.nome,
+            categoria: product.categoria,
+            tenant_id,
+            competitor_cnpj,
+            error_code: insertError?.code,
+            error_message: insertError?.message,
+            error_hint: insertError?.hint
+          });
+          
+          // 🔥 CRÍTICO: Se erro for de constraint ou duplicata, contar como skipped
+          if (insertError?.code === '23505' || insertError?.message?.includes('duplicate')) {
+            console.log(`[ScanCompetitor] 🔄 Produto duplicado detectado: ${product.nome}`);
+            productsSkipped++;
+            productsError--; // Não contar como erro se for duplicata
+          }
+        }
+      } catch (insertException: any) {
+        productsError++;
+        console.error(`[ScanCompetitor] ❌ Exceção ao inserir produto (${product.nome}):`, insertException);
+        console.error(`[ScanCompetitor] 📋 Stack trace:`, insertException.stack);
       }
     }
+    
+    console.log(`[ScanCompetitor] 📊 Resumo da inserção: ${productsInserted} inseridos, ${productsSkipped} já existiam, ${productsError} com erro`);
 
     console.log(`[ScanCompetitor] ✅ Concluído: ${productsInserted} produtos inseridos de ${extractedProducts.length} encontrados`);
 

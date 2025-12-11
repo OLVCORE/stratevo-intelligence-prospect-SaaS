@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Globe, Sparkles, X, Package, Plus, Building2, RefreshCw, MapPin, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,13 +24,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 interface Props {
   onNext: (data: any) => void;
   onBack: () => void;
-  onSave?: (data?: any) => void | Promise<void>;
+  onSave?: (data?: any) => void | Promise<void>; // Auto-save silencioso
+  onSaveExplicit?: (data?: any) => void | Promise<void>; // Botão "Salvar" explícito (com toast)
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
 }
 
-export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
   const [formData, setFormData] = useState({
     cnpj: initialData?.cnpj || '',
     email: initialData?.email || '',
@@ -112,22 +113,124 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 }); // 🔥 NOVO: Progresso da extração em massa
   const [extractionStatus, setExtractionStatus] = useState<Record<string, 'pending' | 'extracting' | 'success' | 'error'>>({}); // 🔥 NOVO: Status de extração por CNPJ/tenant
   
-  const { tenant } = useTenant();
+  const { tenant, refreshTenant, switchTenant } = useTenant();
+  
+  // 🔥 CRÍTICO: Carregar dados do tenant do banco quando tenant muda
+  const loadTenantData = useCallback(async () => {
+    if (!tenant?.id) {
+      console.warn('[Step1] ⚠️ Tenant não identificado para carregar dados');
+      return;
+    }
+    
+    // 🔥 CRÍTICO: Verificar se tenant_id é um UUID válido (não é tenant local)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.id);
+    if (!isUUID) {
+      console.log('[Step1] ℹ️ Tenant local detectado, usando dados do contexto:', tenant.id);
+      // Para tenant local, usar dados do contexto se disponíveis
+      if (tenant.nome || tenant.cnpj || tenant.email) {
+        setFormData(prev => ({
+          cnpj: tenant.cnpj || prev.cnpj || '',
+          email: tenant.email || prev.email || '',
+          website: prev.website || '',
+          telefone: prev.telefone || '',
+        }));
+      }
+      return;
+    }
+    
+    try {
+      console.log('[Step1] 🔍 Carregando dados do tenant do banco:', tenant.id);
+      
+      // Buscar dados do tenant
+      const { data: tenantData, error: tenantError } = await (supabase as any)
+        .from('tenants')
+        .select('id, nome, cnpj, email, telefone')
+        .eq('id', tenant.id)
+        .maybeSingle();
+      
+      if (tenantError) {
+        console.warn('[Step1] ⚠️ Erro ao buscar dados do tenant:', tenantError);
+        return;
+      }
+      
+      if (tenantData) {
+        console.log('[Step1] ✅ Dados do tenant carregados:', tenantData);
+        
+        // Atualizar formData com dados do tenant (MERGE não-destrutivo)
+        setFormData(prev => ({
+          cnpj: tenantData.cnpj || prev.cnpj || '',
+          email: tenantData.email || prev.email || '',
+          website: prev.website || '',
+          telefone: tenantData.telefone || prev.telefone || '',
+        }));
+        
+        // Se tem CNPJ mas não tem cnpjData, buscar da Receita Federal
+        if (tenantData.cnpj && !cnpjData) {
+          const cnpjLimpo = tenantData.cnpj.replace(/\D/g, '');
+          if (cnpjLimpo.length === 14) {
+            console.log('[Step1] 🔍 CNPJ encontrado no tenant, buscando dados da Receita Federal...');
+            // Não buscar automaticamente, apenas logar que poderia buscar
+            // O usuário pode clicar em "Buscar Dados" se quiser
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Step1] ❌ Erro ao carregar dados do tenant:', error);
+    }
+  }, [tenant?.id, tenant?.cnpj, tenant?.email, tenant?.nome, cnpjData]);
+  
+  // 🔥 CRÍTICO: Carregar dados do tenant quando tenant muda
+  useEffect(() => {
+    if (tenant?.id) {
+      loadTenantData();
+    }
+  }, [tenant?.id, loadTenantData]);
 
   // 🔥 NOVO: Carregar produtos do tenant (BUSCA DE AMBAS AS TABELAS)
-  const loadTenantProducts = async () => {
+  // ✅ useCallback para evitar loops infinitos
+  const loadTenantProducts = useCallback(async () => {
     if (!tenant?.id) {
       console.warn('[Step1] ⚠️ Tenant não identificado para carregar produtos');
+      return;
+    }
+    
+    // 🔥 CRÍTICO: Verificar se tenant_id é um UUID válido (não é tenant local)
+    // Tenants locais têm formato "local-tenant-..." e não podem ser usados em queries
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.id);
+    if (!isUUID) {
+      console.log('[Step1] ℹ️ Tenant local detectado, pulando busca de produtos do banco:', tenant.id);
+      setTenantProducts([]);
+      setTenantProductsCount(0);
       return;
     }
     
     try {
       console.log('[Step1] 🔍 Carregando produtos do tenant:', tenant.id);
       
-      const tenantCnpj = formData.cnpj?.replace(/\D/g, '') || '';
       let produtosData: any[] = [];
       
-      // 🔥 CRÍTICO: Buscar de tenant_competitor_products primeiro (onde scan-competitor-url salva)
+      // 🔥 CORRIGIDO: Priorizar tenant_products (onde scan-website-products salva)
+      // Buscar primeiro de tenant_products (tabela principal para produtos do tenant)
+      try {
+        const { data: produtosTenant, error: produtosTenantError } = await supabase
+          .from('tenant_products' as any)
+          .select('id, nome, descricao, categoria, created_at')
+          .eq('tenant_id', tenant.id)
+          .order('created_at', { ascending: false });
+        
+        if (!produtosTenantError && produtosTenant) {
+          produtosData = [...produtosData, ...(produtosTenant || [])];
+          console.log('[Step1] ✅ Produtos encontrados em tenant_products:', produtosTenant.length);
+        } else if (produtosTenantError) {
+          console.warn('[Step1] ⚠️ Erro ao buscar de tenant_products:', produtosTenantError);
+        }
+      } catch (err: any) {
+        console.warn('[Step1] ⚠️ Erro ao buscar de tenant_products:', err);
+      }
+      
+      // 🔥 COMPATIBILIDADE: Buscar também de tenant_competitor_products (para dados antigos)
+      // Isso é necessário apenas para compatibilidade com produtos extraídos antes da correção
+      const tenantCnpj = formData.cnpj?.replace(/\D/g, '') || '';
       if (tenantCnpj && tenantCnpj.length === 14) {
         try {
           const { data: produtosConcorrente, error: produtosConcorrenteError } = await supabase
@@ -138,35 +241,15 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
             .order('created_at', { ascending: false });
           
           if (!produtosConcorrenteError && produtosConcorrente) {
-            produtosData = [...produtosData, ...(produtosConcorrente || [])];
-            console.log('[Step1] ✅ Produtos encontrados em tenant_competitor_products:', produtosConcorrente.length);
+            // Combinar produtos, evitando duplicatas por nome
+            const nomesExistentes = new Set(produtosData.map((p: any) => p.nome?.toLowerCase()));
+            const produtosNovos = (produtosConcorrente || []).filter((p: any) => !nomesExistentes.has(p.nome?.toLowerCase()));
+            produtosData = [...produtosData, ...produtosNovos];
+            console.log('[Step1] ✅ Produtos encontrados em tenant_competitor_products (compatibilidade):', produtosConcorrente.length);
           }
         } catch (err: any) {
           console.warn('[Step1] ⚠️ Erro ao buscar de tenant_competitor_products:', err);
         }
-      }
-      
-      // 🔥 CRÍTICO: Buscar também de tenant_products (tabela principal)
-      try {
-        const { data: produtosTenant, error: produtosTenantError } = await supabase
-          .from('tenant_products' as any)
-          .select('id, nome, descricao, categoria, created_at')
-          .eq('tenant_id', tenant.id)
-          .order('created_at', { ascending: false });
-        
-        if (!produtosTenantError && produtosTenant) {
-          // Combinar produtos, evitando duplicatas por nome
-          const nomesExistentes = new Set(produtosData.map((p: any) => p.nome?.toLowerCase()));
-          const produtosNovos = (produtosTenant || []).filter((p: any) => !nomesExistentes.has(p.nome?.toLowerCase()));
-          produtosData = [...produtosData, ...produtosNovos];
-          console.log('[Step1] ✅ Produtos encontrados em tenant_products:', produtosTenant.length);
-        } else if (produtosTenantError) {
-          console.warn('[Step1] ⚠️ Erro ao buscar de tenant_products:', produtosTenantError);
-          // Não falhar se tenant_products não existir, apenas usar tenant_competitor_products
-        }
-      } catch (err: any) {
-        console.warn('[Step1] ⚠️ Erro ao buscar de tenant_products:', err);
-        // Não falhar, apenas usar tenant_competitor_products
       }
       
       // Remover duplicatas por nome (caso tenha buscado de ambas)
@@ -205,7 +288,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       setTenantProductsCount(0);
       setTenantProducts([]);
     }
-  };
+  }, [tenant?.id, formData.cnpj]); // ✅ Dependências do useCallback
 
   // 🔥 NOVO: Carregar produtos de um concorrente específico
   const loadCompetitorProducts = async (competitorCnpj: string) => {
@@ -238,19 +321,71 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
   // 🔥 CORRIGIDO: Usar useRef para evitar loops infinitos
   const initialDataRef = useRef<any>(null);
   const hasInitializedRef = useRef(false);
+  const lastTenantIdRef = useRef<string | null>(null);
   
   useEffect(() => {
-    // 🔥 CORRIGIDO: Só atualizar se initialData realmente mudou
+    // 🔥 CRÍTICO: Se o tenant mudou, limpar todos os dados locais primeiro
+    if (tenant?.id && tenant.id !== lastTenantIdRef.current) {
+      console.log('[Step1] 🔄 Tenant mudou, limpando dados locais:', {
+        old: lastTenantIdRef.current,
+        new: tenant.id,
+      });
+      
+      const oldTenantId = lastTenantIdRef.current;
+      lastTenantIdRef.current = tenant.id;
+      
+      // 🔥 CRÍTICO: Limpar dados do tenant ANTERIOR do localStorage para evitar mistura
+      if (oldTenantId) {
+        const oldStorageKey = `onboarding_form_data_${oldTenantId}`;
+        const oldStepKey = `onboarding_current_step_${oldTenantId}`;
+        localStorage.removeItem(oldStorageKey);
+        localStorage.removeItem(oldStepKey);
+        console.log('[Step1] 🗑️ Dados do tenant anterior removidos do localStorage:', oldTenantId);
+      }
+      
+      // Limpar dados locais quando tenant muda
+      setFormData({
+        cnpj: '',
+        email: '',
+        website: '',
+        telefone: '',
+      });
+      setCnpjData(null);
+      initialDataRef.current = null;
+      hasInitializedRef.current = false;
+    }
+    
+    // 🔥 CORRIGIDO: Só atualizar se initialData realmente mudou - MERGE não-destrutivo
+    // 🔥 CRÍTICO: NÃO resetar campos que o usuário está digitando
     if (initialData && initialData !== initialDataRef.current) {
       console.log('[Step1] 🔄 Atualizando dados do initialData:', initialData);
       initialDataRef.current = initialData;
       hasInitializedRef.current = true;
       
-      setFormData({
-        cnpj: initialData.cnpj || '',
-        email: initialData.email || '',
-        website: initialData.website || '',
-        telefone: initialData.telefone || '',
+      // 🔥 MERGE não-destrutivo: preservar dados existentes, complementar com initialData
+      // 🔥 CRÍTICO: Se usuário está digitando (campo tem foco), NÃO sobrescrever
+      setFormData(prev => {
+        // Verificar se algum campo tem foco (usuário está digitando)
+        const activeElement = document.activeElement;
+        const isTyping = activeElement && (
+          activeElement.id === 'cnpj' ||
+          activeElement.id === 'email' ||
+          activeElement.id === 'website' ||
+          activeElement.id === 'telefone'
+        );
+        
+        if (isTyping) {
+          console.log('[Step1] ⏸️ Usuário está digitando, mantendo valores atuais');
+          return prev; // Não atualizar enquanto digita
+        }
+        
+        // Atualizar apenas campos vazios ou que realmente mudaram
+        return {
+          cnpj: prev.cnpj || initialData.cnpj || '',
+          email: prev.email || initialData.email || '',
+          website: prev.website || initialData.website || '',
+          telefone: prev.telefone || initialData.telefone || '',
+        };
       });
       
       // 🔥 CRÍTICO: Restaurar cnpjData PRIMEIRO (antes de carregar produtos)
@@ -288,8 +423,8 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         console.log('[Step1] ℹ️ Mantendo cnpjData existente no estado');
       }
       
-      // 🔥 NOVO: Carregar produtos do tenant ao montar
-      if (tenant?.id) {
+      // 🔥 NOVO: Carregar produtos do tenant ao montar (apenas se tenant não mudou)
+      if (tenant?.id && tenant.id === lastTenantIdRef.current) {
         loadTenantProducts();
       }
       
@@ -348,21 +483,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       // Se initialData foi limpo, resetar
       console.log('[Step1] ⚠️ initialData foi limpo, mantendo estado atual');
     }
-  }, [initialData?.cnpj, initialData?.email, initialData?.website, initialData?.telefone, initialData?.razaoSocial, tenant?.id]);
-
-  // 🔥 NOVO: Carregar produtos do tenant quando tenant mudar
-  useEffect(() => {
-    if (tenant?.id) {
-      console.log('[Step1] 🔄 useEffect: Carregando produtos do tenant:', tenant.id);
-      loadTenantProducts();
-    }
-  }, [tenant?.id]);
-  
-  // 🔥 CRÍTICO: Forçar recarregamento quando tenantProductsCount mudar (para garantir sincronização)
-  useEffect(() => {
-    console.log('[Step1] 🔄 tenantProductsCount mudou para:', tenantProductsCount);
-    console.log('[Step1] 🔄 tenantProducts.length:', tenantProducts.length);
-  }, [tenantProductsCount, tenantProducts.length]);
+  }, [initialData?.cnpj, initialData?.email, initialData?.website, initialData?.telefone, initialData?.razaoSocial, tenant?.id, loadTenantProducts]); // ✅ Adicionar loadTenantProducts às dependências
 
   // 🔥 CRÍTICO: Auto-save quando cnpjData ou formData mudarem (para garantir persistência)
   useEffect(() => {
@@ -472,6 +593,177 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       }
       setFormData(updatedFormData);
       
+      // 🔥 CRÍTICO: Atualizar nome E CNPJ do tenant se já existir (banco OU localStorage)
+      if (tenant?.id && data.nome) {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.id);
+        const cnpjLimpo = formData.cnpj.replace(/\D/g, '');
+        
+        if (isUUID) {
+          // Tenant do banco - atualizar no banco
+          try {
+            console.log('[Step1] 🔄 Atualizando nome e CNPJ do tenant no banco:', { 
+              tenantId: tenant.id, 
+              nome: data.nome,
+              cnpj: cnpjLimpo 
+            });
+            const { error: updateError } = await (supabase as any)
+              .from('tenants')
+              .update({ 
+                nome: data.nome,
+                cnpj: cnpjLimpo || tenant.cnpj || null
+              })
+              .eq('id', tenant.id);
+            
+            if (updateError) {
+              console.warn('[Step1] ⚠️ Erro ao atualizar tenant no banco:', updateError);
+              // 🔥 NOVO: Mesmo com erro, disparar evento para atualizar UI (pode ser erro 500 temporário)
+              // O nome será atualizado quando o erro RLS for corrigido
+              window.dispatchEvent(new CustomEvent('tenant-updated', { 
+                detail: { 
+                  tenantId: tenant.id, 
+                  nome: data.nome,
+                  cnpj: cnpjLimpo 
+                } 
+              }));
+            } else {
+              console.log('[Step1] ✅ Nome e CNPJ do tenant atualizados no banco com sucesso');
+              // Disparar evento customizado para refetch do useUserTenants
+              window.dispatchEvent(new CustomEvent('tenant-updated', { 
+                detail: { 
+                  tenantId: tenant.id, 
+                  nome: data.nome,
+                  cnpj: cnpjLimpo 
+                } 
+              }));
+            }
+          } catch (err) {
+            console.warn('[Step1] ⚠️ Erro ao atualizar tenant no banco:', err);
+            // 🔥 NOVO: Mesmo com erro, disparar evento para atualizar UI
+            window.dispatchEvent(new CustomEvent('tenant-updated', { 
+              detail: { 
+                tenantId: tenant.id, 
+                nome: data.nome,
+                cnpj: cnpjLimpo 
+              } 
+            }));
+          }
+        } else {
+          // Tenant local - atualizar no localStorage
+          try {
+            console.log('[Step1] 🔄 Atualizando nome e CNPJ do tenant local no localStorage:', { 
+              tenantId: tenant.id, 
+              nome: data.nome,
+              cnpj: cnpjLimpo 
+            });
+            const localTenantsKey = 'local_tenants';
+            const localTenantsJson = localStorage.getItem(localTenantsKey);
+            
+            if (localTenantsJson) {
+              const localTenants = JSON.parse(localTenantsJson);
+              const tenantIndex = localTenants.findIndex((t: any) => t.id === tenant.id);
+              
+              if (tenantIndex !== -1) {
+                // Atualizar nome e CNPJ do tenant local
+                localTenants[tenantIndex] = {
+                  ...localTenants[tenantIndex],
+                  nome: data.nome,
+                  cnpj: cnpjLimpo || localTenants[tenantIndex].cnpj || '',
+                };
+                localStorage.setItem(localTenantsKey, JSON.stringify(localTenants));
+                console.log('[Step1] ✅ Nome e CNPJ do tenant local atualizados no localStorage');
+                
+                // Disparar evento customizado para refetch do useUserTenants
+                window.dispatchEvent(new CustomEvent('tenant-updated', { 
+                  detail: { 
+                    tenantId: tenant.id, 
+                    nome: data.nome,
+                    cnpj: cnpjLimpo 
+                  } 
+                }));
+              } else {
+                console.warn('[Step1] ⚠️ Tenant local não encontrado no localStorage:', tenant.id);
+              }
+            }
+          } catch (err) {
+            console.warn('[Step1] ⚠️ Erro ao atualizar tenant local:', err);
+          }
+        }
+        
+        // 🔥 CRÍTICO: Atualizar também o TenantContext imediatamente
+        try {
+          // O TenantContext já escuta o evento 'tenant-updated'
+          window.dispatchEvent(new CustomEvent('tenant-changed', { 
+            detail: { 
+              tenantId: tenant.id, 
+              nome: data.nome,
+              cnpj: cnpjLimpo 
+            } 
+          }));
+        } catch (err) {
+          console.warn('[Step1] ⚠️ Erro ao disparar evento tenant-changed:', err);
+        }
+      }
+      
+      // 🔥 CICLO 1: Criar tenant + sessão atomicamente (PADRÃO GRANDES PLATAFORMAS)
+      if (!tenant?.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.id)) {
+        try {
+          console.log('[Step1] 🚀 CICLO 1: Criando tenant + sessão atomicamente...');
+          const { onboardingService } = await import('@/services/onboarding.service');
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          
+          if (!authUser) {
+            throw new Error('Usuário não autenticado');
+          }
+
+          if (!data.nome) {
+            throw new Error('Razão social é obrigatória');
+          }
+
+          // CRIAR TENANT + SESSÃO ATOMICAMENTE
+          const { tenant: novoTenant, session } = await onboardingService.createTenantWithSession(
+            {
+              cnpjData: data,
+              formData: {
+                cnpj: formData.cnpj,
+                email: updatedFormData.email || '',
+                telefone: updatedFormData.telefone || '',
+                website: updatedFormData.website || '',
+                razaoSocial: data.nome,
+              },
+            },
+            authUser.id
+          );
+
+          console.log('[Step1] ✅ CICLO 1 COMPLETO: Tenant + Sessão criados:', {
+            tenantId: novoTenant.id,
+            sessionId: session.id,
+          });
+
+          // ATUALIZAR CONTEXTO IMEDIATAMENTE
+          localStorage.setItem('selectedTenantId', novoTenant.id);
+          window.dispatchEvent(new CustomEvent('tenant-switched', { 
+            detail: { 
+              tenantId: novoTenant.id,
+              tenant: novoTenant
+            } 
+          }));
+
+          // Atualizar contexto via hook
+          await switchTenant(novoTenant.id);
+          console.log('[Step1] ✅ Contexto atualizado, tenant visível na tela');
+
+          // Toast de sucesso
+          toast.success('Empresa criada com sucesso!', {
+            description: 'Dados salvos no banco de dados.'
+          });
+        } catch (err: any) {
+          console.error('[Step1] ❌ Erro ao criar tenant + sessão:', err);
+          toast.error('Erro ao criar empresa', {
+            description: err.message || 'Não foi possível criar a empresa. Tente novamente.'
+          });
+        }
+      }
+      
       // 🔥 CRÍTICO: Salvar IMEDIATAMENTE após buscar CNPJ para garantir persistência
       if (onSave) {
         const dataToSave = {
@@ -509,10 +801,19 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     }
   };
 
-  // 🔥 COPIADO EXATAMENTE DA FUNÇÃO handleScanConcorrenteURL - MESMA LÓGICA
+  // 🔥 CORRIGIDO: Usar scan-website-products para o tenant (salva em tenant_products)
   const handleScanTenantWebsite = async () => {
     if (!formData.website || !tenant?.id) {
       toast.error('Informe a URL para escanear');
+      return;
+    }
+
+    // 🔥 NOVO: Verificar se o tenant é UUID válido (não é local)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.id);
+    if (!isUUID) {
+      toast.error('Aguarde a criação do tenant no banco de dados antes de extrair produtos', {
+        description: 'O tenant ainda está sendo criado. Tente novamente em alguns segundos.'
+      });
       return;
     }
 
@@ -522,37 +823,67 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     toast.info(`Escaneando ${formData.website}...`);
 
     try {
-      // Detectar tipo de URL (MESMO DOS CONCORRENTES)
-      let sourceType = 'website';
-      if (formData.website.includes('instagram.com')) sourceType = 'instagram';
-      else if (formData.website.includes('linkedin.com')) sourceType = 'linkedin';
-      else if (formData.website.includes('facebook.com')) sourceType = 'facebook';
+      console.log('[Step1] 🔍 Escaneando website do tenant:', formData.website);
 
-      // Chamar Edge Function para extrair produtos (MESMA DOS CONCORRENTES)
-      const { data, error } = await supabase.functions.invoke('scan-competitor-url', {
+      // 🔥 CORRIGIDO: Usar scan-website-products (salva em tenant_products)
+      const { data, error } = await supabase.functions.invoke('scan-website-products', {
         body: {
           tenant_id: tenant.id,
-          competitor_cnpj: formData.cnpj?.replace(/\D/g, '') || '00000000000000',
-          competitor_name: cnpjData?.nome || 'Tenant',
-          source_url: formData.website,
-          source_type: sourceType,
+          website_url: formData.website,
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Step1] ❌ Erro na Edge Function scan-website-products:', error);
+        // 🔥 NOVO: Tratar erro CORS ou de rede
+        if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
+          toast.error('Erro de conexão com o servidor', {
+            description: 'Verifique sua conexão ou tente novamente em alguns instantes.'
+          });
+        } else {
+          throw error;
+        }
+        return;
+      }
 
-      const extracted = data?.products_extracted || 0;
+      console.log('[Step1] ✅ Resposta da Edge Function:', data);
+
+      const extracted = data?.products_extracted || data?.products_found || 0;
       const inserted = data?.products_inserted || 0;
       
-      // 🔥 CRÍTICO: Buscar produtos de tenant_competitor_products (onde foram salvos)
-      // MESMA LÓGICA DOS CONCORRENTES - buscar diretamente de onde foi salvo
-      const tenantCnpj = formData.cnpj?.replace(/\D/g, '') || '';
+      console.log('[Step1] ✅ Resposta da Edge Function:', { 
+        success: data?.success, 
+        domain: data?.domain, 
+        pages_scanned: data?.pages_scanned, 
+        products_found: extracted, 
+        products_inserted: inserted 
+      });
       
-      // Aguardar um pouco para garantir que os dados foram salvos
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 🔥 CRÍTICO: Aguardar mais tempo para garantir que os dados foram salvos no banco
+      // A Edge Function pode estar processando em background
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Buscar produtos de tenant_competitor_products (MESMO DOS CONCORRENTES)
-      await loadTenantProducts();
+      // 🔥 CRÍTICO: Recarregar produtos múltiplas vezes para garantir que apareçam
+      let tentativas = 0;
+      const maxTentativas = 3;
+      let produtosCarregados = 0;
+      
+      while (tentativas < maxTentativas && produtosCarregados === 0) {
+        console.log(`[Step1] 🔄 Tentativa ${tentativas + 1}/${maxTentativas} de recarregar produtos...`);
+        await loadTenantProducts();
+        
+        // Aguardar um pouco antes de verificar novamente
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Verificar se produtos foram carregados
+        produtosCarregados = tenantProductsCount;
+        tentativas++;
+        
+        if (produtosCarregados > 0) {
+          console.log(`[Step1] ✅ Produtos carregados após ${tentativas} tentativa(s): ${produtosCarregados}`);
+          break;
+        }
+      }
       
       // Buscar contador atualizado
       const totalProdutos = tenantProductsCount;
@@ -577,13 +908,24 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
         onSave(dataToSave);
       }
 
-      // Toast mais informativo (MESMO DOS CONCORRENTES)
-      if (inserted > 0) {
+      // 🔥 CRÍTICO: Se produtos foram encontrados mas não inseridos, verificar se é problema de RLS ou duplicatas
+      if (extracted > 0 && inserted === 0 && totalProdutos === 0) {
+        console.warn('[Step1] ⚠️ Produtos encontrados mas não inseridos. Verificando se é problema de RLS ou duplicatas...');
+        toast.warning(`${extracted} produtos encontrados, mas não foram inseridos`, {
+          description: 'Pode ser problema de permissões ou produtos duplicados. Verifique os logs da Edge Function.',
+          duration: 10000,
+        });
+      } else if (inserted > 0) {
         toast.success(`${inserted} novos produtos inseridos! Total: ${totalProdutos} produtos`, {
           description: `${extracted} produtos encontrados na URL`
         });
-      } else if (extracted > 0) {
+      } else if (extracted > 0 && totalProdutos > 0) {
         toast.info(`${extracted} produtos encontrados, mas já estavam cadastrados. Total: ${totalProdutos} produtos`);
+      } else if (extracted > 0) {
+        toast.warning(`${extracted} produtos encontrados, mas não foram inseridos`, {
+          description: 'Verifique os logs da Edge Function para mais detalhes',
+          duration: 10000,
+        });
       } else {
         toast.warning('Nenhum produto encontrado na URL', {
           description: 'Tente uma URL diferente ou verifique se o site contém informações de produtos'
@@ -677,51 +1019,102 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           setExtractionStatus(prev => ({ ...prev, [statusKey]: 'extracting' }));
           
           try {
-            // Detectar tipo de URL
-            let sourceType = 'website';
-            if (task.url.includes('instagram.com')) sourceType = 'instagram';
-            else if (task.url.includes('linkedin.com')) sourceType = 'linkedin';
-            else if (task.url.includes('facebook.com')) sourceType = 'facebook';
+            let extracted = 0;
+            let inserted = 0;
             
-            // Chamar Edge Function
-            const { data, error } = await supabase.functions.invoke('scan-competitor-url', {
-              body: {
-                tenant_id: tenant.id,
-                competitor_cnpj: task.cnpj || '00000000000000',
-                competitor_name: task.name,
-                source_url: task.url,
-                source_type: sourceType,
-              },
-            });
-            
-            if (error) throw error;
-            
-            const extracted = data?.products_extracted || 0;
-            const inserted = data?.products_inserted || 0;
-            
-            // Atualizar produtos do concorrente específico
-            if (task.type === 'competitor' && task.index !== undefined) {
-              await loadCompetitorProducts(task.cnpj || '');
+            // 🔥 CORRIGIDO: Usar função diferente para tenant vs concorrente
+            if (task.type === 'tenant') {
+              // Para tenant: usar scan-website-products (salva em tenant_products)
+              console.log('[Step1] 🔍 Extraindo produtos do tenant via scan-website-products');
+              const { data, error } = await supabase.functions.invoke('scan-website-products', {
+                body: {
+                  tenant_id: tenant.id,
+                  website_url: task.url,
+                },
+              });
               
-              // Buscar produtos atualizados
-              const { data: produtosData } = await supabase
-                .from('tenant_competitor_products' as any)
-                .select('id, nome, descricao, categoria')
-                .eq('tenant_id', tenant.id)
-                .eq('competitor_cnpj', task.cnpj)
-                .order('created_at', { ascending: false });
+              if (error) throw error;
               
-              const updated = [...concorrentes];
-              updated[task.index] = {
-                ...updated[task.index],
-                produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
-                produtosExtraidos: produtosData?.length || 0
-              };
-              setConcorrentes(updated);
-            } else if (task.type === 'tenant') {
+              extracted = data?.products_extracted || data?.products_found || 0;
+              inserted = data?.products_inserted || 0;
+              
               // Atualizar produtos do tenant
               await new Promise(resolve => setTimeout(resolve, 1000));
               await loadTenantProducts();
+            } else {
+              // Para concorrentes: usar scan-competitor-url (salva em tenant_competitor_products)
+              console.log('[Step1] 🔍 Extraindo produtos do concorrente via scan-competitor-url');
+              
+              // Detectar tipo de URL
+              let sourceType = 'website';
+              if (task.url.includes('instagram.com')) sourceType = 'instagram';
+              else if (task.url.includes('linkedin.com')) sourceType = 'linkedin';
+              else if (task.url.includes('facebook.com')) sourceType = 'facebook';
+              
+              const { data, error } = await supabase.functions.invoke('scan-competitor-url', {
+                body: {
+                  tenant_id: tenant.id,
+                  competitor_cnpj: task.cnpj || '00000000000000',
+                  competitor_name: task.name,
+                  source_url: task.url,
+                  source_type: sourceType,
+                },
+              });
+              
+              if (error) throw error;
+              
+              extracted = data?.products_extracted || 0;
+              inserted = data?.products_inserted || 0;
+              
+              console.log('[Step1] ✅ Resposta da Edge Function (concorrente em massa):', { 
+                competitor_name: task.name,
+                products_found: extracted, 
+                products_inserted: inserted 
+              });
+              
+              // 🔥 CRÍTICO: Aguardar mais tempo e recarregar múltiplas vezes
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Atualizar produtos do concorrente específico
+              if (task.index !== undefined) {
+                // Recarregar produtos múltiplas vezes
+                let tentativas = 0;
+                const maxTentativas = 3;
+                while (tentativas < maxTentativas) {
+                  await loadCompetitorProducts(task.cnpj || '');
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                  tentativas++;
+                  
+                  // Verificar se produtos foram carregados
+                  const { data: produtosData } = await supabase
+                    .from('tenant_competitor_products' as any)
+                    .select('id, nome, descricao, categoria')
+                    .eq('tenant_id', tenant.id)
+                    .eq('competitor_cnpj', task.cnpj)
+                    .order('created_at', { ascending: false });
+                  
+                  if (produtosData && produtosData.length > 0) {
+                    console.log(`[Step1] ✅ Produtos do concorrente carregados após ${tentativas} tentativa(s): ${produtosData.length}`);
+                    break;
+                  }
+                }
+                
+                // Buscar produtos atualizados (última tentativa)
+                const { data: produtosData } = await supabase
+                  .from('tenant_competitor_products' as any)
+                  .select('id, nome, descricao, categoria')
+                  .eq('tenant_id', tenant.id)
+                  .eq('competitor_cnpj', task.cnpj)
+                  .order('created_at', { ascending: false });
+                
+                const updated = [...concorrentes];
+                updated[task.index] = {
+                  ...updated[task.index],
+                  produtos: (produtosData || []) as unknown as Array<{ id: string; nome: string; descricao?: string; categoria?: string }>,
+                  produtosExtraidos: produtosData?.length || 0
+                };
+                setConcorrentes(updated);
+              }
             }
             
             successCount++;
@@ -864,7 +1257,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           setor: setorExtraido,
           cidade: data.municipio || '',
           estado: data.uf || '',
-          capitalSocial: data.capital_social || 0,
+          capitalSocial: (data as any).capital_social || 0,
           cnaePrincipal: data.atividade_principal?.[0]?.code || '',
           cnaePrincipalDescricao: data.atividade_principal?.[0]?.text || '',
           website: '',
@@ -1065,8 +1458,39 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
       const extracted = data?.products_extracted || 0;
       const inserted = data?.products_inserted || 0;
       
-      // 🔥 CRÍTICO: Sempre buscar produtos do banco após extração (mesmo se não inseriu novos)
-      const totalProdutos = await loadCompetitorProducts(concorrente.cnpj);
+      console.log('[Step1] ✅ Resposta da Edge Function (concorrente):', { 
+        success: data?.success, 
+        competitor_name: concorrente.razaoSocial,
+        products_found: extracted, 
+        products_inserted: inserted 
+      });
+      
+      // 🔥 CRÍTICO: Aguardar mais tempo para garantir que os dados foram salvos no banco
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // 🔥 CRÍTICO: Recarregar produtos múltiplas vezes para garantir que apareçam
+      let tentativas = 0;
+      const maxTentativas = 3;
+      let produtosCarregados = 0;
+      
+      while (tentativas < maxTentativas) {
+        console.log(`[Step1] 🔄 Tentativa ${tentativas + 1}/${maxTentativas} de recarregar produtos do concorrente...`);
+        const total = await loadCompetitorProducts(concorrente.cnpj);
+        
+        // Aguardar um pouco antes de verificar novamente
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Verificar se produtos foram carregados
+        produtosCarregados = total;
+        tentativas++;
+        
+        if (produtosCarregados > 0) {
+          console.log(`[Step1] ✅ Produtos do concorrente carregados após ${tentativas} tentativa(s): ${produtosCarregados}`);
+          break;
+        }
+      }
+      
+      const totalProdutos = produtosCarregados;
       
       // Buscar dados completos dos produtos para exibição
       let produtosData: any[] = [];
@@ -1367,13 +1791,26 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
     }
 
     if (!formData.cnpj || !formData.email) {
-      alert('Preencha CNPJ e Email');
+      toast.error('Campos obrigatórios', {
+        description: 'Preencha CNPJ e Email antes de continuar.',
+      });
       return;
     }
 
-    // 🔥 CORRIGIDO: Não bloquear se já tiver dados salvos (initialData)
+    // 🔥 CRÍTICO: OBRIGAR busca de CNPJ antes de avançar (nunca criar tenant sem dados reais)
     if (!cnpjData && !initialData?.razaoSocial && !initialData?.cnpjData) {
-      alert('Por favor, busque os dados do CNPJ antes de continuar');
+      toast.error('CNPJ não encontrado', {
+        description: 'Por favor, clique em "Buscar Dados" para consultar a Receita Federal antes de continuar. A empresa só será criada após confirmar os dados.',
+      });
+      return;
+    }
+    
+    // 🔥 CRÍTICO: Verificar se tem razão social (nome da empresa)
+    const razaoSocial = cnpjData?.nome || initialData?.razaoSocial;
+    if (!razaoSocial) {
+      toast.error('Dados incompletos', {
+        description: 'Não foi possível obter a razão social da empresa. Por favor, busque os dados do CNPJ novamente.',
+      });
       return;
     }
 
@@ -1443,7 +1880,9 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
             type="text"
             value={formData.cnpj}
             onChange={(e) => {
-              setFormData({ ...formData, cnpj: e.target.value });
+              // 🔥 CRÍTICO: Usar função de atualização para garantir estado atualizado
+              const newCnpj = e.target.value;
+              setFormData(prev => ({ ...prev, cnpj: newCnpj }));
               setCnpjData(null);
               setCnpjError(null);
             }}
@@ -2515,7 +2954,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, initialData, isSavin
           }
         }}
         onNext={handleSubmit}
-        onSave={onSave}
+        onSave={onSaveExplicit || onSave}
         showSave={!!onSave}
         saveLoading={isSaving}
         hasUnsavedChanges={hasUnsavedChanges}

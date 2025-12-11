@@ -159,7 +159,33 @@ export class MultiTenantService {
       .select()
       .single();
     
+    // 🔥 CRÍTICO: Se erro 42P17 (recursão infinita), tentar continuar mesmo assim
     if (error) {
+      // Se for erro 42P17, verificar se o tenant foi criado mesmo assim (às vezes acontece)
+      if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
+        console.warn('[MultiTenantService] ⚠️ Erro 42P17 detectado, tentando buscar tenant criado...');
+        // Tentar buscar o tenant que pode ter sido criado mesmo com erro
+        try {
+          const { data: existingTenant } = await (supabase as any)
+            .from('tenants')
+            .select('*')
+            .eq('slug', slug)
+            .maybeSingle();
+          
+          if (existingTenant) {
+            console.log('[MultiTenantService] ✅ Tenant encontrado apesar do erro 42P17:', existingTenant.id);
+            return existingTenant as Tenant;
+          }
+        } catch (lookupError) {
+          console.warn('[MultiTenantService] ⚠️ Não foi possível buscar tenant após erro 42P17');
+        }
+        // Se não encontrou, lançar erro para que o caller crie tenant local
+        throw new Error(`Erro 42P17 ao criar tenant: ${error.message}`);
+      }
+      // Se for erro 500 ou CORS, também lançar para fallback local
+      if (error.status === 500 || error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
+        throw new Error(`Erro ao criar tenant: ${error.message}`);
+      }
       throw new Error(`Erro ao criar tenant: ${error.message}`);
     }
     
@@ -180,17 +206,80 @@ export class MultiTenantService {
    * Obter tenant por ID
    */
   async obterTenant(tenantId: string): Promise<Tenant | null> {
-    const { data, error } = await (supabase as any)
-      .from('tenants')
-      .select('*')
-      .eq('id', tenantId)
-      .single();
-    
-    if (error || !data) {
+    try {
+      // ✅ Tentar usar função RPC segura primeiro
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc(
+        'get_tenant_safe',
+        { p_tenant_id: tenantId }
+      );
+
+      if (!rpcError && rpcData && rpcData.length > 0) {
+        const tenantData = rpcData[0];
+        // Se RPC retornou dados, buscar dados completos via query direta
+        // (RPC só retorna campos básicos)
+        const { data: fullData, error: fullError } = await (supabase as any)
+          .from('tenants')
+          .select('*')
+          .eq('id', tenantId)
+          .maybeSingle();
+
+        if (!fullError && fullData) {
+          return fullData as Tenant;
+        }
+      }
+
+      // Fallback: query direta (se função RPC não existir ou falhar)
+      if (rpcError && (rpcError.code === 'PGRST202' || rpcError.status === 500)) {
+        console.warn('[MultiTenant] Função RPC não disponível - usando fallback');
+        const { data, error } = await (supabase as any)
+          .from('tenants')
+          .select('*')
+          .eq('id', tenantId)
+          .maybeSingle();
+
+        if (error) {
+          // Se erro 500, não tentar novamente
+          if (error.status === 500 || error.code === 'PGRST301') {
+            console.warn('[MultiTenant] ⚠️ Erro 500 ao buscar tenant - pode ser problema de RLS');
+            // Tentar usar tenant do localStorage como último recurso
+            const localTenantId = typeof localStorage !== 'undefined' 
+              ? localStorage.getItem('selectedTenantId') 
+              : null;
+            if (localTenantId && localTenantId === tenantId) {
+              // Retornar dados mínimos do localStorage
+              return {
+                id: tenantId,
+                slug: '',
+                nome: 'Tenant (cache)',
+                cnpj: '',
+                email: '',
+                schema_name: '',
+                plano: 'FREE' as const,
+                status: 'ACTIVE' as const,
+                creditos: 0,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              } as Tenant;
+            }
+            return null;
+          }
+          return null;
+        }
+
+        return data as Tenant | null;
+      }
+
+      // Se erro na RPC mas não é "não encontrada", retornar null
+      if (rpcError) {
+        console.warn('[MultiTenant] Erro na função RPC:', rpcError);
+        return null;
+      }
+
+      return null;
+    } catch (error: any) {
+      console.error('[MultiTenant] Erro ao buscar tenant:', error);
       return null;
     }
-    
-    return data as Tenant;
   }
   
   /**
@@ -365,21 +454,42 @@ export class MultiTenantService {
     try {
       // 🆕 Se houver um tenant preferido, verificar se o usuário tem acesso a ele
       if (preferredTenantId) {
-        const { data: hasAccess } = await (supabase as any)
-          .from('users')
-          .select('tenant_id')
-          .eq('auth_user_id', authUserId)
-          .eq('tenant_id', preferredTenantId)
-          .maybeSingle();
-        
-        if (hasAccess) {
-          console.log('[MultiTenant] ✅ Usando tenant preferido:', preferredTenantId);
-          return this.obterTenant(preferredTenantId);
-        } else {
-          console.log('[MultiTenant] ⚠️ Tenant preferido não acessível, buscando primeiro disponível');
-          // Limpar preferência inválida
-          if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem('selectedTenantId');
+        try {
+          const { data: hasAccess, error: accessError } = await (supabase as any)
+            .from('users')
+            .select('tenant_id')
+            .eq('auth_user_id', authUserId)
+            .eq('tenant_id', preferredTenantId)
+            .maybeSingle();
+          
+          // Se erro 500, pular verificação e tentar buscar tenant diretamente
+          if (accessError && (accessError.status === 500 || accessError.code === 'PGRST301')) {
+            console.warn('[MultiTenant] ⚠️ Erro 500 ao verificar acesso - tentando buscar tenant diretamente');
+            // Tentar buscar tenant diretamente mesmo com erro
+            try {
+              return await this.obterTenant(preferredTenantId);
+            } catch {
+              // Se falhar, continuar fluxo normal
+            }
+          } else if (hasAccess && !accessError) {
+            console.log('[MultiTenant] ✅ Usando tenant preferido:', preferredTenantId);
+            return this.obterTenant(preferredTenantId);
+          } else {
+            console.log('[MultiTenant] ⚠️ Tenant preferido não acessível, buscando primeiro disponível');
+            // Limpar preferência inválida
+            if (typeof localStorage !== 'undefined') {
+              localStorage.removeItem('selectedTenantId');
+            }
+          }
+        } catch (error: any) {
+          // Se erro 500, pular e tentar buscar tenant diretamente
+          if (error.status === 500 || error.code === 'PGRST301') {
+            console.warn('[MultiTenant] ⚠️ Erro 500 - tentando buscar tenant diretamente');
+            try {
+              return await this.obterTenant(preferredTenantId);
+            } catch {
+              // Continuar fluxo normal
+            }
           }
         }
       }
@@ -401,6 +511,36 @@ export class MultiTenantService {
           .order('created_at', { ascending: false });
         
         if (error) {
+          // 🔥 CRÍTICO: Se erro 42P17, bloquear e usar tenant do localStorage
+          if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
+            console.warn('[MultiTenant] ⚠️ Erro 42P17 ao buscar users - usando tenant do localStorage');
+            const localTenantId = typeof localStorage !== 'undefined' 
+              ? localStorage.getItem('selectedTenantId') 
+              : null;
+            if (localTenantId) {
+              try {
+                return await this.obterTenant(localTenantId);
+              } catch {
+                // Se falhar, retornar null
+              }
+            }
+            return null;
+          }
+          // Se erro 500, tentar usar tenant do localStorage se existir
+          if (error.status === 500 || error.code === 'PGRST301') {
+            console.warn('[MultiTenant] ⚠️ Erro 500 ao buscar users - tentando usar tenant do localStorage');
+            const localTenantId = typeof localStorage !== 'undefined' 
+              ? localStorage.getItem('selectedTenantId') 
+              : null;
+            if (localTenantId) {
+              try {
+                return await this.obterTenant(localTenantId);
+              } catch {
+                // Se falhar, retornar null
+              }
+            }
+            return null;
+          }
           // Se a tabela não existir, não é erro - usuário ainda não completou onboarding
           if (error.code === 'PGRST116' || error.message?.includes('Could not find the table')) {
             console.log('[MultiTenant] Tabela users não existe ainda - usuário precisa completar onboarding');
@@ -415,10 +555,31 @@ export class MultiTenantService {
           return null;
         }
         
+        // 🔥 CRÍTICO: Se houver tenant preferido e ele estiver na lista, retornar ele (PRIORIDADE)
+        if (preferredTenantId) {
+          const preferredTenant = userTenants.find((ut: any) => ut.tenant_id === preferredTenantId);
+          if (preferredTenant) {
+            console.log('[MultiTenant] ✅ Usando tenant preferido da lista:', preferredTenantId);
+            const tenant = await this.obterTenant(preferredTenantId);
+            if (tenant) {
+              return tenant;
+            }
+            // Se não encontrou, continuar para próximo tenant
+            console.warn('[MultiTenant] ⚠️ Tenant preferido não encontrado, usando próximo disponível');
+          }
+        }
+        
         // 🆕 Usar o primeiro tenant (mais recente)
         const firstTenantId = userTenants[0].tenant_id;
         console.log('[MultiTenant] 📋 Usando primeiro tenant disponível:', firstTenantId);
-        return this.obterTenant(firstTenantId);
+        const tenant = await this.obterTenant(firstTenantId);
+        
+        // 🔥 CRÍTICO: Se encontrou tenant, salvar como preferido para próxima vez
+        if (tenant && typeof localStorage !== 'undefined') {
+          localStorage.setItem('selectedTenantId', tenant.id);
+        }
+        
+        return tenant;
       } catch (tableError: any) {
         // Se a tabela não existir, não é erro crítico
         if (tableError.message?.includes('Could not find the table') || tableError.message?.includes('does not exist')) {
