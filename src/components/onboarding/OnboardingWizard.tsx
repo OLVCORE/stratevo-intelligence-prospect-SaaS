@@ -1,7 +1,7 @@
 // src/components/onboarding/OnboardingWizard.tsx
 // [HF-STRATEVO-TENANT] Arquivo mapeado para fluxo de tenants/empresas
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Step1DadosBasicos } from './steps/Step1DadosBasicos';
 import { Step2SetoresNichos } from './steps/Step2SetoresNichos';
 import { Step3PerfilClienteIdeal } from './steps/Step3PerfilClienteIdeal';
@@ -144,52 +144,137 @@ export interface OnboardingData {
 
 export function OnboardingWizard() {
   const [searchParams] = useSearchParams();
-  const { tenant } = useTenant();
+  const { tenant, switchTenant } = useTenant();
   const navigate = useNavigate();
   
   // 🔥 CRÍTICO: Verificar se é para criar novo tenant
   const isNewTenant = searchParams.get('new') === 'true';
   const tenantIdFromUrl = searchParams.get('tenant_id');
   
+  // 🔥 DEBUG: Log detalhado dos parâmetros da URL
+  useEffect(() => {
+    console.log('[OnboardingWizard] 🔍 DEBUG - Parâmetros da URL:', {
+      tenant_id: tenantIdFromUrl,
+      new: isNewTenant,
+      allParams: Object.fromEntries(searchParams.entries()),
+      tenantFromContext: tenant?.id,
+      tenantFromContextNome: (tenant as any)?.nome,
+      windowLocation: window.location.href
+    });
+  }, [tenantIdFromUrl, isNewTenant, searchParams, tenant]);
+  
   // 🔥 CRÍTICO: Determinar tenant_id com prioridade e garantia de sempre ter um ID
   // Prioridade: 1) tenant_id da URL (se especificado), 2) tenant do contexto, 3) gerar local se necessário
-  const determineTenantId = (): string | null => {
-    if (tenantIdFromUrl) {
-      // Se há tenant_id na URL, usar ele (pode ser remoto ou local)
-      return tenantIdFromUrl;
-    } else if (tenant?.id) {
-      // Se não tem na URL mas tem no contexto, usar do contexto
+  // 🔥 CORRIGIDO: Usar useMemo para recalcular quando searchParams ou tenant mudarem
+  const tenantIdDetermined = useMemo(() => {
+    console.log('[OnboardingWizard] 🔍 determineTenantId - Verificando:', {
+      tenantIdFromUrl,
+      tenantIdFromContext: tenant?.id,
+      isNewTenant,
+      searchParamsString: searchParams.toString(),
+      windowLocation: window.location.href
+    });
+    
+    // 🔥 PRIORIDADE 1: tenant_id da URL (sempre usar se existir)
+    if (tenantIdFromUrl && tenantIdFromUrl.trim() !== '') {
+      console.log('[OnboardingWizard] ✅ Usando tenant_id da URL:', tenantIdFromUrl);
+      return tenantIdFromUrl.trim();
+    }
+    
+    // 🔥 PRIORIDADE 2: tenant do contexto (se já carregado)
+    if (tenant?.id) {
+      console.log('[OnboardingWizard] ✅ Usando tenant_id do contexto:', tenant.id);
       return tenant.id;
-    } else if (isNewTenant) {
-      // Se é novo tenant mas não tem ID, gerar um local temporário
-      // Isso garante que sempre haverá isolamento por tenant_id
+    }
+    
+    // 🔥 PRIORIDADE 3: novo tenant (gerar local temporário)
+    if (isNewTenant) {
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 9);
       const localTenantId = `local-tenant-${timestamp}-${random}`;
       console.warn('[OnboardingWizard] ⚠️ Novo tenant sem ID, gerando local:', localTenantId);
       return localTenantId;
     }
+    
+    console.warn('[OnboardingWizard] ⚠️ Nenhum tenant_id encontrado');
     return null;
-  };
+  }, [tenantIdFromUrl, tenant?.id, isNewTenant, searchParams]);
   
-  const tenantIdDetermined = determineTenantId();
+  // 🔥 DEBUG: Log do resultado
+  useEffect(() => {
+    console.log('[OnboardingWizard] 🚀 Inicializando wizard de onboarding...', {
+      tenantId: tenantIdDetermined,
+      tenantIdFromUrl,
+      tenantFromContext: tenant?.id,
+      isNewTenant
+    });
+  }, [tenantIdDetermined, tenantIdFromUrl, tenant?.id, isNewTenant]);
   
   // 🔥 CRÍTICO: Estado para controlar quando recarregar dados (quando tenant muda)
   const [lastTenantId, setLastTenantId] = useState<string | null>(tenantIdDetermined);
   
   // 🔥 CRÍTICO: Se não temos tenant_id e não é novo tenant, redirecionar
+  // 🔥 CORRIGIDO: Aguardar um pouco se temos tenant_id na URL mas ainda não foi carregado no contexto
   useEffect(() => {
+    // 🔥 DEBUG: Log detalhado antes de verificar
+    console.log('[OnboardingWizard] 🔍 Verificando se precisa redirecionar:', {
+      tenantIdDetermined,
+      isNewTenant,
+      tenantIdFromUrl,
+      tenantFromContext: tenant?.id,
+      willRedirect: !tenantIdDetermined && !isNewTenant
+    });
+    
+    // Se temos tenant_id na URL, aguardar um pouco para o contexto carregar
+    if (tenantIdFromUrl && !tenantIdDetermined && !isNewTenant) {
+      console.log('[OnboardingWizard] ⏳ Tenant_id na URL detectado, aguardando contexto carregar...', tenantIdFromUrl);
+      return; // Não redirecionar ainda, aguardar switchTenant carregar
+    }
+    
     if (!tenantIdDetermined && !isNewTenant) {
-      console.error('[OnboardingWizard] ❌ Sem tenant_id e não é novo tenant, redirecionando...');
+      console.error('[OnboardingWizard] ❌ Sem tenant_id e não é novo tenant, redirecionando...', {
+        tenantIdFromUrl,
+        tenantFromContext: tenant?.id,
+        isNewTenant,
+        allSearchParams: Object.fromEntries(searchParams.entries())
+      });
       navigate('/my-companies');
       toast.error('Erro ao carregar onboarding', {
         description: 'Selecione uma empresa para continuar.',
       });
     }
-  }, [tenantIdDetermined, isNewTenant, navigate]);
+  }, [tenantIdDetermined, isNewTenant, navigate, tenantIdFromUrl, tenant?.id, searchParams]);
+  
+  // 🔥 CORRIGIDO: Se temos tenant_id na URL mas não no contexto, carregar o tenant primeiro
+  useEffect(() => {
+    if (tenantIdFromUrl && tenantIdFromUrl.trim() !== '' && tenantIdFromUrl !== tenant?.id && switchTenant) {
+      console.log('[OnboardingWizard] 🔄 Tenant_id na URL detectado, carregando tenant no contexto...', {
+        tenantIdFromUrl,
+        tenantFromContext: tenant?.id,
+        willCallSwitchTenant: true
+      });
+      // Usar switchTenant para carregar o tenant da URL (função completa do contexto)
+      switchTenant(tenantIdFromUrl.trim()).catch((err) => {
+        console.error('[OnboardingWizard] ❌ Erro ao carregar tenant da URL:', err);
+        toast.error('Erro ao carregar empresa', {
+          description: 'Não foi possível carregar os dados da empresa selecionada.',
+        });
+      });
+    }
+  }, [tenantIdFromUrl, tenant?.id, switchTenant]);
   
   // Se não temos tenant_id válido, retornar null (o useEffect vai redirecionar)
+  // 🔥 CORRIGIDO: Aguardar um pouco se temos tenant_id na URL mas ainda não foi determinado
   if (!tenantIdDetermined && !isNewTenant) {
+    // Se temos tenant_id na URL mas ainda não foi determinado, aguardar um pouco
+    if (tenantIdFromUrl) {
+      console.log('[OnboardingWizard] ⏳ Aguardando tenant_id da URL ser processado...', tenantIdFromUrl);
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
     return null;
   }
   
