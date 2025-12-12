@@ -238,7 +238,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
 
   // Carregar produtos do tenant e concorrentes
   useEffect(() => {
-    if (!tenant?.id) return; // 🔥 REMOVER verificação de concorrentesAtuais para não bloquear
+    if (!tenant?.id) return;
 
     const loadProducts = async () => {
       setLoading(true);
@@ -249,60 +249,54 @@ export function ProductComparisonMatrix({ icpId }: Props) {
           razao_social: (tenant as any)?.razao_social
         });
         
-        // 🔥 CORRIGIDO: Buscar produtos, filtrar por CNPJs atuais SE disponível
-        let query = supabase
-          .from('tenant_competitor_products' as any)
+        // 🔥 CORRIGIDO: Buscar produtos do TENANT da tabela CORRETA (tenant_products)
+        const { data: tenantProductsDirect, error: tenantError } = await supabase
+          .from('tenant_products')
+          .select('id, nome, descricao, categoria')
+          .eq('tenant_id', tenant.id)
+          .order('nome');
+        
+        if (tenantError) {
+          console.warn('[ProductComparison] ⚠️ Erro ao buscar produtos do tenant:', tenantError);
+        }
+        
+        // 🔥 CORRIGIDO: Buscar produtos dos CONCORRENTES da tabela tenant_competitor_products
+        let competitorQuery = supabase
+          .from('tenant_competitor_products')
           .select('id, nome, descricao, categoria, competitor_name, competitor_cnpj')
           .eq('tenant_id', tenant.id);
         
         // Aplicar filtro de CNPJs APENAS se tiver lista de concorrentes atuais
         if (concorrentesAtuais.length > 0) {
-          console.log('[ProductComparison] 🔍 Filtrando por', concorrentesAtuais.length, 'CNPJs atuais');
-          query = query.in('competitor_cnpj', concorrentesAtuais);
+          console.log('[ProductComparison] 🔍 Filtrando concorrentes por', concorrentesAtuais.length, 'CNPJs atuais');
+          competitorQuery = competitorQuery.in('competitor_cnpj', concorrentesAtuais);
         } else {
-          console.log('[ProductComparison] ⚠️ Sem filtro de CNPJs (carregando todos)');
+          console.log('[ProductComparison] ⚠️ Sem filtro de CNPJs (carregando todos os concorrentes)');
         }
         
-        const { data: tenantProds, error: tenantError } = await query.order('nome');
-
-        if (tenantError) {
-          console.warn('[ProductComparison] ⚠️ Erro ao buscar produtos:', tenantError);
+        const { data: competitorProductsData, error: competitorError } = await competitorQuery.order('nome');
+        
+        if (competitorError) {
+          console.warn('[ProductComparison] ⚠️ Erro ao buscar produtos dos concorrentes:', competitorError);
         }
-
-        // Separar produtos do tenant vs concorrentes
-        const tenantCNPJ = (tenant as any)?.cnpj?.replace(/\D/g, '');
-        const allProducts = tenantProds || [];
         
-        // Log simplificado
-        console.log('[ProductComparison] 🔍 Filtrando produtos...');
+        // 🔥 CORRIGIDO: Mapear produtos do tenant diretamente
+        const tenantProductsList: TenantProduct[] = (tenantProductsDirect || []).map(p => ({
+          id: p.id,
+          nome: p.nome,
+          descricao: p.descricao,
+          categoria: p.categoria,
+        }));
         
-        // 🔥 CORRIGIDO: Se não tiver CNPJ do tenant, usar tenant_id para filtrar
-        const tenantProductsList: TenantProduct[] = tenantCNPJ 
-          ? allProducts.filter(p => p.competitor_cnpj?.replace(/\D/g, '') === tenantCNPJ)
-              .map(p => ({ id: p.id, nome: p.nome, descricao: p.descricao, categoria: p.categoria }))
-          : allProducts.filter(p => !p.competitor_cnpj || p.competitor_cnpj === tenant.id)
-              .map(p => ({ id: p.id, nome: p.nome, descricao: p.descricao, categoria: p.categoria }));
-        
-        // 🔥 CORRIGIDO: Todos os outros são de concorrentes
-        const competitorProductsList: CompetitorProduct[] = tenantCNPJ
-          ? allProducts.filter(p => p.competitor_cnpj?.replace(/\D/g, '') !== tenantCNPJ && p.competitor_cnpj)
-              .map(p => ({
-                id: p.id,
-                nome: p.nome,
-                descricao: p.descricao,
-                categoria: p.categoria,
-                competitor_name: p.competitor_name,
-                competitor_cnpj: p.competitor_cnpj,
-              }))
-          : allProducts.filter(p => p.competitor_cnpj && p.competitor_cnpj !== tenant.id)
-              .map(p => ({
-                id: p.id,
-                nome: p.nome,
-                descricao: p.descricao,
-                categoria: p.categoria,
-                competitor_name: p.competitor_name,
-                competitor_cnpj: p.competitor_cnpj,
-              }));
+        // 🔥 CORRIGIDO: Mapear produtos dos concorrentes
+        const competitorProductsList: CompetitorProduct[] = (competitorProductsData || []).map(p => ({
+          id: p.id,
+          nome: p.nome,
+          descricao: p.descricao,
+          categoria: p.categoria,
+          competitor_name: p.competitor_name,
+          competitor_cnpj: p.competitor_cnpj,
+        }));
 
         console.log('[ProductComparison] ✅ Produtos carregados:', {
           tenant: tenantProductsList.length,
