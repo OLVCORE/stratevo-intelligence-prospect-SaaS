@@ -67,6 +67,7 @@ import {
   ChevronUp,
   Maximize,
   Minimize,
+  Target,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -107,6 +108,7 @@ import LocationMap from '@/components/map/LocationMap';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
+import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
 
 interface QualifiedProspect {
   id: string;
@@ -481,6 +483,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
     setShowFullPreview(true);
     
     try {
+      // ✅ PRIMEIRO: Buscar o prospect atual para usar seus dados de website_fit_score
+      const currentProspect = prospects.find(p => p.cnpj === cnpj || p.cnpj_raw === cnpj);
+      
       // Buscar dados completos da Receita Federal
       const result = await consultarReceitaFederal(cnpj);
       
@@ -489,6 +494,11 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       }
       
       const empresaData = result.data as any;
+      
+      // ✅ Se houver prospect atual, usar seus dados de website_fit_score
+      if (currentProspect) {
+        setPreviewProspect(currentProspect);
+      }
       
       // Montar preview completo igual ao SearchPage
       const previewData = {
@@ -716,24 +726,14 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           company_name: companyName,
           name: companyName, // Campo obrigatório
           industry: sector,
-          website: website || prospect.website_encontrado || null,
+          website: website || null,
           location: city && state ? { city, state } : null,
           updated_at: new Date().toISOString(),
         };
 
         // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
-        if (prospect.website_encontrado) {
-          companyData.website_encontrado = prospect.website_encontrado;
-        }
-        if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
-          companyData.website_fit_score = Number(prospect.website_fit_score);
-        }
-        if (prospect.website_products_match) {
-          companyData.website_products_match = prospect.website_products_match;
-        }
-        if (prospect.linkedin_url) {
-          companyData.linkedin_url = prospect.linkedin_url;
-        }
+        // NOTA: Esses campos podem não existir na tabela companies, então salvamos apenas em raw_data
+        // Se as colunas existirem, podem ser adicionadas aqui no futuro
 
         // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS EM raw_data
         const rawData: any = {
@@ -1016,20 +1016,17 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             }
             
             // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
+            // NOTA: Esses campos não existem na tabela companies, então salvamos apenas em raw_data
             if (prospect.website_encontrado) {
-              updatePayload.website_encontrado = prospect.website_encontrado;
               rawData.website_encontrado = prospect.website_encontrado;
             }
             if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
-              updatePayload.website_fit_score = Number(prospect.website_fit_score);
               rawData.website_fit_score = Number(prospect.website_fit_score);
             }
             if (prospect.website_products_match) {
-              updatePayload.website_products_match = prospect.website_products_match;
               rawData.website_products_match = prospect.website_products_match;
             }
             if (prospect.linkedin_url) {
-              updatePayload.linkedin_url = prospect.linkedin_url;
               rawData.linkedin_url = prospect.linkedin_url;
             }
             
@@ -1136,20 +1133,17 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             }
             
             // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
+            // NOTA: Esses campos não existem na tabela companies, então salvamos apenas em raw_data
             if (prospect.website_encontrado) {
-              insertPayload.website_encontrado = prospect.website_encontrado;
               rawData.website_encontrado = prospect.website_encontrado;
             }
             if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
-              insertPayload.website_fit_score = Number(prospect.website_fit_score);
               rawData.website_fit_score = Number(prospect.website_fit_score);
             }
             if (prospect.website_products_match) {
-              insertPayload.website_products_match = prospect.website_products_match;
               rawData.website_products_match = prospect.website_products_match;
             }
             if (prospect.linkedin_url) {
-              insertPayload.linkedin_url = prospect.linkedin_url;
               rawData.linkedin_url = prospect.linkedin_url;
             }
             
@@ -1936,6 +1930,170 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
     }
   };
 
+  // ✅ STRATEVO One - Purchase Intent RPC (robusto contra schema cache / nomes divergentes)
+  async function fetchPurchaseIntentScore(p_qualified_prospect_id: string) {
+    // 1) Nome esperado pelo app (wrapper na migration)
+    let { data, error } = await supabase.rpc("calculate_purchase_intent_for_prospect", {
+      p_qualified_prospect_id,
+    });
+
+    if (!error && data) {
+      // Se retornar JSONB com success, extrair score
+      if (typeof data === 'object' && data !== null) {
+        const jsonData = data as any;
+        if (jsonData.success && jsonData.purchase_intent_score !== undefined) {
+          return { ok: true, data: jsonData.purchase_intent_score, raw: jsonData };
+        }
+        if (jsonData.purchase_intent_score !== undefined) {
+          return { ok: true, data: jsonData.purchase_intent_score, raw: jsonData };
+        }
+      }
+      // Se retornar número direto
+      if (typeof data === 'number') {
+        return { ok: true, data, raw: { purchase_intent_score: data } };
+      }
+      return { ok: true, data, raw: data };
+    }
+
+    // 2) Nome sugerido pelo Supabase (função real) - fallback
+    const prospect = prospects.find(p => p.id === p_qualified_prospect_id);
+    if (prospect?.cnpj && tenantId) {
+      let r2 = await supabase.rpc("calculate_purchase_intent_score", {
+        p_tenant_id: tenantId,
+        p_cnpj: prospect.cnpj,
+        p_company_id: null,
+      });
+
+      if (!r2.error && r2.data !== null && r2.data !== undefined) {
+        const score = typeof r2.data === 'number' ? r2.data : 0;
+        // Atualizar prospect manualmente
+        await supabase
+          .from('qualified_prospects')
+          .update({ purchase_intent_score: score })
+          .eq('id', p_qualified_prospect_id);
+        return { ok: true, data: score, raw: { purchase_intent_score: score } };
+      }
+    }
+
+    // 3) Falha controlada (não quebra fluxo)
+    console.warn("[Purchase Intent] indisponível:", error);
+    return { ok: false, data: null, error: error };
+  }
+
+  // ✅ NOVA FUNÇÃO: Calcular Purchase Intent Score individual
+  const handleCalculatePurchaseIntent = async (prospectId: string) => {
+    const prospect = prospects.find(p => p.id === prospectId);
+    if (!prospect || !tenantId) return;
+
+    setEnrichingIds(prev => new Set(prev).add(prospectId));
+    try {
+      toast({
+        title: '🎯 Calculando Intenção de Compra...',
+        description: 'Analisando sinais de compra para esta empresa',
+      });
+
+      // ✅ Usar função robusta com fallback
+      const r = await fetchPurchaseIntentScore(prospectId);
+      const score = r?.ok ? (r.data ?? 0) : 0;
+
+      if (score === 0) {
+        toast({
+          title: 'ℹ️ Intenção de Compra: 0/100',
+          description: 'Nenhum sinal de compra detectado ainda. O score será atualizado automaticamente quando sinais forem detectados (expansão, vagas, notícias, funding, etc.)',
+          duration: 5000,
+        });
+      } else {
+        const leadType = score >= 70 ? '🔥 Hot Lead' : score >= 50 ? '🎯 Warm Lead' : '📋 Cold Lead';
+        toast({
+          title: `✅ Intenção de Compra: ${score}/100`,
+          description: `${leadType} - ${score >= 70 ? 'Alta probabilidade de compra!' : score >= 50 ? 'Interesse moderado' : 'Baixo interesse no momento'}`,
+        });
+      }
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Calculate Purchase Intent] Erro:', error);
+      toast({
+        title: 'Erro ao calcular intenção de compra',
+        description: error.message || 'Não foi possível calcular o score',
+        variant: 'destructive',
+      });
+    } finally {
+      setEnrichingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(prospectId);
+        return newSet;
+      });
+    }
+  };
+
+  // ✅ NOVA FUNÇÃO: Calcular Purchase Intent Score em lote
+  const handleBulkCalculatePurchaseIntent = async () => {
+    const idsToProcess = selectedIds.size > 0 
+      ? Array.from(selectedIds) 
+      : prospects.map(p => p.id);
+
+    if (idsToProcess.length === 0) {
+      toast({
+        title: 'Atenção',
+        description: 'Nenhuma empresa selecionada',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    setBulkProgress({ current: 0, total: idsToProcess.length });
+    try {
+      toast({
+        title: '🎯 Calculando Intenção de Compra...',
+        description: `Processando ${idsToProcess.length} empresa(s)`,
+      });
+
+      let successCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < idsToProcess.length; i++) {
+        const prospectId = idsToProcess[i];
+        try {
+          const prospect = prospects.find(p => p.id === prospectId);
+          setBulkProgress({ 
+            current: i + 1, 
+            total: idsToProcess.length,
+            currentItem: prospect?.razao_social || prospectId
+          });
+
+          // ✅ Usar função robusta com fallback
+          const r = await fetchPurchaseIntentScore(prospectId);
+          if (r?.ok) {
+            successCount++;
+          } else {
+            errors.push(`${prospect?.razao_social || prospectId}: ${r?.error?.message || 'Erro desconhecido'}`);
+          }
+        } catch (error: any) {
+          const prospect = prospects.find(p => p.id === prospectId);
+          errors.push(`${prospect?.razao_social || prospectId}: ${error.message}`);
+        }
+      }
+
+      toast({
+        title: successCount > 0 ? '✅ Cálculo concluído!' : '⚠️ Nenhum score calculado',
+        description: `${successCount} de ${idsToProcess.length} empresa(s) processada(s)${errors.length > 0 ? `. ${errors.length} erros.` : ''}`,
+        variant: successCount === 0 ? 'destructive' : 'default',
+      });
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Bulk Calculate Purchase Intent] Erro:', error);
+      toast({
+        title: 'Erro ao calcular intenção de compra',
+        description: error.message || 'Não foi possível processar',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+      setBulkProgress({ current: 0, total: 0 });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
       'new': 'bg-blue-100 text-blue-800',
@@ -2174,6 +2332,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                 onDeleteAll={handleDeleteAll}
                 onBulkEnrichment={handleBulkEnrichment}
                 onBulkEnrichWebsite={handleBulkEnrichWebsite}
+                onBulkCalculatePurchaseIntent={handleBulkCalculatePurchaseIntent}
                 onPromoteToCompanies={handlePromoteToCompanies}
                 onExportSelected={handleExportSelected}
                 isProcessing={processing}
@@ -2741,6 +2900,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                                 Enriquecer Website + Fit Score
                               </DropdownMenuItem>
                               <DropdownMenuItem
+                                onClick={() => handleCalculatePurchaseIntent(prospect.id)}
+                                disabled={enrichingIds.has(prospect.id)}
+                              >
+                                <Target className="w-4 h-4 mr-2" />
+                                Calcular Intenção de Compra
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
                                 onClick={() => handleUpdateReceitaFederal(prospect.id)}
                                 disabled={enrichingIds.has(prospect.id)}
                               >
@@ -2787,402 +2953,23 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         </CardContent>
       </Card>
 
-      {/* ✅ CICLO 1: Modal de Preview Completo (igual a SearchPage) */}
-      <Dialog open={showFullPreview} onOpenChange={setShowFullPreview}>
-        <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl flex items-center gap-3">
-              <Building2 className="h-6 w-6 text-primary" />
-              Preview Completo dos Dados
-              {fullPreviewData?.cnpj_status === 'ativo' && (
-                <Badge className="ml-2 bg-green-500 hover:bg-green-600 text-white border-green-600 gap-1">
-                  <CheckCircle className="h-3 w-3" />
-                  CNPJ ATIVO
-                </Badge>
-              )}
-              {fullPreviewData?.cnpj_status === 'inativo' && (
-                <Badge className="ml-2 bg-orange-500 hover:bg-orange-600 text-white border-orange-600 gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  CNPJ INATIVO
-                </Badge>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              Revise as informações completas antes de confirmar o cadastro no funil de vendas
-            </DialogDescription>
-          </DialogHeader>
-          
-          {loadingFullPreview ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : fullPreviewData ? (
-            <div className="space-y-6">
-              {/* Header com dados principais */}
-              <Card className="border-l-4 border-l-primary">
-                <CardHeader>
-                  <div className="space-y-2">
-                    <CardTitle className="text-xl">{fullPreviewData.company.name}</CardTitle>
-                    {fullPreviewData.company.raw_data?.receita?.fantasia && (
-                      <p className="text-sm text-muted-foreground">Nome Fantasia: {fullPreviewData.company.raw_data.receita.fantasia}</p>
-                    )}
-                  </div>
-                  {/* ✅ CORRIGIDO: Usar div em vez de CardDescription para evitar warning de DOM nesting (div dentro de p) */}
-                  <div className="text-sm text-muted-foreground space-y-2 pt-2">
-                    {fullPreviewData.company.cnpj && (
-                      <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
-                        <span className="text-sm font-medium text-muted-foreground">CNPJ:</span>
-                        <span className="text-xl font-mono font-bold text-indigo-700 dark:text-indigo-400">
-                          {fullPreviewData.company.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </CardHeader>
-              </Card>
-
-              {/* Grid com 3 colunas - Simplificado para não sobrecarregar */}
-              <div className="grid md:grid-cols-3 gap-6">
-                {/* Coluna 1 - Dados Cadastrais */}
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-sm">
-                        <FileText className="h-4 w-4" />
-                        Dados Cadastrais
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-xs">
-                      <div>
-                        <span className="text-muted-foreground">Porte:</span>
-                        <p className="font-medium">{fullPreviewData.company.raw_data?.receita?.porte || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Abertura:</span>
-                        <p className="font-medium">{fullPreviewData.company.raw_data?.receita?.abertura || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Capital Social:</span>
-                        <p className="font-medium">
-                          {fullPreviewData.company.raw_data?.receita?.capital_social 
-                            ? `R$ ${Number(fullPreviewData.company.raw_data.receita.capital_social).toLocaleString('pt-BR')}` 
-                            : 'N/A'}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Situação Cadastral */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Activity className="h-4 w-4" />
-                        Situação Cadastral
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-xs">
-                      <div>
-                        <span className="text-muted-foreground">Status:</span>
-                        <Badge 
-                          className={`ml-2 ${
-                            fullPreviewData.company.raw_data?.receita?.situacao === 'ATIVA' 
-                              ? 'bg-emerald-500 text-white' 
-                              : 'bg-rose-500 text-white'
-                          }`}
-                        >
-                          {fullPreviewData.company.raw_data?.receita?.situacao || 'N/A'}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Coluna 2 - Localização */}
-                <div className="space-y-4">
-                  {fullPreviewData.company.location && (
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm">
-                          <MapPin className="h-4 w-4" />
-                          Localização
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="text-xs space-y-1">
-                          {fullPreviewData.company.raw_data?.receita?.logradouro && (
-                            <p>{fullPreviewData.company.raw_data.receita.logradouro}, {fullPreviewData.company.raw_data.receita.numero || 'S/N'}</p>
-                          )}
-                          <p className="font-semibold">
-                            {fullPreviewData.company.raw_data?.receita?.municipio || fullPreviewData.company.location.city}/
-                            {fullPreviewData.company.raw_data?.receita?.uf || fullPreviewData.company.location.state}
-                          </p>
-                          {fullPreviewData.company.raw_data?.receita?.cep && (
-                            <p className="text-muted-foreground">CEP: {fullPreviewData.company.raw_data.receita.cep}</p>
-                          )}
-                        </div>
-                        
-                        {/* Mapa */}
-                        {(fullPreviewData.company.location.cep || fullPreviewData.company.location.city) && (
-                          <div className="h-[180px] rounded-lg overflow-hidden">
-                            <LocationMap
-                              address={fullPreviewData.company.raw_data?.receita?.logradouro}
-                              municipio={fullPreviewData.company.location.city}
-                              estado={fullPreviewData.company.location.state}
-                              cep={fullPreviewData.company.location.cep}
-                            />
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-
-                {/* Coluna 3 - Atividades */}
-                <div className="space-y-4">
-                  {fullPreviewData.company.raw_data?.receita?.atividade_principal && (
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm">
-                          <Briefcase className="h-4 w-4" />
-                          Atividade Principal
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {fullPreviewData.company.raw_data.receita.atividade_principal.map((ativ: any, idx: number) => (
-                            <div key={idx} className="text-xs">
-                              <Badge variant="outline" className="text-[10px] mb-1">{ativ.code}</Badge>
-                              <p className="text-[10px] leading-relaxed">{ativ.text}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      {/* ✅ FLUXO OFICIAL: Modal de Preview da Empresa (mantido para compatibilidade) */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className={`${isModalFullscreen ? 'max-w-[95vw] max-h-[95vh]' : 'max-w-2xl max-h-[80vh]'} overflow-y-auto transition-all duration-300`}>
-          <DialogHeader className="flex flex-row items-center justify-between">
-            <div className="flex-1">
-              <DialogTitle>Resumo da Empresa Qualificada</DialogTitle>
-              <DialogDescription>
-                Detalhes da qualificação e critérios de matching
-              </DialogDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsModalFullscreen(!isModalFullscreen)}
-                className="h-8 w-8 p-0"
-                title={isModalFullscreen ? 'Minimizar' : 'Tela cheia'}
-              >
-                {isModalFullscreen ? (
-                  <Minimize className="h-4 w-4" />
-                ) : (
-                  <Maximize className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </DialogHeader>
-          {previewProspect && (
-            <div className="space-y-4">
-              {/* Cabeçalho */}
-              <div className="border-b pb-4">
-                <h3 className="text-lg font-semibold">
-                  {previewProspect.razao_social || previewProspect.nome_fantasia || 'Razão social não informada'}
-                </h3>
-                
-                {/* ✅ CNPJ: Mostrar origem e normalizado */}
-                <div className="mt-2 space-y-1">
-                  {previewProspect.cnpj_raw ? (
-                    <>
-                      <p className="text-xs text-muted-foreground">CNPJ de origem (Excel):</p>
-                      <p className="text-sm font-mono text-muted-foreground">{previewProspect.cnpj_raw}</p>
-                      <p className="text-xs text-muted-foreground mt-1">CNPJ normalizado usado na análise:</p>
-                      <p className="text-sm font-mono font-semibold">{previewProspect.cnpj}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs text-muted-foreground">CNPJ normalizado:</p>
-                      <p className="text-sm font-mono font-semibold">{previewProspect.cnpj}</p>
-                    </>
-                  )}
-                </div>
-                
-                {previewProspect.nome_fantasia && (
-                  <p className="text-sm text-muted-foreground mt-2">Nome Fantasia: {previewProspect.nome_fantasia}</p>
-                )}
-                
-                {/* ✅ Mensagem sobre dados faltantes */}
-                {(!previewProspect.razao_social && !previewProspect.nome_fantasia) && (
-                  <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-800 dark:text-amber-200">
-                    ⚠️ Razão social não informada no lote e não encontrada nas fontes externas. Apenas CNPJ disponível.
-                  </div>
-                )}
-              </div>
-
-              {/* ICP e Grade */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">ICP Utilizado</p>
-                  <p className="text-base">{previewProspect.icp?.nome || 'Não especificado'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Grade Final</p>
-                  <div className="mt-1">{getGradeBadge(previewProspect.grade)}</div>
-                </div>
-              </div>
-
-              {/* Fit Score */}
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Fit Score</p>
-                {previewProspect.fit_score != null ? (
-                  <div className="flex items-center gap-2 mt-1">
-                    <TrendingUp className="w-5 h-5 text-primary" />
-                    <span className="text-2xl font-bold">{previewProspect.fit_score.toFixed(1)}%</span>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-sm mt-1">Não calculado</p>
-                )}
-              </div>
-
-              {/* Dados Básicos */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Localização</p>
-                  <p className="text-base">
-                    {previewProspect.cidade && previewProspect.estado
-                      ? `${previewProspect.cidade}/${previewProspect.estado}`
-                      : previewProspect.estado || 'Não informado'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Setor</p>
-                  <p className="text-base">
-                    {previewProspect.setor || (
-                      <span className="text-muted-foreground italic">
-                        Não informado no lote / não encontrado nas fontes externas
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              
-              {/* ✅ Mensagem sobre enrich (se dados faltarem) */}
-              {(!previewProspect.setor || !previewProspect.cidade || !previewProspect.website) && (
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded">
-                  <p className="text-xs text-blue-800 dark:text-blue-200 font-medium mb-1">
-                    ℹ️ Informação sobre dados faltantes
-                  </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    Esta empresa não foi localizada nas bases externas para o CNPJ {previewProspect.cnpj}.
-                    A qualificação foi feita apenas com os dados internos do lote de importação.
-                  </p>
-                </div>
-              )}
-
-              {/* Origem do Lote */}
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Origem do Lote</p>
-                <p className="text-base">{previewProspect.job?.job_name || 'Não especificado'}</p>
-                {previewProspect.job?.source_type && (
-                  <Badge variant="outline" className="mt-1">
-                    {previewProspect.job.source_type}
-                  </Badge>
-                )}
-              </div>
-
-              {/* ✅ Análise Estratégica de Fit - Website & Produtos */}
-              <WebsiteFitAnalysisCard
-                companyId={previewProspect.id}
-                qualifiedProspectId={previewProspect.id}
-                websiteEncontrado={previewProspect.website_encontrado}
-                websiteFitScore={previewProspect.website_fit_score}
-                websiteProductsMatch={previewProspect.website_products_match}
-                linkedinUrl={previewProspect.linkedin_url}
-                isModalFullscreen={isModalFullscreen}
-              />
-
-              {/* ✅ Detalhamento de Matching com match_breakdown */}
-              <div className="border-t pt-4">
-                <p className="text-sm font-medium text-muted-foreground mb-2">Detalhamento de Qualificação</p>
-                {previewProspect.match_breakdown && Array.isArray(previewProspect.match_breakdown) && previewProspect.match_breakdown.length > 0 ? (
-                  <div className="space-y-2">
-                    {previewProspect.match_breakdown.map((item: any, idx: number) => (
-                      <div 
-                        key={idx} 
-                        className={`flex items-center justify-between p-2 rounded ${
-                          item.matched ? 'bg-green-50 dark:bg-green-950/20' : 'bg-gray-50 dark:bg-gray-900/20'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          {item.matched ? (
-                            <CheckCircle2 className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-gray-400" />
-                          )}
-                          <span className="text-sm font-medium">{item.label}</span>
-                          <span className="text-xs text-muted-foreground">(peso {Math.round((item.weight || 0) * 100)}%)</span>
-                        </div>
-                        <div className="text-sm font-semibold">
-                          {item.matched ? (
-                            <span className="text-green-600">+{item.score}%</span>
-                          ) : (
-                            <span className="text-gray-400">+{item.score}%</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Metodologia: classificação por Fit Score ponderado (Setor 30%, Localização 25%, Dados 20%, Website 15%, Contatos 10%).
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Este lote foi gerado antes da atualização do motor de qualificação. Os detalhes de matching não estão disponíveis para esta empresa.
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Metodologia: classificação por Fit Score ponderado (Setor 30%, Localização 25%, Dados 20%, Website 15%, Contatos 10%).
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Ações */}
-              <div className="flex gap-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsPreviewOpen(false);
-                    handleSelectOne(previewProspect.id, true);
-                  }}
-                >
-                  Selecionar Empresa
-                </Button>
-                <Button
-                  onClick={async () => {
-                    setIsPreviewOpen(false);
-                    setSelectedIds(new Set([previewProspect.id]));
-                    await handlePromoteToCompanies();
-                  }}
-                >
-                  <Database className="w-4 h-4 mr-2" />
-                  Enviar para Banco de Empresas
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* ✅ MODAL UNIFICADO: Usar componente CompanyPreviewModal */}
+      {previewProspect && (
+        <CompanyPreviewModal
+          open={isPreviewOpen}
+          onOpenChange={setIsPreviewOpen}
+          company={previewProspect}
+        />
+      )}
+      
+      {/* ✅ Modal de Preview Completo (compatibilidade com handleShowFullPreview) */}
+      {fullPreviewData && previewProspect && (
+        <CompanyPreviewModal
+          open={showFullPreview}
+          onOpenChange={setShowFullPreview}
+          company={previewProspect}
+        />
+      )}
     </div>
   );
 }

@@ -850,19 +850,25 @@ const insertDirectlyToProspectingCandidates = async ({
     .filter(Boolean);
   
   console.log('[BulkUpload][fallback] 🔍 Buscando CNPJs existentes no banco...');
-  // ✅ CORRIGIDO: Verificar duplicatas GLOBALMENTE por tenant+ICP (não apenas mesmo batch)
-  // Isso previne que o mesmo CNPJ seja qualificado múltiplas vezes em diferentes batches
-  // A verificação por source_batch_id só previne duplicatas no mesmo lote de upload
+  // 🔥 CORREÇÃO CRÍTICA: Verificar duplicatas APENAS no mesmo source_batch_id
+  // Isso permite re-importação de empresas com novos batches, mas previne duplicatas no mesmo upload
+  // A verificação global estava impedindo qualquer re-importação, mesmo quando necessário
   const { data: existingRows, error: existingError } = await supabase
     .from('prospecting_candidates' as any)
-    .select('cnpj, source_batch_id, source_name')
+    .select('cnpj, source_batch_id, source_name, status')
     .eq('tenant_id', tenantId)
-    .eq('icp_id', icpId);
-    // 🔥 REMOVIDO: .eq('source_batch_id', sourceBatchId) - agora verifica globalmente
+    .eq('icp_id', icpId)
+    .eq('source_batch_id', sourceBatchId); // ✅ CORRIGIDO: Verificar apenas no mesmo batch
 
   console.log('[BulkUpload][fallback] 🔍 Resultado busca duplicatas:', {
     existingRowsCount: existingRows?.length || 0,
+    sourceBatchId,
     error: existingError?.message || null,
+    sampleExisting: existingRows?.slice(0, 3).map((r: any) => ({
+      cnpj: r.cnpj,
+      source_batch_id: r.source_batch_id,
+      status: r.status
+    })) || []
   });
 
   if (existingError) {
@@ -870,27 +876,34 @@ const insertDirectlyToProspectingCandidates = async ({
     throw existingError;
   }
 
-  // ✅ Normalizar CNPJs do banco também para comparação (globalmente por tenant+ICP)
+  // ✅ Normalizar CNPJs do banco também para comparação (apenas no mesmo batch)
   const existingCnpjsNormalized = new Set(
     (existingRows || []).map((r: any) => normalizeCnpj(r.cnpj)).filter(Boolean)
   );
   
-  console.log('[BulkUpload][fallback] ℹ️ CNPJs já existentes globalmente (tenant+ICP):', {
+  console.log('[BulkUpload][fallback] ℹ️ CNPJs já existentes no mesmo batch:', {
     countExisting: existingCnpjsNormalized.size,
     totalNew: normalizedCnpjs.length,
     sourceBatchId,
-    sampleExisting: Array.from(existingCnpjsNormalized).slice(0, 3),
-    sampleNew: normalizedCnpjs.slice(0, 3),
+    sampleExisting: Array.from(existingCnpjsNormalized).slice(0, 5),
+    sampleNew: normalizedCnpjs.slice(0, 5),
     matches: normalizedCnpjs.filter(cnpj => existingCnpjsNormalized.has(cnpj)).length,
-    note: 'Verificação global previne duplicatas reais - mesmo CNPJ não pode ser qualificado múltiplas vezes'
+    note: 'Verificação apenas no mesmo batch permite re-importação com novos batches'
   });
 
-  // 🔥 BUG 2 FIX: Filtrar duplicatas GLOBALMENTE por tenant+ICP (não apenas mesmo batch)
-  // Isso previne que o mesmo CNPJ seja qualificado múltiplas vezes em diferentes batches
-  // A verificação é global para garantir integridade dos dados
+  // 🔥 CORREÇÃO: Filtrar duplicatas apenas no mesmo source_batch_id
+  // Isso permite re-importação de empresas com novos batches, mas previne duplicatas no mesmo upload
   const companiesToInsert = validCompanies.filter((c) => {
     const normalized = normalizeCnpj(c.cnpj);
-    return normalized && !existingCnpjsNormalized.has(normalized);
+    const isDuplicate = normalized && existingCnpjsNormalized.has(normalized);
+    if (isDuplicate) {
+      console.log('[BulkUpload][fallback] ⚠️ Duplicata detectada no mesmo batch:', {
+        cnpj: c.cnpj,
+        normalized,
+        companyName: c.companyName || c['Razão'] || c['Razao'] || 'N/A'
+      });
+    }
+    return normalized && !isDuplicate;
   });
 
   console.log('[BulkUpload][fallback] 📦 Preparando insert:', {
@@ -1003,6 +1016,18 @@ const insertDirectlyToProspectingCandidates = async ({
     
     // ✅ Usar razão social, se não tiver, usar fantasia, se não tiver, deixar null
     const companyName = razao || fantasia || null;
+    
+    // 🔍 DEBUG: Log se não encontrou nome da empresa
+    if (!companyName && companiesToInsert.indexOf(c) < 3) {
+      console.warn('[BulkUpload][fallback] ⚠️ Nome da empresa não encontrado:', {
+        index: companiesToInsert.indexOf(c),
+        cnpj: c.cnpj,
+        razao: razao,
+        fantasia: fantasia,
+        allKeys: Object.keys(c).slice(0, 20),
+        columnMapping: columnMapping['razao_social']
+      });
+    }
     
     // ✅ Se houver nome fantasia diferente da razão social, incluir em notes
     const notesContent = [];
@@ -1125,14 +1150,30 @@ const insertDirectlyToProspectingCandidates = async ({
 
   console.log('[BulkUpload][fallback] 📤 Tentando inserir', rows.length, 'registros...');
   console.log('[BulkUpload][fallback] 📋 Primeiro registro exemplo:', rows[0]);
+  console.log('[BulkUpload][fallback] 📊 Estatísticas de validação:', {
+    totalValidCompanies: validCompanies.length,
+    companiesToInsert: companiesToInsert.length,
+    rowsAfterMapping: rows.length,
+    invalidCount: invalidCount,
+    duplicatesInBatch: validCompanies.length - companiesToInsert.length,
+  });
   
   // 🔍 DEBUG: Se rows está vazio, investigar por quê
   if (rows.length === 0) {
     console.error('[BulkUpload][fallback] ❌ ERRO CRÍTICO: Nenhum registro válido após mapeamento!', {
       totalCompanies: validCompanies.length,
       companiesToInsert: companiesToInsert.length,
+      invalidCount: invalidCount,
+      duplicatesInBatch: validCompanies.length - companiesToInsert.length,
       firstCompanySample: companiesToInsert[0],
       firstCompanyKeys: companiesToInsert[0] ? Object.keys(companiesToInsert[0]) : [],
+      firstCompanyRazao: companiesToInsert[0] ? {
+        'Razão': companiesToInsert[0]['Razão'],
+        'Razao': companiesToInsert[0]['Razao'],
+        'Razão Social': companiesToInsert[0]['Razão Social'],
+        'Razao Social': companiesToInsert[0]['Razao Social'],
+        'company_name': companiesToInsert[0]['company_name'],
+      } : null,
     });
   }
 
@@ -1254,6 +1295,39 @@ for (const icpId of icpIdsToProcess) {
       insertedCount = fallbackResult.insertedCount;
       duplicatesCount = fallbackResult.duplicateCount;
       console.log(`✅ [BulkUpload] Fallback processou: ${insertedCount} inseridas, ${duplicatesCount} duplicadas`);
+      
+      // 🔥 CRÍTICO: Criar job automaticamente após inserir empresas com sucesso
+      if (insertedCount > 0 && tenantId && icpId) {
+        try {
+          console.log(`[BulkUpload] 🔄 Criando job de qualificação para ICP ${icpId}...`);
+          const { data: jobId, error: jobError } = await (supabase.rpc as any)(
+            'create_qualification_job_after_import',
+            {
+              p_tenant_id: tenantId,
+              p_icp_id: icpId,
+              p_source_type: 'upload_csv',
+              p_source_batch_id: sourceBatchId,
+              p_job_name: sourceName 
+                ? `${sourceName} - ${insertedCount} empresas`
+                : `Importação ${new Date().toLocaleDateString('pt-BR')} - ${insertedCount} empresas`,
+            }
+          );
+
+          if (jobError) {
+            console.error('[BulkUpload] ⚠️ Erro ao criar job de qualificação:', jobError);
+            // Não bloquear o fluxo se falhar criar o job - usuário pode criar manualmente
+          } else {
+            console.log(`✅ [BulkUpload] Job de qualificação criado com sucesso: ${jobId}`);
+            // 🔥 Disparar evento customizado para notificar outras páginas
+            window.dispatchEvent(new CustomEvent('qualification-job-created', { 
+              detail: { jobId, tenantId, icpId } 
+            }));
+          }
+        } catch (jobErr: any) {
+          console.error('[BulkUpload] ⚠️ Erro ao criar job de qualificação:', jobErr);
+          // Não bloquear o fluxo se falhar criar o job
+        }
+      }
     } catch (fallbackError: any) {
       console.error('[BulkUpload] ❌ Fallback também falhou', fallbackError);
       console.error('[BulkUpload] ❌ Stack trace:', fallbackError.stack);
@@ -1280,16 +1354,16 @@ console.log('[BulkUpload] ✅ Loop de ICPs concluído. Total:', { totalInserted,
 
       setProgress(90);
 
-      // ✅ CORRIGIDO: NÃO criar job automaticamente
+      // ✅ CORRIGIDO: Job criado automaticamente após upload
       // Fluxo correto:
       // 1. Upload → empresas vão para prospecting_candidates
-      // 2. Usuário vai para "Motor de Qualificação"
-      // 3. Usuário escolhe qual ICP usar
-      // 4. Usuário clica em "Rodar Qualificação" → cria job e processa
+      // 2. Job é criado automaticamente em prospect_qualification_jobs
+      // 3. Usuário vai para "Motor de Qualificação" → vê o job na lista
+      // 4. Usuário seleciona o job e clica em "Rodar Qualificação" → processa
       // 5. DEPOIS as empresas vão para qualified_prospects (Estoque Qualificado)
       
       console.log(`[BulkUpload] ✅ ${totalInserted} empresas importadas para prospecting_candidates.`);
-      console.log(`[BulkUpload] 📋 Próximo passo: Vá para "Motor de Qualificação", escolha o ICP e clique em "Rodar Qualificação"`);
+      console.log(`[BulkUpload] ✅ Job(s) de qualificação criado(s) automaticamente.`);
 
       setProgress(100);
 
@@ -1298,11 +1372,13 @@ console.log('[BulkUpload] ✅ Loop de ICPs concluído. Total:', { totalInserted,
         console.log(`✅ SUCESSO: ${totalInserted} empresas importadas, ${totalDuplicates} duplicadas ignoradas!`);
         
         toast.success(`✅ ${totalInserted} empresas importadas!`, {
-          description: `🎯 Empresas salvas em prospecting_candidates. Escolha o ICP e clique em "Rodar Qualificação" para qualificar. ${totalDuplicates > 0 ? `${totalDuplicates} duplicadas ignoradas.` : ''}`,
+          description: `🎯 Empresas salvas e job de qualificação criado. Vá para "Motor de Qualificação" e clique em "Rodar Qualificação" para qualificar. ${totalDuplicates > 0 ? `${totalDuplicates} duplicadas ignoradas.` : ''}`,
           action: {
             label: 'Ir para Motor de Qualificação →',
-            onClick: () => {
+            onClick: async () => {
               setIsOpen(false);
+              // 🔥 Pequeno delay para garantir que o job foi criado no banco
+              await new Promise(resolve => setTimeout(resolve, 500));
               navigate('/leads/qualification-engine');
             }
           },

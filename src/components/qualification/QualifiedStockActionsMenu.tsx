@@ -17,6 +17,7 @@ import {
   Database,
   AlertTriangle,
   Globe,
+  Target,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -27,6 +28,7 @@ interface QualifiedStockActionsMenuProps {
   onDeleteAll: () => Promise<void>;
   onBulkEnrichment: () => Promise<void>;
   onBulkEnrichWebsite?: () => Promise<void>; // ✅ NOVO: Enriquecimento de website
+  onBulkCalculatePurchaseIntent?: () => Promise<void>; // ✅ NOVO: Calcular Purchase Intent
   onPromoteToCompanies: () => Promise<void>;
   onExportSelected: () => void;
   isProcessing?: boolean;
@@ -39,6 +41,7 @@ export function QualifiedStockActionsMenu({
   onDeleteAll,
   onBulkEnrichment,
   onBulkEnrichWebsite,
+  onBulkCalculatePurchaseIntent,
   onPromoteToCompanies,
   onExportSelected,
   isProcessing = false,
@@ -47,6 +50,7 @@ export function QualifiedStockActionsMenu({
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [isEnrichingWebsite, setIsEnrichingWebsite] = useState(false);
+  const [isCalculatingIntent, setIsCalculatingIntent] = useState(false);
 
   const handleDelete = async () => {
     try {
@@ -93,16 +97,28 @@ export function QualifiedStockActionsMenu({
     }
   };
 
+  const handleCalculatePurchaseIntent = async () => {
+    if (!onBulkCalculatePurchaseIntent) return;
+    try {
+      setIsCalculatingIntent(true);
+      await onBulkCalculatePurchaseIntent();
+    } catch (error) {
+      console.error('Error calculating purchase intent:', error);
+    } finally {
+      setIsCalculatingIntent(false);
+    }
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="default"
           size="default"
-          disabled={isProcessing || isDeleting || isDeletingAll || isEnriching || isEnrichingWebsite}
+          disabled={isProcessing || isDeleting || isDeletingAll || isEnriching || isEnrichingWebsite || isCalculatingIntent}
           className="gap-2 border border-primary shadow-md hover:shadow-lg"
         >
-          {isProcessing || isDeleting || isDeletingAll || isEnriching || isEnrichingWebsite ? (
+          {isProcessing || isDeleting || isDeletingAll || isEnriching || isEnrichingWebsite || isCalculatingIntent ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <MoreHorizontal className="h-4 w-4" />
@@ -148,7 +164,7 @@ export function QualifiedStockActionsMenu({
           {onBulkEnrichWebsite && (
             <DropdownMenuItem 
               onClick={handleEnrichWebsite}
-              disabled={selectedCount === 0 || isEnriching || isEnrichingWebsite}
+              disabled={selectedCount === 0 || isEnriching || isEnrichingWebsite || isCalculatingIntent}
               className="cursor-pointer"
             >
               {isEnrichingWebsite ? (
@@ -157,6 +173,21 @@ export function QualifiedStockActionsMenu({
                 <Globe className="h-4 w-4 mr-2" />
               )}
               Enriquecer Website + Fit Score
+            </DropdownMenuItem>
+          )}
+
+          {onBulkCalculatePurchaseIntent && (
+            <DropdownMenuItem 
+              onClick={handleCalculatePurchaseIntent}
+              disabled={selectedCount === 0 || isCalculatingIntent || isEnriching || isEnrichingWebsite}
+              className="cursor-pointer"
+            >
+              {isCalculatingIntent ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Target className="h-4 w-4 mr-2" />
+              )}
+              Calcular Intenção de Compra
             </DropdownMenuItem>
           )}
 

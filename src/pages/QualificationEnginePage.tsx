@@ -189,6 +189,36 @@ export default function QualificationEnginePage() {
     }
   }, [tenantId, loadJobs]);
 
+  // ✅ NOVO: Escutar evento de job criado para recarregar automaticamente
+  useEffect(() => {
+    const handleJobCreated = () => {
+      console.log('[QualificationEngine] Job criado detectado, recarregando lista...');
+      // Pequeno delay para garantir que o job foi commitado no banco
+      setTimeout(() => {
+        loadJobs();
+      }, 300);
+    };
+
+    window.addEventListener('qualification-job-created', handleJobCreated);
+    
+    // ✅ NOVO: Recarregar quando a página receber foco (usuário navegou para cá)
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible' && tenantId) {
+        console.log('[QualificationEngine] Página recebeu foco, recarregando jobs...');
+        loadJobs();
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    
+    return () => {
+      window.removeEventListener('qualification-job-created', handleJobCreated);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [loadJobs, tenantId]);
+
   // ✅ NOVO: Função para deletar job e candidatos associados
   const handleDeleteJob = async (jobId: string, jobName: string) => {
     if (!confirm(`Tem certeza que deseja deletar o lote "${jobName}"?\n\nEsta ação irá:\n- Deletar o job de qualificação\n- Deletar candidatos associados (prospecting_candidates)\n- Deletar empresas qualificadas deste job (qualified_prospects)\n\nEsta ação NÃO pode ser desfeita!`)) {

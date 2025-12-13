@@ -239,62 +239,235 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
       }
     }
 
-    // 7. Comparar produtos extraídos com produtos do tenant
+    // 7. ✅ ANÁLISE INTELIGENTE COM IA: Comparar produtos usando contexto e aplicação
     const compatibleProducts: any[] = [];
-    for (const extracted of extractedProducts) {
-      for (const tenant of tenantProductsList) {
-        // Comparação simples (pode ser melhorada com embeddings)
-        const extractedLower = extracted.nome?.toLowerCase() || '';
-        const tenantLower = tenant.nome?.toLowerCase() || '';
-        
-        // Match por categoria
-        if (extracted.categoria && tenant.categoria && 
-            extracted.categoria.toLowerCase() === tenant.categoria.toLowerCase()) {
-          compatibleProducts.push({
-            extracted: extracted.nome,
-            tenant: tenant.nome,
-            categoria: extracted.categoria,
-            match_type: 'categoria',
-          });
-          break;
+    let websiteFitScore = 0; // ✅ Declarar variável antes de usar
+    
+    console.log(`[ScanProspect] 🔍 Condições para análise IA:`, {
+      extractedProducts: extractedProducts.length,
+      tenantProducts: tenantProductsList.length,
+      hasOpenAIKey: !!openaiKey,
+    });
+    
+    if (extractedProducts.length > 0 && tenantProductsList.length > 0 && openaiKey) {
+      console.log('[ScanProspect] 🤖 Usando IA para análise contextual de fit...');
+      
+      try {
+        // Preparar contexto para análise IA
+        const prospectContext = {
+          razao_social: razao_social || '',
+          produtos: extractedProducts.slice(0, 20).map(p => ({
+            nome: p.nome || '',
+            categoria: p.categoria || '',
+            descricao: p.descricao || ''
+          })),
+          setor: extractedProducts[0]?.categoria || 'Não especificado'
+        };
+
+        const tenantContext = {
+          produtos: tenantProductsList.slice(0, 20).map(p => ({
+            nome: p.nome || '',
+            categoria: p.categoria || '',
+            descricao: p.descricao || ''
+          }))
+        };
+
+        // Chamar OpenAI para análise contextual
+        const aiAnalysisResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Você é um especialista em análise de fit entre empresas B2B. Analise se os produtos/serviços do tenant podem ser aplicados/usados nos processos de fabricação, operação ou negócio da empresa prospect.
+
+IMPORTANTE: Considere:
+- Produtos de FABRICAÇÃO do prospect podem usar produtos de AUTOMAÇÃO, SOFTWARE, EQUIPAMENTOS do tenant
+- Produtos de SERVIÇOS do prospect podem usar produtos de TECNOLOGIA, CONSULTORIA, FERRAMENTAS do tenant
+- Produtos de COMÉRCIO do prospect podem usar produtos de GESTÃO, LOGÍSTICA, MARKETING do tenant
+- Analise APLICAÇÃO e USABILIDADE, não apenas nomes similares
+
+Retorne APENAS um JSON válido com este formato:
+{
+  "matches": [
+    {
+      "prospect_product": "nome do produto do prospect",
+      "tenant_product": "nome do produto do tenant",
+      "match_type": "aplicacao" | "uso" | "fabricacao" | "processo" | "suporte",
+      "confidence": 0.0-1.0,
+      "reason": "explicação curta do porquê há fit"
+    }
+  ],
+  "overall_fit_score": 0-20,
+  "analysis": "análise geral do fit em 2-3 frases"
+}`
+              },
+              {
+                role: 'user',
+                content: `Analise o fit entre:
+
+EMPRESA PROSPECT (${razao_social || 'Empresa'}):
+Produtos/Serviços que fabrica/fornece:
+${prospectContext.produtos.map((p, i) => `${i + 1}. ${p.nome}${p.categoria ? ` (${p.categoria})` : ''}${p.descricao ? ` - ${p.descricao}` : ''}`).join('\n')}
+
+PRODUTOS/SERVIÇOS DO TENANT (ofertas):
+${tenantContext.produtos.map((p, i) => `${i + 1}. ${p.nome}${p.categoria ? ` (${p.categoria})` : ''}${p.descricao ? ` - ${p.descricao}` : ''}`).join('\n')}
+
+Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos de fabricação, operação ou negócio da empresa prospect. Considere contexto, não apenas nomes similares.`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 1500,
+            response_format: { type: 'json_object' }
+          }),
+        });
+
+        if (aiAnalysisResponse.ok) {
+          const aiData = await aiAnalysisResponse.json();
+          const aiContent = aiData.choices[0]?.message?.content;
+          
+          if (aiContent) {
+            try {
+              const aiResult = JSON.parse(aiContent);
+              
+              if (aiResult.matches && Array.isArray(aiResult.matches)) {
+                compatibleProducts.push(...aiResult.matches.map((match: any) => ({
+                  prospect_product: match.prospect_product,
+                  tenant_product: match.tenant_product,
+                  match_type: match.match_type || 'aplicacao',
+                  confidence: match.confidence || 0.5,
+                  reason: match.reason || '',
+                })));
+                
+                // Usar score da IA se disponível, senão calcular
+                websiteFitScore = aiResult.overall_fit_score || 
+                  Math.min(20, Math.round((compatibleProducts.length / extractedProducts.length) * 20));
+                
+                console.log(`[ScanProspect] ✅ IA encontrou ${compatibleProducts.length} matches com score ${websiteFitScore}/20`);
+              }
+            } catch (parseError) {
+              console.warn('[ScanProspect] ⚠️ Erro ao parsear resposta IA, usando fallback:', parseError);
+            }
+          }
+        } else {
+          const errorText = await aiAnalysisResponse.text();
+          console.warn('[ScanProspect] ⚠️ Erro na API OpenAI:', aiAnalysisResponse.status, errorText);
+          console.warn('[ScanProspect] ⚠️ Usando fallback simples...');
         }
-        
-        // Match por palavras-chave
-        const extractedWords = extractedLower.split(/\s+/);
-        const tenantWords = tenantLower.split(/\s+/);
-        const commonWords = extractedWords.filter(w => w.length > 3 && tenantWords.includes(w));
-        
-        if (commonWords.length >= 2) {
-          compatibleProducts.push({
-            extracted: extracted.nome,
-            tenant: tenant.nome,
-            match_type: 'keywords',
-            keywords: commonWords,
-          });
-          break;
+      } catch (aiError) {
+        console.warn('[ScanProspect] ⚠️ Erro ao chamar IA, usando fallback:', aiError);
+      }
+    } else {
+      console.log('[ScanProspect] ⚠️ Análise IA não executada:', {
+        reason: !extractedProducts.length ? 'Sem produtos extraídos' : 
+                !tenantProductsList.length ? 'Sem produtos do tenant' : 
+                !openaiKey ? 'Sem chave OpenAI' : 'Desconhecido'
+      });
+    }
+
+    // ✅ FALLBACK: Comparação simples se IA não funcionar ou não houver produtos suficientes
+    if (compatibleProducts.length === 0 && extractedProducts.length > 0 && tenantProductsList.length > 0) {
+      console.log('[ScanProspect] 🔄 Usando fallback de comparação simples...');
+      
+      for (const extracted of extractedProducts) {
+        for (const tenant of tenantProductsList) {
+          const extractedLower = extracted.nome?.toLowerCase() || '';
+          const tenantLower = tenant.nome?.toLowerCase() || '';
+          
+          // Match por categoria
+          if (extracted.categoria && tenant.categoria && 
+              extracted.categoria.toLowerCase() === tenant.categoria.toLowerCase()) {
+            compatibleProducts.push({
+              prospect_product: extracted.nome,
+              tenant_product: tenant.nome,
+              match_type: 'categoria',
+              confidence: 0.6,
+            });
+            break;
+          }
+          
+          // Match por palavras-chave
+          const extractedWords = extractedLower.split(/\s+/);
+          const tenantWords = tenantLower.split(/\s+/);
+          const commonWords = extractedWords.filter(w => w.length > 3 && tenantWords.includes(w));
+          
+          if (commonWords.length >= 2) {
+            compatibleProducts.push({
+              prospect_product: extracted.nome,
+              tenant_product: tenant.nome,
+              match_type: 'keywords',
+              confidence: 0.4,
+            });
+            break;
+          }
         }
+      }
+      
+      // Calcular score baseado em matches encontrados
+      if (compatibleProducts.length > 0) {
+        const matchRatio = compatibleProducts.length / extractedProducts.length;
+        websiteFitScore = Math.min(20, Math.round(matchRatio * 20));
       }
     }
 
     console.log(`[ScanProspect] ✅ Produtos compatíveis encontrados: ${compatibleProducts.length}`);
-
-    // ✅ Calcular Website Fit Score (0-20 pontos)
-    let websiteFitScore = 0;
-    if (extractedProducts.length > 0 && compatibleProducts.length > 0) {
-      // Score baseado na proporção de produtos compatíveis
-      // Máximo 20 pontos: 100% de match = 20 pontos
-      const matchRatio = compatibleProducts.length / extractedProducts.length;
-      websiteFitScore = Math.min(20, Math.round(matchRatio * 20));
-    }
+    console.log(`[ScanProspect] ✅ Website Fit Score: ${websiteFitScore}/20 pontos`);
 
     // ✅ Formatar produtos compatíveis no formato esperado
     const formattedCompatibleProducts = compatibleProducts.map((comp: any) => ({
-      prospect_product: comp.extracted || comp.prospect_product,
-      tenant_product: comp.tenant || comp.tenant_product,
+      prospect_product: comp.prospect_product || comp.extracted || '',
+      tenant_product: comp.tenant_product || comp.tenant || '',
       match_type: comp.match_type || 'category_match',
+      confidence: comp.confidence || 0.5,
+      reason: comp.reason || '',
     }));
 
     console.log(`[ScanProspect] ✅ Website Fit Score calculado: ${websiteFitScore}/20 pontos`);
+
+    // ✅ CRÍTICO: Atualizar qualified_prospects com os dados calculados
+    if (qualified_prospect_id) {
+      // Buscar prospect atual para verificar se já tem website_encontrado
+      const { data: currentProspect } = await supabase
+        .from('qualified_prospects')
+        .select('website_encontrado')
+        .eq('id', qualified_prospect_id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+      const updatePayload: any = {
+        website_fit_score: websiteFitScore,
+        website_products_match: formattedCompatibleProducts,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Se website_encontrado não estiver preenchido, usar o website_url fornecido
+      if (!currentProspect?.website_encontrado && website_url) {
+        updatePayload.website_encontrado = website_url;
+      }
+
+      // Se linkedin_url foi encontrado, atualizar
+      if (linkedinUrl) {
+        updatePayload.linkedin_url = linkedinUrl;
+      }
+
+      const { error: updateError } = await supabase
+        .from('qualified_prospects')
+        .update(updatePayload)
+        .eq('id', qualified_prospect_id)
+        .eq('tenant_id', tenant_id);
+
+      if (updateError) {
+        console.error('[ScanProspect] ⚠️ Erro ao atualizar qualified_prospects:', updateError);
+        // Não falhar a requisição se a atualização falhar
+      } else {
+        console.log('[ScanProspect] ✅ qualified_prospects atualizado com website_fit_score:', websiteFitScore);
+      }
+    }
 
     return new Response(
       JSON.stringify({
