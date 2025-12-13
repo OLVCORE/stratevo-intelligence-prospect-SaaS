@@ -47,6 +47,7 @@ import { enrichment360Simplificado } from '@/services/enrichment360';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
+import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -1026,6 +1027,118 @@ export default function ICPQuarantine() {
     const company = filteredCompanies.find(c => c.id === id);
     if (!company) return;
     refreshBatch([{ id, razao_social: company.razao_social, cnpj: company.cnpj }]);
+  };
+
+  // ✅ NOVA FUNÇÃO: Enriquecer Website + Fit Score
+  const handleEnrichWebsite = async (analysisId: string) => {
+    const company = filteredCompanies.find(c => c.id === analysisId);
+    if (!company || !tenantId) return;
+
+    try {
+      toast.info('🌐 Buscando e escaneando website da empresa...');
+
+      const supabaseUrl = (supabase as any).supabaseUrl || (window as any).__SUPABASE_URL__;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sessão não encontrada');
+
+      // 1. Buscar website oficial
+      const findWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/find-prospect-website`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          razao_social: company.razao_social,
+          cnpj: company.cnpj,
+          tenant_id: tenantId,
+        }),
+      });
+
+      if (!findWebsiteResponse.ok) {
+        throw new Error('Erro ao buscar website');
+      }
+
+      const websiteData = await findWebsiteResponse.json();
+      if (!websiteData.success || !websiteData.website) {
+        toast.error('⚠️ Website não encontrado');
+        return;
+      }
+
+      // 2. Escanear website e calcular fit score
+      const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          company_id: company.company_id,
+          cnpj: company.cnpj,
+          website_url: websiteData.website,
+          razao_social: company.razao_social,
+        }),
+      });
+
+      if (!scanWebsiteResponse.ok) {
+        throw new Error('Erro ao escanear website');
+      }
+
+      const scanData = await scanWebsiteResponse.json();
+      
+      // 3. Atualizar icp_analysis_results
+      if (scanData.success) {
+        await supabase
+          .from('icp_analysis_results')
+          .update({
+            website_encontrado: websiteData.website,
+            website_fit_score: scanData.website_fit_score || 0,
+            website_products_match: scanData.website_products_match || [],
+            linkedin_url: scanData.linkedin_url || null,
+          })
+          .eq('id', analysisId);
+
+        toast.success('✅ Website enriquecido com sucesso!');
+        refetch();
+      }
+    } catch (error: any) {
+      console.error('[Enriquecimento Website] Erro:', error);
+      toast.error('Erro ao enriquecer website', { description: error.message });
+    }
+  };
+
+  // ✅ NOVA FUNÇÃO: Calcular Purchase Intent Score
+  const handleCalculatePurchaseIntent = async (analysisId: string) => {
+    const company = filteredCompanies.find(c => c.id === analysisId);
+    if (!company || !tenantId || !company.cnpj) return;
+
+    try {
+      toast.info('🎯 Calculando Intenção de Compra...');
+
+      // Usar função SQL diretamente com CNPJ
+      const { data, error } = await supabase.rpc('calculate_purchase_intent_score', {
+        p_tenant_id: tenantId,
+        p_cnpj: company.cnpj,
+        p_company_id: company.company_id || null,
+      });
+
+      if (error) throw error;
+
+      const score = typeof data === 'number' ? data : 0;
+
+      // Atualizar icp_analysis_results
+      await supabase
+        .from('icp_analysis_results')
+        .update({ purchase_intent_score: score })
+        .eq('id', analysisId);
+
+      toast.success('✅ Intenção de Compra calculada!');
+      refetch();
+    } catch (error: any) {
+      console.error('[Purchase Intent] Erro:', error);
+      toast.error('Erro ao calcular intenção de compra', { description: error.message });
+    }
   };
 
   // Handlers para enriquecimento
@@ -2311,7 +2424,9 @@ export default function ICPQuarantine() {
                     {/* ✅ NOVA COLUNA: Purchase Intent Score */}
                     <TableCell className="w-[10rem]">
                       <PurchaseIntentBadge 
-                        score={(company as any).purchase_intent_score || 0} 
+                        score={(company as any).purchase_intent_score || 0}
+                        intentType={(company as any).purchase_intent_type || 'potencial'}
+                        size="sm"
                       />
                     </TableCell>
                     {/* ✅ NOVA COLUNA: Website */}
@@ -2433,6 +2548,8 @@ export default function ICPQuarantine() {
                           onEnrichCompleto={handleEnrichCompleto}
                           onEnrichVerification={handleEnrichVerification}
                           onDiscoverCNPJ={handleDiscoverCNPJ}
+                          onEnrichWebsite={handleEnrichWebsite}
+                          onCalculatePurchaseIntent={handleCalculatePurchaseIntent}
                           onRestoreIndividual={async (cnpj) => {
                           // Restaurar empresa individual
                           try {
@@ -2508,20 +2625,27 @@ export default function ICPQuarantine() {
         </CardContent>
       </Card>
 
-      {/* Preview Dialog */}
-      <DraggableDialog
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        title={previewCompany ? 'Preview da Empresa' : 'Preview das Empresas Selecionadas'}
-        description={previewCompany 
-          ? `Visualizando: ${previewCompany.razao_social}`
-          : `${displayCompanies.length} empresa(s) selecionada(s)`
-        }
-        className="max-w-6xl"
-        maxWidth="max-h-[90vh]"
-      >
-        <div className="space-y-6">
-          {displayCompanies.map((company) => (
+      {/* ✅ MODAL UNIFICADO: Usar CompanyPreviewModal quando há apenas uma empresa */}
+      {previewCompany && (
+        <CompanyPreviewModal
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          company={previewCompany}
+        />
+      )}
+
+      {/* Preview Dialog para múltiplas empresas (mantido para compatibilidade) */}
+      {!previewCompany && displayCompanies.length > 1 && (
+        <DraggableDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          title="Preview das Empresas Selecionadas"
+          description={`${displayCompanies.length} empresa(s) selecionada(s)`}
+          className="max-w-6xl"
+          maxWidth="max-h-[90vh]"
+        >
+          <div className="space-y-6">
+            {displayCompanies.map((company) => (
             <Card key={company.id} className="border-2">
               <CardContent className="pt-6">
                 {/* Header Section */}
@@ -2817,7 +2941,7 @@ export default function ICPQuarantine() {
                     websiteFitScore={company.website_fit_score}
                     websiteProductsMatch={company.website_products_match}
                     linkedinUrl={company.linkedin_url}
-                    isModalFullscreen={isModalFullscreen}
+                    isModalFullscreen={false}
                   />
                 )}
 
@@ -2862,6 +2986,7 @@ export default function ICPQuarantine() {
           ))}
         </div>
       </DraggableDialog>
+      )}
 
       {/* Reject/Discard Modal */}
       <Dialog open={rejectModalOpen} onOpenChange={setRejectModalOpen}>

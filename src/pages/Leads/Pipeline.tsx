@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   Search, TrendingUp, DollarSign, Calendar, 
   Flame, Droplet, Snowflake, Clock, ArrowRight, Target,
-  Plus, FileText, Play, MoreVertical, UserCheck
+  Plus, FileText, Play, MoreVertical, UserCheck, Eye
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +16,8 @@ import { useToast } from '@/hooks/use-toast';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { AdminDataCleanupDialog } from '@/components/admin/AdminDataCleanupDialog';
 import { HandoffModal } from '@/components/handoff/HandoffModal';
+import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
+import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 
 const STAGES = [
   { id: 'discovery', label: 'Descoberta', color: 'bg-blue-100 text-blue-800' },
@@ -36,13 +38,23 @@ export default function Pipeline() {
   const [handoffModalOpen, setHandoffModalOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<any | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewCompany, setPreviewCompany] = useState<any | null>(null);
 
   const { data: deals, isLoading } = useQuery({
     queryKey: ['pipeline-deals', temperatureFilter],
     queryFn: async () => {
       let query = supabase
         .from('companies')
-        .select('*')
+        .select(`
+          *,
+          purchase_intent_score,
+          purchase_intent_type,
+          website_encontrado,
+          website_fit_score,
+          website_products_match,
+          linkedin_url
+        `)
         .not('deal_stage', 'is', null)
         .order('stage_changed_at', { ascending: false });
 
@@ -338,8 +350,32 @@ export default function Pipeline() {
                                 )}
                               </div>
 
+                              {/* ✅ NOVO: Purchase Intent */}
+                              {(deal as any).purchase_intent_score != null && (deal as any).purchase_intent_score > 0 && (
+                                <div className="mb-2">
+                                  <PurchaseIntentBadge 
+                                    score={(deal as any).purchase_intent_score || 0}
+                                    intentType={(deal as any).purchase_intent_type || 'potencial'}
+                                    size="sm"
+                                  />
+                                </div>
+                              )}
+
                               {/* Ações Rápidas */}
                               <div className="flex gap-1 pt-2 border-t">
+                                {/* ✅ NOVO: Botão Preview */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-7"
+                                  onClick={() => {
+                                    setPreviewCompany(deal);
+                                    setPreviewOpen(true);
+                                  }}
+                                  title="Ver Detalhes Completos"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                </Button>
                                 {/* Botão Handoff - Mostrar apenas se stage = qualification */}
                                 {stage.id === 'qualification' && (
                                   <Button
@@ -410,6 +446,15 @@ export default function Pipeline() {
           ))}
         </div>
       </DragDropContext>
+
+      {/* ✅ MODAL UNIFICADO: Preview da Empresa */}
+      {previewCompany && (
+        <CompanyPreviewModal
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          company={previewCompany}
+        />
+      )}
 
       {/* Modal de Handoff */}
       <HandoffModal

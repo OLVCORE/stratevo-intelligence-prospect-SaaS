@@ -122,7 +122,8 @@ export function useQuarantineCompanies(filters?: {
             website_fit_score,
             website_products_match,
             linkedin_url,
-            purchase_intent_score
+            purchase_intent_score,
+            purchase_intent_type
           `)
           .order('icp_score', { ascending: false });
 

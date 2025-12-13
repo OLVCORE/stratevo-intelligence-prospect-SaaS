@@ -1,4 +1,4 @@
-import { Settings, CheckCircle, XCircle, Eye, Trash2, RefreshCw, Target, Edit, Search, Building2, Sparkles, Zap, ExternalLink, Loader2, FileText, Undo2 } from 'lucide-react';
+import { Settings, CheckCircle, XCircle, Eye, Trash2, RefreshCw, Target, Edit, Search, Building2, Sparkles, Zap, ExternalLink, Loader2, FileText, Undo2, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -38,6 +38,8 @@ interface QuarantineRowActionsProps {
   onOpenExecutiveReport?: () => void;
   onEnrichCompleto?: (id: string) => Promise<void>;
   onRestoreIndividual?: (cnpj: string) => Promise<void>;
+  onEnrichWebsite?: (id: string) => Promise<void>;
+  onCalculatePurchaseIntent?: (id: string) => Promise<void>;
 }
 
 export function QuarantineRowActions({
@@ -56,6 +58,8 @@ export function QuarantineRowActions({
   onOpenExecutiveReport,
   onEnrichCompleto,
   onRestoreIndividual,
+  onEnrichWebsite,
+  onCalculatePurchaseIntent,
 }: QuarantineRowActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
@@ -335,6 +339,50 @@ export function QuarantineRowActions({
           )}
 
           <DropdownMenuSeparator />
+
+          {/* ✅ NOVO: Enriquecer Website + Fit Score */}
+          {onEnrichWebsite && (
+            <Tooltip delayDuration={100}>
+              <TooltipTrigger asChild>
+                <DropdownMenuItem 
+                  onClick={() => {
+                    if (onEnrichWebsite) onEnrichWebsite(company.id);
+                    setIsOpen(false);
+                  }}
+                  className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
+                >
+                  <Globe className="h-4 w-4 mr-2" />
+                  Enriquecer Website + Fit Score
+                </DropdownMenuItem>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs">
+                <p className="font-semibold text-sm">Enriquecer Website & LinkedIn</p>
+                <p className="text-xs text-muted-foreground mt-1">Escaneia website, extrai produtos, encontra LinkedIn e calcula Website Fit Score</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* ✅ NOVO: Calcular Intenção de Compra */}
+          {onCalculatePurchaseIntent && (
+            <Tooltip delayDuration={100}>
+              <TooltipTrigger asChild>
+                <DropdownMenuItem 
+                  onClick={() => {
+                    if (onCalculatePurchaseIntent) onCalculatePurchaseIntent(company.id);
+                    setIsOpen(false);
+                  }}
+                  className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
+                >
+                  <Target className="h-4 w-4 mr-2" />
+                  Calcular Intenção de Compra
+                </DropdownMenuItem>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs">
+                <p className="font-semibold text-sm">Purchase Intent Score</p>
+                <p className="text-xs text-muted-foreground mt-1">Calcula score de intenção de compra baseado em sinais de mercado e comportamentais</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           {/* Abrir Website */}
           {company.website && (
