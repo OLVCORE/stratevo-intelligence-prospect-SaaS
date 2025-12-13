@@ -67,34 +67,64 @@ export function PredictiveForecast({
       setAccuracy(data.accuracy || 90);
     } catch (error: any) {
       console.error('Erro ao carregar previsão:', error);
-      // Em caso de erro, usar dados mockados
-      const mockForecast: ForecastData[] = [
-        {
-          period: 'Jan 2025',
-          predicted_revenue: 150000,
-          confidence: 0.92,
-          deals_count: 12,
-          average_deal_size: 12500,
-          trend: 'up',
-        },
-        {
-          period: 'Fev 2025',
-          predicted_revenue: 180000,
-          confidence: 0.88,
-          deals_count: 15,
-          average_deal_size: 12000,
-          trend: 'up',
-        },
-        {
-          period: 'Mar 2025',
-          predicted_revenue: 165000,
-          confidence: 0.85,
-          deals_count: 14,
-          average_deal_size: 11786,
-          trend: 'stable',
-        },
-      ];
-      setForecast(mockForecast);
+      
+      // 🔥 PROIBIDO: Dados mockados removidos
+      // Se Edge Function falhar, calcular previsão baseada em deals reais do banco
+      try {
+        const { data: deals, error: dbError } = await (supabase as any)
+          .from('deals')
+          .select('id, value, probability, stage, created_at, updated_at')
+          .eq('tenant_id', tenant.id)
+          .in('stage', ['Negociação', 'Proposta', 'Qualificado']);
+
+        if (dbError) throw dbError;
+
+        if (!deals || deals.length === 0) {
+          setForecast([]);
+          return;
+        }
+
+        // Calcular previsão real baseada em deals ativos
+        const now = new Date();
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const monthAfter = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+        const twoMonthsAfter = new Date(now.getFullYear(), now.getMonth() + 3, 1);
+
+        const calculateForecast = (targetDate: Date, periodName: string) => {
+          const relevantDeals = deals.filter((deal: any) => {
+            const dealDate = new Date(deal.updated_at || deal.created_at);
+            return dealDate <= targetDate;
+          });
+
+          const predictedRevenue = relevantDeals.reduce((sum: number, deal: any) => {
+            return sum + ((deal.value || 0) * (deal.probability || 0) / 100);
+          }, 0);
+
+          const avgDealSize = relevantDeals.length > 0
+            ? relevantDeals.reduce((sum: number, d: any) => sum + (d.value || 0), 0) / relevantDeals.length
+            : 0;
+
+          return {
+            period: periodName,
+            predicted_revenue: Math.round(predictedRevenue),
+            confidence: 0.75, // Baseado em probabilidade média
+            deals_count: relevantDeals.length,
+            average_deal_size: Math.round(avgDealSize),
+            trend: 'stable' as const,
+          };
+        };
+
+        const realForecast: ForecastData[] = [
+          calculateForecast(nextMonth, nextMonth.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })),
+          calculateForecast(monthAfter, monthAfter.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })),
+          calculateForecast(twoMonthsAfter, twoMonthsAfter.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })),
+        ];
+
+        setForecast(realForecast);
+      } catch (fallbackError) {
+        console.error('Erro no fallback de previsão:', fallbackError);
+        setForecast([]); // Retornar vazio ao invés de dados fake
+      }
     } finally {
       setIsLoading(false);
     }

@@ -87,15 +87,73 @@ serve(async (req) => {
     let enrichedCount = 0;
     let failedCount = 0;
 
-    // Processar cada CNPJ
+    // MC10: Buscar ICP uma vez (otimização - não buscar para cada CNPJ)
+    let icpData: any = null;
+    if (icp_id) {
+      const { data: icp } = await supabase
+        .from('icp')
+        .select('*')
+        .eq('id', icp_id)
+        .single();
+      icpData = icp;
+    } else {
+      // Buscar ICP mais recente do tenant
+      const { data: icp } = await supabase
+        .from('icp')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      icpData = icp;
+    }
+
+    // MC10: Rate limiting - processar com delay inteligente (3 req/segundo = 333ms entre requisições)
+    const RATE_LIMIT_DELAY = 333; // ms entre requisições
+    let lastRequestTime = 0;
+
+    // MC10: Processar cada CNPJ (PRESERVAR lógica existente, apenas adicionar retry)
     for (const cnpj of cnpjs) {
       try {
+        // MC10: Rate limiting - aguardar se necessário
+        const now = Date.now();
+        const timeSinceLastRequest = now - lastRequestTime;
+        if (timeSinceLastRequest < RATE_LIMIT_DELAY) {
+          await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY - timeSinceLastRequest));
+        }
+        lastRequestTime = Date.now();
+
         console.log(`[QualifyBulk] 📞 Processando CNPJ: ${cnpj}`);
 
-        // 1. Enriquecer via Receita Federal
-        const prospectData = await enrichProspect(cnpj);
+        // MC10: Retry automático com backoff exponencial (máximo 3 tentativas)
+        let prospectData: ProspectData | null = null;
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        while (!prospectData && retryCount < maxRetries) {
+          try {
+            // 1. Enriquecer via Receita Federal (🆕 agora busca website automaticamente)
+            prospectData = await enrichProspect(cnpj, tenant_id);
+            
+            if (!prospectData && retryCount < maxRetries - 1) {
+              // Backoff exponencial: 1s, 2s, 4s
+              const backoffDelay = Math.pow(2, retryCount) * 1000;
+              console.log(`[QualifyBulk] ⚠️ Retry ${retryCount + 1}/${maxRetries} para CNPJ ${cnpj} após ${backoffDelay}ms`);
+              await new Promise(resolve => setTimeout(resolve, backoffDelay));
+            }
+            retryCount++;
+          } catch (retryError: any) {
+            console.error(`[QualifyBulk] ⚠️ Erro no retry ${retryCount + 1} para ${cnpj}:`, retryError);
+            retryCount++;
+            if (retryCount < maxRetries) {
+              const backoffDelay = Math.pow(2, retryCount) * 1000;
+              await new Promise(resolve => setTimeout(resolve, backoffDelay));
+            }
+          }
+        }
         
         if (!prospectData) {
+          console.warn(`[QualifyBulk] ⚠️ CNPJ ${cnpj} falhou após ${maxRetries} tentativas`);
           failedCount++;
           processedCount++;
           continue;
@@ -103,32 +161,55 @@ serve(async (req) => {
 
         enrichedCount++;
 
-        // 2. Buscar ICP do tenant (se não foi fornecido)
-        let icpData: any = null;
-        if (icp_id) {
-          const { data: icp } = await supabase
-            .from('icp')
-            .select('*')
-            .eq('id', icp_id)
-            .single();
-          icpData = icp;
-        } else {
-          // Buscar ICP mais recente do tenant
-          const { data: icp } = await supabase
-            .from('icp')
-            .select('*')
-            .eq('tenant_id', tenant_id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-          icpData = icp;
+        // 🆕 2. ESCANEAR WEBSITE DA EMPRESA PROSPECTADA (se tiver website)
+        let websiteFitScore = 0;
+        let websiteProductsMatch: any[] = [];
+        let linkedinUrl: string | null = null;
+        let qualifiedProspectId: string | null = null;
+
+        if (prospectData.website) {
+          try {
+            console.log(`[QualifyBulk] 🔍 Escaneando website: ${prospectData.website}`);
+            
+            const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+            const scanResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                tenant_id,
+                qualified_prospect_id: 'temp', // Será atualizado após inserção
+                website_url: prospectData.website,
+                razao_social: prospectData.razaoSocial,
+              }),
+            });
+
+            if (scanResponse.ok) {
+              const scanData = await scanResponse.json();
+              if (scanData.success) {
+                websiteProductsMatch = scanData.compatible_products_details || [];
+                linkedinUrl = scanData.linkedin_url || null;
+                
+                // Calcular website fit score: +20 pontos se houver produtos compatíveis
+                if (scanData.compatible_products > 0) {
+                  websiteFitScore = Math.min(20, scanData.compatible_products * 2); // Máximo 20 pontos
+                  console.log(`[QualifyBulk] ✅ Website fit score: +${websiteFitScore} pontos`);
+                }
+              }
+            }
+          } catch (scanError) {
+            console.warn(`[QualifyBulk] ⚠️ Erro ao escanear website (continuando sem website fit):`, scanError);
+            // Não falhar a qualificação se o scan falhar
+          }
         }
 
-        // 3. Calcular FIT score
-        const fitResult = calculateFitScore(prospectData, icpData);
+        // 3. Calcular FIT score (🆕 agora inclui website fit score)
+        const fitResult = calculateFitScore(prospectData, icpData, websiteFitScore, websiteProductsMatch);
 
-        // 4. Salvar prospect qualificado
-        const { error: insertError } = await supabase
+        // 4. Salvar prospect qualificado (🆕 agora inclui website fit score e LinkedIn)
+        const { data: insertedProspect, error: insertError } = await supabase
           .from('qualified_prospects')
           .insert({
             tenant_id,
@@ -144,6 +225,10 @@ serve(async (req) => {
             cnae_principal: prospectData.cnaePrincipal,
             cnae_descricao: prospectData.cnaeDescricao,
             website: prospectData.website,
+            website_encontrado: prospectData.website, // 🆕 Website encontrado automaticamente
+            website_fit_score: websiteFitScore, // 🆕 Score de fit do website
+            website_products_match: websiteProductsMatch, // 🆕 Produtos compatíveis
+            linkedin_url: linkedinUrl, // 🆕 LinkedIn encontrado
             produtos: prospectData.produtos || [],
             produtos_count: prospectData.produtos?.length || 0,
             fit_score: fitResult.fitScore,
@@ -156,7 +241,31 @@ serve(async (req) => {
             fit_reasons: fitResult.reasons,
             compatible_products: fitResult.compatibleProducts,
             enrichment_data: prospectData,
-          });
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error(`[QualifyBulk] ❌ Erro ao salvar prospect ${cnpj}:`, insertError);
+          failedCount++;
+          processedCount++;
+          continue;
+        }
+
+        qualifiedProspectId = insertedProspect?.id;
+
+        // 🆕 5. Atualizar produtos extraídos com o ID correto (se escaneou website)
+        if (qualifiedProspectId && prospectData.website) {
+          try {
+            await supabase
+              .from('prospect_extracted_products')
+              .update({ qualified_prospect_id: qualifiedProspectId })
+              .eq('qualified_prospect_id', 'temp')
+              .eq('tenant_id', tenant_id);
+          } catch (updateError) {
+            console.warn(`[QualifyBulk] ⚠️ Erro ao atualizar produtos extraídos:`, updateError);
+          }
+        }
 
         if (insertError) {
           console.error(`[QualifyBulk] ❌ Erro ao salvar prospect ${cnpj}:`, insertError);
@@ -165,7 +274,19 @@ serve(async (req) => {
 
         processedCount++;
 
-        // Delay para não sobrecarregar APIs
+        // MC10: Atualizar progresso em tempo real (adicionar, não modificar)
+        const progressPercentage = (processedCount / cnpjs.length) * 100;
+        await supabase
+          .from('prospect_qualification_jobs')
+          .update({
+            processed_count: processedCount,
+            enriched_count: enrichedCount,
+            failed_count: failedCount,
+            progress_percentage: Math.round(progressPercentage * 100) / 100,
+          })
+          .eq('id', job_id);
+
+        // Delay para não sobrecarregar APIs (PRESERVAR delay existente)
         await new Promise(resolve => setTimeout(resolve, 500));
 
       } catch (error: any) {
@@ -212,8 +333,9 @@ serve(async (req) => {
 
 /**
  * Enriquece um CNPJ via Receita Federal
+ * 🆕 NOVO: Busca website oficial automaticamente se não estiver na planilha
  */
-async function enrichProspect(cnpj: string): Promise<ProspectData | null> {
+async function enrichProspect(cnpj: string, tenantId: string): Promise<ProspectData | null> {
   try {
     // Chamar API da Receita Federal
     const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
@@ -235,18 +357,54 @@ async function enrichProspect(cnpj: string): Promise<ProspectData | null> {
     };
     const setorExtraido = setores[secao] || 'Outros';
 
+    const razaoSocial = data.razao_social || data.nome_fantasia || '';
+    
+    // 🆕 BUSCAR WEBSITE OFICIAL se não estiver nos dados da Receita
+    let website = data.website || data.site || '';
+    
+    if (!website && razaoSocial) {
+      try {
+        console.log(`[Enrich] 🔍 Buscando website oficial para: ${razaoSocial}`);
+        
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const findWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/find-prospect-website`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            razao_social: razaoSocial,
+            cnpj: cnpj,
+            tenant_id: tenantId,
+          }),
+        });
+
+        if (findWebsiteResponse.ok) {
+          const websiteData = await findWebsiteResponse.json();
+          if (websiteData.success && websiteData.website) {
+            website = websiteData.website;
+            console.log(`[Enrich] ✅ Website encontrado: ${website}`);
+          }
+        }
+      } catch (websiteError) {
+        console.warn(`[Enrich] ⚠️ Erro ao buscar website (continuando sem website):`, websiteError);
+        // Não falhar o enriquecimento se a busca de website falhar
+      }
+    }
+
     return {
       cnpj: data.cnpj || cnpj,
-      razaoSocial: data.razao_social || data.nome_fantasia || '',
+      razaoSocial,
       nomeFantasia: data.nome_fantasia || '',
       cidade: data.municipio || '',
       estado: data.uf || '',
       capitalSocial: parseFloat(data.capital_social || '0'),
       setor: setorExtraido,
-      cnaePrincipal: data.cnae_fiscal?.toString() || '',
+      cnaePrincipal: cnaeCode,
       cnaeDescricao: data.cnae_fiscal_descricao || '',
-      website: '', // TODO: Extrair do site se disponível
-      produtos: [], // TODO: Scan do website
+      website, // 🆕 Website encontrado automaticamente
+      produtos: [], // Será preenchido pelo scan-prospect-website
     };
 
   } catch (error) {
@@ -257,23 +415,31 @@ async function enrichProspect(cnpj: string): Promise<ProspectData | null> {
 
 /**
  * Calcula FIT score entre prospect e ICP do tenant
+ * 🆕 NOVO: Inclui website fit score (+20 pontos máximo)
  */
-function calculateFitScore(prospect: ProspectData, icp: any): FitScoreResult {
+function calculateFitScore(
+  prospect: ProspectData, 
+  icp: any,
+  websiteFitScore: number = 0, // 🆕 Score de fit do website (0-20)
+  websiteProductsMatch: any[] = [] // 🆕 Produtos compatíveis encontrados no website
+): FitScoreResult {
   const reasons: string[] = [];
   const compatibleProducts: any[] = [];
   
   // Default: sem ICP = score neutro
   if (!icp) {
     return {
-      fitScore: 50,
+      fitScore: 50 + websiteFitScore, // 🆕 Adicionar website fit mesmo sem ICP
       grade: 'C',
       productSimilarity: 50,
       sectorFit: 50,
       capitalFit: 50,
       geoFit: 50,
       maturityScore: 50,
-      reasons: ['ICP não configurado - score padrão aplicado'],
-      compatibleProducts: [],
+      reasons: websiteFitScore > 0 
+        ? ['ICP não configurado - score padrão aplicado', `✅ Website fit: +${websiteFitScore} pontos`]
+        : ['ICP não configurado - score padrão aplicado'],
+      compatibleProducts: websiteProductsMatch, // 🆕 Incluir produtos compatíveis do website
     };
   }
 
@@ -292,14 +458,22 @@ function calculateFitScore(prospect: ProspectData, icp: any): FitScoreResult {
   // 5. Maturidade (10%)
   const maturityScore = 70; // TODO: Calcular com base em data de abertura
 
-  // Score final ponderado
-  const finalScore = (
+  // Score final ponderado + 🆕 Website Fit Score (até +20 pontos)
+  const baseScore = (
     productScore * 0.30 +
     sectorScore * 0.25 +
     capitalScore * 0.20 +
     geoScore * 0.15 +
     maturityScore * 0.10
   );
+  
+  const finalScore = Math.min(100, baseScore + websiteFitScore); // 🆕 Adicionar website fit (máximo 100)
+  
+  // 🆕 Adicionar razão do website fit
+  if (websiteFitScore > 0) {
+    reasons.push(`✅ Website fit: +${websiteFitScore} pontos (${websiteProductsMatch.length} produtos compatíveis encontrados)`);
+    compatibleProducts.push(...websiteProductsMatch); // 🆕 Incluir produtos compatíveis do website
+  }
 
   // Classificação
   let grade: 'A+' | 'A' | 'B' | 'C' | 'D';

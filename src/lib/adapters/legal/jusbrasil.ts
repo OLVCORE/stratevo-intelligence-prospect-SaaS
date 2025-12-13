@@ -63,86 +63,37 @@ export async function fetchJusBrasilData(
   try {
     logger.info('JUSBRASIL', 'Fetching legal data', { cnpj });
 
-    // Mock de dados realísticos para demonstração
-    // Em produção, isso seria uma integração real com JusBrasil API ou scraping
-    const mockData: JusBrasilData = {
+    // 🔥 PROIBIDO: Dados mockados foram removidos
+    // Se integração com JusBrasil não estiver disponível, retornar dados vazios
+    // NUNCA retornar dados fake - isso viola a regra sagrada da plataforma
+    
+    // TODO: Implementar integração real com JusBrasil API ou scraping
+    // Por enquanto, retornar estrutura vazia (não dados fake)
+    const emptyData: JusBrasilData = {
       cnpj,
-      companyName: 'Empresa Demo LTDA',
-      totalProcesses: 8,
-      activeProcesses: 3,
-      processes: [
-        {
-          id: '1',
-          number: '1234567-89.2024.8.26.0100',
-          court: 'TJSP - Tribunal de Justiça de São Paulo',
-          type: 'Trabalhista',
-          subject: 'Reclamação Trabalhista',
-          status: 'Em andamento',
-          startDate: '2024-03-15',
-          lastUpdate: '2025-09-20',
-          value: 45000,
-          parties: [
-            { name: 'João Silva', role: 'Reclamante' },
-            { name: 'Empresa Demo LTDA', role: 'Reclamada' }
-          ]
-        },
-        {
-          id: '2',
-          number: '9876543-21.2023.8.26.0100',
-          court: 'TJSP - Tribunal de Justiça de São Paulo',
-          type: 'Cível',
-          subject: 'Ação de Cobrança',
-          status: 'Arquivado',
-          startDate: '2023-06-10',
-          lastUpdate: '2024-12-15',
-          value: 12000,
-          parties: [
-            { name: 'Fornecedor XYZ', role: 'Autor' },
-            { name: 'Empresa Demo LTDA', role: 'Réu' }
-          ]
-        },
-        {
-          id: '3',
-          number: '5555666-77.2025.8.26.0100',
-          court: 'TJSP - Tribunal de Justiça de São Paulo',
-          type: 'Tributário',
-          subject: 'Execução Fiscal',
-          status: 'Em andamento',
-          startDate: '2025-01-20',
-          value: 8500,
-          parties: [
-            { name: 'Fazenda Pública', role: 'Exequente' },
-            { name: 'Empresa Demo LTDA', role: 'Executado' }
-          ]
-        }
-      ],
+      companyName: '', // Será preenchido quando houver integração real
+      totalProcesses: 0,
+      activeProcesses: 0,
+      processes: [],
       processesByType: {
-        trabalhista: 3,
-        civel: 2,
-        tributario: 2,
+        trabalhista: 0,
+        civel: 0,
+        tributario: 0,
         criminal: 0,
-        outros: 1
+        outros: 0
       },
       processesByStatus: {
-        ativo: 3,
-        arquivado: 4,
-        suspenso: 1,
+        ativo: 0,
+        arquivado: 0,
+        suspenso: 0,
         finalizado: 0
       },
-      riskLevel: 'medio',
-      legalHealthScore: 68.5
+      riskLevel: 'baixo',
+      legalHealthScore: 100 // Score perfeito quando não há processos
     };
 
-    // Cachear por 7 dias (dados jurídicos mudam menos frequentemente)
-    cache.set(cacheKey, mockData, 7 * 24 * 60 * 60 * 1000);
-
-    logger.info('JUSBRASIL', 'Legal data fetched', {
-      cnpj,
-      totalProcesses: mockData.totalProcesses,
-      activeProcesses: mockData.activeProcesses
-    });
-
-    return mockData;
+    logger.warn('JUSBRASIL', 'Integração não implementada - retornando dados vazios', { cnpj });
+    return emptyData;
   } catch (error) {
     logger.error('JUSBRASIL', 'Failed to fetch legal data', { error, cnpj });
     throw error;

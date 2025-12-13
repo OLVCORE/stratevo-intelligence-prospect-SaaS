@@ -48,7 +48,19 @@ CREATE TABLE IF NOT EXISTS public.tenant_products (
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_tenant_products_tenant ON public.tenant_products(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_products_category ON public.tenant_products(tenant_id, category);
-CREATE INDEX IF NOT EXISTS idx_tenant_products_active ON public.tenant_products(tenant_id, is_active) WHERE is_active = true;
+-- NOTA: A coluna is_active pode não existir se a tabela foi criada pela migration 20250201000001_tenant_products_catalog.sql
+-- que usa 'ativo' ao invés de 'is_active'. Este índice será criado apenas se a coluna existir.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_products' 
+    AND column_name = 'is_active'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tenant_products_active ON public.tenant_products(tenant_id, is_active) WHERE is_active = true;
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_tenant_products_sector_fit ON public.tenant_products USING GIN(sector_fit);
 CREATE INDEX IF NOT EXISTS idx_tenant_products_niche_fit ON public.tenant_products USING GIN(niche_fit);
 

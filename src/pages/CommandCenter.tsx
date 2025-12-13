@@ -31,6 +31,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { toast } from 'sonner';
+import { useTenant } from '@/contexts/TenantContext';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -56,6 +57,8 @@ interface FunnelMetrics {
 
 export default function CommandCenter() {
   const navigate = useNavigate();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   const [metrics, setMetrics] = useState<FunnelMetrics>({
     totalImported: 0,
     inQuarantine: 0,
@@ -78,13 +81,21 @@ export default function CommandCenter() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadMetrics();
-  }, []);
+    if (tenantId) {
+      loadMetrics();
+    }
+  }, [tenantId]);
 
   const loadMetrics = async () => {
+    if (!tenantId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
 
+      // 🔥 CRÍTICO: Filtrar TODAS as queries por tenant_id
       // PARALLEL QUERIES PARA MÁXIMA PERFORMANCE
       const [
         { count: totalImported },
@@ -98,16 +109,16 @@ export default function CommandCenter() {
         { data: lostDeals },
         { data: lastImportData },
       ] = await Promise.all([
-        supabase.from('companies').select('*', { count: 'exact', head: true }),
-        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente'),
-        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada'),
-        supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']),
-        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovado'),
-        supabase.from('stc_verification_history').select('*', { count: 'exact', head: true }).eq('status', 'processing'),
-        supabase.from('sdr_deals').select('deal_value, created_at').in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']),
-        supabase.from('sdr_deals').select('deal_value, created_at, won_date').eq('deal_stage', 'won').limit(10),
-        supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).eq('deal_stage', 'lost'),
-        supabase.from('companies').select('created_at').order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente').eq('tenant_id', tenantId),
+        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada').eq('tenant_id', tenantId),
+        supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId),
+        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovado').eq('tenant_id', tenantId),
+        supabase.from('stc_verification_history').select('*', { count: 'exact', head: true }).eq('status', 'processing').eq('tenant_id', tenantId),
+        supabase.from('sdr_deals').select('deal_value, created_at').in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId),
+        supabase.from('sdr_deals').select('deal_value, created_at, won_date').eq('deal_stage', 'won').eq('tenant_id', tenantId).limit(10),
+        supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).eq('deal_stage', 'lost').eq('tenant_id', tenantId),
+        supabase.from('companies').select('created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(1).single(),
       ]);
 
       // Calcular valor total do pipeline

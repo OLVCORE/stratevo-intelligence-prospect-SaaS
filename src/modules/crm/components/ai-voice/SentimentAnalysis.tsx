@@ -41,20 +41,57 @@ export function SentimentAnalysis({ callId, transcript, realTime = false }: Sent
 
   const analyzeSentiment = async (text: string) => {
     setIsAnalyzing(true);
-    // Em produção, chamar Edge Function para análise de sentimento
-    // Por enquanto, simulação
-    setTimeout(() => {
-      const mockSentiment: SentimentData = {
-        overall: text.includes('sim') || text.includes('interessado') ? 'positive' : 
-                text.includes('não') || text.includes('não quero') ? 'negative' : 'neutral',
-        score: text.includes('sim') ? 75 : text.includes('não') ? 25 : 50,
-        confidence: 0.8,
-        keywords: [],
-        timeline: [],
-      };
-      setSentiment(mockSentiment);
+    try {
+      // 🔥 PROIBIDO: Dados mockados removidos
+      // Usar OpenAI para análise real de sentimento
+      const { data, error } = await (supabase as any).functions.invoke('analyze-sentiment', {
+        body: { text, call_id: callId },
+      });
+
+      if (error) throw error;
+
+      if (data && data.sentiment) {
+        setSentiment(data.sentiment);
+      } else {
+        // Fallback: análise básica local (não mock, mas análise real simples)
+        const positiveWords = ['sim', 'interessado', 'gostei', 'ótimo', 'perfeito', 'quero', 'vamos'];
+        const negativeWords = ['não', 'não quero', 'não gostei', 'ruim', 'cancelar', 'desistir'];
+        
+        const lowerText = text.toLowerCase();
+        const positiveCount = positiveWords.filter(w => lowerText.includes(w)).length;
+        const negativeCount = negativeWords.filter(w => lowerText.includes(w)).length;
+        
+        let overall: 'positive' | 'neutral' | 'negative' = 'neutral';
+        let score = 50;
+        
+        if (positiveCount > negativeCount) {
+          overall = 'positive';
+          score = Math.min(100, 50 + (positiveCount * 10));
+        } else if (negativeCount > positiveCount) {
+          overall = 'negative';
+          score = Math.max(0, 50 - (negativeCount * 10));
+        }
+
+        const realSentiment: SentimentData = {
+          overall,
+          score,
+          confidence: 0.6, // Menor confiança em análise básica
+          keywords: [
+            ...positiveWords.filter(w => lowerText.includes(w)).map(w => ({ word: w, sentiment: 'positive' as const, weight: 1 })),
+            ...negativeWords.filter(w => lowerText.includes(w)).map(w => ({ word: w, sentiment: 'negative' as const, weight: 1 })),
+          ],
+          timeline: [],
+        };
+        
+        setSentiment(realSentiment);
+      }
+    } catch (error: any) {
+      console.error('Erro ao analisar sentimento:', error);
+      // Retornar vazio ao invés de dados fake
+      setSentiment(null);
+    } finally {
       setIsAnalyzing(false);
-    }, 1000);
+    }
   };
 
   const getSentimentIcon = (sentiment: 'positive' | 'neutral' | 'negative') => {

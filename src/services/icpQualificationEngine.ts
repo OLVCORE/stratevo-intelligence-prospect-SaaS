@@ -645,6 +645,97 @@ export class ICPQualificationEngine {
     };
   }
   
+  // ==================== WEBSITE FIT SCORE ====================
+  
+  /**
+   * 🆕 Calcula fit score baseado em análise de website
+   * Compara produtos extraídos do website da empresa prospectada com produtos do tenant
+   * Retorna score 0-20 (máximo de +20 pontos no fit total)
+   * 
+   * @param prospectWebsite - Website da empresa prospectada
+   * @param extractedProducts - Produtos extraídos do website da prospectada
+   * @param tenantProducts - Produtos do tenant
+   * @returns Score de 0 a 20
+   */
+  async calculateWebsiteFitScore(
+    prospectWebsite: string | null,
+    extractedProducts: Array<{ nome: string; categoria?: string; descricao?: string }>,
+    tenantProducts: Array<{ nome: string; categoria?: string; descricao?: string }>
+  ): Promise<{ score: number; compatibleProducts: any[]; reasons: string[] }> {
+    // Se não tem website ou produtos extraídos, retorna 0
+    if (!prospectWebsite || extractedProducts.length === 0 || tenantProducts.length === 0) {
+      return { score: 0, compatibleProducts: [], reasons: [] };
+    }
+
+    const compatibleProducts: any[] = [];
+    const reasons: string[] = [];
+    let matchCount = 0;
+
+    // Comparar cada produto extraído com produtos do tenant
+    for (const extracted of extractedProducts) {
+      const extractedLower = extracted.nome?.toLowerCase() || '';
+      const extractedCategoria = extracted.categoria?.toLowerCase() || '';
+
+      for (const tenant of tenantProducts) {
+        const tenantLower = tenant.nome?.toLowerCase() || '';
+        const tenantCategoria = tenant.categoria?.toLowerCase() || '';
+
+        // Match por categoria exata
+        if (extractedCategoria && tenantCategoria && extractedCategoria === tenantCategoria) {
+          compatibleProducts.push({
+            extracted: extracted.nome,
+            tenant: tenant.nome,
+            categoria: extracted.categoria,
+            match_type: 'categoria_exata',
+          });
+          matchCount++;
+          reasons.push(`Produto "${extracted.nome}" compatível com "${tenant.nome}" (mesma categoria: ${extracted.categoria})`);
+          break;
+        }
+
+        // Match por palavras-chave (mínimo 2 palavras comuns de 4+ caracteres)
+        const extractedWords = extractedLower.split(/\s+/).filter(w => w.length > 3);
+        const tenantWords = tenantLower.split(/\s+/).filter(w => w.length > 3);
+        const commonWords = extractedWords.filter(w => tenantWords.includes(w));
+
+        if (commonWords.length >= 2) {
+          compatibleProducts.push({
+            extracted: extracted.nome,
+            tenant: tenant.nome,
+            match_type: 'keywords',
+            keywords: commonWords,
+          });
+          matchCount++;
+          reasons.push(`Produto "${extracted.nome}" compatível com "${tenant.nome}" (palavras-chave: ${commonWords.join(', ')})`);
+          break;
+        }
+
+        // Match por substring (nome do produto contém palavras-chave do tenant)
+        if (extractedWords.some(w => tenantLower.includes(w)) || tenantWords.some(w => extractedLower.includes(w))) {
+          compatibleProducts.push({
+            extracted: extracted.nome,
+            tenant: tenant.nome,
+            match_type: 'substring',
+          });
+          matchCount++;
+          reasons.push(`Produto "${extracted.nome}" compatível com "${tenant.nome}" (match parcial)`);
+          break;
+        }
+      }
+    }
+
+    // Calcular score: máximo 20 pontos
+    // Baseado na proporção de produtos compatíveis
+    const matchRatio = matchCount / Math.max(extractedProducts.length, 1);
+    const score = Math.min(20, Math.round(matchRatio * 20));
+
+    return {
+      score,
+      compatibleProducts,
+      reasons: reasons.slice(0, 5), // Limitar a 5 razões principais
+    };
+  }
+
   // ==================== SAVE RESULTS ====================
   
   /**

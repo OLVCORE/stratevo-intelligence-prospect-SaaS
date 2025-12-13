@@ -38,7 +38,8 @@ import { cn } from '@/lib/utils';
 interface Props {
   onNext: (data: any) => void;
   onBack: () => void;
-  onSave?: () => void | Promise<void>;
+  onSave?: () => void | Promise<void>; // Auto-save silencioso
+  onSaveExplicit?: () => void | Promise<void>; // Botão "Salvar" explícito (com toast)
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
@@ -59,7 +60,7 @@ interface Niche {
   isCustom?: boolean; // Para nichos adicionados manualmente
 }
 
-export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [niches, setNiches] = useState<Niche[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +91,7 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
   // 🆕 Estado para setor customizado
   const [newCustomSector, setNewCustomSector] = useState('');
 
-  // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa)
+  // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa) - MERGE não-destrutivo
   useEffect(() => {
     if (initialData) {
       console.log('[Step2] 🔄 Atualizando dados do initialData:', initialData);
@@ -113,18 +114,30 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
         console.log('[Step2] ⚠️ Convertendo nomes para códigos (fallback):', sectorCodesToUse);
       }
       
+      // 🔥 MERGE não-destrutivo: só atualizar se houver dados válidos, preservar estado atual se não houver
       if (sectorCodesToUse.length > 0) {
-        setSelectedSectors(sectorCodesToUse);
+        setSelectedSectors(prev => {
+          // Preservar setores existentes se initialData não tiver setores
+          return sectorCodesToUse.length > 0 ? sectorCodesToUse : prev;
+        });
       }
       
-      // Atualizar nichos por setor
-      if (initialData.nichosBySector) {
-        setSelectedNichesBySector(initialData.nichosBySector);
+      // Atualizar nichos por setor (merge não-destrutivo)
+      if (initialData.nichosBySector && Object.keys(initialData.nichosBySector).length > 0) {
+        setSelectedNichesBySector(prev => ({
+          ...prev,
+          ...initialData.nichosBySector,
+        }));
       }
       
-      // Atualizar nichos customizados
-      if (initialData.customNiches) {
-        setCustomNiches(initialData.customNiches);
+      // Atualizar nichos customizados (merge não-destrutivo)
+      if (initialData.customNiches && Array.isArray(initialData.customNiches) && initialData.customNiches.length > 0) {
+        setCustomNiches(prev => {
+          // Preservar nichos customizados existentes
+          const existingCodes = new Set(prev.map(n => n.niche_code));
+          const novos = initialData.customNiches.filter((n: Niche) => !existingCodes.has(n.niche_code));
+          return [...prev, ...novos];
+        });
       }
     }
   }, [initialData]);
@@ -611,9 +624,19 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
           console.error('[Step2SetoresNichos] ❌ Erro ao carregar:', error);
         }
         
-        // Usar fallback se necessário
-        const finalSectors = loadedSectors.length > 0 ? loadedSectors : FALLBACK_SECTORS;
-        const finalNiches = loadedNiches.length > 0 ? loadedNiches : FALLBACK_NICHES;
+        // 🔥 PROIBIDO: Fallback hardcoded removido
+        // Se banco falhar, mostrar erro ao invés de dados fake
+        if (loadedSectors.length === 0) {
+          console.error('[Step2SetoresNichos] ⚠️ Nenhum setor encontrado no banco - não usar fallback hardcoded');
+          // Não usar FALLBACK_SECTORS - mostrar erro na UI
+        }
+        if (loadedNiches.length === 0) {
+          console.error('[Step2SetoresNichos] ⚠️ Nenhum nicho encontrado no banco - não usar fallback hardcoded');
+          // Não usar FALLBACK_NICHES - mostrar erro na UI
+        }
+        
+        const finalSectors = loadedSectors; // SEM fallback
+        const finalNiches = loadedNiches; // SEM fallback
         
         console.log('[Step2SetoresNichos] 📋 Dados finais:', {
           setores: finalSectors.length,
@@ -650,8 +673,11 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
         });
       } catch (error) {
         console.error('[Step2SetoresNichos] Erro geral:', error);
-        setSectors(FALLBACK_SECTORS);
-        setNiches(FALLBACK_NICHES);
+        // 🔥 PROIBIDO: Fallback hardcoded removido
+        // Se banco falhar, deixar arrays vazios ao invés de dados fake
+        setSectors([]);
+        setNiches([]);
+        console.error('[Step2SetoresNichos] ⚠️ Erro ao carregar setores/nichos - não usar fallback hardcoded');
       } finally {
         setLoading(false);
       }
@@ -819,8 +845,9 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
     });
     
     // Buscar nomes dos nichos para passar para próxima etapa
-    // Combinar nichos do banco + fallback + custom
-    const allNichesData = [...niches, ...FALLBACK_NICHES, ...customNiches];
+    // 🔥 PROIBIDO: Fallback hardcoded removido
+    // Combinar apenas nichos do banco + custom (SEM fallback)
+    const allNichesData = [...niches, ...customNiches];
     const nicheNames = allSelectedNiches.map(code => {
       const niche = allNichesData.find(n => n.niche_code === code);
       const name = niche?.niche_name || code;
@@ -1238,7 +1265,7 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, initialData, isSavi
       <StepNavigation
         onBack={onBack}
         onNext={() => {}}
-        onSave={onSave}
+        onSave={onSaveExplicit || onSave}
         showSave={!!onSave}
         saveLoading={isSaving}
         hasUnsavedChanges={hasUnsavedChanges}

@@ -45,36 +45,96 @@ export function PipelineHealthScore({ onRecommendationClick }: PipelineHealthSco
     
     setIsLoading(true);
     try {
-      // Em produção, calcular health score baseado em dados reais
-      // Por enquanto, dados mockados
-      const mockHealth: HealthMetrics = {
-        overall_score: 72,
-        stage_distribution: [
-          { stage: 'Novos', count: 45, percentage: 30 },
-          { stage: 'Qualificados', count: 30, percentage: 20 },
-          { stage: 'Proposta', count: 25, percentage: 17 },
-          { stage: 'Negociação', count: 30, percentage: 20 },
-          { stage: 'Ganhos', count: 20, percentage: 13 },
-        ],
-        velocity: 12, // dias médios
-        conversion_rates: [
-          { from_stage: 'Novos', to_stage: 'Qualificados', rate: 66.7 },
-          { from_stage: 'Qualificados', to_stage: 'Proposta', rate: 83.3 },
-          { from_stage: 'Proposta', to_stage: 'Negociação', rate: 80.0 },
-          { from_stage: 'Negociação', to_stage: 'Ganhos', rate: 66.7 },
-        ],
-        bottlenecks: [
-          'Muitos leads em "Novos" sem qualificação',
-          'Velocidade baixa na etapa "Negociação"',
-        ],
-        recommendations: [
-          'Acelerar qualificação de leads novos',
-          'Focar em deals em negociação há mais de 30 dias',
-          'Aumentar taxa de conversão de proposta para negociação',
-        ],
+      // 🔥 PROIBIDO: Dados mockados foram removidos
+      // Buscar deals reais do banco e calcular métricas reais
+      const { data: deals, error } = await (supabase as any)
+        .from('deals')
+        .select('id, stage, probability, value, created_at, updated_at')
+        .eq('tenant_id', tenant.id);
+
+      if (error) throw error;
+
+      if (!deals || deals.length === 0) {
+        setHealth(null); // Sem dados, não mostrar nada
+        return;
+      }
+
+      // Calcular distribuição real por estágio
+      const stageCounts: Record<string, number> = {};
+      deals.forEach((deal: any) => {
+        const stage = deal.stage || 'Sem estágio';
+        stageCounts[stage] = (stageCounts[stage] || 0) + 1;
+      });
+
+      const totalDeals = deals.length;
+      const stageDistribution = Object.entries(stageCounts).map(([stage, count]) => ({
+        stage,
+        count: count as number,
+        percentage: Math.round(((count as number) / totalDeals) * 100),
+      }));
+
+      // Calcular velocidade média (dias entre criação e atualização)
+      const velocities = deals
+        .filter((deal: any) => deal.created_at && deal.updated_at)
+        .map((deal: any) => {
+          const days = Math.floor(
+            (new Date(deal.updated_at).getTime() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          return days;
+        });
+      const avgVelocity = velocities.length > 0
+        ? Math.round(velocities.reduce((a: number, b: number) => a + b, 0) / velocities.length)
+        : 0;
+
+      // Calcular taxas de conversão reais (simplificado - precisa de histórico)
+      const conversionRates: Array<{ from_stage: string; to_stage: string; rate: number }> = [];
+      // TODO: Implementar cálculo real de conversão baseado em histórico
+
+      // Identificar gargalos reais
+      const bottlenecks: string[] = [];
+      const stalledStages = stageDistribution.filter(s => {
+        // Deals sem atualização há mais de 30 dias
+        const stageDeals = deals.filter((d: any) => (d.stage || 'Sem estágio') === s.stage);
+        const stalled = stageDeals.filter((d: any) => {
+          if (!d.updated_at) return true;
+          const days = Math.floor((Date.now() - new Date(d.updated_at).getTime()) / (1000 * 60 * 60 * 24));
+          return days > 30;
+        });
+        return stalled.length > stageDeals.length * 0.5; // Mais de 50% parados
+      });
+      stalledStages.forEach(s => {
+        bottlenecks.push(`Muitos deals parados no estágio "${s.stage}"`);
+      });
+
+      // Gerar recomendações baseadas em dados reais
+      const recommendations: string[] = [];
+      if (bottlenecks.length > 0) {
+        recommendations.push('Reativar deals parados nos estágios identificados');
+      }
+      if (avgVelocity > 60) {
+        recommendations.push('Acelerar velocidade do pipeline (média atual muito alta)');
+      }
+      if (stageDistribution.find(s => s.stage === 'Novos' && s.percentage > 40)) {
+        recommendations.push('Acelerar qualificação de leads novos');
+      }
+
+      // Calcular score geral baseado em métricas reais
+      let overallScore = 100;
+      if (bottlenecks.length > 0) overallScore -= bottlenecks.length * 10;
+      if (avgVelocity > 60) overallScore -= 15;
+      if (stageDistribution.find(s => s.stage === 'Novos' && s.percentage > 40)) overallScore -= 10;
+      overallScore = Math.max(0, Math.min(100, overallScore));
+
+      const realHealth: HealthMetrics = {
+        overall_score: overallScore,
+        stage_distribution: stageDistribution,
+        velocity: avgVelocity,
+        conversion_rates: conversionRates,
+        bottlenecks,
+        recommendations,
       };
       
-      setHealth(mockHealth);
+      setHealth(realHealth);
     } catch (error: any) {
       console.error('Erro ao carregar health score:', error);
     } finally {

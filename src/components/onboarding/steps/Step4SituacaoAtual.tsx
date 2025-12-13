@@ -17,7 +17,8 @@ import { consultarReceitaFederal } from '@/services/receitaFederal';
 interface Props {
   onNext: (data: any) => void;
   onBack: () => void;
-  onSave?: (data?: any) => void | Promise<void>; // 🔥 CORRIGIDO: Aceita dados opcionais
+  onSave?: (data?: any) => void | Promise<void>; // Auto-save silencioso
+  onSaveExplicit?: (data?: any) => void | Promise<void>; // Botão "Salvar" explícito (com toast)
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
@@ -35,7 +36,7 @@ interface TicketECiclo {
   criterio: string; // Critério/Enquadramento (ex: "Spot", "Projetos", "Contratos", "Licitações", etc.)
 }
 
-export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step4SituacaoAtual({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
   const [formData, setFormData] = useState({
     categoriaSolucao: initialData?.categoriaSolucao || '',
     diferenciais: initialData?.diferenciais || [],
@@ -48,23 +49,56 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
     // 🔥 REMOVIDO: concorrentesDiretos movidos para Step 1
   });
 
-  // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa)
+  // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa) - MERGE não-destrutivo
   useEffect(() => {
     if (initialData) {
       console.log('[Step4] 🔄 Atualizando dados do initialData:', initialData);
-      setFormData({
-        categoriaSolucao: initialData.categoriaSolucao || '',
-        diferenciais: initialData.diferenciais || [],
-        casosDeUso: initialData.casosDeUso || [],
-        ticketsECiclos: initialData.ticketsECiclos || (initialData.ticketMedio || initialData.cicloVendaMedia ? [{
-          ticketMedio: initialData.ticketMedio || 0,
-          cicloVenda: initialData.cicloVendaMedia || 0,
-          criterio: initialData.criterioTicketMedio || initialData.criterioCicloVenda || 'Geral'
-        }] : []), // 🔥 NOVO: Migração de dados antigos
-        // 🔥 REMOVIDO: concorrentesDiretos movidos para Step 1
-      });
+      // MERGE: preservar dados existentes, complementar com initialData
+      setFormData(prev => ({
+        ...prev,
+        categoriaSolucao: initialData.categoriaSolucao || prev.categoriaSolucao || '',
+        diferenciais: Array.isArray(initialData.diferenciais) && initialData.diferenciais.length > 0
+          ? initialData.diferenciais
+          : (Array.isArray(prev.diferenciais) && prev.diferenciais.length > 0 ? prev.diferenciais : []),
+        casosDeUso: Array.isArray(initialData.casosDeUso) && initialData.casosDeUso.length > 0
+          ? initialData.casosDeUso
+          : (Array.isArray(prev.casosDeUso) && prev.casosDeUso.length > 0 ? prev.casosDeUso : []),
+        ticketsECiclos: Array.isArray(initialData.ticketsECiclos) && initialData.ticketsECiclos.length > 0
+          ? initialData.ticketsECiclos
+          : (Array.isArray(prev.ticketsECiclos) && prev.ticketsECiclos.length > 0
+            ? prev.ticketsECiclos
+            : (initialData.ticketMedio || initialData.cicloVendaMedia ? [{
+                ticketMedio: initialData.ticketMedio || 0,
+                cicloVenda: initialData.cicloVendaMedia || 0,
+                criterio: initialData.criterioTicketMedio || initialData.criterioCicloVenda || 'Geral'
+              }] : [])),
+      }));
     }
   }, [initialData]);
+
+  // 🔥 CRÍTICO: Auto-save quando formData mudar (para garantir persistência)
+  useEffect(() => {
+    // Só salvar se tiver dados relevantes
+    if (formData.categoriaSolucao || formData.diferenciais.length > 0 || formData.casosDeUso.length > 0 || formData.ticketsECiclos.length > 0) {
+      const timeoutId = setTimeout(async () => {
+        if (onSave) {
+          try {
+            await onSave(formData);
+            console.log('[Step4] ✅ Auto-save executado:', { 
+              categoriaSolucao: formData.categoriaSolucao,
+              diferenciais: formData.diferenciais.length,
+              casosDeUso: formData.casosDeUso.length,
+              ticketsECiclos: formData.ticketsECiclos.length,
+            });
+          } catch (err) {
+            console.error('[Step4] ❌ Erro no auto-save:', err);
+          }
+        }
+      }, 1000); // Aguardar 1 segundo após última mudança
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [formData.categoriaSolucao, formData.diferenciais, formData.casosDeUso, formData.ticketsECiclos, onSave]);
 
   const [novoDiferencial, setNovoDiferencial] = useState('');
   const [novoCasoUso, setNovoCasoUso] = useState('');
@@ -702,7 +736,7 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, initialData, isSavi
       <StepNavigation
         onBack={onBack}
         onNext={() => {}}
-        onSave={() => onSave?.(formData)} // 🔥 CRÍTICO: Passar formData ao salvar
+        onSave={() => (onSaveExplicit || onSave)?.(formData)} // 🔥 CRÍTICO: Passar formData ao salvar (explícito com toast)
         showSave={!!onSave}
         saveLoading={isSaving}
         hasUnsavedChanges={hasUnsavedChanges}

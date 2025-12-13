@@ -50,36 +50,63 @@ export function ResponseRateAnalyzer({ templateId, dateRange }: ResponseRateAnal
     
     setIsLoading(true);
     try {
-      // Em produção, buscar dados reais do banco
-      // Por enquanto, dados mockados
-      const mockData: TemplatePerformance[] = [
-        {
-          template_id: '1',
-          template_name: 'Cold Email - Primeiro Contato',
-          sent: 500,
-          opened: 225,
-          clicked: 45,
-          replied: 18,
-          open_rate: 45.0,
-          click_rate: 9.0,
-          reply_rate: 3.6,
-          trend: 'up',
-        },
-        {
-          template_id: '2',
-          template_name: 'Follow-up - Acompanhamento',
-          sent: 300,
-          opened: 180,
-          clicked: 60,
-          replied: 30,
-          open_rate: 60.0,
-          click_rate: 20.0,
-          reply_rate: 10.0,
-          trend: 'stable',
-        },
-      ];
+      // 🔥 PROIBIDO: Dados mockados removidos
+      // Buscar dados reais de performance de templates do banco
+      let query = (supabase as any)
+        .from('email_templates')
+        .select('id, name, subject, sent_count, opened_count, clicked_count, replied_count, open_rate, click_rate, reply_rate, updated_at')
+        .eq('tenant_id', tenant.id);
+
+      if (templateId) {
+        query = query.eq('id', templateId);
+      }
+
+      if (dateRange) {
+        query = query.gte('updated_at', dateRange.start.toISOString())
+                     .lte('updated_at', dateRange.end.toISOString());
+      }
+
+      const { data: templates, error } = await query.order('reply_rate', { ascending: false });
+
+      if (error) throw error;
+
+      if (!templates || templates.length === 0) {
+        setPerformance([]);
+        return;
+      }
+
+      // Calcular tendência baseada em histórico (simplificado - idealmente teria tabela de histórico)
+      const realPerformance: TemplatePerformance[] = templates.map((template: any) => {
+        const sent = template.sent_count || 0;
+        const opened = template.opened_count || 0;
+        const clicked = template.clicked_count || 0;
+        const replied = template.replied_count || 0;
+
+        // Calcular taxas reais se não estiverem no banco
+        const openRate = template.open_rate || (sent > 0 ? (opened / sent) * 100 : 0);
+        const clickRate = template.click_rate || (sent > 0 ? (clicked / sent) * 100 : 0);
+        const replyRate = template.reply_rate || (sent > 0 ? (replied / sent) * 100 : 0);
+
+        // Determinar tendência (simplificado - idealmente compararia com período anterior)
+        let trend: 'up' | 'down' | 'stable' = 'stable';
+        if (replyRate > 5) trend = 'up';
+        else if (replyRate < 2) trend = 'down';
+
+        return {
+          template_id: template.id,
+          template_name: template.name || template.subject || 'Template sem nome',
+          sent,
+          opened,
+          clicked,
+          replied,
+          open_rate: Math.round(openRate * 10) / 10,
+          click_rate: Math.round(clickRate * 10) / 10,
+          reply_rate: Math.round(replyRate * 10) / 10,
+          trend,
+        };
+      });
       
-      setPerformance(mockData);
+      setPerformance(realPerformance);
     } catch (error: any) {
       console.error('Erro ao carregar performance:', error);
     } finally {

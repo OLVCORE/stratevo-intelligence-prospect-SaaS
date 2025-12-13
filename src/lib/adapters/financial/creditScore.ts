@@ -65,57 +65,38 @@ export async function fetchFinancialHealthData(
   try {
     logger.info('FINANCIAL', 'Fetching financial health data', { cnpj });
 
-    // Mock de dados realísticos para demonstração
-    // Em produção, integraria com Serasa, Boa Vista SCPC, etc.
-    const mockData: FinancialHealthData = {
+    // 🔥 PROIBIDO: Dados mockados foram removidos
+    // Se integração com Serasa/SCPC não estiver disponível, retornar dados vazios
+    // NUNCA retornar dados fake - isso viola a regra sagrada da plataforma
+    
+    // TODO: Implementar integração real com Serasa, Boa Vista SCPC, etc.
+    // Por enquanto, retornar estrutura vazia (não dados fake)
+    const emptyData: FinancialHealthData = {
       cnpj,
-      companyName: 'Empresa Demo LTDA',
-      creditScore: 720,
-      riskClassification: 'B',
-      serasaData: {
-        score: 725,
-        negativacoes: 0,
-        protestos: 0,
-        chequesSemFundo: 0,
-        acoesJudiciais: 2,
-        falencias: 0,
-        recuperacoesJudiciais: 0
-      },
-      scpcData: {
-        score: 715,
-        pendenciasFinanceiras: 1,
-        valorTotal: 8500
-      },
+      companyName: '', // Será preenchido quando houver integração real
+      creditScore: 0,
+      riskClassification: 'E', // Classificação mais conservadora quando não há dados
       paymentHistory: {
-        onTimePayments: 142,
-        latePayments: 8,
+        onTimePayments: 0,
+        latePayments: 0,
         defaultPayments: 0,
-        avgPaymentDelay: 3.2
+        avgPaymentDelay: 0
       },
       debtIndicators: {
-        totalDebt: 450000,
-        currentDebt: 120000,
-        overdueDebt: 8500,
-        debtToRevenueRatio: 0.35
+        totalDebt: 0,
+        currentDebt: 0,
+        overdueDebt: 0
       },
-      predictiveRiskScore: 72.5,
+      predictiveRiskScore: 0, // Score zero quando não há dados
       trends: {
         improving: false,
-        stable: true,
+        stable: false,
         deteriorating: false
       }
     };
 
-    // Cachear por 24 horas
-    cache.set(cacheKey, mockData, 24 * 60 * 60 * 1000);
-
-    logger.info('FINANCIAL', 'Financial data fetched', {
-      cnpj,
-      creditScore: mockData.creditScore,
-      riskClassification: mockData.riskClassification
-    });
-
-    return mockData;
+    logger.warn('FINANCIAL', 'Integração não implementada - retornando dados vazios', { cnpj });
+    return emptyData;
   } catch (error) {
     logger.error('FINANCIAL', 'Failed to fetch financial data', { error, cnpj });
     throw error;

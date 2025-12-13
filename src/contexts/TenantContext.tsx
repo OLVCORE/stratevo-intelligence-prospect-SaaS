@@ -50,6 +50,31 @@ export function TenantProvider({ children }: { children: ReactNode }) {
           tenantData = await multiTenantService.obterTenant(preferredTenantId);
           if (tenantData) {
             console.log('[TenantContext] ✅ Tenant encontrado via localStorage');
+          } else {
+            // 🔥 NOVO: Se obterTenant falhou, tentar buscar lista de tenants via RPC
+            console.log('[TenantContext] ⚠️ obterTenant retornou null, tentando buscar lista de tenants...');
+            try {
+              const { createClient } = await import('@supabase/supabase-js');
+              const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+              const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+              const supabaseClient = createClient(supabaseUrl, supabaseKey);
+              
+              const { data: tenantsList, error: listError } = await supabaseClient.rpc('get_user_tenants_complete');
+              if (!listError && tenantsList && tenantsList.length > 0) {
+                // Encontrar o tenant preferido na lista
+                const foundTenant = tenantsList.find((t: any) => t.id === preferredTenantId);
+                if (foundTenant) {
+                  console.log('[TenantContext] ✅ Tenant encontrado na lista de tenants');
+                  tenantData = foundTenant as any;
+                } else if (tenantsList.length > 0) {
+                  // Se não encontrou o preferido, usar o primeiro da lista
+                  console.log('[TenantContext] ⚠️ Tenant preferido não encontrado, usando primeiro da lista');
+                  tenantData = tenantsList[0] as any;
+                }
+              }
+            } catch (listError) {
+              console.warn('[TenantContext] Erro ao buscar lista de tenants:', listError);
+            }
           }
         } catch (localError: any) {
           console.warn('[TenantContext] Erro ao buscar tenant do localStorage:', localError);
@@ -117,10 +142,38 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setError(null);
 
       // 1. Buscar dados completos do tenant
-      const tenantData = await multiTenantService.obterTenant(tenantId);
+      let tenantData = await multiTenantService.obterTenant(tenantId);
       
+      // 🔥 FALLBACK: Se obterTenant retornou null, tentar buscar via lista de tenants
       if (!tenantData) {
-        console.error('[TenantContext] ❌ Tenant não encontrado:', tenantId);
+        console.warn('[TenantContext] ⚠️ obterTenant retornou null, tentando buscar via lista de tenants...');
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+          const supabaseClient = createClient(supabaseUrl, supabaseKey);
+          
+          const { data: tenantsList, error: listError } = await supabaseClient.rpc('get_user_tenants_complete');
+          if (!listError && tenantsList && tenantsList.length > 0) {
+            // Encontrar o tenant desejado na lista
+            const foundTenant = tenantsList.find((t: any) => t.id === tenantId);
+            if (foundTenant) {
+              console.log('[TenantContext] ✅ Tenant encontrado na lista de tenants via switchTenant');
+              tenantData = foundTenant as any;
+            } else if (tenantsList.length > 0) {
+              // Se não encontrou o desejado, usar o primeiro da lista
+              console.log('[TenantContext] ⚠️ Tenant desejado não encontrado, usando primeiro da lista');
+              tenantData = tenantsList[0] as any;
+            }
+          }
+        } catch (listError) {
+          console.warn('[TenantContext] Erro ao buscar lista de tenants no switchTenant:', listError);
+        }
+      }
+      
+      // Se ainda não encontrou após todos os fallbacks, retornar erro
+      if (!tenantData) {
+        console.error('[TenantContext] ❌ Tenant não encontrado após todos os fallbacks:', tenantId);
         setError('Tenant não encontrado');
         setLoading(false);
         return;

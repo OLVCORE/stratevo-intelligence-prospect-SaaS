@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, Rocket, TrendingUp, HelpCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, Rocket, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -151,20 +151,42 @@ export default function ApprovedLeads() {
       // 3. CRIAR DEALS (transferência para pipeline)
       const { data: { user } } = await supabase.auth.getUser();
       
-      const dealsToCreate = validCompanies.map(q => ({
-        deal_title: `Prospecção - ${q.razao_social}`,
-        description: `Empresa aprovada com ICP Score: ${q.icp_score || 0}`,
-        company_id: q.company_id,
-        deal_value: 0,
-        probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50),
-        priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
-        deal_stage: 'discovery',
-        assigned_sdr: user?.email || 'auto',
-        source: 'approved_to_pipeline',
-        lead_score: q.icp_score || 0,
-        notes: `Enviado de Aprovadas. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}.`,
-        raw_data: q.raw_analysis || {},
-      }));
+      // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao criar deals
+      const dealsToCreate = validCompanies.map(q => {
+        const rawData: any = {
+          ...(q.raw_analysis || {}),
+          // Preservar dados de enriquecimento de website
+          website_enrichment: q.website_encontrado ? {
+            website_encontrado: q.website_encontrado,
+            website_fit_score: q.website_fit_score,
+            website_products_match: q.website_products_match,
+            linkedin_url: q.linkedin_url,
+          } : undefined,
+          // Preservar fit_score e grade se existirem
+          fit_score: (q.raw_analysis as any)?.fit_score,
+          grade: (q.raw_analysis as any)?.grade,
+          icp_id: (q.raw_analysis as any)?.icp_id,
+          // Preservar dados de enriquecimento da Receita Federal
+          receita_federal: (q.raw_analysis as any)?.receita_federal,
+          // Preservar dados de enriquecimento do Apollo
+          apollo: (q.raw_analysis as any)?.apollo,
+        };
+
+        return {
+          deal_title: `Prospecção - ${q.razao_social}`,
+          description: `Empresa aprovada com ICP Score: ${q.icp_score || 0}`,
+          company_id: q.company_id,
+          deal_value: 0,
+          probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50),
+          priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
+          deal_stage: 'discovery',
+          assigned_sdr: user?.email || 'auto',
+          source: 'approved_to_pipeline',
+          lead_score: q.icp_score || 0,
+          notes: `Enviado de Aprovadas. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
+          raw_data: rawData,
+        };
+      });
 
       const { error: insertError } = await supabase
         .from('sdr_deals')
@@ -1970,6 +1992,9 @@ export default function ApprovedLeads() {
                       onFilterChange={setFilterGrade}
                     />
                   </TableHead>
+                  <TableHead className="w-[10rem]">Website</TableHead>
+                  <TableHead className="w-[8rem]">Website Fit</TableHead>
+                  <TableHead className="w-[8rem]">LinkedIn</TableHead>
                   <TableHead className="w-[10rem] text-right"><span className="font-semibold text-[10px]">Ações</span></TableHead>
                 </TableRow>
               </TableHeader>
@@ -2259,6 +2284,73 @@ export default function ApprovedLeads() {
                           </Badge>
                         );
                       })()}
+                    </TableCell>
+                    {/* ✅ NOVA COLUNA: Website */}
+                    <TableCell className="w-[10rem]">
+                      {company.website_encontrado || company.website ? (
+                        <a
+                          href={company.website_encontrado || company.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1 text-xs"
+                        >
+                          <Globe className="h-3.5 w-3.5" />
+                          <span className="truncate max-w-[120px]">{company.website_encontrado || company.website}</span>
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
+                    </TableCell>
+                    {/* ✅ NOVA COLUNA: Website Fit Score */}
+                    <TableCell className="w-[8rem]">
+                      {company.website_fit_score != null && company.website_fit_score > 0 ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30 text-xs">
+                                +{company.website_fit_score}pts
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="space-y-1">
+                                <p className="font-semibold">Website Fit Score: +{company.website_fit_score} pontos</p>
+                                {company.website_products_match && Array.isArray(company.website_products_match) && company.website_products_match.length > 0 && (
+                                  <div className="text-xs mt-2">
+                                    <p className="font-medium">Produtos compatíveis:</p>
+                                    <ul className="list-disc list-inside mt-1 space-y-0.5">
+                                      {company.website_products_match.slice(0, 3).map((match: any, idx: number) => (
+                                        <li key={idx}>
+                                          {match.tenant_product} ↔ {match.prospect_product}
+                                        </li>
+                                      ))}
+                                      {company.website_products_match.length > 3 && (
+                                        <li className="text-muted-foreground">+{company.website_products_match.length - 3} mais...</li>
+                                      )}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
+                    </TableCell>
+                    {/* ✅ NOVA COLUNA: LinkedIn */}
+                    <TableCell className="w-[8rem]">
+                      {company.linkedin_url ? (
+                        <a
+                          href={company.linkedin_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1 text-xs"
+                        >
+                          <span className="truncate max-w-[100px]">LinkedIn</span>
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="w-[10rem]">
                       <div className="flex items-center justify-end gap-2">
@@ -2607,6 +2699,118 @@ export default function ApprovedLeads() {
                     </div>
                   );
                 })()}
+                
+                {/* ✅ SEÇÕES ADICIONAIS DO MODAL COMPLETO */}
+                <div className="space-y-4 mt-4 border-t pt-4">
+                  {/* ICP e Grade */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">ICP Utilizado</p>
+                      <p className="text-base">{(company as any).icp?.nome || 'Não especificado'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Grade Final</p>
+                      <div className="mt-1">
+                        {(() => {
+                          const grade = company.grade || (company as any).raw_analysis?.grade;
+                          if (!grade) return <Badge variant="outline">N/A</Badge>;
+                          const colors: Record<string, string> = {
+                            'A+': 'bg-emerald-600 text-white',
+                            'A': 'bg-emerald-500 text-white',
+                            'B': 'bg-sky-500 text-white',
+                            'C': 'bg-orange-500 text-white',
+                            'D': 'bg-rose-500 text-white',
+                          };
+                          return <Badge className={colors[grade] || 'bg-gray-500 text-white'}>{grade}</Badge>;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fit Score */}
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Fit Score / ICP Score</p>
+                    {company.icp_score != null ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <TrendingUp className="w-5 h-5 text-primary" />
+                        <span className="text-2xl font-bold">{company.icp_score.toFixed(1)}%</span>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-sm mt-1">Não calculado</p>
+                    )}
+                  </div>
+
+                  {/* Dados Básicos */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Localização</p>
+                      <p className="text-base">
+                        {((company as any).cidade && (company as any).estado)
+                          ? `${(company as any).cidade}/${(company as any).estado}`
+                          : (company as any).estado || (company as any).uf || 'Não informado'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Setor</p>
+                      <p className="text-base">
+                        {company.setor || (company as any).industry || (
+                          <span className="text-muted-foreground italic">Não informado</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ✅ Análise Estratégica de Fit - Website & Produtos */}
+                {company && (
+                  <WebsiteFitAnalysisCard
+                    companyId={company.company_id || company.id}
+                    qualifiedProspectId={undefined}
+                    companyCnpj={company.cnpj}
+                    websiteEncontrado={company.website_encontrado || company.website}
+                    websiteFitScore={company.website_fit_score}
+                    websiteProductsMatch={company.website_products_match}
+                    linkedinUrl={company.linkedin_url}
+                    isModalFullscreen={isModalFullscreen}
+                  />
+                )}
+
+                {/* ✅ Detalhamento de Matching com match_breakdown */}
+                {(company as any).match_breakdown && Array.isArray((company as any).match_breakdown) && (company as any).match_breakdown.length > 0 && (
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-2">Detalhamento de Qualificação</p>
+                    <div className="space-y-2">
+                      {(company as any).match_breakdown.map((item: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className={`flex items-center justify-between p-2 rounded ${
+                            item.matched ? 'bg-green-50 dark:bg-green-950/20' : 'bg-gray-50 dark:bg-gray-900/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {item.matched ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-gray-400" />
+                            )}
+                            <span className="text-sm font-medium">{item.label}</span>
+                            <span className="text-xs text-muted-foreground">(peso {Math.round((item.weight || 0) * 100)}%)</span>
+                          </div>
+                          <div className="text-sm font-semibold">
+                            {item.matched ? (
+                              <span className="text-green-600">+{item.score}%</span>
+                            ) : (
+                              <span className="text-gray-400">+{item.score}%</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Metodologia: classificação por Fit Score ponderado (Setor 30%, Localização 25%, Dados 20%, Website 15%, Contatos 10%).
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

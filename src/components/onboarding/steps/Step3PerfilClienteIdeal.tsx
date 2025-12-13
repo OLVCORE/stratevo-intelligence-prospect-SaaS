@@ -31,7 +31,8 @@ import { cn } from '@/lib/utils';
 interface Props {
   onNext: (data: any) => void;
   onBack: () => void;
-  onSave?: () => void | Promise<void>;
+  onSave?: () => void | Promise<void>; // Auto-save silencioso
+  onSaveExplicit?: () => void | Promise<void>; // Botão "Salvar" explícito (com toast)
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
@@ -75,7 +76,7 @@ const CARACTERISTICAS_ESPECIAIS = [
   { code: 'MULTINACIONAL', label: 'Multinacional', description: 'Empresa multinacional' },
 ];
 
-export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
   // 🔥 FORÇAR ATUALIZAÇÃO: Sempre usar dados do Step2 diretamente, SEM fallback para dados antigos
   const [formData, setFormData] = useState(() => {
     // Inicializar SEMPRE com dados do Step2 (sem fallback para dados antigos)
@@ -114,7 +115,7 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, initialData, i
     };
   });
 
-  // 🔥 ATUALIZAR AUTOMATICAMENTE quando initialData mudar (voltar do Step 2)
+  // 🔥 ATUALIZAR AUTOMATICAMENTE quando initialData mudar (voltar do Step 2) - MERGE não-destrutivo
   useEffect(() => {
     console.log('[Step3] 🔄 initialData mudou:', {
       setoresAlvo: initialData?.setoresAlvo,
@@ -122,36 +123,55 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, initialData, i
       fullInitialData: initialData,
     });
     
-    // SEMPRE atualizar setores e nichos do Step2 (FORÇAR atualização)
-    const step2Setores = initialData?.setoresAlvo || [];
-    const step2Nichos = initialData?.nichosAlvo || [];
+    // Atualizar setores e nichos do Step2 (só se houver dados válidos)
+    const step2Setores = Array.isArray(initialData?.setoresAlvo) && initialData.setoresAlvo.length > 0
+      ? initialData.setoresAlvo
+      : null;
+    const step2Nichos = Array.isArray(initialData?.nichosAlvo) && initialData.nichosAlvo.length > 0
+      ? initialData.nichosAlvo
+      : null;
     
-    console.log('[Step3] ✅ Atualizando com dados do Step2:', {
+    console.log('[Step3] ✅ Atualizando com dados do Step2 (merge não-destrutivo):', {
       setoresAlvo: step2Setores,
       nichosAlvo: step2Nichos,
     });
     
     setFormData(prev => ({
       ...prev,
-      // FORÇAR atualização dos setores e nichos (sempre do Step2)
-      setoresAlvo: step2Setores,
-      nichosAlvo: step2Nichos,
-      // Manter outros dados do Step3 (não sobrescrever)
-      cnaesAlvo: prev.cnaesAlvo.length > 0 ? prev.cnaesAlvo : (initialData?.cnaesAlvo || []),
-      ncmsAlvo: prev.ncmsAlvo.length > 0 ? prev.ncmsAlvo : (initialData?.ncmsAlvo || []),
-      porteAlvo: prev.porteAlvo.length > 0 ? prev.porteAlvo : (initialData?.porteAlvo || []),
-      localizacaoAlvo: prev.localizacaoAlvo.estados.length > 0 || prev.localizacaoAlvo.regioes.length > 0 || (prev.localizacaoAlvo.municipios && prev.localizacaoAlvo.municipios.length > 0)
+      // Atualizar setores e nichos do Step2 (só se houver dados válidos, senão preservar)
+      setoresAlvo: step2Setores || prev.setoresAlvo || [],
+      nichosAlvo: step2Nichos || prev.nichosAlvo || [],
+      // Manter outros dados do Step3 (prioridade: prev > initialData > default)
+      cnaesAlvo: prev.cnaesAlvo.length > 0 
+        ? prev.cnaesAlvo 
+        : (Array.isArray(initialData?.cnaesAlvo) && initialData.cnaesAlvo.length > 0 ? initialData.cnaesAlvo : []),
+      ncmsAlvo: prev.ncmsAlvo.length > 0 
+        ? prev.ncmsAlvo 
+        : (Array.isArray(initialData?.ncmsAlvo) && initialData.ncmsAlvo.length > 0 ? initialData.ncmsAlvo : []),
+      porteAlvo: prev.porteAlvo.length > 0 
+        ? prev.porteAlvo 
+        : (Array.isArray(initialData?.porteAlvo) && initialData.porteAlvo.length > 0 ? initialData.porteAlvo : []),
+      localizacaoAlvo: (prev.localizacaoAlvo.estados.length > 0 || prev.localizacaoAlvo.regioes.length > 0 || (prev.localizacaoAlvo.municipios && prev.localizacaoAlvo.municipios.length > 0))
         ? prev.localizacaoAlvo 
-        : (initialData?.localizacaoAlvo || { estados: [], regioes: [], municipios: [] }),
-      faturamentoAlvo: prev.faturamentoAlvo.minimo || prev.faturamentoAlvo.maximo
+        : (initialData?.localizacaoAlvo && 
+          (initialData.localizacaoAlvo.estados?.length > 0 || initialData.localizacaoAlvo.regioes?.length > 0 || initialData.localizacaoAlvo.municipios?.length > 0)
+          ? initialData.localizacaoAlvo
+          : { estados: [], regioes: [], municipios: [] }),
+      faturamentoAlvo: (prev.faturamentoAlvo.minimo || prev.faturamentoAlvo.maximo)
         ? prev.faturamentoAlvo
-        : (initialData?.faturamentoAlvo || { minimo: null, maximo: null }),
-      funcionariosAlvo: prev.funcionariosAlvo.minimo || prev.funcionariosAlvo.maximo
+        : (initialData?.faturamentoAlvo && (initialData.faturamentoAlvo.minimo || initialData.faturamentoAlvo.maximo)
+          ? initialData.faturamentoAlvo
+          : { minimo: null, maximo: null }),
+      funcionariosAlvo: (prev.funcionariosAlvo.minimo || prev.funcionariosAlvo.maximo)
         ? prev.funcionariosAlvo
-        : (initialData?.funcionariosAlvo || { minimo: null, maximo: null }),
+        : (initialData?.funcionariosAlvo && (initialData.funcionariosAlvo.minimo || initialData.funcionariosAlvo.maximo)
+          ? initialData.funcionariosAlvo
+          : { minimo: null, maximo: null }),
       caracteristicasEspeciais: prev.caracteristicasEspeciais.length > 0 
         ? prev.caracteristicasEspeciais 
-        : (initialData?.caracteristicasEspeciais || []),
+        : (Array.isArray(initialData?.caracteristicasEspeciais) && initialData.caracteristicasEspeciais.length > 0
+          ? initialData.caracteristicasEspeciais
+          : []),
     }));
   }, [initialData?.setoresAlvo, initialData?.nichosAlvo]); // Só atualizar quando setores/nichos mudarem
 
@@ -1572,7 +1592,7 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, initialData, i
       <StepNavigation
         onBack={onBack}
         onNext={() => {}}
-        onSave={onSave}
+        onSave={onSaveExplicit || onSave}
         showSave={!!onSave}
         saveLoading={isSaving}
         hasUnsavedChanges={hasUnsavedChanges}

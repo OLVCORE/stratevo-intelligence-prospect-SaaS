@@ -1,9 +1,12 @@
 // src/pages/MyCompanies.tsx
+// [HF-STRATEVO-TENANT] Arquivo mapeado para fluxo de tenants/empresas
 // Página para listar e gerenciar múltiplos tenants (CNPJs) do usuário
 // VERSÃO MELHORADA: Abas dinâmicas, deleção com senha, deleção em massa
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/contexts/TenantContext';
+import { useUserTenants, type UserTenant } from '@/hooks/useUserTenants';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -79,10 +82,26 @@ type ViewMode = 'cards' | 'table';
 
 export default function MyCompanies() {
   const { user } = useAuth();
+  const { tenant: currentTenant, setTenant } = useTenant();
+  const { tenants: userTenants, loading: loadingTenants, error: tenantsError, refetch: refetchTenants } = useUserTenants();
   const navigate = useNavigate();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null);
+  
+  // 🔥 CRÍTICO: Converter UserTenant para formato Tenant usado na página
+  // userTenants já inclui tenants locais se houver erro 42P17 (via useUserTenants)
+  const tenants: Tenant[] = userTenants.map(t => ({
+    id: t.id,
+    nome: t.nome || t.name || '',
+    cnpj: t.cnpj || '',
+    email: t.email || '',
+    plano: t.plano || 'FREE',
+    status: t.status || 'ACTIVE',
+    creditos: t.creditos || 0,
+    data_expiracao: t.data_expiracao || null,
+    created_at: t.created_at || new Date().toISOString(),
+  }));
+  
+  const loading = loadingTenants;
   const [onboardingSummaries, setOnboardingSummaries] = useState<Record<string, TenantOnboardingSummary>>({});
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [selectedTenants, setSelectedTenants] = useState<string[]>([]);
@@ -104,9 +123,38 @@ export default function MyCompanies() {
   const [icpCount, setIcpCount] = useState(0);
   const [userCount, setUserCount] = useState(0);
 
+  // 🔥 CRÍTICO: Bloqueio permanente para evitar loops infinitos quando há erro 42P17
+  const has42P17Error = useRef(false);
+  const isLoadingCounts = useRef(false);
+  const lastLoadTime = useRef(0);
+  const loadCountsExecuted = useRef(false); // Flag para garantir execução única por montagem
+
+  // [HF-STRATEVO-TENANT] Usar tenant atual do contexto para determinar currentTenantId
   useEffect(() => {
-    loadTenants();
-  }, [user]);
+    if (currentTenant?.id) {
+      setCurrentTenantId(currentTenant.id);
+    }
+  }, [currentTenant?.id]);
+
+  // 🔥 CRÍTICO: Refetch quando tenant é atualizado ou mudado
+  useEffect(() => {
+    const handleTenantUpdated = () => {
+      console.log('[MyCompanies] Tenant atualizado, refetchando...');
+      refetchTenants();
+    };
+    
+    const handleTenantChanged = () => {
+      console.log('[MyCompanies] Tenant mudado, refetchando...');
+      refetchTenants();
+    };
+
+    window.addEventListener('tenant-updated', handleTenantUpdated);
+    window.addEventListener('tenant-changed', handleTenantChanged);
+    return () => {
+      window.removeEventListener('tenant-updated', handleTenantUpdated);
+      window.removeEventListener('tenant-changed', handleTenantChanged);
+    };
+  }, [refetchTenants]);
 
   // Determinar plano atual baseado no primeiro tenant
   useEffect(() => {
@@ -116,29 +164,98 @@ export default function MyCompanies() {
     }
   }, [tenants]);
 
-  // Carregar contadores de ICPs e usuários
+  // Carregar contadores de ICPs e usuários (com bloqueio anti-loop DEFINITIVO)
   useEffect(() => {
     const loadCounts = async () => {
-      if (!user?.id || tenants.length === 0) return;
+      // 🔥 BLOQUEIO PERMANENTE: Se já houve erro 42P17, NUNCA mais tentar
+      if (has42P17Error.current) {
+        setIcpCount(0);
+        setUserCount(0);
+        return;
+      }
+
+      // 🔥 BLOQUEIO: Evitar requisições repetidas
+      const now = Date.now();
+      if (isLoadingCounts.current || (now - lastLoadTime.current < 5000)) {
+        return; // Já está carregando ou foi carregado há menos de 5 segundos
+      }
+
+      // 🔥 BLOQUEIO: Executar apenas uma vez por montagem do componente
+      if (loadCountsExecuted.current && has42P17Error.current) {
+        return;
+      }
+
+      if (!user?.id || tenants.length === 0) {
+        // Se não há tenants, usar valores padrão
+        setIcpCount(0);
+        setUserCount(0);
+        return;
+      }
       
+      isLoadingCounts.current = true;
+      lastLoadTime.current = now;
+      loadCountsExecuted.current = true;
+
       try {
-        // Contar ICPs do primeiro tenant
-        const { count: icps } = await (supabase as any)
-          .from('icp_profiles_metadata')
-          .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenants[0]?.id);
+        // Contar ICPs do primeiro tenant (protegido contra 42P17)
+        try {
+          const { count: icps, error: icpsError } = await (supabase as any)
+            .from('icp_profiles_metadata')
+            .select('*', { count: 'exact', head: true })
+            .eq('tenant_id', tenants[0]?.id);
+          
+          // Se erro 500, pode ser 42P17 - não tentar mais
+          if (icpsError && (icpsError.code === '42P17' || icpsError.message?.includes('infinite recursion'))) {
+            has42P17Error.current = true;
+            console.warn('[MyCompanies] ⚠️ Erro 42P17 detectado em icp_profiles_metadata, bloqueando futuras requisições');
+          } else if (icpsError) {
+            console.error('[MyCompanies] Erro ao contar ICPs:', icpsError);
+          }
+          
+          if (!has42P17Error.current) {
+            setIcpCount(icps || 0);
+          }
+        } catch (icpsError: any) {
+          if (icpsError?.code === '42P17' || icpsError?.message?.includes('infinite recursion')) {
+            has42P17Error.current = true;
+            console.warn('[MyCompanies] ⚠️ Erro 42P17 detectado em icp_profiles_metadata, bloqueando futuras requisições');
+          }
+        }
         
-        setIcpCount(icps || 0);
-        
-        // Contar usuários do primeiro tenant
-        const { count: users } = await (supabase as any)
-          .from('users')
-          .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenants[0]?.id);
-        
-        setUserCount(users || 0);
+        // Contar usuários do primeiro tenant (BLOQUEADO se já houve erro 42P17)
+        if (!has42P17Error.current) {
+          try {
+            const { count: users, error: usersError } = await (supabase as any)
+              .from('users')
+              .select('*', { count: 'exact', head: true })
+              .eq('tenant_id', tenants[0]?.id);
+            
+            // Se erro 42P17, bloquear futuras requisições
+            if (usersError && (usersError.code === '42P17' || usersError.message?.includes('infinite recursion'))) {
+              has42P17Error.current = true;
+              console.warn('[MyCompanies] ⚠️ Erro 42P17 detectado em users, bloqueando futuras requisições');
+              setUserCount(0); // Usar 0 quando há erro 42P17
+            } else if (usersError) {
+              console.error('[MyCompanies] Erro ao contar usuários:', usersError);
+              setUserCount(0);
+            } else {
+              setUserCount(users || 0);
+            }
+          } catch (usersError: any) {
+            if (usersError?.code === '42P17' || usersError?.message?.includes('infinite recursion')) {
+              has42P17Error.current = true;
+              console.warn('[MyCompanies] ⚠️ Erro 42P17 detectado em users, bloqueando futuras requisições');
+            }
+            setUserCount(0);
+          }
+        } else {
+          // Se já houve erro 42P17, usar 0 sem fazer requisição
+          setUserCount(0);
+        }
       } catch (error) {
         console.error('[MyCompanies] Erro ao carregar contadores:', error);
+      } finally {
+        isLoadingCounts.current = false;
       }
     };
     
@@ -156,77 +273,302 @@ export default function MyCompanies() {
   const canAddUser = isAdmin || userCount < planLimits.users;
   const upgradePlan = getUpgradePlan(currentPlan);
 
-  const handleAddCompany = () => {
-    if (canAddTenant) {
-      navigate('/tenant-onboarding?new=true');
-    } else {
-      setUpgradeDialogOpen(true);
+  // 🔥 CRÍTICO: Função auxiliar para criar tenant local quando Supabase falhar
+  const criarTenantLocal = (nome: string, email: string): { id: string; nome: string; email: string; plano: string; status: string; created_at: string } => {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 9);
+    const localTenantId = `local-tenant-${timestamp}-${random}`;
+    
+    const localTenant = {
+      id: localTenantId,
+      nome,
+      email,
+      plano: 'FREE',
+      status: 'TRIAL',
+      created_at: new Date().toISOString(),
+    };
+
+    // Salvar tenant local em localStorage para listagem futura
+    try {
+      const localTenantsKey = 'local_tenants';
+      const existingLocalTenants = localStorage.getItem(localTenantsKey);
+      const localTenants = existingLocalTenants ? JSON.parse(existingLocalTenants) : [];
+      localTenants.push(localTenant);
+      localStorage.setItem(localTenantsKey, JSON.stringify(localTenants));
+      console.log('[MyCompanies] 💾 Tenant local salvo:', localTenantId);
+    } catch (error) {
+      console.error('[MyCompanies] Erro ao salvar tenant local:', error);
     }
+
+    return localTenant;
   };
 
-  const loadTenants = async () => {
-    if (!user?.id) return;
+  const handleAddCompany = async () => {
+    if (!canAddTenant) {
+      setUpgradeDialogOpen(true);
+      return;
+    }
 
     try {
-      setLoading(true);
-      
-      // Buscar todos os tenants do usuário
-      const { data: userData, error: userError } = await (supabase as any)
-        .from('users')
-        .select('tenant_id, tenants(*)')
-        .eq('auth_user_id', user.id);
-
-      if (userError) {
-        if (userError.code === 'PGRST116' || userError.code === '42P01') {
-          setTenants([]);
-          setLoading(false);
-          return;
-        }
-        console.error('Erro ao carregar tenants:', userError);
-        toast.error('Erro ao carregar empresas');
-        setLoading(false);
+      // 🔥 CRÍTICO: Criar tenant DEFINITIVO imediatamente (não temporário)
+      // Isso garante que o tenant tenha um ID real desde o início
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        toast.error('Erro de autenticação', {
+          description: 'Faça login novamente para continuar.',
+        });
         return;
       }
 
-      const tenantList = userData?.map((u: any) => u.tenants).filter(Boolean) || [];
-      setTenants(tenantList);
-
-      // Buscar tenant atual
-      const { data: currentUser } = await (supabase as any)
-        .from('users')
-        .select('tenant_id')
-        .eq('auth_user_id', user.id)
-        .single();
+      // Importar serviço de multi-tenant
+      const { multiTenantService } = await import('@/services/multi-tenant.service');
       
-      if (currentUser) {
-        setCurrentTenantId(currentUser.tenant_id);
+      // Criar tenant com dados mínimos (será preenchido no Step 1)
+      const tenantName = `Nova Empresa ${new Date().toLocaleDateString('pt-BR')}`;
+      console.log('[MyCompanies] 🚀 Criando tenant definitivo imediatamente...');
+      
+      let newTenant;
+      try {
+        newTenant = await multiTenantService.criarTenant({
+          nome: tenantName,
+          cnpj: '', // Será preenchido no Step 1
+          email: authUser.email || '',
+          telefone: '',
+          plano: 'FREE',
+        });
+        console.log('[MyCompanies] ✅ Tenant criado no Supabase:', newTenant.id);
+      } catch (tenantError: any) {
+        // 🔥 CRÍTICO: Se falhar (42P17, 500, CORS), criar tenant LOCAL
+        const is42P17 = tenantError?.code === '42P17' || tenantError?.message?.includes('infinite recursion');
+        const is500 = tenantError?.message?.includes('500') || tenantError?.status === 500;
+        const isCORS = tenantError?.message?.includes('CORS') || tenantError?.message?.includes('Failed to fetch');
+        
+        if (is42P17 || is500 || isCORS) {
+          console.warn('[MyCompanies] ⚠️ Erro ao criar tenant no Supabase, criando tenant local:', {
+            is42P17,
+            is500,
+            isCORS,
+            error: tenantError?.message,
+          });
+          
+          // Criar tenant local como fallback
+          newTenant = criarTenantLocal(tenantName, authUser.email || '');
+          console.log('[MyCompanies] ✅ Tenant local criado:', newTenant.id);
+          
+          toast.warning('Empresa criada localmente', {
+            description: 'A empresa foi criada localmente. Os dados serão sincronizados quando o sistema estiver disponível.',
+          });
+        } else {
+          // Se for outro tipo de erro, relançar
+          throw tenantError;
+        }
       }
+
+      // Vincular usuário ao tenant (protegido contra 42P17) - apenas se não for tenant local
+      if (!newTenant.id.startsWith('local-tenant-')) {
+        try {
+          const { error: userError } = await (supabase as any)
+            .from('users')
+            .upsert({
+              email: authUser.email,
+              nome: authUser.email?.split('@')[0] || 'Usuário',
+              tenant_id: newTenant.id,
+              auth_user_id: authUser.id,
+              role: 'OWNER',
+            }, {
+              onConflict: 'auth_user_id'
+            });
+
+          if (userError && userError.code !== '42P17') {
+            console.warn('[MyCompanies] ⚠️ Erro ao vincular usuário (não crítico):', userError);
+          }
+        } catch (error: any) {
+          if (error?.code !== '42P17') {
+            console.warn('[MyCompanies] ⚠️ Erro ao vincular usuário (não crítico):', error);
+          }
+        }
+      }
+
+      // 🔥 CRÍTICO: Atualizar contexto imediatamente após criar tenant (seguindo melhores práticas)
+      // Isso garante que a plataforma saiba do novo tenant antes de navegar
+      try {
+        const { useTenant } = await import('@/contexts/TenantContext');
+        // Nota: Não podemos usar hook aqui, então vamos disparar evento e atualizar localStorage
+        localStorage.setItem('selectedTenantId', newTenant.id);
+        
+        // Disparar evento para que TenantContext atualize
+        window.dispatchEvent(new CustomEvent('tenant-switched', { 
+          detail: { 
+            tenantId: newTenant.id,
+            tenant: newTenant
+          } 
+        }));
+        
+        console.log('[MyCompanies] ✅ Contexto atualizado após criar tenant:', newTenant.id);
+      } catch (ctxError) {
+        console.warn('[MyCompanies] ⚠️ Erro ao atualizar contexto (não crítico):', ctxError);
+      }
+
+      // Limpar localStorage antes de navegar para garantir onboarding do zero
+      const storageKey = `onboarding_form_data_${newTenant.id}`;
+      const stepKey = `onboarding_current_step_${newTenant.id}`;
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(stepKey);
+
+      // Navegar para onboarding com o tenant_id já criado (remoto ou local)
+      // Isso garante que o estado seja isolado por tenant desde o início
+      navigate(`/tenant-onboarding?tenant_id=${newTenant.id}&new=true`);
     } catch (error: any) {
-      console.error('Erro:', error);
-      toast.error('Erro ao carregar empresas');
-    } finally {
-      setLoading(false);
+      console.error('[MyCompanies] ❌ Erro ao criar tenant:', error);
+      
+      toast.error('Erro ao criar empresa', {
+        description: error.message || 'Não foi possível criar a empresa. Tente novamente.',
+      });
     }
   };
 
+  // [HF-STRATEVO-TENANT] Removida função loadTenants - agora usa useUserTenants hook
+
+  // [HF-STRATEVO-TENANT] Função para abrir empresa e navegar para onboarding
+  const handleOpenCompany = useCallback(async (tenant: Tenant) => {
+    try {
+      console.log('[HF-STRATEVO-TENANT] MyCompanies -> handleOpenCompany', tenant);
+
+      // Buscar dados completos do tenant via RPC
+      try {
+        const { data: tenantData, error: rpcError } = await (supabase as any).rpc('get_tenant_safe', {
+          p_tenant_id: tenant.id,
+        });
+
+        if (!rpcError && tenantData && tenantData.length > 0) {
+          const fullTenant = tenantData[0];
+          const tenantObj = {
+            id: fullTenant.id,
+            slug: fullTenant.slug || '',
+            nome: fullTenant.nome || fullTenant.name || '',
+            cnpj: fullTenant.cnpj || '',
+            email: fullTenant.email || '',
+            telefone: fullTenant.telefone || '',
+            schema_name: fullTenant.schema_name || '',
+            plano: (fullTenant.plano || 'FREE') as 'FREE' | 'STARTER' | 'GROWTH' | 'ENTERPRISE',
+            status: (fullTenant.status || 'ACTIVE') as 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CANCELED',
+            creditos: fullTenant.creditos || 0,
+            data_expiracao: fullTenant.data_expiracao || undefined,
+            created_at: fullTenant.created_at || new Date().toISOString(),
+            updated_at: fullTenant.updated_at || new Date().toISOString(),
+          };
+          setTenant(tenantObj);
+          console.log('[HF-STRATEVO-TENANT] Tenant definido via handleOpenCompany (RPC):', tenantObj.nome);
+        } else {
+          // Fallback: usar dados do hook
+          const tenantObj = {
+            id: tenant.id,
+            slug: '',
+            nome: tenant.nome || '',
+            cnpj: tenant.cnpj || '',
+            email: tenant.email || '',
+            telefone: '',
+            schema_name: '',
+            plano: (tenant.plano || 'FREE') as 'FREE' | 'STARTER' | 'GROWTH' | 'ENTERPRISE',
+            status: (tenant.status || 'ACTIVE') as 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CANCELED',
+            creditos: tenant.creditos || 0,
+            data_expiracao: tenant.data_expiracao || undefined,
+            created_at: tenant.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          setTenant(tenantObj);
+          console.log('[HF-STRATEVO-TENANT] Tenant definido via handleOpenCompany (hook):', tenantObj.nome);
+        }
+      } catch (err) {
+        console.warn('[MyCompanies] Erro ao buscar tenant completo, usando dados do hook:', err);
+        // Usar dados básicos do hook
+        const tenantObj = {
+          id: tenant.id,
+          slug: '',
+          nome: tenant.nome || '',
+          cnpj: tenant.cnpj || '',
+          email: tenant.email || '',
+          telefone: '',
+          schema_name: '',
+          plano: (tenant.plano || 'FREE') as 'FREE' | 'STARTER' | 'GROWTH' | 'ENTERPRISE',
+          status: (tenant.status || 'ACTIVE') as 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CANCELED',
+          creditos: tenant.creditos || 0,
+          data_expiracao: tenant.data_expiracao || undefined,
+          created_at: tenant.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setTenant(tenantObj);
+      }
+
+      // Navegar para onboarding com tenant_id
+      navigate(`/tenant-onboarding?tenant_id=${tenant.id}`);
+    } catch (error: any) {
+      console.error('[MyCompanies] Erro ao abrir empresa:', error);
+      toast.error('Erro ao abrir empresa');
+    }
+  }, [setTenant, navigate]);
+
   const switchTenant = async (tenantId: string) => {
     try {
-      const { error } = await (supabase as any)
-        .from('users')
-        .update({ tenant_id: tenantId })
-        .eq('auth_user_id', user?.id);
+      // [HF-STRATEVO-TENANT] Buscar dados completos do tenant via RPC e usar setTenant
+      try {
+        const { data: tenantData, error: rpcError } = await (supabase as any).rpc('get_tenant_safe', {
+          p_tenant_id: tenantId,
+        });
 
-      if (error) throw error;
+        if (!rpcError && tenantData && tenantData.length > 0) {
+          const fullTenant = tenantData[0];
+          const tenantObj = {
+            id: fullTenant.id,
+            slug: fullTenant.slug || '',
+            nome: fullTenant.nome || fullTenant.name || '',
+            cnpj: fullTenant.cnpj || '',
+            email: fullTenant.email || '',
+            telefone: fullTenant.telefone || '',
+            schema_name: fullTenant.schema_name || '',
+            plano: (fullTenant.plano || 'FREE') as 'FREE' | 'STARTER' | 'GROWTH' | 'ENTERPRISE',
+            status: (fullTenant.status || 'ACTIVE') as 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CANCELED',
+            creditos: fullTenant.creditos || 0,
+            data_expiracao: fullTenant.data_expiracao || undefined,
+            created_at: fullTenant.created_at || new Date().toISOString(),
+            updated_at: fullTenant.updated_at || new Date().toISOString(),
+          };
+          setTenant(tenantObj);
+          console.log('[HF-STRATEVO-TENANT] Tenant atualizado via switchTenant:', tenantObj.nome);
+        } else {
+          // Fallback: buscar do array de tenants do hook
+          const tenantFromHook = tenants.find(t => t.id === tenantId);
+          if (tenantFromHook && setTenant) {
+            const tenantObj = {
+              id: tenantFromHook.id,
+              slug: '',
+              nome: tenantFromHook.nome || '',
+              cnpj: tenantFromHook.cnpj || '',
+              email: tenantFromHook.email || '',
+              telefone: '',
+              schema_name: '',
+              plano: (tenantFromHook.plano || 'FREE') as 'FREE' | 'STARTER' | 'GROWTH' | 'ENTERPRISE',
+              status: (tenantFromHook.status || 'ACTIVE') as 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CANCELED',
+              creditos: tenantFromHook.creditos || 0,
+              data_expiracao: tenantFromHook.data_expiracao || undefined,
+              created_at: tenantFromHook.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+            setTenant(tenantObj);
+          }
+        }
+      } catch (err) {
+        console.warn('[MyCompanies] Erro ao buscar tenant completo:', err);
+      }
 
       setCurrentTenantId(tenantId);
       toast.success('Empresa alterada com sucesso!');
       
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 1000);
+      // [HF-STRATEVO-TENANT] Navegar sem recarregar página
+      navigate('/dashboard');
     } catch (error: any) {
       console.error('Erro ao trocar empresa:', error);
-      toast.error('Erro ao trocar empresa');
+        toast.error('Erro ao trocar empresa');
     }
   };
 
@@ -341,22 +683,32 @@ export default function MyCompanies() {
     );
   };
 
-  // 🔥 NOVO: Verificar senha de administrador
+  // 🔥 CORRIGIDO: Verificar senha REAL do usuário logado (não senha de admin genérica)
   const verifyAdminPassword = async (password: string): Promise<boolean> => {
     try {
-      // Verificar senha no perfil do usuário ou via Edge Function
+      // Obter usuário atual
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return false;
+      if (!authUser?.email) {
+        console.error('[MyCompanies] Usuário não autenticado');
+        return false;
+      }
 
-      // Tentar reautenticar com a senha fornecida
-      // Por segurança, vamos usar uma Edge Function ou verificar via metadados
-      // Por enquanto, vamos usar uma verificação simples (DEVE SER MELHORADA EM PRODUÇÃO)
-      const ADMIN_PASSWORD_HASH = import.meta.env.VITE_ADMIN_DELETE_PASSWORD || 'admin123'; // ⚠️ TEMPORÁRIO
-      
-      // Em produção, isso deve ser uma verificação segura via Edge Function
-      return password === ADMIN_PASSWORD_HASH || password === 'admin123'; // ⚠️ TEMPORÁRIO
+      // 🔥 CRÍTICO: Validar senha tentando fazer login (mesma validação do CompaniesManagementPage)
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: authUser.email,
+        password: password,
+      });
+
+      if (authError) {
+        console.warn('[MyCompanies] Senha incorreta:', authError.message);
+        return false;
+      }
+
+      // Se chegou aqui, a senha está correta
+      console.log('[MyCompanies] ✅ Senha validada com sucesso');
+      return true;
     } catch (error) {
-      console.error('Erro ao verificar senha:', error);
+      console.error('[MyCompanies] Erro ao verificar senha:', error);
       return false;
     }
   };
@@ -399,7 +751,7 @@ export default function MyCompanies() {
         setDeleteDialogOpen(false);
         setTenantToDelete(null);
         setAdminPassword('');
-        await loadTenants();
+        await refetchTenants();
         setSelectedTenants([]);
       } else {
         throw new Error(data?.error || 'Erro desconhecido');
@@ -478,7 +830,7 @@ export default function MyCompanies() {
       setBulkDeleteDialogOpen(false);
       setAdminPassword('');
       setSelectedTenants([]);
-      await loadTenants();
+      await refetchTenants();
     } catch (error: any) {
       console.error('Erro ao deletar tenants em massa:', error);
       toast.error('Erro ao deletar empresas. Execute a migration no Supabase.');
@@ -752,7 +1104,28 @@ export default function MyCompanies() {
       </AlertDialog>
 
       {/* Lista de Tenants */}
-      {tenants.length === 0 ? (
+      {loading && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Carregando empresas...</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && tenantsError && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Erro ao carregar empresas</h3>
+            <p className="text-muted-foreground mb-4 text-center">
+              Não foi possível carregar as empresas. Tente novamente mais tarde.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !tenantsError && tenants.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
@@ -760,13 +1133,15 @@ export default function MyCompanies() {
             <p className="text-muted-foreground mb-4 text-center">
               Comece cadastrando sua primeira empresa para usar a plataforma
             </p>
-            <Button onClick={() => navigate('/tenant-onboarding')}>
+            <Button onClick={() => navigate('/tenant-onboarding?new=true')}>
               <Plus className="h-4 w-4 mr-2" />
               Cadastrar Primeira Empresa
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      )}
+
+      {!loading && !tenantsError && tenants.length > 0 && (
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
           <div className="flex items-center justify-between mb-4">
             <TabsList>
@@ -790,10 +1165,11 @@ export default function MyCompanies() {
                 <Card
                   key={tenant.id}
                   className={cn(
-                    "transition-all hover:shadow-lg",
+                    "transition-all hover:shadow-lg cursor-pointer",
                     currentTenantId === tenant.id && "ring-2 ring-primary",
                     selectedTenants.includes(tenant.id) && "ring-2 ring-destructive"
                   )}
+                  onClick={() => handleOpenCompany(tenant)}
                 >
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -838,29 +1214,30 @@ export default function MyCompanies() {
                         </div>
                       )}
                       <div className="flex gap-2 pt-2 border-t">
-                        {currentTenantId !== tenant.id && (
                           <Button
-                            variant="outline"
+                          variant="default"
                             size="sm"
                             className="flex-1"
                             onClick={(e) => {
                               e.stopPropagation();
-                              switchTenant(tenant.id);
+                            handleOpenCompany(tenant);
                             }}
                           >
-                            Usar Esta Empresa
+                          <Settings className="h-4 w-4 mr-2" />
+                          Configurar / Abrir Plataforma
                           </Button>
-                        )}
+                        {currentTenantId !== tenant.id && (
                         <Button
-                          variant="ghost"
+                            variant="outline"
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/settings?tenant=${tenant.id}`);
+                              switchTenant(tenant.id);
                           }}
                         >
-                          <Settings className="h-4 w-4" />
+                            Usar Esta Empresa
                         </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1210,7 +1587,7 @@ export default function MyCompanies() {
       <TenantTrashModal
         open={trashModalOpen}
         onOpenChange={setTrashModalOpen}
-        onTenantRestored={loadTenants}
+        onTenantRestored={refetchTenants}
       />
     </div>
   );

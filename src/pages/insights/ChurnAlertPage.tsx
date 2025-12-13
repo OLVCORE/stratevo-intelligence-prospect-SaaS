@@ -7,12 +7,55 @@ import { useDashboardExecutive } from "@/hooks/useDashboardExecutive";
 import { AlertTriangle, Activity, Building2, Clock, Target, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useTenant } from "@/contexts/TenantContext";
+
+interface ChurnRiskCompany {
+  id: string;
+  name: string;
+  risk: 'high' | 'medium' | 'low';
+  last_activity: string;
+  reason: string;
+}
 
 export default function ChurnAlertPage() {
   const navigate = useNavigate();
   const { data, isLoading } = useDashboardExecutive();
+  const { tenant } = useTenant();
+  const [churnRisk, setChurnRisk] = useState<ChurnRiskCompany[]>([]);
+  const [isLoadingChurn, setIsLoadingChurn] = useState(true);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (tenant) {
+      loadChurnRisk();
+    }
+  }, [tenant]);
+
+  const loadChurnRisk = async () => {
+    if (!tenant) return;
+    
+    setIsLoadingChurn(true);
+    try {
+      // 🔥 PROIBIDO: Dados mockados foram removidos
+      // Buscar empresas reais com risco de churn do banco
+      // TODO: Implementar análise real de churn baseada em:
+      // - Última atividade/interação
+      // - Redução em métricas de engajamento
+      // - Score de health
+      // - Padrões de uso
+      
+      // Por enquanto, retornar vazio (não dados fake)
+      setChurnRisk([]);
+    } catch (error) {
+      console.error('Erro ao carregar risco de churn:', error);
+      setChurnRisk([]);
+    } finally {
+      setIsLoadingChurn(false);
+    }
+  };
+
+  if (isLoading || isLoadingChurn) {
     return (
       <div className="container mx-auto p-6 space-y-6">
         <BackButton />
@@ -21,16 +64,8 @@ export default function ChurnAlertPage() {
     );
   }
 
-  // Mock churn risk data for now - will be replaced with real data
-  const churnRisk = [
-    { id: '1', name: 'Empresa Exemplo A', risk: 'high', last_activity: 'há 45 dias', reason: 'Redução de 60% na atividade digital' },
-    { id: '2', name: 'Empresa Exemplo B', risk: 'high', last_activity: 'há 52 dias', reason: 'Sem interação nas últimas 7 semanas' },
-    { id: '3', name: 'Empresa Exemplo C', risk: 'high', last_activity: 'há 38 dias', reason: 'Score de health abaixo de 40%' },
-    { id: '4', name: 'Empresa Exemplo D', risk: 'medium', last_activity: 'há 25 dias', reason: 'Redução de 30% na atividade' },
-    { id: '5', name: 'Empresa Exemplo E', risk: 'medium', last_activity: 'há 22 dias', reason: 'Padrão irregular de engajamento' },
-  ];
-  const highRiskCompanies = churnRisk.filter((c: any) => c.risk === 'high');
-  const mediumRiskCompanies = churnRisk.filter((c: any) => c.risk === 'medium');
+  const highRiskCompanies = churnRisk.filter((c) => c.risk === 'high');
+  const mediumRiskCompanies = churnRisk.filter((c) => c.risk === 'medium');
 
   return (
     <div className="container mx-auto p-6 space-y-6 animate-fade-in">
@@ -107,7 +142,14 @@ export default function ChurnAlertPage() {
             </h2>
 
             <div className="space-y-4">
-              {highRiskCompanies.slice(0, 5).map((company: any, idx: number) => (
+              {highRiskCompanies.length === 0 ? (
+                <Card className="glass-card border-muted">
+                  <CardContent className="p-6 text-center text-muted-foreground">
+                    <p>Nenhuma empresa com risco alto de churn identificada</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                highRiskCompanies.slice(0, 5).map((company, idx: number) => (
                 <Card 
                   key={company.id || idx}
                   className="glass-card border-destructive/20 hover:border-destructive/40 transition-all cursor-pointer group"
@@ -136,7 +178,8 @@ export default function ChurnAlertPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -147,7 +190,14 @@ export default function ChurnAlertPage() {
             </h2>
 
             <div className="space-y-4">
-              {mediumRiskCompanies.slice(0, 5).map((company: any, idx: number) => (
+              {mediumRiskCompanies.length === 0 ? (
+                <Card className="glass-card border-muted">
+                  <CardContent className="p-6 text-center text-muted-foreground">
+                    <p>Nenhuma empresa com risco médio de churn identificada</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                mediumRiskCompanies.slice(0, 5).map((company, idx: number) => (
                 <Card 
                   key={company.id || idx}
                   className="glass-card border-orange-500/20 hover:border-orange-500/40 transition-all cursor-pointer group"
@@ -175,7 +225,8 @@ export default function ChurnAlertPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

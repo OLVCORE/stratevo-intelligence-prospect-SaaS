@@ -10,7 +10,7 @@ import { toast } from '@/hooks/use-toast';
 
 export default function ICPProfiles() {
   const navigate = useNavigate();
-  const { tenant } = useTenant();
+  const { tenant, loading: tenantLoading } = useTenant();
   const tenantId = tenant?.id;
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,8 +18,11 @@ export default function ICPProfiles() {
   useEffect(() => {
     if (tenantId) {
       loadProfiles();
+    } else if (!tenantLoading) {
+      // Se não há tenant e não está mais carregando, parar loading
+      setLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, tenantLoading]);
 
   const loadProfiles = async () => {
     if (!tenantId) return;
@@ -65,10 +68,23 @@ export default function ICPProfiles() {
         </Button>
       </div>
 
-      {loading ? (
+      {tenantLoading || loading ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">Carregando ICPs...</p>
         </div>
+      ) : !tenantId ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-semibold mb-2">Nenhuma empresa selecionada</h3>
+            <p className="text-muted-foreground mb-4">
+              Selecione uma empresa para visualizar os ICPs.
+            </p>
+            <Button onClick={() => navigate('/my-companies')}>
+              Selecionar Empresa
+            </Button>
+          </CardContent>
+        </Card>
       ) : profiles.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">

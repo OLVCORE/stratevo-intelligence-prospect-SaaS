@@ -57,34 +57,68 @@ export function TemplateOptimizer({
     setIsAnalyzing(true);
 
     try {
-      // Em produção, chamar Edge Function para análise
-      // Por enquanto, simular sugestões
-      setTimeout(() => {
-        const mockSuggestions: OptimizationSuggestion[] = [
-          {
+      // 🔥 PROIBIDO: Dados mockados removidos
+      // Buscar performance real de templates similares do banco
+      const { data: similarTemplates, error: templateError } = await (supabase as any)
+        .from('email_templates')
+        .select('id, subject, body, open_rate, click_rate, reply_rate')
+        .eq('tenant_id', tenant.id)
+        .order('reply_rate', { ascending: false })
+        .limit(10);
+
+      if (templateError) throw templateError;
+
+      // Analisar template atual e comparar com melhores performers
+      const suggestions: OptimizationSuggestion[] = [];
+
+      if (similarTemplates && similarTemplates.length > 0) {
+        const bestPerformer = similarTemplates[0];
+        
+        // Analisar assunto se houver diferença significativa
+        if (bestPerformer.open_rate > 50 && currentTemplate.includes('Oportunidade')) {
+          suggestions.push({
             type: 'subject',
-            current: 'Oportunidade de Negócio',
-            suggested: 'Como [Empresa] pode aumentar receita em 30%',
-            reason: 'Assuntos personalizados têm 2.5x mais abertura',
-            expected_improvement: 25,
-          },
-          {
+            current: currentTemplate.match(/subject[:\s]+([^\n]+)/i)?.[1] || 'Assunto atual',
+            suggested: bestPerformer.subject || 'Assunto otimizado baseado em melhor performer',
+            reason: `Templates similares têm ${bestPerformer.open_rate}% de abertura`,
+            expected_improvement: Math.round(bestPerformer.open_rate - 30),
+          });
+        }
+
+        // Analisar CTA se houver diferença significativa
+        if (bestPerformer.click_rate > 15) {
+          const currentCta = currentTemplate.match(/cta[:\s]+([^\n]+)/i)?.[1] || 'Entre em contato';
+          suggestions.push({
             type: 'cta',
-            current: 'Entre em contato',
+            current: currentCta,
             suggested: 'Agende uma demonstração gratuita de 15 minutos',
-            reason: 'CTAs específicos com prazo têm 3x mais cliques',
-            expected_improvement: 40,
-          },
-        ];
-        
-        setSuggestions(mockSuggestions);
-        setIsAnalyzing(false);
-        
-        toast({
-          title: "Análise Concluída",
-          description: `${mockSuggestions.length} sugestões encontradas`,
-        });
-      }, 2000);
+            reason: `Melhores templates têm ${bestPerformer.click_rate}% de clique`,
+            expected_improvement: Math.round(bestPerformer.click_rate - 5),
+          });
+        }
+      }
+
+      // Se não houver dados suficientes, usar análise básica do template
+      if (suggestions.length === 0) {
+        // Análise básica: verificar se template tem elementos essenciais
+        if (!currentTemplate.toLowerCase().includes('personaliz')) {
+          suggestions.push({
+            type: 'body',
+            current: 'Template genérico',
+            suggested: 'Adicionar personalização com nome da empresa',
+            reason: 'Templates personalizados têm 2.5x mais resposta',
+            expected_improvement: 25,
+          });
+        }
+      }
+      
+      setSuggestions(suggestions);
+      setIsAnalyzing(false);
+      
+      toast({
+        title: "Análise Concluída",
+        description: `${suggestions.length} sugestões encontradas`,
+      });
     } catch (error: any) {
       console.error('Erro ao analisar template:', error);
       toast({

@@ -18,7 +18,14 @@ export default function LeadsCapture() {
         .from('leads_quarantine')
         .select('captured_at, validation_status, source_id')
       
-      if (error) throw error
+      // ✅ Tratar erro 404 (tabela não existe) sem causar loop
+      if (error) {
+        if (error.code === 'PGRST116' || error.message?.includes('404') || error.message?.includes('not found')) {
+          console.warn('[LeadsCapture] Tabela leads_quarantine não existe - retornando valores padrão');
+          return { today: 0, week: 0, month: 0, total: 0, pending: 0, approved: 0, rejected: 0 };
+        }
+        throw error;
+      }
 
       const now = new Date()
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -35,7 +42,9 @@ export default function LeadsCapture() {
         rejected: data.filter(l => l.validation_status === 'rejected').length
       }
     },
-    refetchInterval: 30000
+    retry: false, // ✅ Não tentar novamente em caso de erro 404
+    refetchOnWindowFocus: false, // ✅ Não refazer query ao focar janela
+    refetchInterval: false // ✅ Desabilitar refetch automático para evitar loops
   })
 
   const { data: sources } = useQuery({
@@ -46,9 +55,18 @@ export default function LeadsCapture() {
         .select('*')
         .order('total_captured', { ascending: false })
       
-      if (error) throw error
-      return data
-    }
+      // ✅ Tratar erro 404 (tabela não existe) sem causar loop
+      if (error) {
+        if (error.code === 'PGRST116' || error.message?.includes('404') || error.message?.includes('not found')) {
+          console.warn('[LeadsCapture] Tabela source_performance não existe - retornando array vazio');
+          return [];
+        }
+        throw error;
+      }
+      return data || []
+    },
+    retry: false, // ✅ Não tentar novamente em caso de erro 404
+    refetchOnWindowFocus: false // ✅ Não refazer query ao focar janela
   })
 
   return (

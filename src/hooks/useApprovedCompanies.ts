@@ -12,7 +12,13 @@ export function useApprovedCompanies(filters?: {
       // 🎯 BUSCAR EMPRESAS APROVADAS (status='aprovada')
       let query = supabase
         .from('icp_analysis_results')
-        .select('*')
+        .select(`
+          *,
+          website_encontrado,
+          website_fit_score,
+          website_products_match,
+          linkedin_url
+        `)
         .eq('status', 'aprovada'); // ✅ APENAS APROVADAS
 
       // Aplicar filtros adicionais

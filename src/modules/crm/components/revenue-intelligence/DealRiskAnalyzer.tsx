@@ -60,44 +60,74 @@ export function DealRiskAnalyzer({ onDealSelected }: DealRiskAnalyzerProps) {
       setRiskyDeals(data.risky_deals || []);
     } catch (error: any) {
       console.error('Erro ao carregar deals em risco:', error);
-      // Dados mockados em caso de erro
-      const mockRiskyDeals: DealRisk[] = [
-        {
-          deal_id: '1',
-          deal_name: 'Empresa ABC - ERP',
-          value: 50000,
-          probability: 30,
-          risk_level: 'high',
-          risk_factors: [
-            'Sem atividade há 15 dias',
-            'Probabilidade caiu 20%',
-            'Competidor mencionado',
-          ],
-          recommended_actions: [
-            'Agendar reunião urgente',
-            'Apresentar caso de sucesso similar',
-            'Oferecer desconto limitado',
-          ],
-          days_stalled: 15,
-        },
-        {
-          deal_id: '2',
-          deal_name: 'Empresa XYZ - CRM',
-          value: 80000,
-          probability: 45,
-          risk_level: 'medium',
-          risk_factors: [
-            'Resposta lenta a emails',
-            'Orçamento não aprovado',
-          ],
-          recommended_actions: [
-            'Follow-up por telefone',
-            'Enviar ROI calculator',
-          ],
-          days_stalled: 8,
-        },
-      ];
-      setRiskyDeals(mockRiskyDeals);
+      
+      // 🔥 PROIBIDO: Dados mockados foram removidos
+      // Se Edge Function falhar, buscar deals diretamente do banco e analisar
+      try {
+        const { data: deals, error: dbError } = await (supabase as any)
+          .from('deals')
+          .select('id, name, value, probability, stage, updated_at, created_at')
+          .eq('tenant_id', tenant.id)
+          .order('updated_at', { ascending: true })
+          .limit(20);
+
+        if (dbError) throw dbError;
+
+        if (!deals || deals.length === 0) {
+          setRiskyDeals([]);
+          return;
+        }
+
+        // Analisar deals reais para identificar riscos
+        const riskyDeals: DealRisk[] = deals
+          .map((deal: any) => {
+            const daysSinceUpdate = deal.updated_at 
+              ? Math.floor((Date.now() - new Date(deal.updated_at).getTime()) / (1000 * 60 * 60 * 24))
+              : 999;
+            
+            const daysSinceCreated = deal.created_at
+              ? Math.floor((Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60 * 24))
+              : 999;
+
+            // Identificar fatores de risco reais
+            const riskFactors: string[] = [];
+            if (daysSinceUpdate > 14) riskFactors.push(`Sem atividade há ${daysSinceUpdate} dias`);
+            if (deal.probability < 40) riskFactors.push(`Probabilidade baixa (${deal.probability}%)`);
+            if (daysSinceCreated > 90 && deal.probability < 60) riskFactors.push('Deal antigo com baixa probabilidade');
+            if (!deal.stage || deal.stage === '') riskFactors.push('Estágio não definido');
+
+            if (riskFactors.length === 0) return null;
+
+            // Determinar nível de risco baseado em fatores reais
+            let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low';
+            if (daysSinceUpdate > 30 || deal.probability < 20) riskLevel = 'critical';
+            else if (daysSinceUpdate > 21 || deal.probability < 30) riskLevel = 'high';
+            else if (daysSinceUpdate > 14 || deal.probability < 40) riskLevel = 'medium';
+
+            // Gerar ações recomendadas baseadas em riscos reais
+            const recommendedActions: string[] = [];
+            if (daysSinceUpdate > 14) recommendedActions.push('Agendar reunião urgente');
+            if (deal.probability < 40) recommendedActions.push('Apresentar caso de sucesso similar');
+            if (riskLevel === 'critical') recommendedActions.push('Revisar estratégia de abordagem');
+
+            return {
+              deal_id: deal.id,
+              deal_name: deal.name || 'Deal sem nome',
+              value: deal.value || 0,
+              probability: deal.probability || 0,
+              risk_level: riskLevel,
+              risk_factors: riskFactors,
+              recommended_actions: recommendedActions,
+              days_stalled: daysSinceUpdate,
+            };
+          })
+          .filter((deal: DealRisk | null): deal is DealRisk => deal !== null);
+
+        setRiskyDeals(riskyDeals);
+      } catch (fallbackError) {
+        console.error('Erro no fallback de busca de deals:', fallbackError);
+        setRiskyDeals([]); // Retornar vazio ao invés de dados fake
+      }
     } finally {
       setIsLoading(false);
     }

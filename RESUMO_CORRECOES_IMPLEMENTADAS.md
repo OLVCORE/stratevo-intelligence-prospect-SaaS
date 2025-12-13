@@ -1,103 +1,78 @@
-# ✅ CORREÇÕES IMPLEMENTADAS - RESUMO EXECUTIVO
+# ✅ RESUMO DAS CORREÇÕES IMPLEMENTADAS
 
-## 🎯 OBJETIVO ALCANÇADO
-Conectar backend ↔ frontend, eliminar CORS, persistir enriquecimento e exibir dados corretamente.
+## 1. ✅ COLUNAS DE WEBSITE ADICIONADAS
 
----
+### Arquivos Modificados:
+- ✅ `src/pages/QualifiedProspectsStock.tsx` - **COMPLETO**
+  - Adicionadas colunas: Website, Website Fit, LinkedIn
+  - Query atualizada para buscar `website_encontrado`, `website_fit_score`, `linkedin_url`
+  
+- ✅ `src/pages/Leads/ApprovedLeads.tsx` - **COMPLETO**
+  - Adicionadas colunas: Website, Website Fit, LinkedIn
+  - Query atualizada em `useApprovedCompanies.ts`
+  
+- ✅ `src/pages/Leads/ICPQuarantine.tsx` - **COMPLETO**
+  - Adicionadas colunas: Website, Website Fit, LinkedIn
+  - Query atualizada em `useICPQuarantine.ts`
+  
+- ✅ `src/pages/CompaniesManagementPage.tsx` - **COMPLETO**
+  - Adicionadas colunas: Website, Website Fit, LinkedIn
 
-## ✅ TODAS AS CORREÇÕES APLICADAS
+### Hooks Atualizados:
+- ✅ `src/hooks/useApprovedCompanies.ts` - Query atualizada
+- ✅ `src/hooks/useICPQuarantine.ts` - Query atualizada (2 lugares)
 
-### 1. **CORS ELIMINADO** ✅
-- ✅ ReceitaWS desabilitada no frontend
-- ✅ Apenas BrasilAPI sendo usada (sem CORS)
-- **Arquivo:** `src/services/receitaFederal.ts`
+## 2. ✅ CAMPO "ORIGEM" CORRIGIDO
 
-### 2. **TABELA DE ENRIQUECIMENTO** ✅
-- ✅ Migration criada: `supabase/migrations/20250210000003_create_qualified_stock_enrichment.sql`
-- ✅ Script SQL pronto: `APLICAR_MIGRATION_ENRIQUECIMENTO.sql`
-- **Status:** Pronto para aplicar no Supabase
+### Arquivos Modificados:
+- ✅ `APLICAR_FUNCAO_PROCESS_QUALIFICATION_JOB_SNIPER.sql`
+  - Função atualizada para salvar `v_job.source_file_name` em `qualified_prospects.source_name`
+  - `ON CONFLICT` também atualiza `source_name`
+  
+- ✅ `src/components/companies/BulkUploadDialog.tsx`
+  - Após criar job, atualiza `source_file_name` com nome do arquivo + campanha
+  - Usa `file.name` (sem extensão) + `sourceCampaign` se disponível
 
-### 3. **SERVIÇO DE PERSISTÊNCIA** ✅
-- ✅ `src/services/qualifiedEnrichment.service.ts` criado
-- ✅ Funções: `saveQualifiedEnrichment`, `classifyCnaeType`, `calculateDataQuality`, `calculateBasicFitScore`, `calculateGrade`
-- ✅ Tratamento de erro se tabela não existir
+## 3. ✅ LÓGICA DE GRADE CORRIGIDA
 
-### 4. **PERSISTÊNCIA INTEGRADA** ✅
-- ✅ `consultarReceitaFederal()` agora persiste automaticamente
-- ✅ Calcula fit_score, grade, data_quality automaticamente
-- **Arquivo:** `src/services/receitaFederal.ts`
+### Arquivos Modificados:
+- ✅ `src/pages/QualifiedProspectsStock.tsx`
+  - Grade agora é recalculada baseada no `fit_score` se não existir ou estiver inconsistente
+  - Lógica: A+ (≥90), A (≥75), B (≥60), C (≥40), D (<40)
 
-### 5. **FRONTEND CONECTADO** ✅
-- ✅ Busca separada de enriquecimento (sem JOIN - funciona mesmo sem tabela)
-- ✅ Renderização usando dados de `enrichment`
-- ✅ Colunas: Nome Fantasia, Fit Score, Grade, Origem
-- **Arquivo:** `src/pages/QualifiedProspectsStock.tsx`
+## 4. ⚠️ PROBLEMA: APENAS 5 DE 10 EMPRESAS APARECEM
 
-### 6. **ERRO 400 ICP CORRIGIDO** ✅
-- ✅ Filtro por `tenant_id` adicionado
-- ✅ Campo correto: `descricao` (não `description`)
-- **Arquivo:** `src/pages/QualifiedProspectsStock.tsx`
+### Diagnóstico:
+- Logs mostram: `countExisting: 5, totalNew: 10, toInsert: 5, duplicates: 5`
+- 5 empresas foram marcadas como duplicadas
+- 0 empresas foram inseridas (problema no mapeamento)
 
----
+### Ação Necessária:
+- Verificar logs de debug adicionados em `BulkUploadDialog.tsx`
+- Investigar por que `rows.length` está 0 após mapeamento
+- Verificar validação de CNPJ e `company_name`
 
-## 🚀 PRÓXIMO PASSO CRÍTICO
+## 5. ⚠️ ENRIQUECIMENTO EM MASSA E INDIVIDUAL
 
-### **APLICAR MIGRATION NO SUPABASE**
+### Status: PENDENTE
+- Componentes de enriquecimento precisam ser atualizados para usar nova metodologia com website fit score
+- Arquivos a verificar:
+  - `src/components/qualification/QualifiedStockActionsMenu.tsx`
+  - `src/components/companies/UnifiedEnrichButton.tsx`
+  - Dropdowns de enriquecimento individual
 
-1. **Acessar Supabase Dashboard**
-2. **Ir para SQL Editor**
-3. **Copiar e executar o conteúdo de:**
-   - `APLICAR_MIGRATION_ENRIQUECIMENTO.sql`
-   - OU `supabase/migrations/20250210000003_create_qualified_stock_enrichment.sql`
+## PRÓXIMOS PASSOS CRÍTICOS:
 
-4. **Após aplicar, recarregar schema:**
-   ```sql
-   NOTIFY pgrst, 'reload schema';
-   ```
+1. **APLICAR FUNÇÃO SQL:**
+   - Executar `APLICAR_FUNCAO_PROCESS_QUALIFICATION_JOB_SNIPER.sql` no Supabase Dashboard
 
----
+2. **VERIFICAR MIGRATION:**
+   - Verificar se `icp_analysis_results` tem colunas `website_encontrado`, `website_fit_score`, `linkedin_url`
+   - Se não tiver, criar migration para adicioná-las
 
-## ✅ FLUXO FUNCIONANDO AGORA
+3. **INVESTIGAR UPLOAD:**
+   - Testar upload novamente e verificar logs de debug
+   - Corrigir problema de 0 registros inseridos
 
-```
-1. Usuário clica "Enriquecer"
-   ↓
-2. consultarReceitaFederal() chama BrasilAPI (sem CORS)
-   ↓
-3. Dados são mesclados (MERGE)
-   ↓
-4. Cálculos automáticos:
-   - cnae_tipo
-   - data_quality
-   - fit_score
-   - grade
-   ↓
-5. saveQualifiedEnrichment() tenta persistir
-   - Se tabela existe: salva ✅
-   - Se não existe: apenas loga (não falha) ⚠️
-   ↓
-6. qualified_prospects é atualizado
-   ↓
-7. loadProspects() busca enriquecimentos separadamente
-   - Se tabela existe: busca e exibe ✅
-   - Se não existe: continua sem erro ⚠️
-   ↓
-8. Tabela exibe dados (do enrichment ou do prospect)
-```
-
----
-
-## 📋 STATUS FINAL
-
-- [x] CORS eliminado
-- [x] Persistência implementada
-- [x] Frontend conectado
-- [x] Erro 400 ICP corrigido
-- [x] Código funciona mesmo sem tabela (graceful degradation)
-- [ ] **PENDENTE:** Aplicar migration no Supabase para persistência completa
-
----
-
-**TUDO IMPLEMENTADO E FUNCIONANDO!** 
-
-Apenas aplicar a migration no Supabase para persistência completa.
+4. **ATUALIZAR ENRIQUECIMENTO:**
+   - Atualizar componentes de enriquecimento para usar nova metodologia

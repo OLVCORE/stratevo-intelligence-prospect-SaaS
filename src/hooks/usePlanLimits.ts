@@ -104,7 +104,7 @@ export function usePlanLimits(): PlanLimitsHook {
     staleTime: 30000, // 30 segundos
   });
   
-  // Buscar contagem de ICPs do tenant atual
+  // Buscar contagem de ICPs do tenant atual (BLOQUEADO se erro 42P17)
   const { 
     data: icpCount = 0,
     isLoading: loadingICPs,
@@ -120,6 +120,11 @@ export function usePlanLimits(): PlanLimitsHook {
         .eq('tenant_id', tenant.id);
       
       if (error) {
+        // 🔥 CRÍTICO: Se erro 42P17, retornar 0 silenciosamente
+        if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
+          console.warn('[usePlanLimits] ⚠️ Erro 42P17 ao contar ICPs, retornando 0');
+          return 0;
+        }
         console.error('[usePlanLimits] Erro ao contar ICPs:', error);
         return 0;
       }
@@ -128,9 +133,12 @@ export function usePlanLimits(): PlanLimitsHook {
     },
     enabled: !!tenant?.id,
     staleTime: 30000,
+    retry: false, // 🔥 CRÍTICO: Desabilitar retries para evitar loops
+    refetchOnWindowFocus: false, // 🔥 CRÍTICO: Não refazer requisição ao focar janela
+    refetchOnReconnect: false, // 🔥 CRÍTICO: Não refazer requisição ao reconectar
   });
   
-  // Buscar contagem de usuários do tenant atual
+  // Buscar contagem de usuários do tenant atual (BLOQUEADO se erro 42P17)
   const { 
     data: userCount = 0,
     isLoading: loadingUsers,
@@ -146,6 +154,12 @@ export function usePlanLimits(): PlanLimitsHook {
         .eq('tenant_id', tenant.id);
       
       if (error) {
+        // 🔥 CRÍTICO: Se erro 42P17, retornar 0 silenciosamente e BLOQUEAR futuras requisições
+        if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
+          console.warn('[usePlanLimits] ⚠️ Erro 42P17 ao contar usuários, bloqueando futuras requisições');
+          // Retornar 0 e não tentar mais
+          return 0;
+        }
         console.error('[usePlanLimits] Erro ao contar usuários:', error);
         return 0;
       }
@@ -154,6 +168,9 @@ export function usePlanLimits(): PlanLimitsHook {
     },
     enabled: !!tenant?.id,
     staleTime: 30000,
+    retry: false, // 🔥 CRÍTICO: Desabilitar retries para evitar loops
+    refetchOnWindowFocus: false, // 🔥 CRÍTICO: Não refazer requisição ao focar janela
+    refetchOnReconnect: false, // 🔥 CRÍTICO: Não refazer requisição ao reconectar
   });
   
   // Determinar plano atual (do tenant mais recente ou FREE)

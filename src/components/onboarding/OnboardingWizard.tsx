@@ -144,7 +144,7 @@ export interface OnboardingData {
 
 export function OnboardingWizard() {
   const [searchParams] = useSearchParams();
-  const { tenant, switchTenant } = useTenant();
+  const { tenant, switchTenant, loading: tenantLoading } = useTenant();
   const navigate = useNavigate();
   
   // 🔥 CRÍTICO: Verificar se é para criar novo tenant
@@ -222,20 +222,38 @@ export function OnboardingWizard() {
       isNewTenant,
       tenantIdFromUrl,
       tenantFromContext: tenant?.id,
-      willRedirect: !tenantIdDetermined && !isNewTenant
+      tenantLoading,
+      willRedirect: !tenantIdDetermined && !isNewTenant && !tenantLoading
     });
     
+    // 🔥 CRÍTICO: Se o tenant está carregando, aguardar antes de tomar qualquer decisão
+    if (tenantLoading) {
+      console.log('[OnboardingWizard] ⏳ Tenant ainda carregando, aguardando...');
+      return; // Não fazer nada enquanto está carregando
+    }
+    
+    // 🔥 CORRIGIDO: Se temos tenant no contexto, não redirecionar (mesmo que tenantIdDetermined seja null)
+    if (tenant?.id) {
+      console.log('[OnboardingWizard] ✅ Tenant encontrado no contexto, não redirecionando:', tenant.id);
+      return; // Não redirecionar se já temos tenant no contexto
+    }
+    
     // Se temos tenant_id na URL, aguardar um pouco para o contexto carregar
-    if (tenantIdFromUrl && !tenantIdDetermined && !isNewTenant) {
+    if (tenantIdFromUrl && !tenant?.id && !isNewTenant) {
       console.log('[OnboardingWizard] ⏳ Tenant_id na URL detectado, aguardando contexto carregar...', tenantIdFromUrl);
       return; // Não redirecionar ainda, aguardar switchTenant carregar
     }
     
-    if (!tenantIdDetermined && !isNewTenant) {
+    // 🔥 CORRIGIDO: Não redirecionar se o tenant está carregando ou se já existe no contexto
+    // Verificar se o contexto já terminou de carregar antes de redirecionar
+    if (!tenantIdDetermined && !isNewTenant && !tenant?.id) {
+      // 🔥 CRÍTICO: Se estamos na rota /tenant-onboarding mas não temos tenant_id e não é novo tenant,
+      // e o contexto já terminou de carregar (tenantLoading = false), então realmente não há tenant
       console.error('[OnboardingWizard] ❌ Sem tenant_id e não é novo tenant, redirecionando...', {
         tenantIdFromUrl,
         tenantFromContext: tenant?.id,
         isNewTenant,
+        tenantLoading,
         allSearchParams: Object.fromEntries(searchParams.entries())
       });
       navigate('/my-companies');
@@ -243,7 +261,7 @@ export function OnboardingWizard() {
         description: 'Selecione uma empresa para continuar.',
       });
     }
-  }, [tenantIdDetermined, isNewTenant, navigate, tenantIdFromUrl, tenant?.id, searchParams]);
+  }, [tenantIdDetermined, isNewTenant, navigate, tenantIdFromUrl, tenant?.id, searchParams, tenantLoading]);
   
   // 🔥 CORRIGIDO: Se temos tenant_id na URL mas não no contexto, carregar o tenant primeiro
   useEffect(() => {

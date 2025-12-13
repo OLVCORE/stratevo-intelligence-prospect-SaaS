@@ -15,7 +15,8 @@ import {
   Search,
   Trash2,
   ExternalLink,
-  FileText
+  FileText,
+  Globe
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,12 +26,14 @@ interface CompanyRowActionsProps {
   company: any;
   onDelete: () => void;
   onDiscoverCNPJ?: () => void;
+  onEnrichWebsite?: () => void;
 }
 
 export function CompanyRowActions({
   company,
   onDelete,
-  onDiscoverCNPJ
+  onDiscoverCNPJ,
+  onEnrichWebsite
 }: CompanyRowActionsProps) {
   const navigate = useNavigate();
   const [showReport, setShowReport] = useState(false);
@@ -119,6 +122,17 @@ export function CompanyRowActions({
               <ExternalLink className="h-4 w-4 mr-2" />
               Abrir Website
             </a>
+          </DropdownMenuItem>
+        )}
+
+        {/* Enriquecer Website & LinkedIn */}
+        {onEnrichWebsite && (
+          <DropdownMenuItem 
+            onClick={onEnrichWebsite}
+            className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
+          >
+            <Globe className="h-4 w-4 mr-2" />
+            Enriquecer Website & LinkedIn
           </DropdownMenuItem>
         )}
 

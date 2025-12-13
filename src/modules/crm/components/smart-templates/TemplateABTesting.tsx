@@ -39,39 +39,63 @@ export function TemplateABTesting({ templateA, templateB, onTestComplete }: Temp
   const handleStartTest = async () => {
     setIsRunning(true);
     
-    // Simular teste A/B (em produção, executar envios reais)
-    setTimeout(() => {
-      const mockResults: ABTestResult[] = [
-        {
-          variant: 'A',
-          sent: 100,
-          opened: 45,
-          clicked: 12,
-          replied: 8,
-          conversion_rate: 8.0,
-        },
-        {
-          variant: 'B',
-          sent: 100,
-          opened: 52,
-          clicked: 18,
-          replied: 14,
-          conversion_rate: 14.0,
-        },
-      ];
-      
-      setResults(mockResults);
-      setIsRunning(false);
-      
-      if (onTestComplete) {
-        onTestComplete(mockResults);
+    try {
+      // 🔥 PROIBIDO: Dados mockados removidos
+      // Em produção, criar duas versões do template e enviar para grupos diferentes
+      // Por enquanto, buscar resultados de testes A/B anteriores do banco
+      const { data: abTests, error } = await (supabase as any)
+        .from('ab_tests')
+        .select('variant, sent_count, opened_count, clicked_count, replied_count')
+        .eq('template_a', templateA)
+        .eq('template_b', templateB)
+        .order('created_at', { ascending: false })
+        .limit(2);
+
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = tabela não existe
+
+      if (abTests && abTests.length >= 2) {
+        // Usar resultados reais de teste anterior
+        const realResults: ABTestResult[] = abTests.map((test: any) => {
+          const sent = test.sent_count || 0;
+          const replied = test.replied_count || 0;
+          const conversionRate = sent > 0 ? (replied / sent) * 100 : 0;
+
+          return {
+            variant: test.variant === 'A' ? 'A' : 'B',
+            sent,
+            opened: test.opened_count || 0,
+            clicked: test.clicked_count || 0,
+            replied,
+            conversion_rate: Math.round(conversionRate * 10) / 10,
+          };
+        });
+
+        setResults(realResults);
+        setIsRunning(false);
+        
+        if (onTestComplete) {
+          onTestComplete(realResults);
+        }
+      } else {
+        // Se não houver teste anterior, mostrar mensagem que precisa executar teste real
+        toast({
+          title: "Teste A/B não encontrado",
+          description: "Execute o teste enviando as duas versões para grupos diferentes",
+          variant: "default",
+        });
+        setResults([]);
+        setIsRunning(false);
       }
-      
+    } catch (error: any) {
+      console.error('Erro ao buscar resultados de teste A/B:', error);
       toast({
-        title: "Teste A/B Concluído",
-        description: "Resultados disponíveis",
+        title: "Erro",
+        description: "Não foi possível buscar resultados. Execute um teste real primeiro.",
+        variant: "destructive",
       });
-    }, 2000);
+      setResults([]);
+      setIsRunning(false);
+    }
   };
 
   const getWinner = () => {

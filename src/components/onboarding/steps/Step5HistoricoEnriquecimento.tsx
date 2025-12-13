@@ -292,7 +292,8 @@ function mapearCnaePorCodigo(cnaeCode: string): string {
 interface Props {
   onNext: (data: any) => void;
   onBack: () => void;
-  onSave?: (data?: any) => void | Promise<void>;
+  onSave?: (data?: any) => void | Promise<void>; // Auto-save silencioso
+  onSaveExplicit?: (data?: any) => void | Promise<void>; // Botão "Salvar" explícito (com toast)
   initialData: any;
   isSubmitting?: boolean;
   isSaving?: boolean;
@@ -335,13 +336,13 @@ interface EmpresaBenchmarking {
   alinhamentoICP?: 'Alto' | 'Médio' | 'Baixo';
 }
 
-export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialData, isSubmitting, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, onSaveExplicit, initialData, isSubmitting, isSaving = false, hasUnsavedChanges = false }: Props) {
   const [formData, setFormData] = useState({
     clientesAtuais: initialData?.clientesAtuais || [],
     empresasBenchmarking: initialData?.empresasBenchmarking || [], // 🔥 UNIFICADO: Empresas para ICP Benchmarking
   });
 
-  // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa)
+  // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa) - MERGE não-destrutivo
   useEffect(() => {
     console.log('[Step5] 🔄 Verificando initialData:', initialData);
     const clientesAtuais = initialData?.clientesAtuais || [];
@@ -354,15 +355,41 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
       benchmarkingDetalhes: empresasBenchmarking,
     });
     
-    // 🔥 SEMPRE atualizar quando initialData existir (mesmo que vazio)
+    // 🔥 MERGE não-destrutivo: preservar dados existentes, complementar com initialData
     if (initialData !== null && initialData !== undefined) {
-      console.log('[Step5] ✅ Atualizando formData com dados do initialData');
-      setFormData({
-        clientesAtuais: clientesAtuais,
-        empresasBenchmarking: empresasBenchmarking,
-      });
+      console.log('[Step5] ✅ Atualizando formData com dados do initialData (merge)');
+      setFormData(prev => ({
+        clientesAtuais: Array.isArray(clientesAtuais) && clientesAtuais.length > 0
+          ? clientesAtuais
+          : (Array.isArray(prev.clientesAtuais) && prev.clientesAtuais.length > 0 ? prev.clientesAtuais : []),
+        empresasBenchmarking: Array.isArray(empresasBenchmarking) && empresasBenchmarking.length > 0
+          ? empresasBenchmarking
+          : (Array.isArray(prev.empresasBenchmarking) && prev.empresasBenchmarking.length > 0 ? prev.empresasBenchmarking : []),
+      }));
     }
   }, [initialData]);
+
+  // 🔥 CRÍTICO: Auto-save quando formData mudar (para garantir persistência)
+  useEffect(() => {
+    // Só salvar se tiver dados relevantes
+    if (formData.clientesAtuais.length > 0 || formData.empresasBenchmarking.length > 0) {
+      const timeoutId = setTimeout(async () => {
+        if (onSave) {
+          try {
+            await onSave(formData);
+            console.log('[Step5] ✅ Auto-save executado:', { 
+              clientesAtuais: formData.clientesAtuais.length,
+              empresasBenchmarking: formData.empresasBenchmarking.length,
+            });
+          } catch (err) {
+            console.error('[Step5] ❌ Erro no auto-save:', err);
+          }
+        }
+      }, 1000); // Aguardar 1 segundo após última mudança
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [formData.clientesAtuais, formData.empresasBenchmarking, onSave]);
 
   const [novoCliente, setNovoCliente] = useState<ClienteAtual>({ 
     cnpj: '',
@@ -1638,7 +1665,7 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, initialDa
       <StepNavigation
         onBack={onBack}
         onNext={() => onNext(formData)}
-        onSave={onSave}
+        onSave={onSaveExplicit || onSave}
         showSave={!!onSave}
         saveLoading={isSaving}
         hasUnsavedChanges={hasUnsavedChanges}

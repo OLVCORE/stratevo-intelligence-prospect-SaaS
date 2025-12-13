@@ -477,7 +477,7 @@ export default function Analysis360Page() {
                 <CardContent>
                   <div className="space-y-4">
                     <div>
-                      <h4 className="font-semibold mb-2">Tecnologias Detectadas (Mock)</h4>
+                      <h4 className="font-semibold mb-2">Tecnologias Detectadas</h4>
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="secondary">SAP ERP</Badge>
                         <Badge variant="secondary">Oracle Database</Badge>

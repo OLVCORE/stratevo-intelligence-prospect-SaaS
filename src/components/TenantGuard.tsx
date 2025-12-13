@@ -49,9 +49,28 @@ export function TenantGuard({ children }: TenantGuardProps) {
     );
   }
 
-  // Se não tiver tenant, redirecionar para onboarding
-  if (!tenant) {
-    return <Navigate to="/tenant-onboarding" replace />;
+  // 🔥 CORRIGIDO: Não redirecionar se ainda está carregando ou se há erro temporário
+  // Se não tiver tenant e não está mais carregando, redirecionar para onboarding
+  if (!tenant && !tenantLoading) {
+    // 🔥 CRÍTICO: Verificar se há tenant no localStorage antes de redirecionar
+    const localTenantId = typeof localStorage !== 'undefined' 
+      ? localStorage.getItem('selectedTenantId') 
+      : null;
+    
+    if (!localTenantId) {
+      // Só redirecionar se realmente não há tenant
+      console.log('[TenantGuard] ❌ Sem tenant e sem localStorage, redirecionando para onboarding');
+      return <Navigate to="/tenant-onboarding" replace />;
+    }
+    // 🔥 CORRIGIDO: Se há tenant no localStorage mas ainda não foi carregado no contexto,
+    // mostrar loader ao invés de redirecionar (aguardar contexto carregar)
+    console.log('[TenantGuard] ⏳ Tenant encontrado no localStorage, aguardando contexto carregar...', localTenantId);
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-3 text-muted-foreground">Carregando workspace...</span>
+      </div>
+    );
   }
 
   // Se tiver tenant, permitir acesso

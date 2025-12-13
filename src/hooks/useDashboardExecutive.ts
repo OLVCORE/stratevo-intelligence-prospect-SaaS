@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTenant } from "@/contexts/TenantContext";
 
 export interface DashboardExecutiveData {
   // Core metrics
@@ -55,13 +56,15 @@ export interface DashboardExecutiveData {
 
 export function useDashboardExecutive() {
   const { session } = useAuth();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   
   return useQuery({
-    queryKey: ['dashboard-executive', session?.user?.id],
+    queryKey: ['dashboard-executive', session?.user?.id, tenantId],
     queryFn: async (): Promise<DashboardExecutiveData> => {
-      // ✅ Verificar sessão antes de buscar dados
-      if (!session?.user) {
-        // Retornar dados vazios se não houver sessão (evita erros)
+      // ✅ Verificar sessão e tenant antes de buscar dados
+      if (!session?.user || !tenantId) {
+        // Retornar dados vazios se não houver sessão ou tenant (evita erros)
         return {
           totalCompanies: 0,
           totalDecisors: 0,
@@ -86,6 +89,7 @@ export function useDashboardExecutive() {
           topPerformingChannels: []
         };
       }
+      // 🔥 CRÍTICO: Filtrar TODAS as queries por tenant_id
       // Fetch only NEW architecture data
       const [
         companiesRes,
@@ -94,11 +98,11 @@ export function useDashboardExecutive() {
         conversationsRes,
         messagesRes
       ] = await Promise.all([
-        supabase.from('companies').select('*'),
-        supabase.from('decision_makers').select('*'),
-        supabase.from('account_strategies').select('*, companies(company_name, industry, employees, location)'),
-        supabase.from('conversations').select('*, companies(company_name, industry)'),
-        supabase.from('messages').select('*')
+        supabase.from('companies').select('*').eq('tenant_id', tenantId),
+        supabase.from('decision_makers').select('*').eq('tenant_id', tenantId),
+        supabase.from('account_strategies').select('*, companies(company_name, industry, employees, location)').eq('tenant_id', tenantId),
+        supabase.from('conversations').select('*, companies(company_name, industry)').eq('tenant_id', tenantId),
+        supabase.from('messages').select('*').eq('tenant_id', tenantId)
       ]);
 
       const companies = companiesRes.data || [];
@@ -380,7 +384,7 @@ export function useDashboardExecutive() {
         topPerformingChannels
       };
     },
-    enabled: !!session?.user, // ✅ Só busca quando há sessão ativa
+    enabled: !!session?.user && !!tenantId, // ✅ Só busca quando há sessão ativa E tenant
     refetchInterval: false, // Desabilitado - use manual refetch quando necessário
     staleTime: 300000 // Dados válidos por 5 minutos
   });

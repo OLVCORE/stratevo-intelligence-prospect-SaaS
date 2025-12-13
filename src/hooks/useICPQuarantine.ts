@@ -116,7 +116,13 @@ export function useQuarantineCompanies(filters?: {
       if (!user) {
         let query = supabase
           .from('icp_analysis_results')
-          .select('*')
+          .select(`
+            *,
+            website_encontrado,
+            website_fit_score,
+            website_products_match,
+            linkedin_url
+          `)
           .order('icp_score', { ascending: false });
 
         if (filters?.status) {
@@ -145,7 +151,13 @@ export function useQuarantineCompanies(filters?: {
 
       let query = supabase
         .from('icp_analysis_results')
-        .select('*')
+        .select(`
+          *,
+          website_encontrado,
+          website_fit_score,
+          website_products_match,
+          linkedin_url
+        `)
         .order('icp_score', { ascending: false });
 
       if (filters?.status) {
@@ -268,20 +280,42 @@ export function useApproveQuarantineBatch() {
       // Buscar current user para atribuir deals
       const { data: { user } } = await supabase.auth.getUser();
       
-      const dealsToCreate = validCompanies.map(q => ({
-        deal_title: `Prospecção - ${q.razao_social}`,
-        description: `Empresa aprovada da quarentena com ICP Score: ${q.icp_score || 0}`,
-        company_id: q.company_id,
-        deal_value: 0, // Será preenchido depois pelo vendedor
-        probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50), // ICP Score → probabilidade inicial
-        priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
-        deal_stage: 'discovery', // Primeiro estágio do pipeline
-        assigned_sdr: user?.email || 'auto',
-        source: 'quarantine_approval',
-        lead_score: q.icp_score || 0,
-        notes: `Auto-criado da quarentena. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}.`,
-        raw_data: q.raw_analysis || {},
-      }));
+      // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao criar deals
+      const dealsToCreate = validCompanies.map(q => {
+        const rawData: any = {
+          ...(q.raw_analysis || {}),
+          // Preservar dados de enriquecimento de website
+          website_enrichment: q.website_encontrado ? {
+            website_encontrado: q.website_encontrado,
+            website_fit_score: q.website_fit_score,
+            website_products_match: q.website_products_match,
+            linkedin_url: q.linkedin_url,
+          } : undefined,
+          // Preservar fit_score e grade se existirem
+          fit_score: (q.raw_analysis as any)?.fit_score,
+          grade: (q.raw_analysis as any)?.grade,
+          icp_id: (q.raw_analysis as any)?.icp_id,
+          // Preservar dados de enriquecimento da Receita Federal
+          receita_federal: (q.raw_analysis as any)?.receita_federal,
+          // Preservar dados de enriquecimento do Apollo
+          apollo: (q.raw_analysis as any)?.apollo,
+        };
+
+        return {
+          deal_title: `Prospecção - ${q.razao_social}`,
+          description: `Empresa aprovada da quarentena com ICP Score: ${q.icp_score || 0}`,
+          company_id: q.company_id,
+          deal_value: 0, // Será preenchido depois pelo vendedor
+          probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50), // ICP Score → probabilidade inicial
+          priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
+          deal_stage: 'discovery', // Primeiro estágio do pipeline
+          assigned_sdr: user?.email || 'auto',
+          source: 'quarantine_approval',
+          lead_score: q.icp_score || 0,
+          notes: `Auto-criado da quarentena. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
+          raw_data: rawData,
+        };
+      });
 
       const { error: insertError } = await supabase
         .from('sdr_deals')

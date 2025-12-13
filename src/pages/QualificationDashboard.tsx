@@ -3,7 +3,7 @@
  * Mostra resultados do motor de qualificação: Go/No-Go
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -82,13 +82,8 @@ export default function QualificationDashboard() {
   const [searchTerm] = useState(''); // Usado para filtrar na visão geral
   const [filterTemp] = useState<string>('all');
 
-  useEffect(() => {
-    if (tenantId) {
-      loadData();
-    }
-  }, [tenantId]);
-
-  const loadData = async () => {
+  // ✅ useCallback para evitar recriação e loops
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       // Buscar diretamente de companies (tabela principal que já existe)
@@ -163,7 +158,14 @@ export default function QualificationDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId]); // ✅ Dependências do useCallback
+
+  // ✅ useEffect para carregar dados quando tenantId mudar
+  useEffect(() => {
+    if (tenantId) {
+      loadData();
+    }
+  }, [tenantId, loadData]);
 
   // Filtrar leads
   const filteredLeads = leads.filter(lead => {

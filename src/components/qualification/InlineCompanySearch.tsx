@@ -64,11 +64,12 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
           return;
         }
 
-        // Verificar se já existe em companies
+        // 🔥 CRÍTICO: Verificar se já existe em companies PARA ESTE TENANT
         const { data: existing } = await supabase
           .from('companies')
           .select('id, company_name')
           .eq('cnpj', cleanCnpj)
+          .eq('tenant_id', tenantId)
           .maybeSingle();
 
         if (existing) {

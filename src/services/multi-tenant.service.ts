@@ -269,15 +269,41 @@ export class MultiTenantService {
         return data as Tenant | null;
       }
 
-      // Se erro na RPC mas não é "não encontrada", retornar null
+      // Se erro na RPC mas não é "não encontrada", tentar buscar via lista de tenants
       if (rpcError) {
-        console.warn('[MultiTenant] Erro na função RPC:', rpcError);
+        console.warn('[MultiTenant] Erro na função RPC get_tenant_safe, tentando buscar via lista de tenants...');
+        try {
+          // 🔥 FALLBACK: Buscar lista de tenants do usuário e encontrar o tenant desejado
+          const { data: tenantsList, error: listError } = await (supabase as any).rpc('get_user_tenants_complete');
+          if (!listError && tenantsList && Array.isArray(tenantsList) && tenantsList.length > 0) {
+            const foundTenant = tenantsList.find((t: any) => t.id === tenantId);
+            if (foundTenant) {
+              console.log('[MultiTenant] ✅ Tenant encontrado na lista de tenants');
+              return foundTenant as Tenant;
+            }
+          }
+        } catch (listError) {
+          console.warn('[MultiTenant] Erro ao buscar lista de tenants:', listError);
+        }
         return null;
       }
 
       return null;
     } catch (error: any) {
       console.error('[MultiTenant] Erro ao buscar tenant:', error);
+      // 🔥 ÚLTIMO FALLBACK: Tentar buscar via lista de tenants mesmo em caso de erro
+      try {
+        const { data: tenantsList, error: listError } = await (supabase as any).rpc('get_user_tenants_complete');
+        if (!listError && tenantsList && Array.isArray(tenantsList) && tenantsList.length > 0) {
+          const foundTenant = tenantsList.find((t: any) => t.id === tenantId);
+          if (foundTenant) {
+            console.log('[MultiTenant] ✅ Tenant encontrado na lista de tenants (fallback após erro)');
+            return foundTenant as Tenant;
+          }
+        }
+      } catch (listError) {
+        console.warn('[MultiTenant] Erro no fallback de lista de tenants:', listError);
+      }
       return null;
     }
   }

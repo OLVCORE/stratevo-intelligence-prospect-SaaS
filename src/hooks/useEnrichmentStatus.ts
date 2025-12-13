@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTenant } from "@/contexts/TenantContext";
 
 export interface EnrichmentStatus {
   companyId: string;
@@ -83,9 +84,17 @@ export function useEnrichmentStatus(companyId?: string) {
 }
 
 export function useAllEnrichmentStatus() {
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
+
   return useQuery({
-    queryKey: ['all-enrichment-status'],
+    queryKey: ['all-enrichment-status', tenantId],
     queryFn: async () => {
+      if (!tenantId) {
+        console.warn('[useAllEnrichmentStatus] ⚠️ Tenant não disponível');
+        return [];
+      }
+
       const { data: companies, error } = await supabase
         .from('companies')
         .select(`
@@ -94,16 +103,17 @@ export function useAllEnrichmentStatus() {
           cnpj,
           raw_data,
           digital_maturity_score
-        `);
+        `)
+        .eq('tenant_id', tenantId);
 
       if (error) throw error;
 
-      // Buscar conjuntos de relacionamentos para todas as empresas
+      // Buscar conjuntos de relacionamentos para todas as empresas (filtrando por tenant_id)
       const [decisorsListRes, digitalMaturityListRes, insightsListRes, legalDataListRes] = await Promise.all([
-        supabase.from('decision_makers').select('company_id'),
-        supabase.from('digital_presence').select('company_id'),
-        supabase.from('insights').select('company_id'),
-        supabase.from('legal_data').select('company_id'),
+        supabase.from('decision_makers').select('company_id').eq('tenant_id', tenantId),
+        supabase.from('digital_presence').select('company_id').eq('tenant_id', tenantId),
+        supabase.from('insights').select('company_id').eq('tenant_id', tenantId),
+        supabase.from('legal_data').select('company_id').eq('tenant_id', tenantId),
       ]);
 
       const decisorsSet = new Set((decisorsListRes.data || []).map((r: any) => r.company_id));

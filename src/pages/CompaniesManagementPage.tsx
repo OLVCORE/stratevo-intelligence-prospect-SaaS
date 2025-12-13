@@ -38,7 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp, TrendingUp, HelpCircle } from 'lucide-react';
+import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp, TrendingUp, HelpCircle, CheckCircle2, MapPin, Briefcase, Activity, Maximize, Minimize } from 'lucide-react';
 import { TableSkeleton } from '@/components/ui/skeletons';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -46,6 +46,7 @@ import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCompanies, useDeleteCompany } from '@/hooks/useCompanies';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTenant } from '@/contexts/TenantContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -61,6 +62,9 @@ import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/c
 import { PartnerSearchModal } from '@/components/companies/PartnerSearchModal';
 import { ExpandedCompanyCard } from '@/components/companies/ExpandedCompanyCard';
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
+import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import LocationMap from '@/components/map/LocationMap';
 
 
 export default function CompaniesManagementPage() {
@@ -69,6 +73,7 @@ export default function CompaniesManagementPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { tenant } = useTenant();
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50); // 🔢 Tamanho da página configurável
   const [searchTerm, setSearchTerm] = useState('');
@@ -260,9 +265,16 @@ export default function CompaniesManagementPage() {
   const [isBatchEnriching360, setIsBatchEnriching360] = useState(false);
   const [enrichingReceitaId, setEnrichingReceitaId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isEnrichingWebsite, setIsEnrichingWebsite] = useState(false);
+  const [websiteEnrichmentProgress, setWebsiteEnrichmentProgress] = useState<{ current: number; total: number; currentItem?: string }>({ current: 0, total: 0 });
   
   const [isApolloImportOpen, setIsApolloImportOpen] = useState(false);
   const hasSelection = selectedCompanies.length > 0;
+  
+  // ✅ Modal de Preview com Website Fit Analysis
+  const [previewCompany, setPreviewCompany] = useState<any>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isModalFullscreen, setIsModalFullscreen] = useState(false);
 
   // Inline website editing state
   const [editingWebsiteId, setEditingWebsiteId] = useState<string | null>(null);
@@ -631,6 +643,355 @@ export default function CompaniesManagementPage() {
       });
     } finally {
       setEnrichingReceitaId(null);
+    }
+  };
+
+  // ✅ NOVO: Enriquecimento de Website & LinkedIn (individual)
+  const handleEnrichWebsite = async (companyId: string) => {
+    try {
+      setIsEnrichingWebsite(true);
+      const company = companies.find((c: any) => c.id === companyId);
+      if (!company) {
+        toast.error('Empresa não encontrada');
+        return;
+      }
+
+      const supabaseUrl = (supabase as any).supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sessão não encontrada');
+
+      const tenantId = tenant?.id;
+      if (!tenantId) {
+        toast.error('Tenant não encontrado');
+        return;
+      }
+
+      toast.info('🌐 Buscando website oficial...');
+
+      // 1. Buscar website
+      const findWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/find-prospect-website`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          razao_social: company.company_name || (company as any).razao_social,
+          cnpj: company.cnpj,
+          tenant_id: tenantId,
+        }),
+      });
+
+      if (!findWebsiteResponse.ok) {
+        throw new Error('Erro ao buscar website');
+      }
+
+      const websiteData = await findWebsiteResponse.json();
+      if (!websiteData.success || !websiteData.website) {
+        toast.warning('Website não encontrado');
+        return;
+      }
+
+      toast.info('🔍 Escaneando website para produtos...');
+
+      // 2. Buscar ou criar qualified_prospect_id correspondente
+      let qualifiedProspectId: string | null = null;
+      
+      // Tentar encontrar qualified_prospect existente pelo CNPJ
+      if (company.cnpj) {
+        const normalizedCnpj = company.cnpj.replace(/\D/g, '');
+        // ✅ CORRIGIDO: Usar cast para any para evitar erro de tipo
+        const { data: existingProspect } = await ((supabase as any)
+          .from('qualified_prospects'))
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('cnpj', normalizedCnpj)
+          .limit(1)
+          .maybeSingle();
+        
+        if (existingProspect) {
+          qualifiedProspectId = existingProspect.id;
+        }
+      }
+
+      // Se não encontrou, criar um registro temporário em qualified_prospects
+      if (!qualifiedProspectId) {
+        const normalizedCnpj = company.cnpj?.replace(/\D/g, '');
+        if (!normalizedCnpj || normalizedCnpj.length !== 14) {
+          console.warn('[Enriquecimento Website] CNPJ inválido, pulando criação de qualified_prospect');
+        } else {
+          // ✅ Campos obrigatórios: tenant_id, cnpj, fit_score, grade
+          // ✅ CORRIGIDO: Usar cast para any para evitar erro de tipo
+          const { data: newProspect, error: createError } = await ((supabase as any)
+            .from('qualified_prospects'))
+            .insert({
+              tenant_id: tenantId,
+              cnpj: normalizedCnpj,
+              razao_social: company.company_name || (company as any).razao_social || 'Empresa Sem Nome',
+              nome_fantasia: (company as any).raw_data?.nome_fantasia || null,
+              cidade: (company.location as any)?.city || null,
+              estado: (company.location as any)?.state || null,
+              setor: company.industry || null,
+              website: company.website || websiteData.website || null,
+              pipeline_status: 'promoted', // Já está no banco de empresas
+              source_name: 'Enriquecimento Website',
+              // ✅ Campos obrigatórios com valores padrão
+              fit_score: (company.raw_data as any)?.fit_score || 0,
+              grade: (company.raw_data as any)?.grade || 'D',
+              // ✅ Usar enrichment_data em vez de raw_data (qualified_prospects não tem raw_data)
+              enrichment_data: company.raw_data || {},
+            })
+            .select('id')
+            .single();
+
+          if (createError) {
+            console.error('[Enriquecimento Website] Erro ao criar qualified_prospect:', createError);
+            // Continuar mesmo sem qualified_prospect_id - vamos atualizar apenas companies
+          } else {
+            qualifiedProspectId = newProspect.id;
+          }
+        }
+      }
+
+      // 3. Escanear website (se tiver qualified_prospect_id)
+      let scanData: any = null;
+      if (qualifiedProspectId) {
+        const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tenant_id: tenantId,
+            qualified_prospect_id: qualifiedProspectId,
+            website_url: websiteData.website,
+            razao_social: company.company_name || (company as any).razao_social,
+          }),
+        });
+
+        if (scanWebsiteResponse.ok) {
+          scanData = await scanWebsiteResponse.json();
+        } else {
+          console.warn('[Enriquecimento Website] Erro ao escanear website:', await scanWebsiteResponse.text());
+        }
+      }
+
+      // 4. Atualizar companies com os dados do website
+      // ✅ Preservar dados existentes em raw_data
+      const existingRawData = (company.raw_data && typeof company.raw_data === 'object') ? (company.raw_data as any) : {};
+      const enrichedRawData = {
+        ...existingRawData,
+        website_enrichment: {
+          website_encontrado: websiteData.website,
+          website_fit_score: scanData?.website_fit_score || 0,
+          website_products_match: scanData?.compatible_products || [],
+          linkedin_url: scanData?.linkedin_url || null,
+          enriched_at: new Date().toISOString(),
+        },
+      };
+
+      // ✅ Atualizar sempre com campos básicos (que sempre existem)
+      const baseUpdateData: any = {
+        website: websiteData.website,
+        raw_data: enrichedRawData,
+        updated_at: new Date().toISOString(),
+      };
+
+      // ✅ Tentar adicionar campos novos (se migration foi aplicada)
+      // Se falhar, continuar apenas com campos básicos
+      const { error: updateError } = await supabase
+        .from('companies')
+        .update(baseUpdateData)
+        .eq('id', companyId);
+
+      if (updateError) {
+        console.error('[Enriquecimento Website] Erro ao atualizar companies:', updateError);
+        // Tentar apenas com website (sem raw_data)
+        const { error: basicError } = await supabase
+          .from('companies')
+          .update({
+            website: websiteData.website,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', companyId);
+        
+        if (basicError) {
+          throw basicError;
+        }
+      } else {
+        // Se atualização básica funcionou, tentar atualizar campos novos (opcional)
+        if (scanData && scanData.success) {
+          // Tentar atualizar campos novos (pode falhar se migration não foi aplicada)
+          await supabase
+            .from('companies')
+            .update({
+              website_encontrado: websiteData.website,
+              website_fit_score: scanData.website_fit_score || 0,
+              website_products_match: scanData.compatible_products_count > 0 ? scanData.compatible_products : [],
+              linkedin_url: scanData.linkedin_url || null,
+            })
+            .eq('id', companyId);
+          // Ignorar erro se colunas não existirem - dados já estão em raw_data
+        }
+      }
+
+      // 5. Se tiver qualified_prospect_id, atualizar também
+      if (qualifiedProspectId && scanData && scanData.success) {
+        // ✅ CORRIGIDO: Usar cast para any para evitar erro de tipo
+        await ((supabase as any)
+          .from('qualified_prospects'))
+          .update({
+            website_encontrado: websiteData.website,
+            website_fit_score: scanData.website_fit_score || 0,
+            website_products_match: scanData.compatible_products_count > 0 ? scanData.compatible_products : [],
+            linkedin_url: scanData.linkedin_url || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', qualifiedProspectId);
+      }
+
+      toast.success('✅ Website enriquecido com sucesso!', {
+        description: scanData?.success 
+          ? `Fit Score: +${scanData.website_fit_score || 0} pontos. ${scanData.products_found || 0} produtos encontrados.`
+          : `Website encontrado: ${websiteData.website}`,
+      });
+
+      await refetch();
+    } catch (error: any) {
+      console.error('[Enriquecimento Website] Erro:', error);
+      toast.error('Erro ao enriquecer website', {
+        description: error.message || 'Não foi possível enriquecer o website',
+      });
+    } finally {
+      setIsEnrichingWebsite(false);
+    }
+  };
+
+  // ✅ NOVO: Enriquecimento de Website & LinkedIn (em massa)
+  const handleBulkEnrichWebsite = async () => {
+    const idsToEnrich = selectedCompanies.length > 0 
+      ? selectedCompanies 
+      : companies.map(c => c.id);
+
+    if (idsToEnrich.length === 0) {
+      toast({
+        title: 'Atenção',
+        description: 'Nenhuma empresa selecionada para enriquecer',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsEnrichingWebsite(true);
+    setWebsiteEnrichmentProgress({ current: 0, total: idsToEnrich.length });
+    try {
+      toast({
+        title: '🌐 Enriquecendo websites...',
+        description: `Processando ${idsToEnrich.length} empresa(s)`,
+      });
+
+      const supabaseUrl = (supabase as any).supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sessão não encontrada');
+
+      const tenantId = tenant?.id;
+      if (!tenantId) {
+        toast.error('Tenant não encontrado');
+        return;
+      }
+
+      let enrichedCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < idsToEnrich.length; i++) {
+        const companyId = idsToEnrich[i];
+        try {
+          const company = companies.find((c: any) => c.id === companyId);
+          if (!company) {
+            setWebsiteEnrichmentProgress({ current: i + 1, total: idsToEnrich.length, currentItem: 'Pulando...' });
+            continue;
+          }
+
+          setWebsiteEnrichmentProgress({ 
+            current: i + 1, 
+            total: idsToEnrich.length, 
+            currentItem: company.company_name || company.cnpj 
+          });
+
+          // 1. Buscar website
+          const findWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/find-prospect-website`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              razao_social: company.company_name || (company as any).razao_social,
+              cnpj: company.cnpj,
+              tenant_id: tenantId,
+            }),
+          });
+
+          if (!findWebsiteResponse.ok) continue;
+          const websiteData = await findWebsiteResponse.json();
+          if (!websiteData.success || !websiteData.website) continue;
+
+          // 2. Escanear website
+          const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              tenant_id: tenantId,
+              qualified_prospect_id: companyId,
+              website_url: websiteData.website,
+              razao_social: company.company_name || (company as any).razao_social,
+            }),
+          });
+
+          if (!scanWebsiteResponse.ok) continue;
+          const scanData = await scanWebsiteResponse.json();
+          if (!scanData.success) continue;
+
+          // 3. Atualizar
+          const { error } = await supabase
+            .from('companies')
+            .update({
+              website_encontrado: websiteData.website,
+              website_fit_score: scanData.website_fit_score || 0,
+              website_products_match: scanData.compatible_products_count > 0 ? scanData.compatible_products : [],
+              linkedin_url: scanData.linkedin_url || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', companyId);
+
+          if (error) throw error;
+          enrichedCount++;
+        } catch (error: any) {
+          const company = companies.find((c: any) => c.id === companyId);
+          errors.push(`${company?.company_name || companyId}: ${error.message}`);
+        }
+      }
+
+      toast({
+        title: enrichedCount > 0 ? '✅ Enriquecimento concluído!' : '⚠️ Nenhuma empresa enriquecida',
+        description: `${enrichedCount} de ${idsToEnrich.length} empresas enriquecidas${errors.length > 0 ? `. ${errors.length} erros.` : ''}`,
+        variant: enrichedCount === 0 ? 'destructive' : 'default',
+      });
+      await refetch();
+    } catch (error: any) {
+      console.error('[Enriquecimento Website Massa] Erro:', error);
+      toast({
+        title: 'Erro ao enriquecer websites',
+        description: error.message || 'Não foi possível enriquecer os websites',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsEnrichingWebsite(false);
+      setWebsiteEnrichmentProgress({ current: 0, total: 0 });
     }
   };
 
@@ -1427,34 +1788,56 @@ export default function CompaniesManagementPage() {
                         // 🔧 NORMALIZAR DADOS USANDO DADOS COMPLETOS DA EMPRESA
                         const receitaData = (fullCompany.raw_data as any)?.receita || {};
                         
+                        // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao integrar ao ICP
+                        const insertData: any = {
+                          // ✅ OBRIGATÓRIOS (NOT NULL)
+                          company_id: fullCompany.id,
+                          cnpj: fullCompany.cnpj,
+                          razao_social: fullCompany.company_name || receitaData.razao_social || receitaData.nome || 'N/A',
+                          
+                          // ✅ OPCIONAIS (mas importantes)
+                          nome_fantasia: receitaData.nome_fantasia || receitaData.fantasia || null,
+                          uf: (fullCompany.location as any)?.state || receitaData.uf || null,
+                          municipio: (fullCompany.location as any)?.city || receitaData.municipio || null,
+                          porte: receitaData.porte || fullCompany.porte_estimado || null,
+                          cnae_principal: receitaData.cnae_fiscal || receitaData.atividade_principal?.[0]?.code || null,
+                          website: fullCompany.website || fullCompany.website_encontrado || fullCompany.domain || null,
+                          email: fullCompany.email || receitaData.email || null,
+                          telefone: receitaData.ddd_telefone_1 || receitaData.telefone || null,
+                          
+                          // ✅ DADOS DE ENRIQUECIMENTO DE WEBSITE (preservar)
+                          website_encontrado: fullCompany.website_encontrado || null,
+                          website_fit_score: fullCompany.website_fit_score || null,
+                          website_products_match: fullCompany.website_products_match || null,
+                          linkedin_url: fullCompany.linkedin_url || null,
+                          
+                          // ✅ RASTREABILIDADE
+                          status: 'pendente',
+                          source_type: fullCompany.source_type || 'manual',
+                          source_name: fullCompany.source_name || (fullCompany.raw_data as any)?.source_name || 'Estoque',
+                          import_batch_id: fullCompany.import_batch_id,
+                          
+                          // ✅ RAW DATA (preservar TUDO, incluindo dados de enriquecimento)
+                          raw_data: {
+                            ...(fullCompany.raw_data || {}),
+                            // Garantir que dados de enriquecimento estejam em raw_data também
+                            website_enrichment: fullCompany.website_encontrado ? {
+                              website_encontrado: fullCompany.website_encontrado,
+                              website_fit_score: fullCompany.website_fit_score,
+                              website_products_match: fullCompany.website_products_match,
+                              linkedin_url: fullCompany.linkedin_url,
+                            } : undefined,
+                            // Preservar fit_score e grade se existirem
+                            fit_score: (fullCompany.raw_data as any)?.fit_score,
+                            grade: (fullCompany.raw_data as any)?.grade,
+                            icp_id: (fullCompany.raw_data as any)?.icp_id,
+                          }
+                        };
+
                         // Integra ao ICP com TODOS os campos necessários
                         const { error: insertError } = await supabase
                           .from('icp_analysis_results')
-                          .insert({
-                            // ✅ OBRIGATÓRIOS (NOT NULL)
-                            company_id: fullCompany.id,
-                            cnpj: fullCompany.cnpj,
-                            razao_social: fullCompany.company_name || receitaData.razao_social || receitaData.nome || 'N/A',
-                            
-                            // ✅ OPCIONAIS (mas importantes)
-                            nome_fantasia: receitaData.nome_fantasia || receitaData.fantasia || null,
-                            uf: (fullCompany.location as any)?.state || receitaData.uf || null,
-                            municipio: (fullCompany.location as any)?.city || receitaData.municipio || null,
-                            porte: receitaData.porte || fullCompany.porte_estimado || null,
-                            cnae_principal: receitaData.cnae_fiscal || receitaData.atividade_principal?.[0]?.code || null,
-                            website: fullCompany.website || fullCompany.domain || null,
-                            email: fullCompany.email || receitaData.email || null,
-                            telefone: receitaData.ddd_telefone_1 || receitaData.telefone || null,
-                            
-                            // ✅ RASTREABILIDADE
-                            status: 'pendente',
-                            source_type: fullCompany.source_type || 'manual',
-                            source_name: fullCompany.source_name || 'Estoque',
-                            import_batch_id: fullCompany.import_batch_id,
-                            
-                            // ✅ RAW DATA (mantém TUDO)
-                            raw_data: fullCompany.raw_data || {}
-                          });
+                          .insert(insertData);
 
                         if (insertError) {
                           console.error(`❌ Erro ao inserir ${company.name} no ICP:`, insertError);
@@ -1957,6 +2340,9 @@ export default function CompaniesManagementPage() {
                         onFilterChange={setFilterGrade}
                       />
                      </TableHead>
+                    <TableHead>Website</TableHead>
+                    <TableHead>Website Fit</TableHead>
+                    <TableHead>LinkedIn</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2132,18 +2518,6 @@ export default function CompaniesManagementPage() {
                           })()}
                         </div>
                       </TableCell>
-                       <TableCell>
-                          {(company as any).icp_score ? (
-                            <Badge 
-                              variant={(company as any).icp_score >= 70 ? 'success' : (company as any).icp_score >= 50 ? 'warning' : 'destructive'}
-                              className="gap-1"
-                            >
-                              {(company as any).icp_score}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">N/A</span>
-                          )}
-                        </TableCell>
                        {/* ✅ COLUNA ICP */}
                        <TableCell>
                          {(() => {
@@ -2241,6 +2615,73 @@ export default function CompaniesManagementPage() {
                            );
                          })()}
                        </TableCell>
+                       {/* ✅ NOVA COLUNA: Website */}
+                       <TableCell>
+                         {company.website_encontrado || company.website ? (
+                           <a
+                             href={company.website_encontrado || company.website}
+                             target="_blank"
+                             rel="noopener noreferrer"
+                             className="text-primary hover:underline flex items-center gap-1 text-xs"
+                           >
+                             <Globe className="h-3.5 w-3.5" />
+                             <span className="truncate max-w-[120px]">{company.website_encontrado || company.website}</span>
+                           </a>
+                         ) : (
+                           <span className="text-muted-foreground text-xs">-</span>
+                         )}
+                       </TableCell>
+                       {/* ✅ NOVA COLUNA: Website Fit Score */}
+                       <TableCell>
+                         {company.website_fit_score != null && company.website_fit_score > 0 ? (
+                           <TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30 text-xs">
+                                   +{company.website_fit_score}pts
+                                 </Badge>
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <div className="space-y-1">
+                                   <p className="font-semibold">Website Fit Score: +{company.website_fit_score} pontos</p>
+                                   {company.website_products_match && Array.isArray(company.website_products_match) && company.website_products_match.length > 0 && (
+                                     <div className="text-xs mt-2">
+                                       <p className="font-medium">Produtos compatíveis:</p>
+                                       <ul className="list-disc list-inside mt-1 space-y-0.5">
+                                         {company.website_products_match.slice(0, 3).map((match: any, idx: number) => (
+                                           <li key={idx}>
+                                             {match.tenant_product} ↔ {match.prospect_product}
+                                           </li>
+                                         ))}
+                                         {company.website_products_match.length > 3 && (
+                                           <li className="text-muted-foreground">+{company.website_products_match.length - 3} mais...</li>
+                                         )}
+                                       </ul>
+                                     </div>
+                                   )}
+                                 </div>
+                               </TooltipContent>
+                             </Tooltip>
+                           </TooltipProvider>
+                         ) : (
+                           <span className="text-muted-foreground text-xs">-</span>
+                         )}
+                       </TableCell>
+                       {/* ✅ NOVA COLUNA: LinkedIn */}
+                       <TableCell>
+                         {company.linkedin_url ? (
+                           <a
+                             href={company.linkedin_url}
+                             target="_blank"
+                             rel="noopener noreferrer"
+                             className="text-primary hover:underline flex items-center gap-1 text-xs"
+                           >
+                             <span className="truncate max-w-[100px]">LinkedIn</span>
+                           </a>
+                         ) : (
+                           <span className="text-muted-foreground text-xs">-</span>
+                         )}
+                       </TableCell>
                        <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <STCAgent 
@@ -2248,7 +2689,20 @@ export default function CompaniesManagementPage() {
                             companyName={company.name || 'Empresa'}
                             cnpj={company.cnpj}
                           />
-                          <CompanyRowActions
+                          {/* ✅ Botão Eye para Modal de Preview com Website Fit Analysis */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => {
+                              setPreviewCompany(company);
+                              setIsPreviewOpen(true);
+                            }}
+                            title="Ver Análise Estratégica de Fit"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <CompanyRowActions 
                             company={company}
                             onDelete={() => {
                               setCompanyToDelete(company);
@@ -2258,6 +2712,7 @@ export default function CompaniesManagementPage() {
                               setCnpjCompany(company); 
                               setCnpjDialogOpen(true); 
                             } : undefined}
+                            onEnrichWebsite={() => handleEnrichWebsite(company.id)}
                           />
                         </div>
                       </TableCell>
@@ -2385,6 +2840,192 @@ export default function CompaniesManagementPage() {
           isCancelling={cancelEnrichment}
         />
         
+        {/* ✅ Modal de Preview COMPLETO - Idêntico ao Estoque Qualificado */}
+        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <DialogContent className={`${isModalFullscreen ? 'max-w-[95vw] max-h-[95vh]' : 'max-w-7xl max-h-[95vh]'} overflow-y-auto transition-all duration-300`}>
+            <DialogHeader className="flex flex-row items-center justify-between">
+              <div className="flex-1">
+                <DialogTitle className="text-2xl flex items-center gap-3">
+                  <Building2 className="h-6 w-6 text-primary" />
+                  Resumo da Empresa
+                </DialogTitle>
+                <DialogDescription>
+                  Detalhes da qualificação e critérios de matching
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsModalFullscreen(!isModalFullscreen)}
+                  className="h-8 w-8 p-0"
+                  title={isModalFullscreen ? 'Minimizar' : 'Tela cheia'}
+                >
+                  {isModalFullscreen ? (
+                    <Minimize className="h-4 w-4" />
+                  ) : (
+                    <Maximize className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </DialogHeader>
+            
+            {previewCompany && (
+              <div className="space-y-4 mt-4">
+                {/* Cabeçalho */}
+                <div className="border-b pb-4">
+                  <h3 className="text-lg font-semibold">
+                    {previewCompany.razao_social || previewCompany.name || (previewCompany as any).company_name || 'Razão social não informada'}
+                  </h3>
+                  
+                  {/* CNPJ */}
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs text-muted-foreground">CNPJ normalizado:</p>
+                    <p className="text-sm font-mono font-semibold">{previewCompany.cnpj || 'N/A'}</p>
+                  </div>
+                  
+                  {(previewCompany as any).nome_fantasia && (
+                    <p className="text-sm text-muted-foreground mt-2">Nome Fantasia: {(previewCompany as any).nome_fantasia}</p>
+                  )}
+                </div>
+
+                {/* ICP e Grade */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">ICP Utilizado</p>
+                    <p className="text-base">{(previewCompany as any).icp?.nome || 'Não especificado'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Grade Final</p>
+                    <div className="mt-1">
+                      {(() => {
+                        const grade = (previewCompany as any).grade || (previewCompany as any).raw_data?.grade;
+                        if (!grade) return <Badge variant="outline">N/A</Badge>;
+                        const colors: Record<string, string> = {
+                          'A+': 'bg-emerald-600 text-white',
+                          'A': 'bg-emerald-500 text-white',
+                          'B': 'bg-sky-500 text-white',
+                          'C': 'bg-orange-500 text-white',
+                          'D': 'bg-rose-500 text-white',
+                        };
+                        return <Badge className={colors[grade] || 'bg-gray-500 text-white'}>{grade}</Badge>;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fit Score */}
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Fit Score</p>
+                  {(previewCompany as any).fit_score != null ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                      <span className="text-2xl font-bold">{(previewCompany as any).fit_score.toFixed(1)}%</span>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-sm mt-1">Não calculado</p>
+                  )}
+                </div>
+
+                {/* Dados Básicos */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Localização</p>
+                    <p className="text-base">
+                      {((previewCompany as any).cidade && (previewCompany as any).estado)
+                        ? `${(previewCompany as any).cidade}/${(previewCompany as any).estado}`
+                        : (previewCompany as any).estado || (previewCompany as any).uf || 'Não informado'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Setor</p>
+                    <p className="text-base">
+                      {previewCompany.setor || (previewCompany as any).industry || (
+                        <span className="text-muted-foreground italic">
+                          Não informado no lote / não encontrado nas fontes externas
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Mensagem sobre enrich (se dados faltarem) */}
+                {(!previewCompany.setor && !(previewCompany as any).industry && !(previewCompany as any).cidade && !previewCompany.website) && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded">
+                    <p className="text-xs text-blue-800 dark:text-blue-200 font-medium mb-1">
+                      ℹ️ Informação sobre dados faltantes
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      Esta empresa não foi localizada nas bases externas para o CNPJ {previewCompany.cnpj}.
+                      A qualificação foi feita apenas com os dados internos do lote de importação.
+                    </p>
+                  </div>
+                )}
+
+                {/* Origem do Lote */}
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Origem</p>
+                  <p className="text-base">{(previewCompany as any).source_name || (previewCompany as any).job?.job_name || 'Não especificado'}</p>
+                  {(previewCompany as any).job?.source_type && (
+                    <Badge variant="outline" className="mt-1">
+                      {(previewCompany as any).job.source_type}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* ✅ Análise Estratégica de Fit - Website & Produtos */}
+                <WebsiteFitAnalysisCard
+                  companyId={previewCompany.id}
+                  qualifiedProspectId={undefined}
+                  companyCnpj={previewCompany.cnpj}
+                  websiteEncontrado={(previewCompany as any).website_encontrado || previewCompany.website}
+                  websiteFitScore={(previewCompany as any).website_fit_score}
+                  websiteProductsMatch={(previewCompany as any).website_products_match}
+                  linkedinUrl={(previewCompany as any).linkedin_url}
+                  isModalFullscreen={isModalFullscreen}
+                />
+
+                {/* ✅ Detalhamento de Matching com match_breakdown */}
+                {(previewCompany as any).match_breakdown && Array.isArray((previewCompany as any).match_breakdown) && (previewCompany as any).match_breakdown.length > 0 && (
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-2">Detalhamento de Qualificação</p>
+                    <div className="space-y-2">
+                      {(previewCompany as any).match_breakdown.map((item: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className={`flex items-center justify-between p-2 rounded ${
+                            item.matched ? 'bg-green-50 dark:bg-green-950/20' : 'bg-gray-50 dark:bg-gray-900/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {item.matched ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-gray-400" />
+                            )}
+                            <span className="text-sm font-medium">{item.label}</span>
+                            <span className="text-xs text-muted-foreground">(peso {Math.round((item.weight || 0) * 100)}%)</span>
+                          </div>
+                          <div className="text-sm font-semibold">
+                            {item.matched ? (
+                              <span className="text-green-600">+{item.score}%</span>
+                            ) : (
+                              <span className="text-gray-400">+{item.score}%</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Metodologia: classificação por Fit Score ponderado (Setor 30%, Localização 25%, Dados 20%, Website 15%, Contatos 10%).
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* ✅ MODAL DE BUSCA POR SÓCIOS */}
         <PartnerSearchModal
           open={partnerSearchOpen}

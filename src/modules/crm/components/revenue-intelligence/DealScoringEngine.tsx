@@ -61,40 +61,56 @@ export function DealScoringEngine({ dealId, autoRefresh = false }: DealScoringEn
     
     setIsLoading(true);
     try {
-      // Em produção, calcular scores baseado em dados reais
-      // Por enquanto, dados mockados
-      const mockScores: DealScore[] = [
-        {
-          deal_id: '1',
-          deal_name: 'Empresa ABC - ERP',
-          overall_score: 85,
+      // 🔥 PROIBIDO: Dados mockados foram removidos
+      // Buscar deals reais do banco de dados
+      const { data: deals, error } = await (supabase as any)
+        .from('deals')
+        .select('id, name, value, probability, stage, created_at, updated_at')
+        .eq('tenant_id', tenant.id)
+        .order('updated_at', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('[DealScoringEngine] Erro ao buscar deals:', error);
+        setScores([]);
+        return;
+      }
+
+      if (!deals || deals.length === 0) {
+        setScores([]);
+        return;
+      }
+
+      // Calcular scores reais baseados nos deals do banco
+      const realScores: DealScore[] = deals.map((deal: any) => {
+        // Calcular score baseado em dados reais
+        const valueScore = Math.min(25, (deal.value || 0) / 10000); // R$ 10k = 25 pontos
+        const probabilityScore = (deal.probability || 0) * 0.2; // 100% = 20 pontos
+        const velocityScore = deal.updated_at ? 15 : 0; // Se atualizado recentemente
+        const engagementScore = deal.stage ? 15 : 0; // Se tem estágio definido
+        const fitScore = 10; // TODO: Calcular fit com ICP
+
+        const overallScore = Math.round(
+          valueScore + probabilityScore + velocityScore + engagementScore + fitScore
+        );
+
+        return {
+          deal_id: deal.id,
+          deal_name: deal.name || 'Deal sem nome',
+          overall_score: Math.min(100, overallScore),
           factors: {
-            value: 25,
-            probability: 20,
-            velocity: 15,
-            engagement: 15,
-            fit: 10,
+            value: Math.round(valueScore),
+            probability: Math.round(probabilityScore),
+            velocity: velocityScore,
+            engagement: engagementScore,
+            fit: fitScore,
           },
-          trend: 'up',
-          last_updated: new Date().toISOString(),
-        },
-        {
-          deal_id: '2',
-          deal_name: 'Empresa XYZ - CRM',
-          overall_score: 72,
-          factors: {
-            value: 20,
-            probability: 18,
-            velocity: 12,
-            engagement: 12,
-            fit: 10,
-          },
-          trend: 'stable',
-          last_updated: new Date().toISOString(),
-        },
-      ];
+          trend: 'stable', // TODO: Calcular tendência baseada em histórico
+          last_updated: deal.updated_at || deal.created_at || new Date().toISOString(),
+        };
+      });
       
-      setScores(mockScores);
+      setScores(realScores);
     } catch (error: any) {
       console.error('Erro ao carregar scores:', error);
     } finally {

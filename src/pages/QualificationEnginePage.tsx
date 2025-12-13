@@ -4,7 +4,7 @@
  * Interface para rodar qualificação em lotes de empresas importadas
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ import {
   FileSpreadsheet,
   Sheet,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -54,6 +55,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useICPLibrary } from '@/hooks/useICPLibrary';
 import { importFromEmpresasAquiApi } from '@/services/empresasAquiImport.service';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface QualificationJob {
   id: string;
@@ -103,6 +105,8 @@ export default function QualificationEnginePage() {
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const [selectedIcpId, setSelectedIcpId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  // ✅ NOVO: Estado para seleção múltipla de lotes para deletar
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
 
   // Função auxiliar para obter nome do ICP
   const getIcpName = (icpId?: string): string => {
@@ -142,13 +146,8 @@ export default function QualificationEnginePage() {
     }
   }, [selectedJob, icps, icpsLoading]);
 
-  useEffect(() => {
-    if (tenantId) {
-      loadJobs();
-    }
-  }, [tenantId]);
-
-  const loadJobs = async () => {
+  // ✅ Usar useCallback para evitar recriação da função e loop infinito
+  const loadJobs = useCallback(async () => {
     if (!tenantId) return;
 
     setLoading(true);
@@ -180,6 +179,92 @@ export default function QualificationEnginePage() {
       });
     } finally {
       setLoading(false);
+    }
+  }, [tenantId]); // ✅ Dependências do useCallback
+
+  // ✅ useEffect para carregar jobs quando tenantId mudar
+  useEffect(() => {
+    if (tenantId) {
+      loadJobs();
+    }
+  }, [tenantId, loadJobs]);
+
+  // ✅ NOVO: Função para deletar job e candidatos associados
+  const handleDeleteJob = async (jobId: string, jobName: string) => {
+    if (!confirm(`Tem certeza que deseja deletar o lote "${jobName}"?\n\nEsta ação irá:\n- Deletar o job de qualificação\n- Deletar candidatos associados (prospecting_candidates)\n- Deletar empresas qualificadas deste job (qualified_prospects)\n\nEsta ação NÃO pode ser desfeita!`)) {
+      return;
+    }
+
+    if (!tenantId) {
+      toast({
+        title: 'Erro',
+        description: 'Tenant não encontrado',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // 1. Buscar job para pegar source_file_name (batch_id)
+      const { data: jobData, error: jobFetchError } = await supabase
+        .from('prospect_qualification_jobs' as any)
+        .select('source_file_name, icp_id')
+        .eq('id', jobId)
+        .eq('tenant_id', tenantId)
+        .single();
+
+      if (jobFetchError) throw jobFetchError;
+
+      // 2. Deletar qualified_prospects deste job
+      const { error: deleteQualifiedError } = await supabase
+        .from('qualified_prospects' as any)
+        .delete()
+        .eq('job_id', jobId)
+        .eq('tenant_id', tenantId);
+
+      if (deleteQualifiedError) {
+        console.warn('[DeleteJob] Erro ao deletar qualified_prospects:', deleteQualifiedError);
+        // Continuar mesmo com erro
+      }
+
+      // 3. Deletar prospecting_candidates deste batch
+      const sourceBatchId = (jobData as any)?.source_file_name;
+      if (sourceBatchId) {
+        const { error: deleteCandidatesError } = await supabase
+          .from('prospecting_candidates' as any)
+          .delete()
+          .eq('tenant_id', tenantId)
+          .eq('source_batch_id', sourceBatchId);
+
+        if (deleteCandidatesError) {
+          console.warn('[DeleteJob] Erro ao deletar prospecting_candidates:', deleteCandidatesError);
+          // Continuar mesmo com erro
+        }
+      }
+
+      // 4. Deletar o job
+      const { error: deleteJobError } = await supabase
+        .from('prospect_qualification_jobs' as any)
+        .delete()
+        .eq('id', jobId)
+        .eq('tenant_id', tenantId);
+
+      if (deleteJobError) throw deleteJobError;
+
+      toast({
+        title: '✅ Lote deletado com sucesso!',
+        description: `O lote "${jobName}" e todos os dados associados foram removidos.`,
+      });
+
+      // Recarregar lista de jobs
+      await loadJobs();
+    } catch (error: any) {
+      console.error('[DeleteJob] Erro ao deletar job:', error);
+      toast({
+        title: 'Erro ao deletar lote',
+        description: error.message || 'Não foi possível deletar o lote',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -279,7 +364,7 @@ export default function QualificationEnginePage() {
     try {
       // Chamar função RPC para processar qualificação
       // ✅ CORRIGIDO: usar supabase.rpc() diretamente, sem destruturação
-      const { data, error } = await (supabase.rpc as any)('process_qualification_job', {
+      const { data, error } = await (supabase.rpc as any)('process_qualification_job_sniper', {
         p_job_id: selectedJobId,
         p_tenant_id: tenantId,
       });
@@ -429,7 +514,7 @@ export default function QualificationEnginePage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="file" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="file" className="flex items-center gap-2">
                 <FileSpreadsheet className="w-4 h-4" />
                 Arquivo
@@ -441,6 +526,10 @@ export default function QualificationEnginePage() {
               <TabsTrigger value="api" className="flex items-center gap-2">
                 <Globe className="w-4 h-4" />
                 API Empresas Aqui
+              </TabsTrigger>
+              <TabsTrigger value="cnpjs" className="flex items-center gap-2">
+                <Upload className="w-4 h-4" />
+                CNPJs em Massa
               </TabsTrigger>
             </TabsList>
 
@@ -633,6 +722,23 @@ export default function QualificationEnginePage() {
                   </div>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="cnpjs" className="mt-4 space-y-4">
+              <BulkUploadDialog>
+                <Button size="lg" className="w-full">
+                  <Upload className="w-5 h-5 mr-2" />
+                  Upload CSV/Excel com CNPJs
+                </Button>
+              </BulkUploadDialog>
+              <p className="text-xs text-muted-foreground text-center">
+                Upload de arquivo CSV/Excel contendo CNPJs • O Normalizador Universal detecta automaticamente • Qualificação automática em massa • Até 10.000 CNPJs por upload
+              </p>
+              <div className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                <p className="text-sm text-emerald-800 dark:text-emerald-200">
+                  <strong>💡 Normalizador Universal:</strong> Aceita qualquer formato de planilha (CSV, Excel, Google Sheets). Se a planilha contiver apenas CNPJs, o sistema detecta automaticamente e processa.
+                </p>
+              </div>
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -942,6 +1048,19 @@ export default function QualificationEnginePage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {/* ✅ NOVO: Coluna de checkbox para seleção múltipla */}
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedJobIds.size === jobs.length && jobs.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedJobIds(new Set(jobs.map(j => j.id)));
+                          } else {
+                            setSelectedJobIds(new Set());
+                          }
+                        }}
+                      />
+                    </TableHead>
                     <TableHead>Nome do Lote</TableHead>
                     <TableHead>ICP</TableHead>
                     <TableHead>Origem</TableHead>
@@ -960,6 +1079,21 @@ export default function QualificationEnginePage() {
                 <TableBody>
                   {jobs.map((job) => (
                     <TableRow key={job.id}>
+                      {/* ✅ NOVO: Checkbox individual */}
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedJobIds.has(job.id)}
+                          onCheckedChange={(checked) => {
+                            const newSet = new Set(selectedJobIds);
+                            if (checked) {
+                              newSet.add(job.id);
+                            } else {
+                              newSet.delete(job.id);
+                            }
+                            setSelectedJobIds(newSet);
+                          }}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         {job.job_name}
                       </TableCell>
@@ -1036,6 +1170,16 @@ export default function QualificationEnginePage() {
                               Ver Erro
                             </Button>
                           )}
+                          {/* ✅ NOVO: Botão de deletar para todos os jobs */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteJob(job.id, job.job_name)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+                            title="Deletar lote e todos os dados associados"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function useICPFlowMetrics() {
   const { session } = useAuth();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   const [data, setData] = useState({ quarentena: 0, pool: 0, ativas: 0, total: 0 });
 
   useEffect(() => {
-    // ✅ Só buscar dados se houver sessão ativa
-    if (!session?.user) {
+    // ✅ Só buscar dados se houver sessão ativa E tenant
+    if (!session?.user || !tenantId) {
       setData({ quarentena: 0, pool: 0, ativas: 0, total: 0 });
       return;
     }
@@ -17,10 +20,11 @@ export function useICPFlowMetrics() {
     
     const fetchMetrics = async () => {
       try {
+        // 🔥 CRÍTICO: Filtrar TODAS as queries por tenant_id
         const [r1, r2, r3] = await Promise.all([
-          supabase.from('icp_analysis_results').select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
-          supabase.from('leads_pool').select('id', { count: 'exact', head: true }),
-          supabase.from('companies').select('id', { count: 'exact', head: true })
+          supabase.from('icp_analysis_results').select('id', { count: 'exact', head: true }).eq('status', 'pendente').eq('tenant_id', tenantId),
+          supabase.from('leads_pool').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+          supabase.from('companies').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId)
         ]);
 
         if (!mounted) return;
@@ -53,7 +57,7 @@ export function useICPFlowMetrics() {
     fetchMetrics();
 
     return () => { mounted = false; };
-  }, [session]);
+  }, [session, tenantId]);
 
   return { data };
 }
