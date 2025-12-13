@@ -274,13 +274,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           website_products_match,
           linkedin_url,
           purchase_intent_score,
-          purchase_intent_type,
           prospect_qualification_jobs (
             job_name,
             source_type,
             source_file_name
           )
         `)
+        // ✅ NOTA: purchase_intent_type será adicionado após aplicar migration 20250223000001_purchase_intent_hybrid_system.sql
         .eq('tenant_id', tenantId)
         .eq('pipeline_status', 'new') // ✅ FLUXO OFICIAL: apenas empresas com status 'new'
         .order('fit_score', { ascending: false });
@@ -2720,7 +2720,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                       <TableCell>
                         <PurchaseIntentBadge 
                           score={prospect.purchase_intent_score} 
-                          intentType={prospect.purchase_intent_type || 'potencial'}
+                          intentType={(prospect as any).purchase_intent_type || 'potencial'}
                           size="sm"
                         />
                       </TableCell>
