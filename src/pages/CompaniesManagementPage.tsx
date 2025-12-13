@@ -2622,6 +2622,7 @@ export default function CompaniesManagementPage() {
                        <TableCell>
                          <PurchaseIntentBadge 
                            score={(company as any).purchase_intent_score} 
+                           intentType={(company as any).purchase_intent_type || 'potencial'}
                            size="sm"
                          />
                        </TableCell>

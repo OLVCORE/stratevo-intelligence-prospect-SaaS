@@ -274,6 +274,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           website_products_match,
           linkedin_url,
           purchase_intent_score,
+          purchase_intent_type,
           prospect_qualification_jobs (
             job_name,
             source_type,
@@ -2719,6 +2720,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                       <TableCell>
                         <PurchaseIntentBadge 
                           score={prospect.purchase_intent_score} 
+                          intentType={prospect.purchase_intent_type || 'potencial'}
                           size="sm"
                         />
                       </TableCell>

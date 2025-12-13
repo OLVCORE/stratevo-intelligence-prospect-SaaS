@@ -13,12 +13,14 @@ import { Flame, Zap, Snowflake } from 'lucide-react';
 
 interface PurchaseIntentBadgeProps {
   score: number | null | undefined;
+  intentType?: 'potencial' | 'real' | null; // ✅ NOVO: Tipo de Purchase Intent
   showIcon?: boolean;
   size?: 'sm' | 'md' | 'lg';
 }
 
 export function PurchaseIntentBadge({ 
-  score = 0, 
+  score = 0,
+  intentType = null, // ✅ NOVO: Tipo de Purchase Intent
   showIcon = true,
   size = 'md'
 }: PurchaseIntentBadgeProps) {
@@ -28,6 +30,10 @@ export function PurchaseIntentBadge({
   const isHot = normalizedScore >= 70;
   const isWarm = normalizedScore >= 40 && normalizedScore < 70;
   const isCold = normalizedScore < 40;
+  
+  // ✅ NOVO: Determinar se é Potencial ou Real
+  const isReal = intentType === 'real';
+  const isPotencial = intentType === 'potencial' || (intentType === null && normalizedScore > 0);
 
   // Cores e estilos
   const getVariant = () => {
@@ -43,9 +49,11 @@ export function PurchaseIntentBadge({
   };
 
   const getLabel = () => {
-    if (isHot) return 'Hot Lead';
-    if (isWarm) return 'Warm Lead';
-    return 'Cold Lead';
+    const baseLabel = isHot ? 'Hot Lead' : isWarm ? 'Warm Lead' : 'Cold Lead';
+    // ✅ NOVO: Adicionar tipo (Potencial/Real) ao label
+    if (isReal) return `${baseLabel} (Real)`;
+    if (isPotencial) return `${baseLabel} (Potencial)`;
+    return baseLabel;
   };
 
   const getSizeClasses = () => {
@@ -74,13 +82,25 @@ export function PurchaseIntentBadge({
         <TooltipContent>
           <div className="space-y-1">
             <p className="font-semibold">Score de Intenção: {normalizedScore}/100</p>
+            {isReal && (
+              <p className="text-xs font-medium text-green-600 dark:text-green-400">
+                ✅ Purchase Intent REAL - Baseado em sinais comportamentais (visitas, downloads, emails, demos)
+              </p>
+            )}
+            {isPotencial && !isReal && (
+              <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                🔮 Purchase Intent POTENCIAL - Baseado em sinais de mercado (expansão, funding, notícias)
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               {isHot && '🔥 Lead quente! Alta probabilidade de compra. Priorizar contato imediato.'}
               {isWarm && '⚡ Lead morno. Interesse moderado. Contatar em breve.'}
               {isCold && '❄️ Lead frio. Baixa intenção de compra no momento.'}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              Baseado em sinais de: expansão, dor, budget, timing e concorrentes
+              {isReal 
+                ? 'Sinais comportamentais: visitas ao site, downloads, emails abertos, demos agendadas'
+                : 'Sinais de mercado: expansão, contratações, funding, mudanças, concorrentes'}
             </p>
           </div>
         </TooltipContent>

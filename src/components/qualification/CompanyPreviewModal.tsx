@@ -104,7 +104,10 @@ export function CompanyPreviewModal({ open, onOpenChange, company }: CompanyPrev
             <div>
               <p className="text-sm font-medium text-muted-foreground">Intenção de Compra</p>
               <div className="mt-1">
-                <PurchaseIntentBadge score={company.purchase_intent_score} />
+                <PurchaseIntentBadge 
+                  score={company.purchase_intent_score} 
+                  intentType={company.purchase_intent_type || 'potencial'}
+                />
               </div>
             </div>
           </div>
