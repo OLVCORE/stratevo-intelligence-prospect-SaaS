@@ -46,6 +46,7 @@ import { searchApolloOrganizations, searchApolloPeople } from '@/services/apollo
 import { enrichment360Simplificado } from '@/services/enrichment360';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
+import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -2013,6 +2014,7 @@ export default function ICPQuarantine() {
                       onFilterChange={setFilterGrade}
                     />
                   </TableHead>
+                  <TableHead className="w-[10rem]">Intenção de Compra</TableHead>
                   <TableHead className="w-[10rem]">Website</TableHead>
                   <TableHead className="w-[8rem]">Website Fit</TableHead>
                   <TableHead className="w-[8rem]">LinkedIn</TableHead>
@@ -2305,6 +2307,12 @@ export default function ICPQuarantine() {
                           </Badge>
                         );
                       })()}
+                    </TableCell>
+                    {/* ✅ NOVA COLUNA: Purchase Intent Score */}
+                    <TableCell className="w-[10rem]">
+                      <PurchaseIntentBadge 
+                        score={(company as any).purchase_intent_score || 0} 
+                      />
                     </TableCell>
                     {/* ✅ NOVA COLUNA: Website */}
                     <TableCell className="w-[10rem]">

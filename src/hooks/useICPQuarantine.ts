@@ -121,7 +121,8 @@ export function useQuarantineCompanies(filters?: {
             website_encontrado,
             website_fit_score,
             website_products_match,
-            linkedin_url
+            linkedin_url,
+            purchase_intent_score
           `)
           .order('icp_score', { ascending: false });
 
@@ -156,7 +157,8 @@ export function useQuarantineCompanies(filters?: {
           website_encontrado,
           website_fit_score,
           website_products_match,
-          linkedin_url
+          linkedin_url,
+          purchase_intent_score
         `)
         .order('icp_score', { ascending: false });
 

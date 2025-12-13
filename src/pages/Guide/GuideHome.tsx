@@ -33,6 +33,7 @@ const iconMap: Record<string, any> = {
   Package,
   TrendingUp,
   BarChart3,
+  Target,
   HelpCircle,
 };
 

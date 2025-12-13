@@ -3,7 +3,7 @@
 // Seletor para trocar entre múltiplos tenants (CNPJs)
 // ✅ USANDO HOOK useUserTenants (RPC get_user_tenants_complete)
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTenant } from '@/contexts/TenantContext';
 import { useUserTenants, type UserTenant } from '@/hooks/useUserTenants';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,18 +23,26 @@ export function TenantSelector() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
-  // 🔥 CRÍTICO: Refetch quando tenant é atualizado
+  // 🔥 BUG 2 FIX: Refetch quando tenant é atualizado - usar ref para evitar loops infinitos
+  const refetchRef = React.useRef(refetch);
+  
+  // Atualizar ref quando refetch mudar
+  React.useEffect(() => {
+    refetchRef.current = refetch;
+  }, [refetch]);
+  
   useEffect(() => {
     const handleTenantUpdated = () => {
       console.log('[TenantSelector] Tenant atualizado, refetchando...');
-      refetch();
+      // Usar ref ao invés de refetch diretamente para evitar dependência circular
+      refetchRef.current();
     };
 
     window.addEventListener('tenant-updated', handleTenantUpdated);
     return () => {
       window.removeEventListener('tenant-updated', handleTenantUpdated);
     };
-  }, [refetch]);
+  }, []); // 🔥 BUG 2 FIX: Array vazio - não depende de refetch para evitar loops
 
   // [HF-STRATEVO-TENANT] Converter UserTenant para formato do TenantContext
   const convertToTenantContext = (userTenant: UserTenant) => {

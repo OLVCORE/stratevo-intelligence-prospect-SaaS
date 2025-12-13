@@ -8,13 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   Search, TrendingUp, DollarSign, Calendar, 
   Flame, Droplet, Snowflake, Clock, ArrowRight, Target,
-  Plus, FileText, Play, MoreVertical
+  Plus, FileText, Play, MoreVertical, UserCheck
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { AdminDataCleanupDialog } from '@/components/admin/AdminDataCleanupDialog';
+import { HandoffModal } from '@/components/handoff/HandoffModal';
 
 const STAGES = [
   { id: 'discovery', label: 'Descoberta', color: 'bg-blue-100 text-blue-800' },
@@ -32,6 +33,9 @@ export default function Pipeline() {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [temperatureFilter, setTemperatureFilter] = useState('all');
+  const [handoffModalOpen, setHandoffModalOpen] = useState(false);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [selectedDeal, setSelectedDeal] = useState<any | null>(null);
 
   const { data: deals, isLoading } = useQuery({
     queryKey: ['pipeline-deals', temperatureFilter],
@@ -336,6 +340,25 @@ export default function Pipeline() {
 
                               {/* Ações Rápidas */}
                               <div className="flex gap-1 pt-2 border-t">
+                                {/* Botão Handoff - Mostrar apenas se stage = qualification */}
+                                {stage.id === 'qualification' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-xs h-7"
+                                    onClick={() => {
+                                      setSelectedDeal(deal);
+                                      // Buscar deal_id na tabela deals se existir
+                                      // Por enquanto usar company_id como deal_id
+                                      setSelectedDealId(deal.id);
+                                      setHandoffModalOpen(true);
+                                    }}
+                                    title="Gerenciar Handoff SDR → Vendedor"
+                                  >
+                                    <UserCheck className="w-3 h-3 mr-1" />
+                                    Handoff
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -387,6 +410,16 @@ export default function Pipeline() {
           ))}
         </div>
       </DragDropContext>
+
+      {/* Modal de Handoff */}
+      <HandoffModal
+        open={handoffModalOpen}
+        onOpenChange={setHandoffModalOpen}
+        dealId={selectedDealId}
+        dealTitle={selectedDeal?.name}
+        dealValue={selectedDeal?.deal_value}
+        currentOwner={selectedDeal?.owner_name}
+      />
     </div>
   );
 }

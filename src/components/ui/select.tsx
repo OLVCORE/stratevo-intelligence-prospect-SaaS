@@ -72,7 +72,7 @@ const SelectContent = React.forwardRef<
         className,
       )}
       position={position}
-      style={{ zIndex: 999999, ...style }}
+      style={{ zIndex: 9999, ...style }} // 🔥 BUG 2 FIX: Usar z-index alto para aparecer acima do header (z-[100])
       {...props}
     >
       <SelectScrollUpButton />

@@ -36,31 +36,65 @@ export function CadenceAnalytics() {
     enabled: !!tenant?.id,
   });
 
-  // Buscar estatísticas gerais
+  // ✅ FASE 3: Buscar estatísticas usando função SQL get_channel_response_rates()
   const { data: stats } = useQuery({
     queryKey: ["cadence-stats", tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return null;
 
-      const { data: executions } = await supabase
-        .from("cadence_executions")
-        .select("status, has_response")
-        .eq("tenant_id", tenant.id);
+      try {
+        // Chamar função SQL get_channel_response_rates()
+        const { data: responseRates, error: ratesError } = await supabase.rpc('get_channel_response_rates', {
+          p_tenant_id: tenant.id,
+          p_period_days: 30
+        });
 
-      if (!executions) return null;
+        if (ratesError) {
+          console.error('[CadenceAnalytics] Erro ao buscar response rates:', ratesError);
+          // Fallback para cálculo manual
+          const { data: executions } = await supabase
+            .from("cadence_executions")
+            .select("status, has_response")
+            .eq("tenant_id", tenant.id);
 
-      const total = executions.length;
-      const active = executions.filter((e) => e.status === "active").length;
-      const completed = executions.filter((e) => e.status === "completed").length;
-      const withResponse = executions.filter((e) => e.has_response).length;
-      const responseRate = total > 0 ? (withResponse / total) * 100 : 0;
+          if (!executions) return null;
 
-      return {
-        total,
-        active,
-        completed,
-        responseRate: Math.round(responseRate * 100) / 100,
-      };
+          const total = executions.length;
+          const active = executions.filter((e) => e.status === "active").length;
+          const completed = executions.filter((e) => e.status === "completed").length;
+          const withResponse = executions.filter((e) => e.has_response).length;
+          const responseRate = total > 0 ? (withResponse / total) * 100 : 0;
+
+          return {
+            total,
+            active,
+            completed,
+            responseRate: Math.round(responseRate * 100) / 100,
+            channelRates: null,
+          };
+        }
+
+        // Calcular totais básicos
+        const { data: executions } = await supabase
+          .from("cadence_executions")
+          .select("status, has_response")
+          .eq("tenant_id", tenant.id);
+
+        const total = executions?.length || 0;
+        const active = executions?.filter((e) => e.status === "active").length || 0;
+        const completed = executions?.filter((e) => e.status === "completed").length || 0;
+
+        return {
+          total,
+          active,
+          completed,
+          responseRate: responseRates?.[0]?.avg_response_rate || 0,
+          channelRates: responseRates || [],
+        };
+      } catch (error: any) {
+        console.error('[CadenceAnalytics] Erro ao buscar estatísticas:', error);
+        return null;
+      }
     },
     enabled: !!tenant?.id,
   });

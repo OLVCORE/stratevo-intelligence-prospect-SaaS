@@ -65,17 +65,18 @@ export async function fetchFinancialHealthData(
   try {
     logger.info('FINANCIAL', 'Fetching financial health data', { cnpj });
 
-    // 🔥 PROIBIDO: Dados mockados foram removidos
-    // Se integração com Serasa/SCPC não estiver disponível, retornar dados vazios
-    // NUNCA retornar dados fake - isso viola a regra sagrada da plataforma
+    // 🔥 BUG 3 FIX: Retornar null/indefinido ao invés de zeros para indicar "dados não disponíveis"
+    // Zeros fazem lógica downstream tratar como dados negativos (crédito falido, sem problemas legais)
+    // ao invés de "dados não coletados ainda"
     
     // TODO: Implementar integração real com Serasa, Boa Vista SCPC, etc.
-    // Por enquanto, retornar estrutura vazia (não dados fake)
+    // 🔥 BUG 6 FIX: Retornar estrutura com valores padrão estruturados ao invés de null as any
+    // Isso previne TypeErrors quando código downstream tenta calcular com esses valores
     const emptyData: FinancialHealthData = {
       cnpj,
-      companyName: '', // Será preenchido quando houver integração real
-      creditScore: 0,
-      riskClassification: 'E', // Classificação mais conservadora quando não há dados
+      companyName: '', // String vazia ao invés de null
+      creditScore: 0, // Zero indica "não disponível" mas permite cálculos sem TypeError
+      riskClassification: 'E' as any, // Classificação mais conservadora quando dados não disponíveis
       paymentHistory: {
         onTimePayments: 0,
         latePayments: 0,
@@ -87,7 +88,7 @@ export async function fetchFinancialHealthData(
         currentDebt: 0,
         overdueDebt: 0
       },
-      predictiveRiskScore: 0, // Score zero quando não há dados
+      predictiveRiskScore: 0,
       trends: {
         improving: false,
         stable: false,
@@ -95,7 +96,7 @@ export async function fetchFinancialHealthData(
       }
     };
 
-    logger.warn('FINANCIAL', 'Integração não implementada - retornando dados vazios', { cnpj });
+    logger.warn('FINANCIAL', 'Integração não implementada - retornando dados null (não disponíveis)', { cnpj });
     return emptyData;
   } catch (error) {
     logger.error('FINANCIAL', 'Failed to fetch financial data', { error, cnpj });

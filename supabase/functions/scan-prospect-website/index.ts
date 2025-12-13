@@ -1,0 +1,321 @@
+// 🔍 ESCANEAR WEBSITE DA EMPRESA PROSPECTADA + LINKEDIN
+// Extrai produtos/serviços e compara com produtos do tenant
+// NÃO modifica scan-website-products ou scan-competitor-url
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+interface ScanProspectRequest {
+  tenant_id: string;
+  qualified_prospect_id: string;
+  website_url: string;
+  razao_social?: string;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  try {
+    const { tenant_id, qualified_prospect_id, website_url, razao_social } = await req.json() as ScanProspectRequest;
+
+    if (!tenant_id || !qualified_prospect_id || !website_url) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'tenant_id, qualified_prospect_id e website_url são obrigatórios' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[ScanProspect] 🔍 Escaneando website:', website_url);
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const openaiKey = Deno.env.get('OPENAI_API_KEY')!;
+    const serperKey = Deno.env.get('SERPER_API_KEY');
+
+    if (!supabaseKey) {
+      throw new Error('SERVICE_ROLE_KEY não configurada');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // 1. Buscar produtos do tenant para comparação
+    const { data: tenantProducts, error: tenantError } = await supabase
+      .from('tenant_products')
+      .select('nome, categoria, descricao')
+      .eq('tenant_id', tenant_id);
+
+    if (tenantError) {
+      console.warn('[ScanProspect] ⚠️ Erro ao buscar produtos do tenant:', tenantError);
+    }
+
+    const tenantProductsList = tenantProducts || [];
+    console.log(`[ScanProspect] 📦 Produtos do tenant para comparação: ${tenantProductsList.length}`);
+
+    // 2. Extrair domínio do website
+    const domain = website_url.replace(/^https?:\/\//, '').split('/')[0];
+    const baseUrl = website_url.startsWith('http') ? website_url : `https://${website_url}`;
+
+    // 3. Coletar conteúdo do website
+    const pagesContent: string[] = [];
+
+    // 3.1. Acessar homepage
+    try {
+      const homepageResponse = await fetch(baseUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (homepageResponse.ok) {
+        const html = await homepageResponse.text();
+        const textContent = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 20000);
+
+        pagesContent.push(`URL: ${baseUrl} (Homepage)\nConteúdo: ${textContent}`);
+        console.log('[ScanProspect] ✅ Homepage acessada');
+      }
+    } catch (error) {
+      console.warn('[ScanProspect] ⚠️ Erro ao acessar homepage:', error);
+    }
+
+    // 3.2. Buscar páginas via SERPER (se disponível)
+    if (serperKey) {
+      try {
+        const serperResponse = await fetch('https://google.serper.dev/search', {
+          method: 'POST',
+          headers: {
+            'X-API-KEY': serperKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            q: `site:${domain} (produtos OR serviços OR soluções OR catálogo)`,
+            num: 10,
+            gl: 'br',
+            hl: 'pt-br',
+          }),
+        });
+
+        if (serperResponse.ok) {
+          const serperData = await serperResponse.json();
+          const organicResults = serperData.organic || [];
+
+          for (const result of organicResults.slice(0, 5)) {
+            if (result.link && result.link !== baseUrl) {
+              pagesContent.push(`Página: ${result.title}\nURL: ${result.link}\nDescrição: ${result.snippet || ''}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[ScanProspect] ⚠️ Erro no SERPER:', error);
+      }
+    }
+
+    if (pagesContent.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Nenhum conteúdo encontrado no website',
+          products_found: 0,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 4. Usar OpenAI para extrair produtos
+    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0.1,
+        max_tokens: 8000,
+        messages: [
+          {
+            role: 'system',
+            content: `Você é um especialista em extrair produtos e serviços de websites corporativos. 
+Extraia TODOS os produtos/serviços mencionados, com nome, descrição, categoria e subcategoria.
+Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
+          },
+          {
+            role: 'user',
+            content: `Extraia todos os produtos e serviços deste website:\n\n${pagesContent.join('\n\n---\n\n')}\n\nRetorne JSON array: [{"nome": "...", "descricao": "...", "categoria": "...", "subcategoria": "..."}]`,
+          },
+        ],
+      }),
+    });
+
+    if (!openaiResponse.ok) {
+      throw new Error('Erro na API OpenAI');
+    }
+
+    const openaiData = await openaiResponse.json();
+    const content = openaiData.choices[0]?.message?.content || '[]';
+
+    // Parse produtos extraídos
+    let extractedProducts: any[] = [];
+    try {
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        extractedProducts = JSON.parse(jsonMatch[0]);
+      }
+    } catch (error) {
+      console.error('[ScanProspect] ❌ Erro ao parsear produtos:', error);
+    }
+
+    console.log(`[ScanProspect] 📦 Produtos extraídos: ${extractedProducts.length}`);
+
+    // 5. Inserir produtos na tabela prospect_extracted_products
+    let insertedCount = 0;
+    for (const product of extractedProducts) {
+      if (!product.nome || product.nome.trim().length === 0) continue;
+
+      const { error: insertError } = await supabase
+        .from('prospect_extracted_products')
+        .insert({
+          qualified_prospect_id,
+          tenant_id,
+          nome: product.nome.trim(),
+          descricao: product.descricao?.trim() || null,
+          categoria: product.categoria?.trim() || null,
+          subcategoria: product.subcategoria?.trim() || null,
+          fonte: 'website',
+          url_origem: baseUrl,
+          confianca_extracao: 0.7,
+          dados_brutos: product,
+        })
+        .select();
+
+      if (!insertError) {
+        insertedCount++;
+      } else {
+        console.warn(`[ScanProspect] ⚠️ Erro ao inserir produto "${product.nome}":`, insertError);
+      }
+    }
+
+    // 6. Buscar LinkedIn (se razao_social fornecido)
+    let linkedinUrl: string | null = null;
+    if (razao_social && serperKey) {
+      try {
+        const linkedinQuery = `"${razao_social}" site:linkedin.com/company`;
+        const linkedinResponse = await fetch('https://google.serper.dev/search', {
+          method: 'POST',
+          headers: {
+            'X-API-KEY': serperKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            q: linkedinQuery,
+            num: 3,
+            gl: 'br',
+            hl: 'pt-br',
+          }),
+        });
+
+        if (linkedinResponse.ok) {
+          const linkedinData = await linkedinResponse.json();
+          const linkedinResult = linkedinData.organic?.[0];
+          if (linkedinResult?.link?.includes('linkedin.com/company')) {
+            linkedinUrl = linkedinResult.link;
+            console.log('[ScanProspect] ✅ LinkedIn encontrado:', linkedinUrl);
+          }
+        }
+      } catch (error) {
+        console.warn('[ScanProspect] ⚠️ Erro ao buscar LinkedIn:', error);
+      }
+    }
+
+    // 7. Comparar produtos extraídos com produtos do tenant
+    const compatibleProducts: any[] = [];
+    for (const extracted of extractedProducts) {
+      for (const tenant of tenantProductsList) {
+        // Comparação simples (pode ser melhorada com embeddings)
+        const extractedLower = extracted.nome?.toLowerCase() || '';
+        const tenantLower = tenant.nome?.toLowerCase() || '';
+        
+        // Match por categoria
+        if (extracted.categoria && tenant.categoria && 
+            extracted.categoria.toLowerCase() === tenant.categoria.toLowerCase()) {
+          compatibleProducts.push({
+            extracted: extracted.nome,
+            tenant: tenant.nome,
+            categoria: extracted.categoria,
+            match_type: 'categoria',
+          });
+          break;
+        }
+        
+        // Match por palavras-chave
+        const extractedWords = extractedLower.split(/\s+/);
+        const tenantWords = tenantLower.split(/\s+/);
+        const commonWords = extractedWords.filter(w => w.length > 3 && tenantWords.includes(w));
+        
+        if (commonWords.length >= 2) {
+          compatibleProducts.push({
+            extracted: extracted.nome,
+            tenant: tenant.nome,
+            match_type: 'keywords',
+            keywords: commonWords,
+          });
+          break;
+        }
+      }
+    }
+
+    console.log(`[ScanProspect] ✅ Produtos compatíveis encontrados: ${compatibleProducts.length}`);
+
+    // ✅ Calcular Website Fit Score (0-20 pontos)
+    let websiteFitScore = 0;
+    if (extractedProducts.length > 0 && compatibleProducts.length > 0) {
+      // Score baseado na proporção de produtos compatíveis
+      // Máximo 20 pontos: 100% de match = 20 pontos
+      const matchRatio = compatibleProducts.length / extractedProducts.length;
+      websiteFitScore = Math.min(20, Math.round(matchRatio * 20));
+    }
+
+    // ✅ Formatar produtos compatíveis no formato esperado
+    const formattedCompatibleProducts = compatibleProducts.map((comp: any) => ({
+      prospect_product: comp.extracted || comp.prospect_product,
+      tenant_product: comp.tenant || comp.tenant_product,
+      match_type: comp.match_type || 'category_match',
+    }));
+
+    console.log(`[ScanProspect] ✅ Website Fit Score calculado: ${websiteFitScore}/20 pontos`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        products_found: extractedProducts.length,
+        products_inserted: insertedCount,
+        compatible_products: compatibleProducts.length,
+        website_fit_score: websiteFitScore, // ✅ ADICIONADO
+        website_products_match: formattedCompatibleProducts, // ✅ FORMATADO
+        linkedin_url: linkedinUrl,
+        compatible_products_details: compatibleProducts,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error) {
+    console.error('[ScanProspect] ❌ Erro:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    );
+  }
+});
+

@@ -134,6 +134,7 @@ const ImportQualificacaoSection = lazy(() => import("./pages/Guide/sections/Impo
 const EstoqueQuarentenaSection = lazy(() => import("./pages/Guide/sections/EstoqueQuarentenaSection"));
 const CrmSequenciasSection = lazy(() => import("./pages/Guide/sections/CrmSequenciasSection"));
 const RelatoriosSection = lazy(() => import("./pages/Guide/sections/RelatoriosSection"));
+const ProspeccaoB2BCompletaSection = lazy(() => import("./pages/Guide/sections/ProspeccaoB2BCompletaSection"));
 const AtalhosFaqSection = lazy(() => import("./pages/Guide/sections/AtalhosFaqSection"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Error500 = lazy(() => import("./pages/Error500"));
@@ -1059,6 +1060,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <RelatoriosSection />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/prospeccao-b2b-completa"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ProspeccaoB2BCompletaSection />
                   </AppLayout>
                 </ProtectedRoute>
               }

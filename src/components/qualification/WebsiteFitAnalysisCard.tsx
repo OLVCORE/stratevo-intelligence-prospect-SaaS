@@ -140,6 +140,7 @@ export function WebsiteFitAnalysisCard({
   };
 
   // ✅ Função para gerar recomendação IA
+  // 🔥 BUG 4 FIX: Usar Edge Function ao invés de expor chave da API no frontend
   const generateAIRecommendation = async (
     tenantProds: any[],
     prospectProds: any[],
@@ -148,46 +149,25 @@ export function WebsiteFitAnalysisCard({
   ) => {
     setLoadingRecommendation(true);
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'Você é um especialista em análise estratégica de fit entre empresas. Analise produtos e forneça recomendações objetivas e acionáveis.'
-            },
-            {
-              role: 'user',
-              content: `Analise o fit entre duas empresas:
-
-PRODUTOS DO TENANT (${tenantProds.length}):
-${tenantProds.slice(0, 10).map(p => `- ${p.nome} (${p.categoria || 'Sem categoria'})`).join('\n')}
-
-PRODUTOS DO PROSPECT (${prospectProds.length}):
-${prospectProds.slice(0, 10).map(p => `- ${p.nome} (${p.categoria || 'Sem categoria'})`).join('\n')}
-
-PRODUTOS COMPATÍVEIS: ${compatibleProducts.length}
-WEBSITE FIT SCORE: ${websiteFitScore}/20
-
-Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
-1. Oportunidades de fit identificadas
-2. Pontos de atenção
-3. Próximos passos recomendados`
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 300,
-        }),
+      // 🔥 BUG 4 FIX: Chamar Edge Function ao invés de API OpenAI diretamente
+      const { data, error } = await supabase.functions.invoke('website-fit-analysis', {
+        body: {
+          tenantProds,
+          prospectProds,
+          compatibleProducts,
+          websiteFitScore
+        }
       });
 
-      if (!response.ok) throw new Error('Erro na API OpenAI');
-      const data = await response.json();
-      setAiRecommendation(data.choices[0]?.message?.content || 'Análise em andamento...');
+      if (error) {
+        console.error('[WebsiteFitAnalysisCard] Erro na Edge Function:', error);
+        throw new Error(error.message || 'Erro ao gerar recomendação');
+      }
+
+      if (!data || !data.recommendation) {
+        throw new Error('Resposta inválida da Edge Function');
+      }
+      setAiRecommendation(data.recommendation || 'Análise em andamento...');
     } catch (error) {
       console.error('[AI Recommendation] Erro:', error);
       setAiRecommendation('Não foi possível gerar recomendação no momento.');

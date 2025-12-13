@@ -81,34 +81,85 @@ export function DealScoringEngine({ dealId, autoRefresh = false }: DealScoringEn
         return;
       }
 
-      // Calcular scores reais baseados nos deals do banco
-      const realScores: DealScore[] = deals.map((deal: any) => {
-        // Calcular score baseado em dados reais
-        const valueScore = Math.min(25, (deal.value || 0) / 10000); // R$ 10k = 25 pontos
-        const probabilityScore = (deal.probability || 0) * 0.2; // 100% = 20 pontos
-        const velocityScore = deal.updated_at ? 15 : 0; // Se atualizado recentemente
-        const engagementScore = deal.stage ? 15 : 0; // Se tem estágio definido
-        const fitScore = 10; // TODO: Calcular fit com ICP
+      // ✅ FASE 2: Chamar função SQL calculate_deal_score() via RPC
+      const realScores: DealScore[] = await Promise.all(
+        deals.map(async (deal: any) => {
+          try {
+            // Chamar função SQL calculate_deal_score()
+            const { data: scoreData, error: scoreError } = await supabase.rpc('calculate_deal_score', {
+              p_deal_id: deal.id,
+              p_tenant_id: tenant.id
+            });
 
-        const overallScore = Math.round(
-          valueScore + probabilityScore + velocityScore + engagementScore + fitScore
-        );
+            if (scoreError) {
+              console.error(`[DealScoringEngine] Erro ao calcular score para deal ${deal.id}:`, scoreError);
+              // Fallback para cálculo manual se RPC falhar
+              const valueScore = Math.min(25, (deal.value || 0) / 10000);
+              const probabilityScore = (deal.probability || 0) * 0.2;
+              const overallScore = Math.round(valueScore + probabilityScore + 30);
+              
+              return {
+                deal_id: deal.id,
+                deal_name: deal.name || 'Deal sem nome',
+                overall_score: Math.min(100, overallScore),
+                factors: {
+                  value: Math.round(valueScore),
+                  probability: Math.round(probabilityScore),
+                  velocity: 0,
+                  engagement: 0,
+                  fit: 0,
+                },
+                trend: 'stable' as const,
+                last_updated: deal.updated_at || deal.created_at || new Date().toISOString(),
+              };
+            }
 
-        return {
-          deal_id: deal.id,
-          deal_name: deal.name || 'Deal sem nome',
-          overall_score: Math.min(100, overallScore),
-          factors: {
-            value: Math.round(valueScore),
-            probability: Math.round(probabilityScore),
-            velocity: velocityScore,
-            engagement: engagementScore,
-            fit: fitScore,
-          },
-          trend: 'stable', // TODO: Calcular tendência baseada em histórico
-          last_updated: deal.updated_at || deal.created_at || new Date().toISOString(),
-        };
-      });
+            // Buscar deal_score completo da tabela deal_scores
+            const { data: dealScoreRecord } = await supabase
+              .from('deal_scores')
+              .select('*')
+              .eq('deal_id', deal.id)
+              .eq('tenant_id', tenant.id)
+              .order('last_calculated_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const factors = dealScoreRecord?.factors as any || {
+              value: 0,
+              probability: 0,
+              velocity: 0,
+              engagement: 0,
+              fit: 0,
+            };
+
+            return {
+              deal_id: deal.id,
+              deal_name: deal.name || deal.title || 'Deal sem nome',
+              overall_score: dealScoreRecord?.overall_score || scoreData || 0,
+              factors: {
+                value: factors.value || 0,
+                probability: factors.probability || 0,
+                velocity: factors.velocity || 0,
+                engagement: factors.engagement || 0,
+                fit: factors.fit || 0,
+              },
+              trend: (dealScoreRecord?.trend || 'stable') as 'up' | 'down' | 'stable',
+              last_updated: dealScoreRecord?.last_calculated_at || deal.updated_at || deal.created_at || new Date().toISOString(),
+            };
+          } catch (error: any) {
+            console.error(`[DealScoringEngine] Erro ao processar deal ${deal.id}:`, error);
+            // Retornar score básico em caso de erro
+            return {
+              deal_id: deal.id,
+              deal_name: deal.name || 'Deal sem nome',
+              overall_score: 0,
+              factors: { value: 0, probability: 0, velocity: 0, engagement: 0, fit: 0 },
+              trend: 'stable' as const,
+              last_updated: deal.updated_at || deal.created_at || new Date().toISOString(),
+            };
+          }
+        })
+      );
       
       setScores(realScores);
     } catch (error: any) {

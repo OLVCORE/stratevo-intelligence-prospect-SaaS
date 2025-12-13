@@ -63,36 +63,35 @@ export async function fetchJusBrasilData(
   try {
     logger.info('JUSBRASIL', 'Fetching legal data', { cnpj });
 
-    // 🔥 PROIBIDO: Dados mockados foram removidos
-    // Se integração com JusBrasil não estiver disponível, retornar dados vazios
-    // NUNCA retornar dados fake - isso viola a regra sagrada da plataforma
+    // 🔥 BUG 3 FIX: Retornar null/indefinido ao invés de zeros para indicar "dados não disponíveis"
+    // Zeros fazem lógica downstream tratar como "sem processos legais" ao invés de "dados não coletados"
     
     // TODO: Implementar integração real com JusBrasil API ou scraping
-    // Por enquanto, retornar estrutura vazia (não dados fake)
+    // Por enquanto, retornar estrutura com valores null/indefinidos para indicar ausência de dados
     const emptyData: JusBrasilData = {
       cnpj,
-      companyName: '', // Será preenchido quando houver integração real
-      totalProcesses: 0,
-      activeProcesses: 0,
-      processes: [],
+      companyName: null as any, // Indica que nome não foi coletado
+      totalProcesses: null as any, // null = não coletado (não zero = sem processos)
+      activeProcesses: null as any,
+      processes: [], // Array vazio é OK (indica que não há processos conhecidos)
       processesByType: {
-        trabalhista: 0,
-        civel: 0,
-        tributario: 0,
-        criminal: 0,
-        outros: 0
+        trabalhista: null as any, // null = não coletado
+        civel: null as any,
+        tributario: null as any,
+        criminal: null as any,
+        outros: null as any
       },
       processesByStatus: {
-        ativo: 0,
-        arquivado: 0,
-        suspenso: 0,
-        finalizado: 0
+        ativo: null as any, // null = não coletado
+        arquivado: null as any,
+        suspenso: null as any,
+        finalizado: null as any
       },
-      riskLevel: 'baixo',
-      legalHealthScore: 100 // Score perfeito quando não há processos
+      riskLevel: null as any, // null = risco não avaliado (não 'baixo' = risco baixo)
+      legalHealthScore: null as any // null = score não calculado (não 100 = saúde perfeita)
     };
 
-    logger.warn('JUSBRASIL', 'Integração não implementada - retornando dados vazios', { cnpj });
+    logger.warn('JUSBRASIL', 'Integração não implementada - retornando dados null (não disponíveis)', { cnpj });
     return emptyData;
   } catch (error) {
     logger.error('JUSBRASIL', 'Failed to fetch legal data', { error, cnpj });

@@ -14,6 +14,7 @@ export type GuideSectionId =
   | "estoque-quarentena"
   | "crm-sequencias"
   | "relatorios"
+  | "prospeccao-b2b-completa"
   | "atalhos-faq";
 
 export interface GuideSection {
@@ -85,6 +86,20 @@ export const STRATEVO_GUIDE_SECTIONS: GuideSection[] = [
     route: "/guide/relatorios",
     relatedRoutes: ["/central-icp", "/intelligence-360"],
     icon: "BarChart3",
+  },
+  {
+    id: "prospeccao-b2b-completa",
+    title: "Guia Completo de Prospecção B2B",
+    shortDescription:
+      "Fluxo completo passo a passo: do upload à venda, com todas as funções SQL dos 7 microciclos automatizados.",
+    route: "/guide/prospeccao-b2b-completa",
+    relatedRoutes: [
+      "/leads/qualification-engine",
+      "/leads/qualified-stock",
+      "/leads/quarantine",
+      "/leads/pipeline",
+    ],
+    icon: "Target",
   },
   {
     id: "atalhos-faq",

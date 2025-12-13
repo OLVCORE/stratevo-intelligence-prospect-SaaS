@@ -173,7 +173,18 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
           ? initialData.caracteristicasEspeciais
           : []),
     }));
-  }, [initialData?.setoresAlvo, initialData?.nichosAlvo]); // Só atualizar quando setores/nichos mudarem
+  }, [
+    // 🔥 BUG 7 FIX: Adicionar todas as dependências que são acessadas dentro do useEffect
+    initialData?.setoresAlvo, 
+    initialData?.nichosAlvo,
+    initialData?.cnaesAlvo,
+    initialData?.ncmsAlvo,
+    initialData?.porteAlvo,
+    initialData?.localizacaoAlvo,
+    initialData?.faturamentoAlvo,
+    initialData?.funcionariosAlvo,
+    initialData?.caracteristicasEspeciais
+  ]);
 
   // Estados para inputs
   const [cnaeSearchQuery, setCnaeSearchQuery] = useState('');

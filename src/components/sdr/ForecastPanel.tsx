@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,13 +6,34 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sparkles, Loader2, TrendingUp, AlertTriangle, Target, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
+import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 
 export function ForecastPanel() {
   const { toast } = useToast();
+  const { tenant } = useTenant();
   const [loading, setLoading] = useState(false);
   const [forecast, setForecast] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<any>(null);
+
+  // ✅ FASE 2: Buscar revenue_forecasts da tabela
+  const { data: revenueForecasts } = useQuery({
+    queryKey: ['revenue-forecasts', tenant?.id],
+    queryFn: async () => {
+      if (!tenant?.id) return [];
+      const { data, error } = await supabase
+        .from('revenue_forecasts')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .order('period_start', { ascending: false })
+        .limit(10);
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!tenant?.id,
+  });
 
   const generateForecast = async () => {
     setLoading(true);
@@ -87,7 +108,7 @@ export function ForecastPanel() {
       </div>
 
       {/* Metadata Cards */}
-      {metadata && (
+      {(metadata || revenueForecasts) && (
         <div className="grid grid-cols-4 gap-3">
           <Card className="p-3">
             <div className="flex items-center gap-2 mb-1">
@@ -95,8 +116,19 @@ export function ForecastPanel() {
               <p className="text-xs text-muted-foreground">Pipeline</p>
             </div>
             <p className="text-lg font-bold">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(metadata.pipelineValue)}
+              {revenueForecasts && revenueForecasts.length > 0
+                ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(
+                    Number(revenueForecasts[0]?.predicted_revenue || 0)
+                  )
+                : metadata
+                ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(metadata.pipelineValue)
+                : 'R$ 0'}
             </p>
+            {revenueForecasts && revenueForecasts.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Confiança: {Number(revenueForecasts[0]?.confidence || 0).toFixed(0)}%
+              </p>
+            )}
           </Card>
 
           <Card className="p-3">
@@ -104,7 +136,11 @@ export function ForecastPanel() {
               <TrendingUp className="h-4 w-4 text-green-600" />
               <p className="text-xs text-muted-foreground">Deals Ativos</p>
             </div>
-            <p className="text-lg font-bold">{metadata.openDeals}</p>
+            <p className="text-lg font-bold">
+              {revenueForecasts && revenueForecasts.length > 0
+                ? revenueForecasts[0]?.deals_count || 0
+                : metadata?.openDeals || 0}
+            </p>
           </Card>
 
           <Card className="p-3">
@@ -112,7 +148,9 @@ export function ForecastPanel() {
               <Zap className="h-4 w-4 text-purple-600" />
               <p className="text-xs text-muted-foreground">Win Rate</p>
             </div>
-            <p className="text-lg font-bold">{metadata.winRate.toFixed(1)}%</p>
+            <p className="text-lg font-bold">
+              {metadata ? metadata.winRate.toFixed(1) : '0.0'}%
+            </p>
           </Card>
 
           <Card className="p-3">
@@ -121,7 +159,13 @@ export function ForecastPanel() {
               <p className="text-xs text-muted-foreground">Ticket Médio</p>
             </div>
             <p className="text-lg font-bold">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(metadata.avgDealSize)}
+              {revenueForecasts && revenueForecasts.length > 0 && revenueForecasts[0]?.average_deal_size
+                ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(
+                    Number(revenueForecasts[0].average_deal_size)
+                  )
+                : metadata
+                ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(metadata.avgDealSize)
+                : 'R$ 0'}
             </p>
           </Card>
         </div>

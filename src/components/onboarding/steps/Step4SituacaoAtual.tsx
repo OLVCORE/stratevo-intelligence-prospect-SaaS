@@ -76,23 +76,28 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, onSaveExplicit, ini
     }
   }, [initialData]);
 
-  // 🔥 CRÍTICO: Auto-save quando formData mudar (para garantir persistência)
+  // 🔥 BUG 4 FIX: Auto-save quando formData mudar - verificar se onSave está conectado
   useEffect(() => {
+    // 🔥 CRÍTICO: Verificar se onSave existe e é uma função antes de chamar
+    if (!onSave || typeof onSave !== 'function') {
+      console.warn('[Step4] ⚠️ onSave não está disponível ou não é uma função - pulando auto-save');
+      return;
+    }
+    
     // Só salvar se tiver dados relevantes
     if (formData.categoriaSolucao || formData.diferenciais.length > 0 || formData.casosDeUso.length > 0 || formData.ticketsECiclos.length > 0) {
       const timeoutId = setTimeout(async () => {
-        if (onSave) {
-          try {
-            await onSave(formData);
-            console.log('[Step4] ✅ Auto-save executado:', { 
-              categoriaSolucao: formData.categoriaSolucao,
-              diferenciais: formData.diferenciais.length,
-              casosDeUso: formData.casosDeUso.length,
-              ticketsECiclos: formData.ticketsECiclos.length,
-            });
-          } catch (err) {
-            console.error('[Step4] ❌ Erro no auto-save:', err);
-          }
+        try {
+          await onSave(formData);
+          console.log('[Step4] ✅ Auto-save executado:', { 
+            categoriaSolucao: formData.categoriaSolucao,
+            diferenciais: formData.diferenciais.length,
+            casosDeUso: formData.casosDeUso.length,
+            ticketsECiclos: formData.ticketsECiclos.length,
+          });
+        } catch (err) {
+          console.error('[Step4] ❌ Erro no auto-save:', err);
+          // 🔥 CRÍTICO: Não silenciar erros - logar para debug
         }
       }, 1000); // Aguardar 1 segundo após última mudança
       

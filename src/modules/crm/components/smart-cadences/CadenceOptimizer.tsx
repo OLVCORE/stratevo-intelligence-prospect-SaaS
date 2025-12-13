@@ -31,25 +31,78 @@ export function CadenceOptimizer() {
     enabled: !!tenant?.id,
   });
 
-  // Buscar otimizações sugeridas
+  // ✅ FASE 3: Buscar otimizações usando função SQL optimize_cadence_step_timing()
   const { data: optimizations, isLoading } = useQuery({
     queryKey: ["cadence-optimizations", selectedCadence],
     queryFn: async () => {
       if (!selectedCadence || !tenant?.id) return null;
 
-      // Chamar Edge Function para otimização
-      const { data, error } = await supabase.functions.invoke(
-        "crm-optimize-cadence-timing",
-        {
-          body: {
-            cadence_id: selectedCadence,
-            tenant_id: tenant.id,
-          },
-        }
-      );
+      try {
+        // Buscar steps da cadência
+        const { data: steps, error: stepsError } = await supabase
+          .from('cadence_steps')
+          .select('*')
+          .eq('cadence_id', selectedCadence)
+          .order('step_order', { ascending: true });
 
-      if (error) throw error;
-      return data;
+        if (stepsError) throw stepsError;
+        if (!steps || steps.length === 0) return null;
+
+        // Chamar função SQL para cada step
+        const optimizedSteps = await Promise.all(
+          steps.map(async (step: any) => {
+            try {
+              const { data, error } = await supabase.rpc('optimize_cadence_step_timing', {
+                p_step_id: step.id,
+                p_tenant_id: tenant.id
+              });
+
+              if (error) {
+                console.error(`[CadenceOptimizer] Erro ao otimizar step ${step.id}:`, error);
+                return null;
+              }
+
+              return {
+                step_id: step.id,
+                step_number: step.step_order,
+                title: step.name || `Passo ${step.step_order}`,
+                description: step.description || '',
+                current_timing: `${step.delay_hours || 0} horas`,
+                optimized_timing: data?.optimal_delay_hours ? `${data.optimal_delay_hours} horas` : `${step.delay_hours || 0} horas`,
+                expected_improvement: data?.expected_improvement || null,
+              };
+            } catch (error: any) {
+              console.error(`[CadenceOptimizer] Erro ao processar step ${step.id}:`, error);
+              return null;
+            }
+          })
+        );
+
+        const validSteps = optimizedSteps.filter((s): s is NonNullable<typeof s> => s !== null);
+
+        return {
+          summary: `${validSteps.length} passo(s) otimizado(s) com sucesso`,
+          suggestions: validSteps,
+        };
+      } catch (error: any) {
+        console.error('[CadenceOptimizer] Erro ao buscar otimizações:', error);
+        // Fallback: tentar Edge Function se SQL falhar
+        try {
+          const { data, error: edgeError } = await supabase.functions.invoke(
+            "crm-optimize-cadence-timing",
+            {
+              body: {
+                cadence_id: selectedCadence,
+                tenant_id: tenant.id,
+              },
+            }
+          );
+          if (edgeError) throw edgeError;
+          return data;
+        } catch (fallbackError: any) {
+          throw error; // Lançar erro original
+        }
+      }
     },
     enabled: !!selectedCadence && !!tenant?.id,
   });

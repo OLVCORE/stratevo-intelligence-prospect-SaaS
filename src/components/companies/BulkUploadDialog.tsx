@@ -643,6 +643,7 @@ if (!tenantId) {
 }
 
 console.log('💾 Salvando diretamente no banco de dados para tenant:', tenantId);
+console.log('[BulkUpload] 🔍 DEBUG - selectedIcpIds:', selectedIcpIds);
 
 // 🔥 FLUXO CORRETO: Usar ICP selecionado OU buscar ICP principal automaticamente
 // Se o usuário não selecionou ICP, buscar o ICP principal do tenant
@@ -650,7 +651,9 @@ let icpIdToUse: string | null = null;
 
 if (selectedIcpIds && selectedIcpIds.length > 0) {
   icpIdToUse = selectedIcpIds[0]; // Usar o primeiro ICP selecionado
+  console.log('[BulkUpload] ✅ Usando ICP selecionado:', icpIdToUse);
 } else {
+  console.log('[BulkUpload] 🔍 Nenhum ICP selecionado, buscando ICP principal...');
   // Se nenhum ICP foi selecionado, buscar o ICP principal automaticamente
   const { data: icpData, error: icpError } = await supabase
     .from('icp_profiles_metadata' as any)
@@ -661,7 +664,10 @@ if (selectedIcpIds && selectedIcpIds.length > 0) {
     .limit(1)
     .maybeSingle();
 
+  console.log('[BulkUpload] 🔍 Resultado busca ICP:', { icpData, icpError });
+
   if (icpError || !icpData) {
+    console.error('[BulkUpload] ❌ Erro ao buscar ICP:', icpError);
     toast.error('Erro: Nenhum ICP encontrado para o tenant', {
       description: 'Crie um ICP antes de importar empresas ou selecione um ICP no card de upload'
     });
@@ -671,6 +677,7 @@ if (selectedIcpIds && selectedIcpIds.length > 0) {
   }
   
   icpIdToUse = icpData.id;
+  console.log('[BulkUpload] ✅ ICP principal encontrado:', icpIdToUse);
   toast.info('Usando ICP principal automaticamente', {
     description: 'Você pode selecionar outro ICP no card de upload ou depois na página de qualificação'
   });
@@ -755,6 +762,26 @@ const icpIdsToProcess = selectedIcpIds && selectedIcpIds.length > 0
   ? selectedIcpIds 
   : (icpIdToUse ? [icpIdToUse] : []);
 
+// 🔥 BUG 1 FIX: Validar se há ICPs antes de processar
+console.log('[BulkUpload] 🔍 DEBUG - icpIdsToProcess:', icpIdsToProcess);
+if (icpIdsToProcess.length === 0) {
+  console.error('[BulkUpload] ❌ ERRO CRÍTICO: Nenhum ICP disponível para processar');
+  console.error('[BulkUpload] 🔍 DEBUG - Estado:', {
+    selectedIcpIds,
+    icpIdToUse,
+    tenantId
+  });
+  toast.error('Nenhum ICP disponível', {
+    description: 'Selecione um ICP ou certifique-se de que há um ICP principal configurado para este tenant.',
+    duration: 8000
+  });
+  setProgress(0);
+  setIsUploading(false);
+  return; // 🔥 CRÍTICO: Parar execução se não houver ICPs
+}
+
+console.log('[BulkUpload] ✅ ICPs disponíveis para processar:', icpIdsToProcess);
+
 // Função auxiliar para fallback direto - REFATORADA COM LOGS DETALHADOS
 const insertDirectlyToProspectingCandidates = async ({
   supabase,
@@ -773,10 +800,13 @@ const insertDirectlyToProspectingCandidates = async ({
   columnMapping: Record<string, string>;
   sourceName?: string; // ✅ NOVO: sourceName opcional
 }): Promise<{ insertedCount: number; duplicateCount: number }> => {
+  console.log('[BulkUpload][fallback] 🚀 INICIANDO insertDirectlyToProspectingCandidates');
   console.log('[BulkUpload][fallback] 🔍 Recebidas empresas para fallback:', {
     totalCompanies: companies.length,
     tenantId,
     icpId,
+    sourceBatchId,
+    sourceName,
   });
 
   // 1) ✅ NORMALIZAÇÃO OBRIGATÓRIA: Normalizar/filtrar empresas válidas usando função central
@@ -811,43 +841,53 @@ const insertDirectlyToProspectingCandidates = async ({
     return { insertedCount: 0, duplicateCount: 0 };
   }
 
-  // 2) ✅ CORRIGIDO: Buscar CNPJs existentes APENAS com o mesmo source_batch_id
-  // Permite re-importação se o source_name ou source_batch_id forem diferentes
+  // 🔥 BUG 2 FIX: Buscar CNPJs existentes globalmente por tenant+ICP (não apenas mesmo batch)
+  // Isso previne duplicatas reais: mesmo CNPJ não pode ser qualificado múltiplas vezes
+  // Mas ainda permite re-importação se source_name for diferente (para rastreabilidade)
+  console.log('[BulkUpload][fallback] 🔍 Normalizando CNPJs para verificação de duplicatas...');
   const normalizedCnpjs = validCompanies
     .map((c) => normalizeCnpj(c.cnpj))
     .filter(Boolean);
   
-  // ✅ SEGURANÇA: Buscar apenas candidatos com o MESMO source_batch_id para evitar duplicatas no mesmo lote
-  // Isso permite re-importar empresas com source_name diferente
+  console.log('[BulkUpload][fallback] 🔍 Buscando CNPJs existentes no banco...');
+  // ✅ CORRIGIDO: Verificar duplicatas GLOBALMENTE por tenant+ICP (não apenas mesmo batch)
+  // Isso previne que o mesmo CNPJ seja qualificado múltiplas vezes em diferentes batches
+  // A verificação por source_batch_id só previne duplicatas no mesmo lote de upload
   const { data: existingRows, error: existingError } = await supabase
     .from('prospecting_candidates' as any)
-    .select('cnpj, source_batch_id')
+    .select('cnpj, source_batch_id, source_name')
     .eq('tenant_id', tenantId)
-    .eq('icp_id', icpId)
-    .eq('source_batch_id', sourceBatchId); // ✅ APENAS mesmo batch_id = duplicata real
+    .eq('icp_id', icpId);
+    // 🔥 REMOVIDO: .eq('source_batch_id', sourceBatchId) - agora verifica globalmente
+
+  console.log('[BulkUpload][fallback] 🔍 Resultado busca duplicatas:', {
+    existingRowsCount: existingRows?.length || 0,
+    error: existingError?.message || null,
+  });
 
   if (existingError) {
     console.error('[BulkUpload][fallback] ❌ Erro ao buscar CNPJs existentes:', existingError);
     throw existingError;
   }
 
-  // ✅ Normalizar CNPJs do banco também para comparação (apenas do mesmo batch)
+  // ✅ Normalizar CNPJs do banco também para comparação (globalmente por tenant+ICP)
   const existingCnpjsNormalized = new Set(
     (existingRows || []).map((r: any) => normalizeCnpj(r.cnpj)).filter(Boolean)
   );
   
-  console.log('[BulkUpload][fallback] ℹ️ CNPJs já existentes no MESMO batch:', {
+  console.log('[BulkUpload][fallback] ℹ️ CNPJs já existentes globalmente (tenant+ICP):', {
     countExisting: existingCnpjsNormalized.size,
     totalNew: normalizedCnpjs.length,
     sourceBatchId,
     sampleExisting: Array.from(existingCnpjsNormalized).slice(0, 3),
     sampleNew: normalizedCnpjs.slice(0, 3),
     matches: normalizedCnpjs.filter(cnpj => existingCnpjsNormalized.has(cnpj)).length,
-    note: 'Permitindo re-importação se source_batch_id for diferente'
+    note: 'Verificação global previne duplicatas reais - mesmo CNPJ não pode ser qualificado múltiplas vezes'
   });
 
-  // 3) ✅ CORRIGIDO: Filtrar apenas duplicatas do MESMO batch_id
-  // Isso permite re-importar empresas com source_name diferente
+  // 🔥 BUG 2 FIX: Filtrar duplicatas GLOBALMENTE por tenant+ICP (não apenas mesmo batch)
+  // Isso previne que o mesmo CNPJ seja qualificado múltiplas vezes em diferentes batches
+  // A verificação é global para garantir integridade dos dados
   const companiesToInsert = validCompanies.filter((c) => {
     const normalized = normalizeCnpj(c.cnpj);
     return normalized && !existingCnpjsNormalized.has(normalized);
@@ -867,6 +907,8 @@ const insertDirectlyToProspectingCandidates = async ({
   }
 
   // 4) ✅ CORREÇÃO DEFINITIVA: Montar payload do insert com mapeamento estruturado
+  // 🔥 BUG 3 FIX: Rastrear registros inválidos separadamente para estatísticas corretas
+  let invalidCount = 0;
   const rows = companiesToInsert.map((c) => {
     // 🔍 DEBUG: Log do objeto completo para entender estrutura
     if (companiesToInsert.indexOf(c) === 0) {
@@ -885,25 +927,70 @@ const insertDirectlyToProspectingCandidates = async ({
     }
     
     // ✅ Mapeamento estruturado de razão social (múltiplas variações)
-    // Buscar em TODOS os campos possíveis, incluindo variações de encoding
-    const razao = 
-      // Campos diretos da planilha (com todas variações possíveis)
-      c['Razão'] ??  
-      c['Razao'] ??  
-      c['Razão Social'] ??
-      c['Razao Social'] ??
-      c['RAZAO_SOCIAL'] ??
-      c['Razão Social'] ??  // Com encoding diferente
-      c['Razo'] ??  // Encoding ISO-8859-1
-      c['Razão'] ??  // Encoding UTF-8
-      // Campos normalizados
-      c.razao_social ??  
-      c.company_name ??  
-      c.nome_empresa ??
-      // Buscar por getValue
-      getValue(c, 'razao_social', columnMapping) ??
-      getValue(c, 'companyName', columnMapping) ??
-      null;
+    // 🔥 FIX: Buscar primeiro pelo columnMapping (mais confiável), depois tentar variações diretas
+    // Isso resolve problemas de encoding onde 'Razão' pode aparecer como 'Razo'
+    let razao = null;
+    
+    // 1. Tentar usar columnMapping primeiro (mais confiável)
+    if (columnMapping['razao_social']) {
+      const mappedKey = columnMapping['razao_social'];
+      razao = c[mappedKey] || getValue(c, 'razao_social', columnMapping);
+      // 🔥 FIX: Verificar se o valor encontrado não está vazio
+      if (razao && String(razao).trim()) {
+        razao = String(razao).trim();
+      } else {
+        razao = null;
+      }
+    }
+    
+    // 2. Se não encontrou, buscar diretamente em todas as chaves do objeto
+    // Isso resolve problemas de encoding onde o nome do campo pode variar
+    if (!razao) {
+      const allKeys = Object.keys(c);
+      // Procurar por chaves que contenham "razao", "razão", "razo", "raz", "nome", "empresa" (case insensitive)
+      const razaoKey = allKeys.find(key => {
+        if (!key) return false;
+        const keyLower = key.toLowerCase();
+        return (
+          keyLower.includes('razao') || 
+          keyLower.includes('razão') ||
+          keyLower.includes('razo') ||
+          keyLower.includes('raz') ||
+          (keyLower.includes('nome') && (keyLower.includes('empresa') || keyLower.includes('social'))) ||
+          keyLower === 'company_name' ||
+          keyLower === 'nome_empresa'
+        );
+      });
+      if (razaoKey) {
+        const value = c[razaoKey];
+        if (value && String(value).trim()) {
+          razao = String(value).trim();
+        }
+      }
+    }
+    
+    // 3. Fallback: tentar variações hardcoded (caso ainda não tenha encontrado)
+    if (!razao) {
+      const candidates = [
+        c['Razão'],
+        c['Razao'],
+        c['Razão Social'],
+        c['Razao Social'],
+        c['RAZAO_SOCIAL'],
+        c['Razo'], // Encoding ISO-8859-1
+        c.razao_social,
+        c.company_name,
+        c.nome_empresa,
+        c['Nome da Empresa'],
+        c['Nome Empresa'],
+      ];
+      for (const candidate of candidates) {
+        if (candidate && String(candidate).trim()) {
+          razao = String(candidate).trim();
+          break;
+        }
+      }
+    }
     
     // ✅ Mapeamento estruturado de nome fantasia
     const fantasia = 
@@ -968,15 +1055,33 @@ const insertDirectlyToProspectingCandidates = async ({
     
     // ✅ VALIDAÇÃO: Se não houver CNPJ ou company_name, marcar como inválido
     if (!normalizedCnpj || !companyName) {
+      // 🔥 BUG 3 FIX: Incrementar contador de inválidos para estatísticas corretas
+      invalidCount++;
       // 🔍 DEBUG: Log para entender por que está sendo marcado como inválido
       if (companiesToInsert.indexOf(c) < 3) {
+        // 🔥 FIX: Buscar todas as chaves que podem conter razão social
+        const allKeys = Object.keys(c);
+        const razaoKeys = allKeys.filter(key => 
+          key && (
+            key.toLowerCase().includes('razao') || 
+            key.toLowerCase().includes('razão') ||
+            key.toLowerCase().includes('razo') ||
+            key.toLowerCase().includes('raz')
+          )
+        );
+        const razaoValues = razaoKeys.map(key => ({ key, value: c[key] }));
+        
         console.warn('[BulkUpload][fallback] ⚠️ Registro inválido:', {
           index: companiesToInsert.indexOf(c),
           normalizedCnpj,
           companyName,
+          razao: razao,
+          fantasia: fantasia,
           cnpjOriginal: c.cnpj,
-          razao: c['Razão'] || c['Razao'] || c['Razão Social'] || c['Razao Social'],
-          fantasia: c['Fantasia'] || c['Nome Fantasia'],
+          razaoKeys: razaoKeys,
+          razaoValues: razaoValues,
+          columnMapping: columnMapping['razao_social'],
+          allKeys: allKeys.slice(0, 15), // Primeiras 15 chaves para debug
           reason: !normalizedCnpj ? 'CNPJ ausente ou inválido' : 'Nome da empresa ausente',
         });
       }
@@ -1031,10 +1136,34 @@ const insertDirectlyToProspectingCandidates = async ({
     });
   }
 
+  console.log('[BulkUpload][fallback] 🚀 Executando INSERT no banco de dados...');
+  console.log('[BulkUpload][fallback] 📊 Dados do INSERT:', {
+    rowsCount: rows.length,
+    tenantId,
+    icpId,
+    sourceBatchId,
+    firstRowSample: rows[0] ? {
+      cnpj: rows[0].cnpj,
+      company_name: rows[0].company_name,
+      tenant_id: rows[0].tenant_id,
+      icp_id: rows[0].icp_id,
+    } : null,
+  });
+
   const { data: insertData, error: insertError } = await supabase
     .from('prospecting_candidates' as any)
     .insert(rows)
     .select('id');
+
+  console.log('[BulkUpload][fallback] 📥 Resultado do INSERT:', {
+    insertDataCount: insertData?.length || 0,
+    error: insertError ? {
+      message: insertError.message,
+      code: insertError.code,
+      details: insertError.details,
+      hint: insertError.hint,
+    } : null,
+  });
 
   if (insertError) {
     console.error('[BulkUpload][fallback] ❌ Erro ao inserir em prospecting_candidates:', insertError);
@@ -1048,20 +1177,27 @@ const insertDirectlyToProspectingCandidates = async ({
   }
 
   const insertedCount = insertData?.length ?? rows.length;
-  const duplicateCount = validCompanies.length - insertedCount;
+  // 🔥 BUG 3 FIX: Calcular duplicatas corretamente incluindo registros inválidos
+  // duplicateCount = total original - inseridos - inválidos
+  // Isso garante que registros descartados por serem inválidos sejam contados corretamente
+  const duplicateCount = validCompanies.length - insertedCount - invalidCount;
 
   console.log('[BulkUpload][fallback] ✅ Insert concluído:', {
     insertedCount,
     duplicateCount,
+    invalidCount, // 🔥 BUG 3 FIX: Incluir contagem de inválidos nas estatísticas
     rowsInserted: insertData?.length,
+    totalOriginal: validCompanies.length,
   });
 
   return { insertedCount, duplicateCount };
 };
 
 // Processar cada ICP
+console.log('[BulkUpload] 🚀 Iniciando processamento de ICPs:', icpIdsToProcess);
 for (const icpId of icpIdsToProcess) {
   try {
+    console.log(`[BulkUpload] 🔄 Processando ICP: ${icpId}`);
     setProgress(20 + (icpIdsToProcess.indexOf(icpId) / icpIdsToProcess.length) * 60);
     
     let insertedCount = 0;
@@ -1104,6 +1240,7 @@ for (const icpId of icpIdsToProcess) {
     */
     
     // TENTATIVA 2: Fallback direto (sempre ativo por enquanto)
+    console.log(`[BulkUpload] 🔄 Chamando insertDirectlyToProspectingCandidates para ICP ${icpId}...`);
     try {
       const fallbackResult = await insertDirectlyToProspectingCandidates({
         supabase,
@@ -1119,6 +1256,7 @@ for (const icpId of icpIdsToProcess) {
       console.log(`✅ [BulkUpload] Fallback processou: ${insertedCount} inseridas, ${duplicatesCount} duplicadas`);
     } catch (fallbackError: any) {
       console.error('[BulkUpload] ❌ Fallback também falhou', fallbackError);
+      console.error('[BulkUpload] ❌ Stack trace:', fallbackError.stack);
       toast.error(`Erro ao importar para ICP ${icpId}`, {
         description: fallbackError.message || 'Erro ao inserir empresas. Veja o console para detalhes.'
       });
@@ -1127,14 +1265,18 @@ for (const icpId of icpIdsToProcess) {
     
     totalInserted += insertedCount;
     totalDuplicates += duplicatesCount;
+    console.log(`[BulkUpload] 📊 Total acumulado: ${totalInserted} inseridas, ${totalDuplicates} duplicadas`);
     
   } catch (err: any) {
     console.error(`❌ Erro ao processar ICP ${icpId}:`, err);
+    console.error(`❌ Stack trace:`, err.stack);
     toast.error(`Erro ao processar ICP ${icpId}`, {
       description: err.message || 'Erro desconhecido'
     });
   }
 }
+
+console.log('[BulkUpload] ✅ Loop de ICPs concluído. Total:', { totalInserted, totalDuplicates });
 
       setProgress(90);
 
@@ -1167,12 +1309,17 @@ for (const icpId of icpIdsToProcess) {
           duration: 6000
         });
       } else {
+        // 🔥 BUG 3 FIX: Se nenhuma empresa foi inserida, mostrar erro claro
+        // Nota: icpIdsToProcess.length === 0 já é tratado no early return (linha 759-767)
+        // então essa verificação nunca será executada - removida para evitar código morto
         console.error(`❌ ERRO: Nenhuma empresa foi importada. Total duplicadas/inválidas: ${totalDuplicates}`);
         
+        const errorMessage = totalDuplicates > 0 
+          ? `${totalDuplicates} empresas foram ignoradas (duplicadas ou CNPJ inválido). Veja o console para detalhes.`
+          : 'Verifique se o arquivo contém dados válidos com CNPJs corretos. Veja o console para detalhes.';
+        
         toast.error('Nenhuma empresa foi importada', {
-          description: totalDuplicates > 0 
-            ? `${totalDuplicates} empresas foram ignoradas (duplicadas ou CNPJ inválido). Veja o console para detalhes.`
-            : 'Verifique se o arquivo contém dados válidos com CNPJs corretos. Veja o console para detalhes.',
+          description: errorMessage,
           duration: 8000
         });
       }
@@ -1180,13 +1327,25 @@ for (const icpId of icpIdsToProcess) {
       // Fechar dialog
       setTimeout(() => setIsOpen(false), 2000);
 
-    } catch (error) {
-      console.error('Erro no upload:', error);
-      toast.error("Erro ao processar arquivo", {
-        description: error instanceof Error ? error.message : "Erro desconhecido"
+    } catch (error: any) {
+      console.error('[BulkUpload] ❌ ERRO CRÍTICO NO UPLOAD:', error);
+      console.error('[BulkUpload] ❌ Stack trace:', error?.stack);
+      console.error('[BulkUpload] ❌ Detalhes completos:', {
+        message: error?.message,
+        name: error?.name,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
       });
+      toast.error("Erro ao processar arquivo", {
+        description: error instanceof Error ? error.message : "Erro desconhecido. Veja o console para detalhes.",
+        duration: 10000
+      });
+      setProgress(0);
     } finally {
+      console.log('[BulkUpload] 🏁 Finalizando upload (finally block)');
       setIsUploading(false);
+      setProgress(0);
     }
   };
 

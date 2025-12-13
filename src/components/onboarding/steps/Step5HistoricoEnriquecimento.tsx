@@ -369,21 +369,26 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, onSaveExp
     }
   }, [initialData]);
 
-  // 🔥 CRÍTICO: Auto-save quando formData mudar (para garantir persistência)
+  // 🔥 BUG 4 FIX: Auto-save quando formData mudar - verificar se onSave está conectado
   useEffect(() => {
+    // 🔥 CRÍTICO: Verificar se onSave existe e é uma função antes de chamar
+    if (!onSave || typeof onSave !== 'function') {
+      console.warn('[Step5] ⚠️ onSave não está disponível ou não é uma função - pulando auto-save');
+      return;
+    }
+    
     // Só salvar se tiver dados relevantes
     if (formData.clientesAtuais.length > 0 || formData.empresasBenchmarking.length > 0) {
       const timeoutId = setTimeout(async () => {
-        if (onSave) {
-          try {
-            await onSave(formData);
-            console.log('[Step5] ✅ Auto-save executado:', { 
-              clientesAtuais: formData.clientesAtuais.length,
-              empresasBenchmarking: formData.empresasBenchmarking.length,
-            });
-          } catch (err) {
-            console.error('[Step5] ❌ Erro no auto-save:', err);
-          }
+        try {
+          await onSave(formData);
+          console.log('[Step5] ✅ Auto-save executado:', { 
+            clientesAtuais: formData.clientesAtuais.length,
+            empresasBenchmarking: formData.empresasBenchmarking.length,
+          });
+        } catch (err) {
+          console.error('[Step5] ❌ Erro no auto-save:', err);
+          // 🔥 CRÍTICO: Não silenciar erros - logar para debug
         }
       }, 1000); // Aguardar 1 segundo após última mudança
       

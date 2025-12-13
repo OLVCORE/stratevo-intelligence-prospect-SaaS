@@ -98,6 +98,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { STCAgent } from '@/components/intelligence/STCAgent';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
 import { QualifiedStockActionsMenu } from '@/components/qualification/QualifiedStockActionsMenu';
@@ -270,6 +271,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           website_fit_score,
           website_products_match,
           linkedin_url,
+          purchase_intent_score,
           prospect_qualification_jobs (
             job_name,
             source_type,
@@ -2305,6 +2307,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                       onFilterChange={setFilterGrade}
                     />
                   </TableHead>
+                  <TableHead>Intenção de Compra</TableHead>
                   <TableHead>Website</TableHead>
                   <TableHead>Website Fit</TableHead>
                   <TableHead>LinkedIn</TableHead>
@@ -2552,6 +2555,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                             </TooltipProvider>
                           );
                         })()}
+                      </TableCell>
+                      {/* ✅ NOVO: 11. Purchase Intent Score */}
+                      <TableCell>
+                        <PurchaseIntentBadge 
+                          score={prospect.purchase_intent_score} 
+                          size="sm"
+                        />
                       </TableCell>
                       {/* ✅ NOVA COLUNA: Website */}
                       <TableCell>

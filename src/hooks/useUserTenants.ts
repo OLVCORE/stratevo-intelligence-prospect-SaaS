@@ -34,16 +34,35 @@ export function useUserTenants(): UseUserTenantsResult {
   const isFetching = useRef(false);
   const lastFetchTime = useRef(0);
 
-  const fetchTenants = async () => {
-    // 🔥 BLOQUEIO: Evitar requisições repetidas
+  const fetchTenants = async (force = false) => {
+    // 🔥 BUG 1 FIX: Tornar verificação de cooldown atômica para prevenir race conditions
+    // Verificar e atualizar lastFetchTime em uma única operação
     const now = Date.now();
-    if (isFetching.current || (now - lastFetchTime.current < 3000)) {
-      console.log('[HF-STRATEVO-TENANT] ⏭️ Requisição bloqueada (já em execução ou muito recente)');
+    const previousFetchTime = lastFetchTime.current;
+    const isWithinCooldown = (now - previousFetchTime < 3000);
+    
+    // Se está em execução, bloquear (exceto se forçado)
+    if (isFetching.current && !force) {
+      console.log('[HF-STRATEVO-TENANT] ⏭️ Requisição bloqueada (já em execução)');
       return;
     }
-
-    isFetching.current = true;
+    
+    // Se está dentro do cooldown e não é forçado, bloquear
+    if (isWithinCooldown && !force) {
+      console.log('[HF-STRATEVO-TENANT] ⏭️ Requisição bloqueada (cooldown de 3s - use refetch() para forçar)');
+      return;
+    }
+    
+    // 🔥 BUG 1 FIX: Atualizar lastFetchTime e isFetching atomicamente
+    // Isso previne que duas chamadas simultâneas passem pela verificação de cooldown
+    // antes de qualquer uma atualizar o timestamp
     lastFetchTime.current = now;
+    isFetching.current = true;
+    
+    // Se é forçado, logar
+    if (force) {
+      console.log('[HF-STRATEVO-TENANT] 🔄 Refetch forçado (ignorando cooldown)');
+    }
     setLoading(true);
     setError(null);
 
@@ -210,6 +229,11 @@ export function useUserTenants(): UseUserTenantsResult {
     };
   }, []);
 
-  return { tenants, loading, error, refetch: fetchTenants };
+  // 🔥 BUG 6 FIX: refetch deve forçar execução mesmo dentro do período de 3 segundos
+  const refetch = async () => {
+    await fetchTenants(true); // Passar force=true para ignorar cooldown
+  };
+
+  return { tenants, loading, error, refetch };
 }
 

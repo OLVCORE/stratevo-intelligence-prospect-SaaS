@@ -1,0 +1,91 @@
+/**
+ * Purchase Intent Badge
+ * 
+ * Exibe badge visual indicando score de intenção de compra
+ * - 🔥 Hot Lead: score >= 70
+ * - ⚡ Warm Lead: score >= 40
+ * - ❄️ Cold Lead: score < 40
+ */
+
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Flame, Zap, Snowflake } from 'lucide-react';
+
+interface PurchaseIntentBadgeProps {
+  score: number | null | undefined;
+  showIcon?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export function PurchaseIntentBadge({ 
+  score = 0, 
+  showIcon = true,
+  size = 'md'
+}: PurchaseIntentBadgeProps) {
+  const normalizedScore = Math.min(100, Math.max(0, score || 0));
+  
+  // Determinar categoria
+  const isHot = normalizedScore >= 70;
+  const isWarm = normalizedScore >= 40 && normalizedScore < 70;
+  const isCold = normalizedScore < 40;
+
+  // Cores e estilos
+  const getVariant = () => {
+    if (isHot) return 'destructive'; // Vermelho = Hot
+    if (isWarm) return 'warning'; // Laranja = Warm
+    return 'secondary'; // Cinza = Cold
+  };
+
+  const getIcon = () => {
+    if (isHot) return <Flame className="h-3 w-3 mr-1" />;
+    if (isWarm) return <Zap className="h-3 w-3 mr-1" />;
+    return <Snowflake className="h-3 w-3 mr-1" />;
+  };
+
+  const getLabel = () => {
+    if (isHot) return 'Hot Lead';
+    if (isWarm) return 'Warm Lead';
+    return 'Cold Lead';
+  };
+
+  const getSizeClasses = () => {
+    switch (size) {
+      case 'sm':
+        return 'text-[10px] px-1.5 py-0.5';
+      case 'lg':
+        return 'text-sm px-3 py-1';
+      default:
+        return 'text-xs px-2 py-0.5';
+    }
+  };
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant={getVariant()}
+            className={`${getSizeClasses()} font-semibold cursor-help`}
+          >
+            {showIcon && getIcon()}
+            {getLabel()} ({normalizedScore})
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div className="space-y-1">
+            <p className="font-semibold">Score de Intenção: {normalizedScore}/100</p>
+            <p className="text-xs text-muted-foreground">
+              {isHot && '🔥 Lead quente! Alta probabilidade de compra. Priorizar contato imediato.'}
+              {isWarm && '⚡ Lead morno. Interesse moderado. Contatar em breve.'}
+              {isCold && '❄️ Lead frio. Baixa intenção de compra no momento.'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Baseado em sinais de: expansão, dor, budget, timing e concorrentes
+            </p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+

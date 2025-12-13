@@ -22,6 +22,7 @@ DECLARE
   v_empresa_id UUID;
   v_lead_id UUID;
   v_deal_id UUID;
+  v_company_id UUID; -- ID da tabela companies (se existir)
 BEGIN
   -- Buscar dados da quarentena
   SELECT * INTO v_quarantine
@@ -112,36 +113,80 @@ BEGIN
     RETURNING id INTO v_lead_id;
   END IF;
   
-  -- 3. Criar deal (oportunidade inicial)
-  IF v_lead_id IS NOT NULL THEN
-    INSERT INTO public.deals (
-      tenant_id,
-      lead_id,
-      title,
-      description,
-      stage,
-      probability,
-      priority,
-      source
-    )
-    VALUES (
-      p_tenant_id,
-      v_lead_id,
-      'Oportunidade - ' || v_quarantine.name,
-      'Oportunidade criada a partir da aprovação da quarentena',
-      'discovery',
-      25,
-      CASE 
-        WHEN COALESCE(v_quarantine.temperatura, '') = 'hot' THEN 'high'
-        WHEN COALESCE(v_quarantine.temperatura, '') = 'warm' THEN 'medium'
-        ELSE 'low'
-      END,
-      'quarantine'
-    )
-    RETURNING id INTO v_deal_id;
+  -- 3. Buscar ou criar registro em companies (para vincular deal)
+  IF v_quarantine.cnpj IS NOT NULL THEN
+    SELECT id INTO v_company_id
+    FROM public.companies
+    WHERE cnpj = v_quarantine.cnpj
+      AND tenant_id = p_tenant_id
+    LIMIT 1;
+    
+    -- Se não encontrou, criar em companies
+    IF v_company_id IS NULL THEN
+      INSERT INTO public.companies (
+        tenant_id,
+        name,
+        company_name,
+        cnpj,
+        industry,
+        location
+      )
+      VALUES (
+        p_tenant_id,
+        COALESCE(v_quarantine.nome_fantasia, v_quarantine.name),
+        v_quarantine.name,
+        v_quarantine.cnpj,
+        v_quarantine.sector,
+        jsonb_build_object(
+          'city', v_quarantine.city,
+          'state', v_quarantine.state,
+          'country', 'BR'
+        )
+      )
+      ON CONFLICT (cnpj) DO UPDATE
+      SET
+        name = EXCLUDED.name,
+        company_name = EXCLUDED.company_name,
+        updated_at = now()
+      RETURNING id INTO v_company_id;
+    END IF;
   END IF;
   
-  -- 4. Atualizar status da quarentena
+  -- 4. Criar deal (SEMPRE, mesmo sem lead - vinculado à empresa)
+  INSERT INTO public.deals (
+    tenant_id,
+    lead_id,
+    company_id,
+    title,
+    description,
+    stage,
+    probability,
+    priority,
+    source
+  )
+  VALUES (
+    p_tenant_id,
+    v_lead_id, -- Pode ser NULL se não houver lead
+    v_company_id, -- Vinculado à empresa
+    'Oportunidade - ' || v_quarantine.name,
+    'Oportunidade criada a partir da aprovação da quarentena',
+    'discovery',
+    CASE 
+      WHEN COALESCE(v_quarantine.icp_score, 0) >= 85 THEN 40
+      WHEN COALESCE(v_quarantine.icp_score, 0) >= 70 THEN 30
+      ELSE 25
+    END,
+    CASE 
+      WHEN COALESCE(v_quarantine.temperatura, '') = 'hot' THEN 'high'
+      WHEN COALESCE(v_quarantine.temperatura, '') = 'warm' THEN 'medium'
+      WHEN COALESCE(v_quarantine.icp_score, 0) >= 80 THEN 'high'
+      ELSE 'low'
+    END,
+    'quarantine'
+  )
+  RETURNING id INTO v_deal_id;
+  
+  -- 5. Atualizar status da quarentena
   UPDATE public.leads_quarantine
   SET
     validation_status = 'approved',
@@ -149,21 +194,21 @@ BEGIN
     approved_at = now()
   WHERE id = p_quarantine_id;
   
-  -- 5. Retornar resultado
+  -- 6. Retornar resultado
   RETURN QUERY SELECT 
     v_empresa_id,
     v_lead_id,
     v_deal_id,
     true,
-    'Lead aprovado e movido para CRM com sucesso';
+    'Lead aprovado e movido para CRM com sucesso. Deal criado automaticamente.';
 END;
 $$;
 
 -- Permissões
 GRANT EXECUTE ON FUNCTION approve_quarantine_to_crm(UUID, UUID) TO authenticated;
 
--- Comentário
+-- Comentário atualizado
 COMMENT ON FUNCTION approve_quarantine_to_crm IS 
-'Aprova lead da quarentena e cria registros em empresas, leads e deals no CRM';
+'Aprova lead da quarentena e cria registros em empresas, leads e deals no CRM. Agora cria deal SEMPRE, mesmo sem lead, vinculando diretamente à empresa.';
 
 

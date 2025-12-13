@@ -73,18 +73,42 @@ export function VoiceCallManager() {
     refetchInterval: 5000, // Atualizar a cada 5 segundos
   });
 
-  // Buscar estatísticas
+  // ✅ FASE 4: Usar função SQL get_voice_call_stats_by_date_range() (nova função)
   const { data: stats } = useQuery({
     queryKey: ['voice-call-stats', tenant?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .rpc('get_voice_call_stats', { 
-          p_tenant_id: tenant?.id,
-          p_period_days: 30 
-        });
+      if (!tenant?.id) return null;
 
-      if (error) throw error;
-      return data[0];
+      try {
+        // Usar nova função get_voice_call_stats_by_date_range
+        const dateFrom = new Date();
+        dateFrom.setDate(dateFrom.getDate() - 30); // Últimos 30 dias
+
+        const { data, error } = await supabase
+          .rpc('get_voice_call_stats_by_date_range', { 
+            p_tenant_id: tenant.id,
+            p_date_from: dateFrom.toISOString(),
+            p_date_to: new Date().toISOString()
+          });
+
+        if (error) {
+          console.error('[VoiceCallManager] Erro ao buscar stats com nova função, tentando antiga:', error);
+          // Fallback para função antiga se nova não existir
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .rpc('get_voice_call_stats', { 
+              p_tenant_id: tenant.id,
+              p_period_days: 30 
+            });
+          
+          if (fallbackError) throw fallbackError;
+          return fallbackData?.[0] || null;
+        }
+
+        return data?.[0] || null;
+      } catch (error: any) {
+        console.error('[VoiceCallManager] Erro ao buscar estatísticas:', error);
+        return null;
+      }
     },
     enabled: !!tenant?.id,
   });

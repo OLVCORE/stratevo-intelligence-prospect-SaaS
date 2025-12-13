@@ -17,7 +17,8 @@ export function useApprovedCompanies(filters?: {
           website_encontrado,
           website_fit_score,
           website_products_match,
-          linkedin_url
+          linkedin_url,
+          purchase_intent_score
         `)
         .eq('status', 'aprovada'); // ✅ APENAS APROVADAS
 

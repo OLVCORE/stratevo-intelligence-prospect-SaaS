@@ -11,13 +11,13 @@ import { ArrowUp, ArrowDown, Clock, Target } from "lucide-react";
 export function FollowUpPrioritizer() {
   const { tenant } = useTenant();
 
-  // Buscar follow-ups que precisam de priorização
+  // ✅ FASE 3: Buscar follow-ups e calcular optimal contact time usando função SQL
   const { data: followUps, isLoading } = useQuery({
     queryKey: ["follow-ups-priority", tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return [];
       
-      const { data, error } = await supabase
+      const { data: executions, error } = await supabase
         .from("cadence_executions")
         .select(`
           *,
@@ -41,7 +41,35 @@ export function FollowUpPrioritizer() {
         .limit(20);
       
       if (error) throw error;
-      return data || [];
+      if (!executions || executions.length === 0) return [];
+
+      // ✅ Chamar calculate_optimal_contact_time() para cada execução
+      const enrichedFollowUps = await Promise.all(
+        executions.map(async (execution: any) => {
+          try {
+            const { data: optimalTime, error: timeError } = await supabase.rpc('calculate_optimal_contact_time', {
+              p_tenant_id: tenant.id,
+              p_lead_id: execution.lead_id || null,
+              p_deal_id: execution.deal_id || null
+            });
+
+            if (!timeError && optimalTime) {
+              return {
+                ...execution,
+                optimal_contact_time: optimalTime,
+                optimal_hour: optimalTime?.optimal_hour || null,
+                optimal_day_of_week: optimalTime?.optimal_day_of_week || null,
+              };
+            }
+            return execution;
+          } catch (error: any) {
+            console.error(`[FollowUpPrioritizer] Erro ao calcular optimal time para execução ${execution.id}:`, error);
+            return execution;
+          }
+        })
+      );
+
+      return enrichedFollowUps;
     },
     enabled: !!tenant?.id,
   });

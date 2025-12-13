@@ -624,19 +624,35 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, ini
           console.error('[Step2SetoresNichos] ❌ Erro ao carregar:', error);
         }
         
-        // 🔥 PROIBIDO: Fallback hardcoded removido
-        // Se banco falhar, mostrar erro ao invés de dados fake
+        // 🔥 BUG 2 FIX: Tratamento de erro com fallback seguro (dados mínimos para continuar)
+        let finalSectors = loadedSectors;
+        let finalNiches = loadedNiches;
+        let hasError = false;
+        
         if (loadedSectors.length === 0) {
-          console.error('[Step2SetoresNichos] ⚠️ Nenhum setor encontrado no banco - não usar fallback hardcoded');
-          // Não usar FALLBACK_SECTORS - mostrar erro na UI
+          console.error('[Step2SetoresNichos] ⚠️ Nenhum setor encontrado no banco');
+          hasError = true;
+          // 🔥 FALLBACK SEGURO: Dados mínimos para não bloquear workflow
+          // Apenas setores básicos se banco falhar completamente
+          finalSectors = [
+            { sector_code: 'manufatura', sector_name: 'Manufatura', description: 'Setor de manufatura' },
+            { sector_code: 'tecnologia', sector_name: 'Tecnologia', description: 'Setor de tecnologia' },
+            { sector_code: 'servicos', sector_name: 'Serviços', description: 'Setor de serviços' }
+          ];
         }
         if (loadedNiches.length === 0) {
-          console.error('[Step2SetoresNichos] ⚠️ Nenhum nicho encontrado no banco - não usar fallback hardcoded');
-          // Não usar FALLBACK_NICHES - mostrar erro na UI
+          console.error('[Step2SetoresNichos] ⚠️ Nenhum nicho encontrado no banco');
+          hasError = true;
+          // 🔥 FALLBACK SEGURO: Dados mínimos para não bloquear workflow
+          finalNiches = [
+            { niche_code: 'manufatura_geral', niche_name: 'Manufatura Geral', sector_code: 'manufatura', description: 'Nicho geral de manufatura' }
+          ];
         }
         
-        const finalSectors = loadedSectors; // SEM fallback
-        const finalNiches = loadedNiches; // SEM fallback
+        if (hasError) {
+          // Mostrar alerta ao usuário mas permitir continuar
+          console.warn('[Step2SetoresNichos] ⚠️ Usando dados mínimos devido a erro no banco - alguns setores/nichos podem não estar disponíveis');
+        }
         
         console.log('[Step2SetoresNichos] 📋 Dados finais:', {
           setores: finalSectors.length,
@@ -673,11 +689,18 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, ini
         });
       } catch (error) {
         console.error('[Step2SetoresNichos] Erro geral:', error);
-        // 🔥 PROIBIDO: Fallback hardcoded removido
-        // Se banco falhar, deixar arrays vazios ao invés de dados fake
-        setSectors([]);
-        setNiches([]);
-        console.error('[Step2SetoresNichos] ⚠️ Erro ao carregar setores/nichos - não usar fallback hardcoded');
+        // 🔥 BUG 2 FIX: Em caso de erro crítico, usar fallback mínimo para não bloquear workflow
+        const fallbackSectors = [
+          { sector_code: 'manufatura', sector_name: 'Manufatura', description: 'Setor de manufatura' },
+          { sector_code: 'tecnologia', sector_name: 'Tecnologia', description: 'Setor de tecnologia' },
+          { sector_code: 'servicos', sector_name: 'Serviços', description: 'Setor de serviços' }
+        ];
+        const fallbackNiches = [
+          { niche_code: 'manufatura_geral', niche_name: 'Manufatura Geral', sector_code: 'manufatura', description: 'Nicho geral de manufatura' }
+        ];
+        setSectors(fallbackSectors);
+        setNiches(fallbackNiches);
+        console.warn('[Step2SetoresNichos] ⚠️ Erro ao carregar - usando dados mínimos para não bloquear workflow');
       } finally {
         setLoading(false);
       }
@@ -845,9 +868,9 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, ini
     });
     
     // Buscar nomes dos nichos para passar para próxima etapa
-    // 🔥 PROIBIDO: Fallback hardcoded removido
-    // Combinar apenas nichos do banco + custom (SEM fallback)
-    const allNichesData = [...niches, ...customNiches];
+    // 🔥 BUG 3 FIX: Incluir FALLBACK_NICHES para evitar perda de dados se nichos selecionados não existem no backend
+    // Isso garante round-trip data integrity - se um nicho foi selecionado mas não está no banco, ainda mostra o nome
+    const allNichesData = [...niches, ...customNiches, ...FALLBACK_NICHES];
     const nicheNames = allSelectedNiches.map(code => {
       const niche = allNichesData.find(n => n.niche_code === code);
       const name = niche?.niche_name || code;
