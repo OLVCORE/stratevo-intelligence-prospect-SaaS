@@ -11,8 +11,32 @@ export function useSaveToQuarantine() {
 
   return useMutation({
     mutationFn: async (results: any[]) => {
+      // 🔥 CORRIGIDO: Buscar tenant_id para cada registro
+      const { data: { user } } = await supabase.auth.getUser();
+      let tenantId: string | null = null;
+      
+      if (user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+        tenantId = userData?.tenant_id || null;
+      }
+      
+      // Se não encontrou via user, tentar via company_id
+      if (!tenantId && results.length > 0 && results[0].company_id) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('tenant_id')
+          .eq('id', results[0].company_id)
+          .maybeSingle();
+        tenantId = companyData?.tenant_id || null;
+      }
+
       const records = results.map(r => ({
         company_id: r.company_id,
+        tenant_id: tenantId || r.tenant_id, // 🔥 CORRIGIDO: Incluir tenant_id
         cnpj: r.cnpj,
         razao_social: r.name,
         icp_score: r.icp_score || 0,
@@ -163,6 +187,11 @@ export function useQuarantineCompanies(filters?: {
         `)
         .order('icp_score', { ascending: false });
 
+      // 🔥 CORRIGIDO: Filtrar por tenant_id para isolamento multi-tenant
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+
       if (filters?.status) {
         query = query.eq('status', filters.status);
       }
@@ -251,11 +280,30 @@ export function useApproveQuarantineBatch() {
       const ids = (analysisIds || []).filter((id): id is string => Boolean(id));
       if (ids.length === 0) throw new Error('Nenhuma empresa selecionada');
 
-      // 1. Buscar dados das empresas por ID da análise
-      const { data: quarantineData, error: fetchError } = await supabase
+      // 🔥 CORRIGIDO: Buscar tenant_id do usuário para filtrar
+      const { data: { user } } = await supabase.auth.getUser();
+      let tenantId: string | null = null;
+      
+      if (user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+        tenantId = userData?.tenant_id || null;
+      }
+
+      // 1. Buscar dados das empresas por ID da análise (filtrando por tenant_id)
+      let query = supabase
         .from('icp_analysis_results')
         .select('*')
         .in('id', ids);
+      
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+      
+      const { data: quarantineData, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
       if (!quarantineData || quarantineData.length === 0) throw new Error('Nenhuma empresa encontrada');
@@ -280,8 +328,8 @@ export function useApproveQuarantineBatch() {
       }
 
       // 3. CRIAR DEALS DIRETAMENTE (leads_pool foi eliminado)
-      // Buscar current user para atribuir deals
-      const { data: { user } } = await supabase.auth.getUser();
+      // Buscar current user para atribuir deals (reutilizar user já obtido acima)
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
       
       // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao criar deals
       const dealsToCreate = validCompanies.map(q => {
@@ -312,7 +360,7 @@ export function useApproveQuarantineBatch() {
           probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50), // ICP Score → probabilidade inicial
           priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
           deal_stage: 'discovery', // Primeiro estágio do pipeline
-          assigned_sdr: user?.email || 'auto',
+          assigned_sdr: currentUser?.email || 'auto',
           source: 'quarantine_approval',
           lead_score: q.icp_score || 0,
           notes: `Auto-criado da quarentena. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
@@ -442,10 +490,28 @@ export function useAutoApprove() {
       temperatura?: 'hot' | 'warm' | 'cold';
       autoCreateDeals?: boolean;
     }) => {
+      // 🔥 CORRIGIDO: Buscar tenant_id do usuário para filtrar
+      const { data: { user } } = await supabase.auth.getUser();
+      let tenantId: string | null = null;
+      
+      if (user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+        tenantId = userData?.tenant_id || null;
+      }
+
       let query = supabase
         .from('icp_analysis_results')
         .select('*')
         .eq('status', 'pendente');
+      
+      // 🔥 CORRIGIDO: Filtrar por tenant_id
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
 
       if (rules.minScore) {
         query = query.gte('icp_score', rules.minScore);

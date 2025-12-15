@@ -1746,7 +1746,7 @@ export default function CompaniesManagementPage() {
                     return;
                   }
                   
-                  toast.info(`🎯 Integrando ${companiesToSend.length} empresas ao ICP...`, {
+                  toast.info(`🎯 Movendo ${companiesToSend.length} empresas para Quarentena ICP...`, {
                     description: 'Todos os dados enriquecidos serão mantidos · Powered by OLV Internacional'
                   });
 
@@ -1756,44 +1756,76 @@ export default function CompaniesManagementPage() {
 
                   for (const company of companiesToSend) {
                       try {
-                        // Verifica se já existe no ICP
-                        const { data: existing, error: checkError } = await supabase
-                          .from('icp_analysis_results')
-                          .select('id')
-                          .eq('company_id', company.id)
-                          .maybeSingle(); // 🔧 USAR maybeSingle() ao invés de single()
-
-                        if (checkError) {
-                          console.error(`❌ Erro ao verificar empresa ${company.name}:`, checkError);
-                          throw checkError;
-                        }
-
-                        if (existing) {
-                          console.log(`✓ Empresa ${company.name} já está no ICP`);
-                          skipped++;
-                          continue;
-                        }
-
                         // 🔧 BUSCAR DADOS COMPLETOS DA EMPRESA (com CNPJ)
-                        const { data: fullCompany } = await supabase
+                        const { data: fullCompany, error: fetchError } = await supabase
                           .from('companies')
                           .select('*')
                           .eq('id', company.id)
                           .single();
 
-                        if (!fullCompany?.cnpj) {
-                          console.warn(`⚠️ Empresa ${company.name} sem CNPJ - pulando integração`);
+                        if (fetchError || !fullCompany) {
+                          console.error(`❌ Erro ao buscar empresa completa:`, fetchError);
+                          errors++;
+                          continue;
+                        }
+
+                        if (!fullCompany.cnpj) {
+                          console.warn(`⚠️ Empresa ${fullCompany.company_name} sem CNPJ - pulando`);
+                          skipped++;
+                          continue;
+                        }
+
+                        // ✅ Verifica se já existe no ICP usando CNPJ (constraint UNIQUE)
+                        const { data: existing, error: checkError } = await supabase
+                          .from('icp_analysis_results')
+                          .select('id, cnpj')
+                          .eq('cnpj', fullCompany.cnpj)
+                          .maybeSingle();
+
+                        if (checkError) {
+                          console.error(`❌ Erro ao verificar empresa ${fullCompany.company_name}:`, checkError);
+                          errors++;
+                          continue;
+                        }
+
+                        if (existing) {
+                          console.log(`✓ Empresa ${fullCompany.company_name} (CNPJ: ${fullCompany.cnpj}) já está no ICP`);
                           skipped++;
                           continue;
                         }
 
                         // 🔧 NORMALIZAR DADOS USANDO DADOS COMPLETOS DA EMPRESA
                         const receitaData = (fullCompany.raw_data as any)?.receita || {};
+                        const rawData = fullCompany.raw_data && typeof fullCompany.raw_data === 'object' && !Array.isArray(fullCompany.raw_data)
+                          ? fullCompany.raw_data as Record<string, any>
+                          : {};
                         
-                        // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao integrar ao ICP
+                        // ✅ Preparar raw_analysis com informações de origem
+                        const rawAnalysis = {
+                          ...rawData,
+                          source_type: fullCompany.source_type || 'manual',
+                          source_name: fullCompany.source_name || 'Estoque',
+                          import_batch_id: fullCompany.import_batch_id || null,
+                          migrated_from_companies: true,
+                          migrated_at: new Date().toISOString(),
+                          // Garantir que dados de enriquecimento estejam em raw_analysis também
+                          website_enrichment: fullCompany.website_encontrado ? {
+                            website_encontrado: fullCompany.website_encontrado,
+                            website_fit_score: fullCompany.website_fit_score,
+                            website_products_match: fullCompany.website_products_match,
+                            linkedin_url: fullCompany.linkedin_url,
+                          } : undefined,
+                          // Preservar fit_score e grade se existirem
+                          fit_score: rawData?.fit_score,
+                          grade: rawData?.grade,
+                          icp_id: rawData?.icp_id,
+                        };
+                        
+                        // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao integrar ao ICP (apenas campos que existem na tabela)
                         const insertData: any = {
                           // ✅ OBRIGATÓRIOS (NOT NULL)
                           company_id: fullCompany.id,
+                          tenant_id: tenant?.id || fullCompany.tenant_id, // 🔥 CORRIGIDO: Adicionar tenant_id para isolamento multi-tenant
                           cnpj: fullCompany.cnpj,
                           razao_social: fullCompany.company_name || receitaData.razao_social || receitaData.nome || 'N/A',
                           
@@ -1807,34 +1839,32 @@ export default function CompaniesManagementPage() {
                           email: fullCompany.email || receitaData.email || null,
                           telefone: receitaData.ddd_telefone_1 || receitaData.telefone || null,
                           
-                          // ✅ DADOS DE ENRIQUECIMENTO DE WEBSITE (preservar)
+                          // ✅ DADOS DE ENRIQUECIMENTO DE WEBSITE (se existirem)
                           website_encontrado: fullCompany.website_encontrado || null,
-                          website_fit_score: fullCompany.website_fit_score || null,
+                          website_fit_score: fullCompany.website_fit_score ?? null,
                           website_products_match: fullCompany.website_products_match || null,
                           linkedin_url: fullCompany.linkedin_url || null,
                           
-                          // ✅ RASTREABILIDADE
+                          // ✅ STATUS (obrigatório com default 'pendente')
                           status: 'pendente',
-                          source_type: fullCompany.source_type || 'manual',
-                          source_name: fullCompany.source_name || (fullCompany.raw_data as any)?.source_name || 'Estoque',
-                          import_batch_id: fullCompany.import_batch_id,
                           
-                          // ✅ RAW DATA (preservar TUDO, incluindo dados de enriquecimento)
-                          raw_data: {
-                            ...(fullCompany.raw_data || {}),
-                            // Garantir que dados de enriquecimento estejam em raw_data também
-                            website_enrichment: fullCompany.website_encontrado ? {
-                              website_encontrado: fullCompany.website_encontrado,
-                              website_fit_score: fullCompany.website_fit_score,
-                              website_products_match: fullCompany.website_products_match,
-                              linkedin_url: fullCompany.linkedin_url,
-                            } : undefined,
-                            // Preservar fit_score e grade se existirem
-                            fit_score: (fullCompany.raw_data as any)?.fit_score,
-                            grade: (fullCompany.raw_data as any)?.grade,
-                            icp_id: (fullCompany.raw_data as any)?.icp_id,
-                          }
+                          // ✅ ORIGEM (CHECK constraint: 'upload_massa', 'icp_individual', 'icp_massa')
+                          origem: 'upload_massa', // Empresas migradas da base de empresas
+                          
+                          // ✅ RAW DATA (preservar TUDO + informações de origem)
+                          raw_data: rawData,
+                          raw_analysis: rawAnalysis
                         };
+                        
+                        // 🔥 DEBUG: Log do payload antes de inserir
+                        console.log(`[ICP Integration] 📦 Inserindo ${fullCompany.company_name}:`, {
+                          cnpj: insertData.cnpj,
+                          company_id: insertData.company_id,
+                          status: insertData.status,
+                          origem: insertData.origem,
+                          has_raw_data: !!insertData.raw_data,
+                          has_raw_analysis: !!insertData.raw_analysis
+                        });
 
                         // Integra ao ICP com TODOS os campos necessários
                         const { error: insertError } = await supabase
@@ -1842,23 +1872,30 @@ export default function CompaniesManagementPage() {
                           .insert(insertData);
 
                         if (insertError) {
-                          console.error(`❌ Erro ao inserir ${company.name} no ICP:`, insertError);
-                          throw insertError;
+                          console.error(`❌ Erro ao inserir ${fullCompany.company_name} no ICP:`, insertError);
+                          console.error(`   Detalhes do erro:`, {
+                            message: insertError.message,
+                            details: insertError.details,
+                            hint: insertError.hint,
+                            code: insertError.code
+                          });
+                          errors++;
+                          continue; // ✅ Continuar com próxima empresa ao invés de quebrar tudo
                         }
                         
-                        console.log(`✅ ${company.name} integrada ao ICP!`);
+                        console.log(`✅ ${fullCompany.company_name} integrada ao ICP!`);
                         sent++;
                       } catch (e: any) {
-                        console.error(`❌ Error integrating ${company.name} to ICP:`, e);
-                        console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
+                        console.error(`❌ Error integrating to ICP:`, e);
+                        console.error(`   Stack trace:`, e.stack);
                         errors++;
                       }
                   }
 
                   toast.success(
-                    `✅ ${sent} empresas integradas ao ICP!`,
+                    `✅ ${sent} empresas movidas para Quarentena ICP!`,
                     { 
-                      description: `${skipped} já estavam · ${errors} erros · Acesse "Leads > ICP Quarentena"`,
+                      description: `${skipped} já estavam na quarentena · ${errors} erros · Acesse "4. Quarentena ICP" para revisar`,
                       action: {
                         label: 'Ver Quarentena →',
                         onClick: () => navigate('/leads/icp-quarantine')
@@ -2041,12 +2078,12 @@ export default function CompaniesManagementPage() {
 
                 {/* RIGHT: Ações */}
                 <div className="flex items-center gap-2">
-                  {/* Integrar ICP (apenas se tiver seleção) */}
+                  {/* 🎯 Mover para Quarentena ICP (apenas se tiver seleção) */}
                   {selectedCompanies.length > 0 && (
                     <Button
                       onClick={async () => {
                   try {
-                    toast.info('🎯 Integrando empresas ao ICP...', {
+                    toast.info('🎯 Movendo empresas para Quarentena ICP...', {
                       description: 'Todos os dados enriquecidos serão mantidos · Powered by OLV Internacional'
                     });
 
@@ -2084,73 +2121,171 @@ export default function CompaniesManagementPage() {
                           continue;
                         }
 
-                        // Verifica se já existe no ICP
+                        // ✅ Verifica se já existe no ICP usando CNPJ (constraint UNIQUE)
                         const { data: existing, error: checkError } = await supabase
                           .from('icp_analysis_results')
-                          .select('id')
-                          .eq('company_id', fullCompany.id)
+                          .select('id, cnpj')
+                          .eq('cnpj', fullCompany.cnpj)
                           .maybeSingle();
 
                         if (checkError) {
                           console.error(`❌ Erro ao verificar empresa ${fullCompany.company_name}:`, checkError);
-                          throw checkError;
+                          errors++;
+                          continue;
                         }
 
                         if (existing) {
-                          console.log(`✓ Empresa ${fullCompany.company_name} já está no ICP`);
+                          console.log(`✓ Empresa ${fullCompany.company_name} (CNPJ: ${fullCompany.cnpj}) já está no ICP`);
                           skipped++;
                           continue;
                         }
 
                         // 🔧 NORMALIZAR DADOS USANDO DADOS COMPLETOS DA EMPRESA
                         const receitaData = (fullCompany.raw_data as any)?.receita || {};
+                        const rawData = fullCompany.raw_data && typeof fullCompany.raw_data === 'object' && !Array.isArray(fullCompany.raw_data)
+                          ? fullCompany.raw_data as Record<string, any>
+                          : {};
+                        
+                        // ✅ Preparar raw_analysis com informações de origem
+                        const rawAnalysis = {
+                          ...rawData,
+                          source_type: fullCompany.source_type || 'manual',
+                          source_name: fullCompany.source_name || 'Estoque',
+                          import_batch_id: fullCompany.import_batch_id || null,
+                          migrated_from_companies: true,
+                          migrated_at: new Date().toISOString()
+                        };
                         
                         // Integra ao ICP com TODOS os campos necessários
-                        const { error: insertError } = await supabase
+                        const insertPayload: any = {
+                          // ✅ OBRIGATÓRIOS (NOT NULL)
+                          company_id: fullCompany.id,
+                          tenant_id: tenant?.id || fullCompany.tenant_id, // 🔥 CORRIGIDO: Adicionar tenant_id para isolamento multi-tenant
+                          cnpj: fullCompany.cnpj,
+                          razao_social: fullCompany.company_name || receitaData.razao_social || receitaData.nome || 'N/A',
+                          
+                          // ✅ OPCIONAIS (mas importantes)
+                          nome_fantasia: receitaData.nome_fantasia || receitaData.fantasia || null,
+                          uf: (fullCompany.location as any)?.state || receitaData.uf || null,
+                          municipio: (fullCompany.location as any)?.city || receitaData.municipio || null,
+                          porte: receitaData.porte || fullCompany.porte_estimado || null,
+                          cnae_principal: receitaData.cnae_fiscal || receitaData.atividade_principal?.[0]?.code || null,
+                          website: fullCompany.website || fullCompany.website_encontrado || fullCompany.domain || null,
+                          email: fullCompany.email || receitaData.email || null,
+                          telefone: receitaData.ddd_telefone_1 || receitaData.telefone || null,
+                          
+                          // ✅ DADOS DE ENRIQUECIMENTO DE WEBSITE (se existirem)
+                          website_encontrado: fullCompany.website_encontrado || null,
+                          website_fit_score: fullCompany.website_fit_score ?? null,
+                          website_products_match: fullCompany.website_products_match || null,
+                          linkedin_url: fullCompany.linkedin_url || null,
+                          
+                          // ✅ STATUS (obrigatório com default 'pendente')
+                          status: 'pendente',
+                          
+                          // ✅ ORIGEM (CHECK constraint: 'upload_massa', 'icp_individual', 'icp_massa')
+                          origem: 'upload_massa', // Empresas migradas da base de empresas
+                          
+                          // ✅ RAW DATA (mantém TUDO + informações de origem)
+                          raw_data: rawData,
+                          // ✅ RAW ANALYSIS (pode não existir no schema, então vamos tentar)
+                          // Se der erro, o PostgREST vai reclamar e vamos remover do payload
+                          raw_analysis: rawAnalysis
+                        };
+                        
+                        // 🔥 REMOVER raw_analysis se a coluna não existir (será detectado pelo erro)
+                        // Por enquanto, vamos tentar inserir. Se falhar, vamos remover e tentar novamente
+                        
+                        // 🔥 DEBUG: Log do payload antes de inserir
+                        console.log(`[ICP Integration] 📦 Inserindo ${fullCompany.company_name}:`, {
+                          cnpj: insertPayload.cnpj,
+                          company_id: insertPayload.company_id,
+                          status: insertPayload.status,
+                          origem: insertPayload.origem,
+                          has_raw_data: !!insertPayload.raw_data,
+                          has_raw_analysis: !!insertPayload.raw_analysis
+                        });
+                        
+                        // 🔥 DEBUG: Log completo do payload
+                        console.log(`[ICP Integration] 🔍 PAYLOAD COMPLETO:`, {
+                          tenant_id: insertPayload.tenant_id,
+                          company_id: insertPayload.company_id,
+                          cnpj: insertPayload.cnpj,
+                          razao_social: insertPayload.razao_social,
+                          status: insertPayload.status,
+                          origem: insertPayload.origem,
+                          has_tenant_id: !!insertPayload.tenant_id,
+                          tenant_id_type: typeof insertPayload.tenant_id
+                        });
+                        
+                        // 🔥 TENTAR INSERIR COM raw_analysis
+                        let { error: insertError } = await supabase
                           .from('icp_analysis_results')
-                          .insert({
-                            // ✅ OBRIGATÓRIOS (NOT NULL)
-                            company_id: fullCompany.id,
-                            cnpj: fullCompany.cnpj,
-                            razao_social: fullCompany.company_name || receitaData.razao_social || receitaData.nome || 'N/A',
-                            
-                            // ✅ OPCIONAIS (mas importantes)
-                            nome_fantasia: receitaData.nome_fantasia || receitaData.fantasia || null,
-                            uf: (fullCompany.location as any)?.state || receitaData.uf || null,
-                            municipio: (fullCompany.location as any)?.city || receitaData.municipio || null,
-                            porte: receitaData.porte || fullCompany.porte_estimado || null,
-                            cnae_principal: receitaData.cnae_fiscal || receitaData.atividade_principal?.[0]?.code || null,
-                            website: fullCompany.website || fullCompany.domain || null,
-                            email: fullCompany.email || receitaData.email || null,
-                            telefone: receitaData.ddd_telefone_1 || receitaData.telefone || null,
-                            
-                            // ✅ RASTREABILIDADE
-                            status: 'pendente',
-                            source_type: fullCompany.source_type || 'manual',
-                            source_name: fullCompany.source_name || 'Estoque',
-                            import_batch_id: fullCompany.import_batch_id,
-                            
-                            // ✅ RAW DATA (mantém TUDO)
-                            raw_data: fullCompany.raw_data || {}
-                          });
+                          .insert(insertPayload);
+
+                        // 🔥 SE ERRO FOR POR COLUNA raw_analysis NÃO EXISTIR OU icp_id NO TRIGGER, REMOVER E TENTAR NOVAMENTE
+                        if (insertError && (insertError.message?.includes('raw_analysis') || insertError.message?.includes('icp_id'))) {
+                          console.warn(`⚠️ Coluna raw_analysis não existe. Removendo do payload e tentando novamente...`);
+                          const { raw_analysis, ...payloadWithoutRawAnalysis } = insertPayload;
+                          // Usar analysis_data como alternativa (se existir)
+                          const fallbackPayload = {
+                            ...payloadWithoutRawAnalysis,
+                            analysis_data: rawAnalysis // Usar analysis_data ao invés de raw_analysis
+                          };
+                          
+                          const { error: retryError } = await supabase
+                            .from('icp_analysis_results')
+                            .insert(fallbackPayload);
+                          
+                          if (retryError) {
+                            insertError = retryError;
+                          } else {
+                            insertError = null; // Sucesso na segunda tentativa
+                            console.log(`✅ Inserido com sucesso usando analysis_data ao invés de raw_analysis`);
+                          }
+                        }
 
                         if (insertError) {
                           console.error(`❌ Erro ao inserir ${fullCompany.company_name} no ICP:`, insertError);
-                          throw insertError;
+                          console.error(`   Detalhes do erro:`, {
+                            message: insertError.message,
+                            details: insertError.details,
+                            hint: insertError.hint,
+                            code: insertError.code
+                          });
+                          console.error(`   🔍 PAYLOAD ENVIADO:`, JSON.stringify(insertPayload, null, 2));
+                          console.error(`   🔍 TENANT_ID:`, insertPayload.tenant_id, `(tipo: ${typeof insertPayload.tenant_id})`);
+                          console.error(`   🔍 TENANT DO CONTEXTO:`, tenant?.id);
+                          console.error(`   🔍 TENANT_ID DA COMPANY:`, fullCompany.tenant_id);
+                          
+                          // 🚨 ERRO CRÍTICO: Mostrar toast com detalhes
+                          toast.error(`Erro ao mover ${fullCompany.company_name} para Quarentena`, {
+                            description: insertError.message || insertError.details || 'Erro desconhecido. Verifique o console para detalhes.',
+                            duration: 10000
+                          });
+                          
+                          errors++;
+                          continue; // ✅ Continuar com próxima empresa ao invés de quebrar tudo
                         }
                         
                         console.log(`✅ ${fullCompany.company_name} integrada ao ICP!`);
                         sent++;
                       } catch (e: any) {
                         console.error(`❌ Error integrating to ICP:`, e);
+                        console.error(`   Stack trace:`, e.stack);
                         errors++;
                       }
                     }
 
                     toast.success(
-                      `✅ ${sent} empresas integradas ao ICP!`,
+                      `✅ ${sent} empresas movidas para Quarentena ICP!`,
                       { 
-                        description: `${skipped} já estavam no ICP · ${errors} erros · Acesse "Leads > ICP Quarentena" para analisar` 
+                        description: `${skipped} já estavam na quarentena · ${errors} erros · Acesse "4. Quarentena ICP" para revisar`,
+                        action: {
+                          label: 'Ver Quarentena →',
+                          onClick: () => navigate('/leads/icp-quarantine')
+                        },
+                        duration: 6000
                       }
                     );
 
@@ -2165,7 +2300,7 @@ export default function CompaniesManagementPage() {
                       className="bg-emerald-600 hover:bg-emerald-700 text-white h-8"
                     >
                       <Target className="h-3.5 w-3.5 mr-1.5" />
-                      Integrar ICP ({selectedCompanies.length})
+                      🎯 Mover para Quarentena ICP ({selectedCompanies.length})
                     </Button>
                   )}
 
