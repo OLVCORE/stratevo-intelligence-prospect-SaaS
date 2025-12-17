@@ -207,55 +207,113 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
       }
     }
 
-    // 6. Buscar LinkedIn (se razao_social fornecido)
+    // 6. Buscar LinkedIn com múltiplas estratégias
     let linkedinUrl: string | null = null;
-    if (razao_social && serperKey) {
+    if (serperKey) {
+      // ✅ Buscar prospect no banco para ter mais dados
+      let prospectData: any = null;
       try {
-        const linkedinQuery = `"${razao_social}" site:linkedin.com/company`;
-        const linkedinResponse = await fetch('https://google.serper.dev/search', {
-          method: 'POST',
-          headers: {
-            'X-API-KEY': serperKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            q: linkedinQuery,
-            num: 3,
-            gl: 'br',
-            hl: 'pt-br',
-          }),
-        });
-
-        if (linkedinResponse.ok) {
-          const linkedinData = await linkedinResponse.json();
-          const organicResults = linkedinData.organic || [];
-          console.log('[ScanProspect] 🔍 Resultados SERPER LinkedIn:', {
-            total_results: organicResults.length,
-            first_result: organicResults[0]?.link,
-          });
-          
-          // ✅ Buscar em todos os resultados, não apenas o primeiro
-          for (const result of organicResults) {
-            if (result?.link && (
-              result.link.includes('linkedin.com/company') || 
-              result.link.includes('linkedin.com/company/')
-            )) {
-              linkedinUrl = result.link;
-              console.log('[ScanProspect] ✅ LinkedIn encontrado:', linkedinUrl);
-              break;
-            }
-          }
-          
-          if (!linkedinUrl) {
-            console.log('[ScanProspect] ⚠️ LinkedIn não encontrado nos resultados SERPER');
-          }
-        } else {
-          const errorText = await linkedinResponse.text();
-          console.warn('[ScanProspect] ⚠️ Erro na busca SERPER LinkedIn:', linkedinResponse.status, errorText);
-        }
-      } catch (error) {
-        console.warn('[ScanProspect] ⚠️ Erro ao buscar LinkedIn:', error);
+        const { data: prospect } = await supabase
+          .from('qualified_prospects')
+          .select('razao_social, nome_fantasia, cnpj')
+          .eq('id', qualified_prospect_id)
+          .eq('tenant_id', tenant_id)
+          .single();
+        prospectData = prospect;
+      } catch (err) {
+        console.warn('[ScanProspect] ⚠️ Erro ao buscar dados do prospect:', err);
       }
+
+      const companyName = razao_social || prospectData?.razao_social || '';
+      const nomeFantasia = prospectData?.nome_fantasia || '';
+      
+      if (!companyName && !nomeFantasia) {
+        console.log('[ScanProspect] ⚠️ Sem nome da empresa para buscar LinkedIn');
+      } else {
+        // ✅ ESTRATÉGIA 1: Buscar por razão social
+        const queries = [];
+        if (companyName) {
+          queries.push(`"${companyName}" site:linkedin.com/company`);
+          queries.push(`${companyName} linkedin company brasil`);
+        }
+        if (nomeFantasia && nomeFantasia !== companyName) {
+          queries.push(`"${nomeFantasia}" site:linkedin.com/company`);
+          queries.push(`${nomeFantasia} linkedin company brasil`);
+        }
+
+        console.log('[ScanProspect] 🔍 Buscando LinkedIn com queries:', queries);
+
+        // ✅ Tentar todas as queries até encontrar
+        for (const linkedinQuery of queries) {
+          if (linkedinUrl) break; // Já encontrou, parar
+
+          try {
+            const linkedinResponse = await fetch('https://google.serper.dev/search', {
+              method: 'POST',
+              headers: {
+                'X-API-KEY': serperKey,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                q: linkedinQuery,
+                num: 5, // ✅ Aumentar para 5 resultados
+                gl: 'br',
+                hl: 'pt-br',
+              }),
+            });
+
+            if (linkedinResponse.ok) {
+              const linkedinData = await linkedinResponse.json();
+              const organicResults = linkedinData.organic || [];
+              console.log('[ScanProspect] 🔍 Resultados SERPER LinkedIn:', {
+                query: linkedinQuery,
+                total_results: organicResults.length,
+                results: organicResults.map((r: any) => ({
+                  link: r.link,
+                  title: r.title,
+                })),
+              });
+              
+              // ✅ Buscar em todos os resultados
+              for (const result of organicResults) {
+                if (result?.link) {
+                  const link = result.link.toLowerCase();
+                  // ✅ Aceitar qualquer URL do LinkedIn que seja de empresa
+                  if (link.includes('linkedin.com/company') || 
+                      link.includes('linkedin.com/company/') ||
+                      (link.includes('linkedin.com') && !link.includes('/in/') && !link.includes('/pub/'))) {
+                    linkedinUrl = result.link;
+                    console.log('[ScanProspect] ✅ LinkedIn encontrado:', {
+                      url: linkedinUrl,
+                      query_usada: linkedinQuery,
+                      title: result.title,
+                    });
+                    break;
+                  }
+                }
+              }
+            } else {
+              const errorText = await linkedinResponse.text();
+              console.warn('[ScanProspect] ⚠️ Erro na busca SERPER LinkedIn:', {
+                status: linkedinResponse.status,
+                query: linkedinQuery,
+                error: errorText,
+              });
+            }
+          } catch (error) {
+            console.warn('[ScanProspect] ⚠️ Erro ao buscar LinkedIn:', {
+              query: linkedinQuery,
+              error: error.message || error,
+            });
+          }
+        }
+        
+        if (!linkedinUrl) {
+          console.log('[ScanProspect] ⚠️ LinkedIn não encontrado após tentar todas as queries');
+        }
+      }
+    } else {
+      console.log('[ScanProspect] ⚠️ SERPER_API_KEY não configurada, pulando busca LinkedIn');
     }
 
     // 7. ✅ ANÁLISE INTELIGENTE COM IA: Comparar produtos usando contexto e aplicação
