@@ -265,22 +265,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
 
     setLoading(true);
     try {
-      // ✅ CORRIGIDO: Query simplificada (JOIN será feito depois se a tabela existir)
+      // ✅ CORRIGIDO: Query simplificada (sem relacionamento que pode causar erro 400)
       let query = ((supabase as any).from('qualified_prospects'))
-        .select(`
-          *,
-          website_encontrado,
-          website_fit_score,
-          website_products_match,
-          linkedin_url,
-          purchase_intent_score,
-          purchase_intent_type,
-          prospect_qualification_jobs (
-            job_name,
-            source_type,
-            source_file_name
-          )
-        `)
+        .select('*')
         .eq('tenant_id', tenantId)
         .eq('pipeline_status', 'new') // ✅ FLUXO OFICIAL: apenas empresas com status 'new'
         .order('fit_score', { ascending: false });
@@ -363,6 +350,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       }
 
       // ✅ Enriquecer prospects com dados do ICP, enriquecimento e parsear match_breakdown
+      // ✅ PRESERVAR TODOS OS DADOS usando o objeto original + dados enriquecidos
       const enrichedProspects = prospectsData.map(p => {
         let matchBreakdown = null;
         if (p.match_breakdown) {
@@ -379,8 +367,22 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         // ✅ Buscar dados de enriquecimento do mapa
         const enrichment = enrichmentMap[p.id] || null;
         
+        // ✅ PRESERVAR TODOS OS DADOS: usar objeto original completo + dados enriquecidos
         return {
-          ...p,
+          ...p, // ✅ PRESERVAR TODOS OS CAMPOS ORIGINAIS
+          // ✅ DADOS BÁSICOS (garantir que estejam presentes)
+          cnpj: p.cnpj || '',
+          razao_social: p.razao_social || 'N/A',
+          nome_fantasia: enrichment?.fantasia || p.nome_fantasia || null,
+          estado: p.estado || null,
+          cidade: p.cidade || null,
+          setor: p.setor || null,
+          situacao_cnpj: p.situacao_cnpj || null,
+          // ✅ SCORES (preservar todos)
+          fit_score: enrichment?.fit_score ?? p.fit_score ?? null,
+          grade: enrichment?.grade || p.grade || null,
+          icp_score: p.icp_score || enrichment?.icp_score || 0,
+          // ✅ DADOS DE ENRIQUECIMENTO
           icp: p.icp_id ? icpMap[p.icp_id] : undefined,
           match_breakdown: matchBreakdown,
           enrichment: enrichment ? {
@@ -393,11 +395,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             origem: enrichment.origem,
             raw: enrichment.raw,
           } : null,
-          // ✅ Usar fantasia do enriquecimento se disponível
-          nome_fantasia: enrichment?.fantasia || p.nome_fantasia || null,
-          // ✅ Usar fit_score e grade do enriquecimento se disponível
-          fit_score: enrichment?.fit_score ?? p.fit_score ?? null,
-          grade: enrichment?.grade || p.grade || null,
+          // ✅ PRESERVAR enrichment_data e ai_analysis se existirem
+          enrichment_data: p.enrichment_data || null,
+          ai_analysis: p.ai_analysis || null,
         };
       });
 
@@ -729,6 +729,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           industry: sector,
           website: website || null,
           location: city && state ? { city, state } : null,
+          origem: origem, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
+          source_name: origem, // ✅ PRESERVAR source_name também
           updated_at: new Date().toISOString(),
         };
 
@@ -736,18 +738,43 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         // NOTA: Esses campos podem não existir na tabela companies, então salvamos apenas em raw_data
         // Se as colunas existirem, podem ser adicionadas aqui no futuro
 
+        // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo)
+        let jobData: any = null;
+        if (prospect.job_id) {
+          try {
+            const { data: job } = await ((supabase as any).from('prospect_qualification_jobs'))
+              .select('job_name, source_file_name, source_type')
+              .eq('id', prospect.job_id)
+              .maybeSingle();
+            if (job) {
+              jobData = job;
+            }
+          } catch (jobError) {
+            console.warn('[Qualified → Companies] ⚠️ Erro ao buscar job:', jobError);
+          }
+        }
+
+        // ✅ ORIGEM: Priorizar source_file_name (nome do arquivo), depois job_name, depois source_name, depois default
+        const origem = jobData?.source_file_name || 
+                       jobData?.job_name || 
+                       prospect.source_name || 
+                       (jobData?.source_type === 'upload_csv' ? 'CSV Upload' :
+                        jobData?.source_type === 'upload_excel' ? 'Excel Upload' :
+                        jobData?.source_type === 'google_sheets' ? 'Google Sheets' :
+                        jobData?.source_type === 'api_empresas_aqui' ? 'API Empresas Aqui' :
+                        'Qualification Engine');
+
         // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS EM raw_data
         const rawData: any = {
           qualified_prospect_id: prospect.id,
           promoted_from_qualified_stock: true,
           promoted_at: new Date().toISOString(),
+          origem: origem, // ✅ PRESERVAR ORIGEM
+          source_name: origem, // ✅ PRESERVAR source_name também
+          source_file_name: jobData?.source_file_name || null,
+          job_name: jobData?.job_name || null,
+          source_type: jobData?.source_type || null,
         };
-
-        // Dados de qualificação
-        const sourceName = prospect.source_name || prospect.job?.source_file_name || 'Qualification Engine';
-        if (sourceName) {
-          rawData.source_name = sourceName;
-        }
         if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
           rawData.fit_score = Number(prospect.fit_score);
         }
@@ -976,6 +1003,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             const updatePayload: any = {
               company_name: companyName || existingCompany.company_name || 'Empresa Sem Nome',
               name: companyName || existingCompany.name || 'Empresa Sem Nome', // Campo obrigatório
+              origem: origem, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
+              source_name: origem, // ✅ PRESERVAR source_name também
               updated_at: new Date().toISOString(),
             };
 
@@ -1093,12 +1122,39 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               company_name: companyName,
             });
 
+            // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo) - se ainda não foi buscado
+            if (!jobData && prospect.job_id) {
+              try {
+                const { data: job } = await ((supabase as any).from('prospect_qualification_jobs'))
+                  .select('job_name, source_file_name, source_type')
+                  .eq('id', prospect.job_id)
+                  .maybeSingle();
+                if (job) {
+                  jobData = job;
+                }
+              } catch (jobError) {
+                console.warn('[Qualified → Companies] ⚠️ Erro ao buscar job:', jobError);
+              }
+            }
+
+            // ✅ ORIGEM: Priorizar source_file_name (nome do arquivo), depois job_name, depois source_name, depois default
+            const origemInsert = jobData?.source_file_name || 
+                                jobData?.job_name || 
+                                prospect.source_name || 
+                                (jobData?.source_type === 'upload_csv' ? 'CSV Upload' :
+                                 jobData?.source_type === 'upload_excel' ? 'Excel Upload' :
+                                 jobData?.source_type === 'google_sheets' ? 'Google Sheets' :
+                                 jobData?.source_type === 'api_empresas_aqui' ? 'API Empresas Aqui' :
+                                 'Qualification Engine');
+
             // ✅ Payload simplificado e seguro - apenas campos que EXISTEM na tabela companies
             const insertPayload: any = {
               tenant_id: tenantId,
               cnpj: normalizedCnpj, // Usar CNPJ já normalizado
               company_name: companyName || 'Empresa Sem Nome', // Garantir que não seja null
               name: companyName || 'Empresa Sem Nome', // Campo obrigatório
+              origem: origemInsert, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
+              source_name: origemInsert, // ✅ PRESERVAR source_name também
             };
 
             // Adicionar campos opcionais apenas se tiverem valores válidos
@@ -1116,13 +1172,15 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             }
             
             // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS: Copiar dados de qualified_prospects para companies
-            const rawData: any = {};
+            const rawData: any = {
+              origem: origemInsert, // ✅ PRESERVAR ORIGEM
+              source_name: origemInsert, // ✅ PRESERVAR source_name também
+              source_file_name: jobData?.source_file_name || null,
+              job_name: jobData?.job_name || null,
+              source_type: jobData?.source_type || null,
+            };
             
             // ✅ DADOS DE QUALIFICAÇÃO
-            const sourceName = prospect.source_name || prospect.job?.source_file_name || 'Qualification Engine';
-            if (sourceName) {
-              rawData.source_name = sourceName;
-            }
             if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
               rawData.fit_score = Number(prospect.fit_score);
             }
@@ -1983,6 +2041,56 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
 
   // ✅ NOVA FUNÇÃO: Calcular Purchase Intent Score individual
   const handleCalculatePurchaseIntent = async (prospectId: string) => {
+    if (!tenantId) return;
+
+    try {
+      toast({
+        title: '🎯 Calculando Purchase Intent Avançado...',
+        description: 'Aguarde enquanto analisamos produtos, ICP, clientes similares e mercado'
+      });
+
+      // Buscar ICP ID se disponível
+      const prospect = prospects.find(p => p.id === prospectId);
+      const icpId = prospect?.icp_id || null;
+
+      // Chamar Edge Function de análise avançada
+      const { data, error } = await supabase.functions.invoke(
+        'calculate-enhanced-purchase-intent',
+        {
+          body: {
+            tenant_id: tenantId,
+            prospect_id: prospectId,
+            icp_id: icpId
+          }
+        }
+      );
+
+      if (error) throw error;
+
+      const response = data as any;
+      if (!response.success) {
+        throw new Error(response.error || 'Erro ao calcular Purchase Intent avançado');
+      }
+
+      toast({
+        title: '✅ Purchase Intent Avançado calculado!',
+        description: `Score: ${response.analysis?.overall_fit_score || 0}/100 - Grade: ${response.analysis?.recommended_grade || 'N/A'}`,
+        variant: 'default'
+      });
+
+      // Recarregar dados
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Purchase Intent Avançado] Erro:', error);
+      toast({
+        title: 'Erro ao calcular Purchase Intent avançado',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleCalculatePurchaseIntentOld = async (prospectId: string) => {
     const prospect = prospects.find(p => p.id === prospectId);
     if (!prospect || !tenantId) return;
 

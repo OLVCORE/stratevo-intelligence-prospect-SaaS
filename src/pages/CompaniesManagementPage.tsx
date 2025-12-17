@@ -67,6 +67,7 @@ import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewMo
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import LocationMap from '@/components/map/LocationMap';
+import { normalizeFromCompanies, prepareForICPInsertion } from '@/lib/utils/companyDataNormalizer';
 
 
 export default function CompaniesManagementPage() {
@@ -1794,79 +1795,72 @@ export default function CompaniesManagementPage() {
                           continue;
                         }
 
-                        // 🔧 NORMALIZAR DADOS USANDO DADOS COMPLETOS DA EMPRESA
-                        const receitaData = (fullCompany.raw_data as any)?.receita || {};
-                        const rawData = fullCompany.raw_data && typeof fullCompany.raw_data === 'object' && !Array.isArray(fullCompany.raw_data)
-                          ? fullCompany.raw_data as Record<string, any>
-                          : {};
+                        // ✅ NORMALIZAR DADOS USANDO O NORMALIZADOR UNIVERSAL (garante preservação de TODOS os dados enriquecidos)
+                        const normalized = normalizeFromCompanies(fullCompany);
                         
-                        // ✅ Preparar raw_analysis com informações de origem
-                        const rawAnalysis = {
-                          ...rawData,
+                        // ✅ PREPARAR DADOS PARA INSERÇÃO usando o normalizador (preserva TODOS os enriquecimentos)
+                        const insertData = prepareForICPInsertion(normalized, tenant?.id || fullCompany.tenant_id);
+                        
+                        // ✅ ORIGEM: Priorizar origem do fullCompany, depois source_name, depois raw_data, depois default
+                        // ⚠️ IMPORTANTE: icp_analysis_results.origem tem CHECK constraint que só permite:
+                        // 'upload_massa', 'icp_individual', 'icp_massa'
+                        // Se vier nome de arquivo ou outro valor, usar 'upload_massa'
+                        const origemRaw = fullCompany.origem || 
+                                         fullCompany.source_name || 
+                                         (fullCompany.raw_data as any)?.origem || 
+                                         (fullCompany.raw_data as any)?.source_name || 
+                                         'upload_massa';
+                        // Mapear para valores permitidos no CHECK constraint
+                        const origem = (origemRaw === 'icp_individual' || origemRaw === 'icp_massa') 
+                          ? origemRaw 
+                          : 'upload_massa'; // Qualquer outro valor (incluindo nomes de arquivo) → 'upload_massa'
+                        
+                        // ✅ ADICIONAR METADADOS DE MIGRAÇÃO ao raw_analysis (PRESERVAR TUDO)
+                        insertData.raw_analysis = {
+                          ...insertData.raw_analysis,
+                          // ✅ PRESERVAR ORIGEM ORIGINAL (nome do arquivo/API/Legacy) em raw_analysis
+                          // ⚠️ NOTA: origem no campo direto deve ser 'upload_massa' (CHECK constraint)
+                          // Mas preservamos a origem REAL em raw_analysis para exibição
+                          origem_original: origemRaw, // ✅ ORIGEM REAL (nome do arquivo, etc.)
+                          origem: origemRaw, // ✅ ORIGEM REAL também aqui para compatibilidade
+                          source_name: origemRaw, // ✅ Nome do arquivo/API/Legacy
                           source_type: fullCompany.source_type || 'manual',
-                          source_name: fullCompany.source_name || 'Estoque',
+                          source_file_name: (fullCompany.raw_data as any)?.source_file_name || null,
+                          job_name: (fullCompany.raw_data as any)?.job_name || null,
                           import_batch_id: fullCompany.import_batch_id || null,
                           migrated_from_companies: true,
                           migrated_at: new Date().toISOString(),
-                          // Garantir que dados de enriquecimento estejam em raw_analysis também
-                          website_enrichment: fullCompany.website_encontrado ? {
-                            website_encontrado: fullCompany.website_encontrado,
-                            website_fit_score: fullCompany.website_fit_score,
-                            website_products_match: fullCompany.website_products_match,
-                            linkedin_url: fullCompany.linkedin_url,
+                          // ✅ PRESERVAR TODOS OS DADOS DE ENRIQUECIMENTO
+                          website_enrichment: normalized.website_encontrado ? {
+                            website_encontrado: normalized.website_encontrado,
+                            website_fit_score: normalized.website_fit_score,
+                            website_products_match: normalized.website_products_match,
+                            linkedin_url: normalized.linkedin_url,
                           } : undefined,
-                          // Preservar fit_score e grade se existirem
-                          fit_score: rawData?.fit_score,
-                          grade: rawData?.grade,
-                          icp_id: rawData?.icp_id,
                         };
                         
-                        // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao integrar ao ICP (apenas campos que existem na tabela)
-                        const insertData: any = {
-                          // ✅ OBRIGATÓRIOS (NOT NULL)
-                          company_id: fullCompany.id,
-                          tenant_id: tenant?.id || fullCompany.tenant_id, // 🔥 CORRIGIDO: Adicionar tenant_id para isolamento multi-tenant
-                          cnpj: fullCompany.cnpj,
-                          razao_social: fullCompany.company_name || receitaData.razao_social || receitaData.nome || 'N/A',
-                          
-                          // ✅ OPCIONAIS (mas importantes)
-                          nome_fantasia: receitaData.nome_fantasia || receitaData.fantasia || null,
-                          uf: (fullCompany.location as any)?.state || receitaData.uf || null,
-                          municipio: (fullCompany.location as any)?.city || receitaData.municipio || null,
-                          porte: receitaData.porte || fullCompany.porte_estimado || null,
-                          cnae_principal: receitaData.cnae_fiscal || receitaData.atividade_principal?.[0]?.code || null,
-                          website: fullCompany.website || fullCompany.website_encontrado || fullCompany.domain || null,
-                          email: fullCompany.email || receitaData.email || null,
-                          telefone: receitaData.ddd_telefone_1 || receitaData.telefone || null,
-                          
-                          // ✅ DADOS DE ENRIQUECIMENTO DE WEBSITE (se existirem)
-                          website_encontrado: fullCompany.website_encontrado || null,
-                          website_fit_score: fullCompany.website_fit_score ?? null,
-                          website_products_match: fullCompany.website_products_match || null,
-                          linkedin_url: fullCompany.linkedin_url || null,
-                          
-                          // ✅ STATUS (obrigatório com default 'pendente')
-                          status: 'pendente',
-                          
-                          // ✅ ORIGEM (CHECK constraint: 'upload_massa', 'icp_individual', 'icp_massa')
-                          origem: 'upload_massa', // Empresas migradas da base de empresas
-                          
-                          // ✅ RAW DATA (preservar TUDO + informações de origem)
-                          raw_data: rawData,
-                          raw_analysis: rawAnalysis
-                        };
+                        // ✅ GARANTIR QUE ORIGEM ESTEJA NO CAMPO DIRETO (valor permitido pelo CHECK constraint)
+                        insertData.origem = origem; // 'upload_massa' ou 'icp_individual' ou 'icp_massa'
                         
                         // 🔥 DEBUG: Log do payload antes de inserir
-                        console.log(`[ICP Integration] 📦 Inserindo ${fullCompany.company_name}:`, {
+                        console.log(`[ICP Integration] 📦 Inserindo ${normalized.razao_social}:`, {
                           cnpj: insertData.cnpj,
                           company_id: insertData.company_id,
+                          tenant_id: insertData.tenant_id,
+                          website_encontrado: insertData.website_encontrado,
+                          website_fit_score: insertData.website_fit_score,
+                          website_products_match: insertData.website_products_match?.length || 0,
+                          linkedin_url: insertData.linkedin_url,
+                          purchase_intent_score: insertData.purchase_intent_score,
+                          fit_score: insertData.fit_score,
+                          grade: insertData.raw_analysis?.grade,
                           status: insertData.status,
                           origem: insertData.origem,
                           has_raw_data: !!insertData.raw_data,
                           has_raw_analysis: !!insertData.raw_analysis
                         });
 
-                        // Integra ao ICP com TODOS os campos necessários
+                        // Integra ao ICP com TODOS os campos necessários (incluindo TODOS os dados enriquecidos)
                         const { error: insertError } = await supabase
                           .from('icp_analysis_results')
                           .insert(insertData);
@@ -2140,58 +2134,9 @@ export default function CompaniesManagementPage() {
                           continue;
                         }
 
-                        // 🔧 NORMALIZAR DADOS USANDO DADOS COMPLETOS DA EMPRESA
-                        const receitaData = (fullCompany.raw_data as any)?.receita || {};
-                        const rawData = fullCompany.raw_data && typeof fullCompany.raw_data === 'object' && !Array.isArray(fullCompany.raw_data)
-                          ? fullCompany.raw_data as Record<string, any>
-                          : {};
-                        
-                        // ✅ Preparar raw_analysis com informações de origem
-                        const rawAnalysis = {
-                          ...rawData,
-                          source_type: fullCompany.source_type || 'manual',
-                          source_name: fullCompany.source_name || 'Estoque',
-                          import_batch_id: fullCompany.import_batch_id || null,
-                          migrated_from_companies: true,
-                          migrated_at: new Date().toISOString()
-                        };
-                        
-                        // Integra ao ICP com TODOS os campos necessários
-                        const insertPayload: any = {
-                          // ✅ OBRIGATÓRIOS (NOT NULL)
-                          company_id: fullCompany.id,
-                          tenant_id: tenant?.id || fullCompany.tenant_id, // 🔥 CORRIGIDO: Adicionar tenant_id para isolamento multi-tenant
-                          cnpj: fullCompany.cnpj,
-                          razao_social: fullCompany.company_name || receitaData.razao_social || receitaData.nome || 'N/A',
-                          
-                          // ✅ OPCIONAIS (mas importantes)
-                          nome_fantasia: receitaData.nome_fantasia || receitaData.fantasia || null,
-                          uf: (fullCompany.location as any)?.state || receitaData.uf || null,
-                          municipio: (fullCompany.location as any)?.city || receitaData.municipio || null,
-                          porte: receitaData.porte || fullCompany.porte_estimado || null,
-                          cnae_principal: receitaData.cnae_fiscal || receitaData.atividade_principal?.[0]?.code || null,
-                          website: fullCompany.website || fullCompany.website_encontrado || fullCompany.domain || null,
-                          email: fullCompany.email || receitaData.email || null,
-                          telefone: receitaData.ddd_telefone_1 || receitaData.telefone || null,
-                          
-                          // ✅ DADOS DE ENRIQUECIMENTO DE WEBSITE (se existirem)
-                          website_encontrado: fullCompany.website_encontrado || null,
-                          website_fit_score: fullCompany.website_fit_score ?? null,
-                          website_products_match: fullCompany.website_products_match || null,
-                          linkedin_url: fullCompany.linkedin_url || null,
-                          
-                          // ✅ STATUS (obrigatório com default 'pendente')
-                          status: 'pendente',
-                          
-                          // ✅ ORIGEM (CHECK constraint: 'upload_massa', 'icp_individual', 'icp_massa')
-                          origem: 'upload_massa', // Empresas migradas da base de empresas
-                          
-                          // ✅ RAW DATA (mantém TUDO + informações de origem)
-                          raw_data: rawData,
-                          // ✅ RAW ANALYSIS (pode não existir no schema, então vamos tentar)
-                          // Se der erro, o PostgREST vai reclamar e vamos remover do payload
-                          raw_analysis: rawAnalysis
-                        };
+                        // 🔧 NORMALIZAR DADOS USANDO NORMALIZADOR UNIVERSAL
+                        const normalized = normalizeFromCompanies(fullCompany);
+                        const insertPayload = prepareForICPInsertion(normalized, tenant?.id || fullCompany.tenant_id);
                         
                         // 🔥 REMOVER raw_analysis se a coluna não existir (será detectado pelo erro)
                         // Por enquanto, vamos tentar inserir. Se falhar, vamos remover e tentar novamente

@@ -1,0 +1,189 @@
+Preciso que você aplique políticas de segurança RLS (Row Level Security) em todas as tabelas públicas do meu projeto Supabase que ainda não têm RLS habilitado.
+
+OBJETIVO:
+1. Usuários não autenticados (público) não podem acessar NADA
+2. Usuários autenticados só vejam/modifiquem dados do seu próprio tenant
+3. Isolamento completo entre tenants (multi-tenant)
+4. Service role continue tendo acesso total (para backend/Edge Functions)
+
+ETAPAS:
+
+1. IDENTIFICAR TABELAS SEM RLS:
+Execute esta query para listar todas as tabelas públicas sem RLS:
+```sql
+SELECT tablename, rowsecurity as rls_enabled
+FROM pg_tables 
+WHERE schemaname = 'public' 
+  AND rowsecurity = false
+ORDER BY tablename;
+```
+
+2. PARA CADA TABELA, VERIFICAR ESTRUTURA:
+- Tem coluna `tenant_id` diretamente?
+- Tem coluna `company_id` que referencia `companies`?
+- É uma tabela global/compartilhada (sem tenant_id nem company_id)?
+
+3. CRIAR MIGRATION SQL seguindo estes padrões:
+
+PADRÃO A - Tabela com tenant_id diretamente:
+```sql
+ALTER TABLE public.nome_da_tabela ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'nome_da_tabela'
+  ) THEN
+    CREATE POLICY "Users can view nome_da_tabela from their tenant"
+      ON public.nome_da_tabela FOR SELECT TO authenticated
+      USING (
+        auth.uid() IS NOT NULL 
+        AND tenant_id IN (
+          SELECT tenant_id FROM public.tenant_users 
+          WHERE user_id = auth.uid() AND status = 'active'
+        )
+      );
+    
+    CREATE POLICY "Users can insert nome_da_tabela in their tenant"
+      ON public.nome_da_tabela FOR INSERT TO authenticated
+      WITH CHECK (
+        auth.uid() IS NOT NULL 
+        AND tenant_id IN (
+          SELECT tenant_id FROM public.tenant_users 
+          WHERE user_id = auth.uid() AND status = 'active'
+        )
+      );
+    
+    CREATE POLICY "Users can update nome_da_tabela from their tenant"
+      ON public.nome_da_tabela FOR UPDATE TO authenticated
+      USING (
+        auth.uid() IS NOT NULL 
+        AND tenant_id IN (
+          SELECT tenant_id FROM public.tenant_users 
+          WHERE user_id = auth.uid() AND status = 'active'
+        )
+      )
+      WITH CHECK (
+        auth.uid() IS NOT NULL 
+        AND tenant_id IN (
+          SELECT tenant_id FROM public.tenant_users 
+          WHERE user_id = auth.uid() AND status = 'active'
+        )
+      );
+    
+    CREATE POLICY "Users can delete nome_da_tabela from their tenant"
+      ON public.nome_da_tabela FOR DELETE TO authenticated
+      USING (
+        auth.uid() IS NOT NULL 
+        AND tenant_id IN (
+          SELECT tenant_id FROM public.tenant_users 
+          WHERE user_id = auth.uid() AND status = 'active'
+        )
+      );
+  END IF;
+END $$;
+```
+
+PADRÃO B - Tabela com company_id (via JOIN):
+```sql
+ALTER TABLE public.nome_da_tabela ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'nome_da_tabela'
+  ) THEN
+    CREATE POLICY "Users can view nome_da_tabela from their tenant"
+      ON public.nome_da_tabela FOR SELECT TO authenticated
+      USING (
+        auth.uid() IS NOT NULL 
+        AND EXISTS (
+          SELECT 1 FROM public.companies c
+          JOIN public.tenant_users tu ON tu.tenant_id = c.tenant_id
+          WHERE c.id = nome_da_tabela.company_id
+            AND tu.user_id = auth.uid() AND tu.status = 'active'
+        )
+      );
+    
+    CREATE POLICY "Users can insert nome_da_tabela in their tenant"
+      ON public.nome_da_tabela FOR INSERT TO authenticated
+      WITH CHECK (
+        auth.uid() IS NOT NULL 
+        AND EXISTS (
+          SELECT 1 FROM public.companies c
+          JOIN public.tenant_users tu ON tu.tenant_id = c.tenant_id
+          WHERE c.id = nome_da_tabela.company_id
+            AND tu.user_id = auth.uid() AND tu.status = 'active'
+        )
+      );
+    
+    CREATE POLICY "Users can update nome_da_tabela from their tenant"
+      ON public.nome_da_tabela FOR UPDATE TO authenticated
+      USING (
+        auth.uid() IS NOT NULL 
+        AND EXISTS (
+          SELECT 1 FROM public.companies c
+          JOIN public.tenant_users tu ON tu.tenant_id = c.tenant_id
+          WHERE c.id = nome_da_tabela.company_id
+            AND tu.user_id = auth.uid() AND tu.status = 'active'
+        )
+      )
+      WITH CHECK (
+        auth.uid() IS NOT NULL 
+        AND EXISTS (
+          SELECT 1 FROM public.companies c
+          JOIN public.tenant_users tu ON tu.tenant_id = c.tenant_id
+          WHERE c.id = nome_da_tabela.company_id
+            AND tu.user_id = auth.uid() AND tu.status = 'active'
+        )
+      );
+    
+    CREATE POLICY "Users can delete nome_da_tabela from their tenant"
+      ON public.nome_da_tabela FOR DELETE TO authenticated
+      USING (
+        auth.uid() IS NOT NULL 
+        AND EXISTS (
+          SELECT 1 FROM public.companies c
+          JOIN public.tenant_users tu ON tu.tenant_id = c.tenant_id
+          WHERE c.id = nome_da_tabela.company_id
+            AND tu.user_id = auth.uid() AND tu.status = 'active'
+        )
+      );
+  END IF;
+END $$;
+```
+
+PADRÃO C - Tabela global (sem tenant_id nem company_id):
+```sql
+ALTER TABLE public.nome_da_tabela ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'nome_da_tabela'
+      AND policyname = 'Users can view nome_da_tabela'
+  ) THEN
+    CREATE POLICY "Users can view nome_da_tabela"
+      ON public.nome_da_tabela FOR SELECT TO authenticated
+      USING (auth.uid() IS NOT NULL);
+  END IF;
+  -- NOTA: Sem políticas de escrita, apenas service_role pode escrever
+END $$;
+```
+
+4. VALIDAR:
+- Verificar que RLS está habilitado em todas as tabelas
+- Verificar que políticas foram criadas
+- Testar isolamento entre tenants
+
+RESULTADO ESPERADO:
+✅ Público: Bloqueado completamente
+✅ Usuários autenticados: Acesso apenas aos dados do seu tenant
+✅ Service Role: Acesso total (para backend)
+✅ Isolamento completo entre tenants
+
+Crie uma migration SQL completa aplicando esses padrões em todas as tabelas identificadas.
+

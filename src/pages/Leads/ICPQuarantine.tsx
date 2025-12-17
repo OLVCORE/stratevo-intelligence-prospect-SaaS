@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -29,9 +29,7 @@ import { QuarantineEnrichmentStatusBadge } from '@/components/icp/QuarantineEnri
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { ICPScoreTooltip } from '@/components/icp/ICPScoreTooltip';
 import { VerificationStatusBadge } from '@/components/totvs/TOTVSStatusBadge';
-import { MC8Badge } from '@/components/icp/MC8Badge';
-import { runMC8MatchAssessment, saveMC8Assessment } from '@/services/icpMatchAssessment.service';
-import type { ICPReportRow, MC8MatchAssessment } from '@/types/icp';
+// MC8 removido - substituído por botão Eye para modal de detalhes
 import { useTenant } from '@/contexts/TenantContext';
 import { useICPLibrary } from '@/hooks/useICPLibrary';
 import { EnrichmentProgressModal, type EnrichmentProgress } from '@/components/companies/EnrichmentProgressModal';
@@ -48,6 +46,7 @@ import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
+import { normalizeFromICPResults } from '@/lib/utils/companyDataNormalizer';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -1056,7 +1055,15 @@ export default function ICPQuarantine() {
       });
 
       if (!findWebsiteResponse.ok) {
-        throw new Error('Erro ao buscar website');
+        const errorText = await findWebsiteResponse.text();
+        let errorMessage = 'Erro ao buscar website';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorJson.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(`${errorMessage} (Status: ${findWebsiteResponse.status})`);
       }
 
       const websiteData = await findWebsiteResponse.json();
@@ -1082,7 +1089,15 @@ export default function ICPQuarantine() {
       });
 
       if (!scanWebsiteResponse.ok) {
-        throw new Error('Erro ao escanear website');
+        const errorText = await scanWebsiteResponse.text();
+        let errorMessage = 'Erro ao escanear website';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorJson.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(`${errorMessage} (Status: ${scanWebsiteResponse.status})`);
       }
 
       const scanData = await scanWebsiteResponse.json();
@@ -1111,33 +1126,77 @@ export default function ICPQuarantine() {
   // ✅ NOVA FUNÇÃO: Calcular Purchase Intent Score
   const handleCalculatePurchaseIntent = async (analysisId: string) => {
     const company = filteredCompanies.find(c => c.id === analysisId);
-    if (!company || !tenantId || !company.cnpj) return;
+    if (!company || !tenantId) return;
 
     try {
-      toast.info('🎯 Calculando Intenção de Compra...');
+      toast.info('🎯 Calculando Purchase Intent Avançado...');
 
-      // Usar função SQL diretamente com CNPJ
-      const { data, error } = await supabase.rpc('calculate_purchase_intent_score', {
-        p_tenant_id: tenantId,
-        p_cnpj: company.cnpj,
-        p_company_id: company.company_id || null,
-      });
+      // Buscar prospect_id (pode estar em qualified_prospect_id ou company_id)
+      let prospectId = (company as any).qualified_prospect_id || company.id;
+      
+      // Se não tem prospect_id direto, buscar em qualified_prospects pelo CNPJ
+      if (!prospectId && company.cnpj) {
+        const { data: prospect } = await supabase
+          .from('qualified_prospects')
+          .select('id')
+          .eq('cnpj', company.cnpj)
+          .eq('tenant_id', tenantId)
+          .single();
+        
+        if (prospect) {
+          prospectId = prospect.id;
+        }
+      }
 
-      if (error) throw error;
+      if (!prospectId) {
+        throw new Error('Prospect não encontrado. A empresa precisa estar no estoque qualificado.');
+      }
 
-      const score = typeof data === 'number' ? data : 0;
+      // Buscar ICP ID se disponível
+      const icpId = (company as any).icp_id || (company as any).icp?.id || null;
 
-      // Atualizar icp_analysis_results
+      // Chamar Edge Function de análise avançada
+      const { data, error } = await supabase.functions.invoke(
+        'calculate-enhanced-purchase-intent',
+        {
+          body: {
+            tenant_id: tenantId,
+            prospect_id: prospectId,
+            icp_id: icpId
+          }
+        }
+      );
+
+      if (error) {
+        console.error('[Purchase Intent Avançado] Erro da Edge Function:', error);
+        throw new Error(error.message || 'Erro ao chamar função de cálculo de Purchase Intent');
+      }
+
+      const response = data as any;
+      if (!response || !response.success) {
+        const errorMsg = response?.error || response?.message || 'Erro desconhecido ao calcular Purchase Intent avançado';
+        console.error('[Purchase Intent Avançado] Resposta de erro:', response);
+        throw new Error(errorMsg);
+      }
+
+      // Atualizar icp_analysis_results com score e análise
       await supabase
         .from('icp_analysis_results')
-        .update({ purchase_intent_score: score })
+        .update({ 
+          purchase_intent_score: response.analysis?.overall_fit_score || 0,
+          purchase_intent_analysis: response.analysis,
+          purchase_intent_calculated_at: new Date().toISOString()
+        })
         .eq('id', analysisId);
 
-      toast.success('✅ Intenção de Compra calculada!');
+      toast.success('✅ Purchase Intent Avançado calculado com sucesso!', {
+        description: `Score: ${response.analysis?.overall_fit_score || 0}/100 - Grade: ${response.analysis?.recommended_grade || 'N/A'}`
+      });
+      
       refetch();
     } catch (error: any) {
-      console.error('[Purchase Intent] Erro:', error);
-      toast.error('Erro ao calcular intenção de compra', { description: error.message });
+      console.error('[Purchase Intent Avançado] Erro:', error);
+      toast.error('Erro ao calcular Purchase Intent avançado', { description: error.message });
     }
   };
 
@@ -2055,7 +2114,7 @@ export default function ICPQuarantine() {
                       onClick={() => handleSort('score')}
                       className="h-8 flex items-center gap-1 px-1 hover:bg-primary/10 transition-colors group"
                     >
-                      <span className="font-semibold text-[10px]">Score</span>
+                      <span className="font-semibold text-[10px]">Score ICP</span>
                       <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'score' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
                     </Button>
                   </TableHead>
@@ -2137,376 +2196,380 @@ export default function ICPQuarantine() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="text-center py-8">
+                  <TableCell colSpan={19} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : paginatedCompanies.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={19} className="text-center py-8 text-muted-foreground">
                     Nenhuma empresa encontrada
                   </TableCell>
                 </TableRow>
               ) : (
                 paginatedCompanies.map((company) => {
-                  // ✅ USAR raw_data (campo correto onde salvamos os enriquecimentos)
-                  const rawData = (company.raw_data && typeof company.raw_data === 'object' && !Array.isArray(company.raw_data)) 
-                    ? company.raw_data as Record<string, any>
-                    : {};
+                  // ✅ NORMALIZAR DADOS usando o normalizador universal (igual Base de Empresas)
+                  const normalized = normalizeFromICPResults(company);
+                  
+                  // ✅ USAR dados normalizados (igual Base de Empresas)
+                  const c = normalized;
                   
                   return (
-                    <>
-                  <TableRow key={company.id} className={`h-[3.25rem] align-middle ${expandedRow === company.id ? 'bg-muted/30' : ''}`}>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedRow(expandedRow === company.id ? null : company.id);
-                        }}
-                      >
-                        {expandedRow === company.id ? (
-                          <ChevronUp className="h-4 w-4 text-primary" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.includes(company.id)}
-                        onCheckedChange={(checked) => 
-                          handleSelectOne(company.id, checked as boolean)
-                        }
-                        disabled={company.status !== 'pendente'}
-                      />
-                    </TableCell>
-                    <TableCell className="w-[26rem] max-w-[26rem] truncate">
-                      <div 
-                        className="flex flex-col cursor-pointer hover:text-primary transition-colors"
-                        onClick={() => {
-                          // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
-                          if (company.company_id) {
-                            navigate(`/company/${company.company_id}`);
-                          } else {
-                            toast.error('Empresa sem ID vinculado', {
-                              description: 'Não foi possível localizar o ID da empresa'
-                            });
-                          }
-                        }}
-                      >
-                        <span className="font-medium text-sm leading-snug line-clamp-2" title={company.razao_social}>
-                          {company.razao_social}
-                        </span>
-                        {rawData?.domain && (
-                          <span className="text-xs text-muted-foreground mt-0.5 truncate">{rawData.domain}</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="w-[9rem]">
-                      {company.cnpj ? (
-                        <Badge 
-                          variant="outline" 
-                          className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
-                          onClick={() => {
-                            if (company.company_id) {
-                              setExecutiveReportCompanyId(company.company_id);
-                              setExecutiveReportOpen(true);
-                            } else {
-                              toast.info('Empresa ainda não possui relatório completo', {
-                                description: 'Aprove a empresa primeiro para gerar o relatório executivo'
-                              });
-                            }
-                          }}
-                        >
-                          {company.cnpj}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">N/A</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="w-[7rem] max-w-[7rem] truncate">
-                      {company.source_name ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Badge 
-                                variant="secondary" 
-                                className="bg-blue-600/10 text-blue-600 border-blue-600/30 hover:bg-blue-600/20 transition-colors cursor-help truncate"
-                              >
-                                {normalizeSourceName(company.source_name)}
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <div className="text-xs space-y-1">
-                                <p><strong>Origem:</strong> {normalizeSourceName(company.source_name)}</p>
-                                {company.source_metadata?.campaign && (
-                                  <p><strong>Campanha:</strong> {company.source_metadata.campaign}</p>
-                                )}
-                                {company.import_date && (
-                                  <p><strong>Importado:</strong> {new Date(company.import_date).toLocaleDateString('pt-BR')}</p>
-                                )}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
-                          Sem origem
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="w-[8rem]">
-                      <QuarantineCNPJStatusBadge 
-                        cnpj={company.cnpj} 
-                        cnpjStatus={(() => {
-                          const receitaData = rawData?.receita_federal || rawData || {};
-                          let status = receitaData.situacao || receitaData.status || company.cnpj_status || '';
-                          
-                          // Normalizar para lowercase
-                          if (status.toUpperCase().includes('ATIVA') || status === '02') return 'ativa';
-                          if (status.toUpperCase().includes('SUSPENSA') || status === '03') return 'inativo';
-                          if (status.toUpperCase().includes('INAPTA') || status === '04') return 'inativo';
-                          if (status.toUpperCase().includes('BAIXADA') || status === '08') return 'inexistente';
-                          if (status.toUpperCase().includes('NULA') || status === '01') return 'inexistente';
-                          
-                          return status.toLowerCase();
-                        })()}
-                      />
-                    </TableCell>
-                    <TableCell className="w-[10rem] max-w-[10rem] truncate">
-                      {(() => {
-                        const sector = company.segmento || company.setor || rawData?.setor_amigavel || rawData?.atividade_economica;
-                        return sector ? (
-                          <span className="text-sm truncate" title={sector}>
-                            {sector}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Não identificado</span>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell className="w-[5rem]">
-                      <div className="flex flex-col gap-1">
-                        {company.uf ? (
-                          <>
-                            <Badge variant="secondary" className="w-fit">
-                              {company.uf}
-                            </Badge>
-                            {company.municipio && (
-                              <span className="text-xs text-muted-foreground truncate" title={company.municipio}>
-                                {company.municipio}
-                              </span>
+                    <React.Fragment key={c.id}>
+                      <TableRow className={`h-[3.25rem] align-middle ${expandedRow === c.id ? 'bg-muted/30' : ''}`}>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedRow(expandedRow === c.id ? null : c.id);
+                            }}
+                          >
+                            {expandedRow === c.id ? (
+                              <ChevronUp className="h-4 w-4 text-primary" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
                             )}
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">N/A</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="w-[7rem] text-center">
-                      <ICPScoreTooltip
-                        score={company.icp_score || 0}
-                        porte={company.porte}
-                        setor={company.setor}
-                        uf={company.uf}
-                        is_cliente_totvs={company.is_cliente_totvs}
-                        hasReceitaData={!!rawData?.receita_federal}
-                        hasApolloData={!!rawData?.apollo || !!rawData?.enrichment_360}
-                        hasWebsite={!!company.website}
-                        hasContact={!!company.email || !!company.telefone}
-                      />
-                    </TableCell>
-                    <TableCell className="w-[9rem]">
-                      <QuarantineEnrichmentStatusBadge 
-                        rawAnalysis={rawData}
-                        totvsStatus={company.totvs_status}
-                        showProgress
-                      />
-                    </TableCell>
-                    {/* ✅ COLUNA ICP */}
-                    <TableCell className="w-[7rem]">
-                      {(() => {
-                        // ✅ LER icp_id de raw_data (onde foi salvo durante a migração)
-                        const companyRawData = (company as any).raw_data || {};
-                        const icpId = companyRawData?.icp_id || rawData?.icp_id || (company as any).icp_id;
-                        const icpName = companyRawData?.best_icp_name || companyRawData?.icp_name || rawData?.best_icp_name || rawData?.icp_name;
-                        
-                        // Se tiver icp_id mas não tiver nome, usar fallback
-                        if (icpId && !icpName) {
-                          return (
-                            <Badge variant="outline" className="text-xs">
-                              ICP Principal
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.includes(c.id)}
+                            onCheckedChange={(checked) => 
+                              handleSelectOne(c.id, checked as boolean)
+                            }
+                            disabled={c.status !== 'pendente'}
+                          />
+                        </TableCell>
+                        <TableCell className="w-[26rem] max-w-[26rem] truncate">
+                          <div 
+                            className="flex flex-col cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => {
+                              // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
+                              if (c.company_id) {
+                                navigate(`/company/${c.company_id}`);
+                              } else {
+                                toast.error('Empresa sem ID vinculado', {
+                                  description: 'Não foi possível localizar o ID da empresa'
+                                });
+                              }
+                            }}
+                          >
+                            <span className="font-medium text-sm leading-snug line-clamp-2" title={c.razao_social}>
+                              {c.razao_social}
+                            </span>
+                            {c.website && (
+                              <span className="text-xs text-muted-foreground mt-0.5 truncate">{c.website}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[9rem]">
+                          {c.cnpj ? (
+                            <Badge 
+                              variant="outline" 
+                              className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
+                              onClick={() => {
+                                if (c.company_id) {
+                                  setExecutiveReportCompanyId(c.company_id);
+                                  setExecutiveReportOpen(true);
+                                } else {
+                                  toast.info('Empresa ainda não possui relatório completo', {
+                                    description: 'Aprove a empresa primeiro para gerar o relatório executivo'
+                                  });
+                                }
+                              }}
+                            >
+                              {c.cnpj}
                             </Badge>
-                          );
-                        }
-                        
-                        if (icpName) {
-                          return (
-                            <Badge variant="outline" className="text-xs">
-                              {icpName}
-                            </Badge>
-                          );
-                        }
-                        return <span className="text-xs text-muted-foreground">-</span>;
-                      })()}
-                    </TableCell>
-                    {/* ✅ COLUNA FIT SCORE */}
-                    <TableCell className="w-[7rem]">
-                      {(() => {
-                        const companyRawData = (company as any).raw_data || {};
-                        // ✅ LER fit_score de raw_data (onde foi salvo durante a migração)
-                        const fitScore = companyRawData?.fit_score ?? rawData?.fit_score ?? (company as any).fit_score ?? company.icp_score;
-                        
-                        if (fitScore != null && fitScore > 0) {
-                          return (
+                          ) : (
+                            <span className="text-xs text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="w-[7rem] max-w-[7rem] truncate">
+                          {c.source_name ? (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <div className="flex items-center gap-2 cursor-help group">
-                                    <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                    <span className="font-medium">{fitScore.toFixed(1)}%</span>
-                                    <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </div>
+                                  <Badge 
+                                    variant="secondary" 
+                                    className="bg-blue-600/10 text-blue-600 border-blue-600/30 hover:bg-blue-600/20 transition-colors cursor-help truncate"
+                                  >
+                                    {normalizeSourceName(c.source_name)}
+                                  </Badge>
                                 </TooltipTrigger>
-                                <TooltipContent side="left" className="max-w-sm p-4">
-                                  <div className="space-y-2">
-                                    <p className="font-semibold text-sm border-b pb-2">
-                                      Fit Score: {fitScore.toFixed(1)}%
-                                    </p>
-                                    <div className="text-xs space-y-1.5">
-                                      <p>Cálculo baseado em:</p>
-                                      <ul className="list-disc list-inside space-y-1">
-                                        <li>Setor (40%): Match com ICP</li>
-                                        <li>Localização (30%): UF/Cidade</li>
-                                        <li>Dados completos (20%): Qualidade dos dados</li>
-                                        <li>Website (5%): Presença digital</li>
-                                        <li>Contato (5%): Email/Telefone</li>
-                                      </ul>
-                                    </div>
+                                <TooltipContent>
+                                  <div className="text-xs space-y-1">
+                                    <p><strong>Origem:</strong> {normalizeSourceName(c.source_name)}</p>
                                   </div>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                          );
-                        }
-                        return <span className="text-xs text-muted-foreground">N/A</span>;
-                      })()}
-                    </TableCell>
-                    {/* ✅ COLUNA GRADE */}
-                    <TableCell className="w-[6rem]">
-                      {(() => {
-                        const companyRawData = (company as any).raw_data || {};
-                        // ✅ LER grade de raw_data (onde foi salvo durante a migração)
-                        const grade = companyRawData?.grade || rawData?.grade || (company as any).grade;
-                        
-                        if (!grade || grade === '-' || grade === 'null') {
-                          return <Badge variant="outline">-</Badge>;
-                        }
-                        
-                        const colors: Record<string, string> = {
-                          'A+': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-                          'A': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-                          'B': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-                          'C': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-                          'D': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-                        };
-                        
-                        return (
-                          <Badge className={colors[grade] || 'bg-gray-100 text-gray-800'}>
-                            {grade}
-                          </Badge>
-                        );
-                      })()}
-                    </TableCell>
-                    {/* ✅ NOVA COLUNA: Purchase Intent Score */}
-                    <TableCell className="w-[10rem]">
-                      <PurchaseIntentBadge 
-                        score={(company as any).purchase_intent_score || 0}
-                        intentType={(company as any).purchase_intent_type || 'potencial'}
-                        size="sm"
-                      />
-                    </TableCell>
-                    {/* ✅ NOVA COLUNA: Website */}
-                    <TableCell className="w-[10rem]">
-                      {company.website_encontrado || company.website ? (
-                        <a
-                          href={company.website_encontrado || company.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1 text-xs"
-                        >
-                          <Globe className="h-3.5 w-3.5" />
-                          <span className="truncate max-w-[120px]">{company.website_encontrado || company.website}</span>
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </TableCell>
-                    {/* ✅ NOVA COLUNA: Website Fit Score */}
-                    <TableCell className="w-[8rem]">
-                      {company.website_fit_score != null && company.website_fit_score > 0 ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30 text-xs">
-                                +{company.website_fit_score}pts
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <div className="space-y-1">
-                                <p className="font-semibold">Website Fit Score: +{company.website_fit_score} pontos</p>
-                                {company.website_products_match && Array.isArray(company.website_products_match) && company.website_products_match.length > 0 && (
-                                  <div className="text-xs mt-2">
-                                    <p className="font-medium">Produtos compatíveis:</p>
-                                    <ul className="list-disc list-inside mt-1 space-y-0.5">
-                                      {company.website_products_match.slice(0, 3).map((match: any, idx: number) => (
-                                        <li key={idx}>
-                                          {match.tenant_product} ↔ {match.prospect_product}
-                                        </li>
-                                      ))}
-                                      {company.website_products_match.length > 3 && (
-                                        <li className="text-muted-foreground">+{company.website_products_match.length - 3} mais...</li>
-                                      )}
-                                    </ul>
-                                  </div>
+                          ) : (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              Legacy
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="w-[8rem]">
+                          {(() => {
+                            // ✅ USAR COMPONENTE IDÊNTICO À BASE DE EMPRESAS
+                            const receitaData = c.raw_data?.receita_federal || c.raw_data?.receita || {};
+                            const situacao = receitaData?.situacao || 
+                                           receitaData?.descricao_situacao_cadastral || 
+                                           receitaData?.situacao_cadastral;
+                            
+                            // Normalizar status para o componente
+                            let cnpjStatus = 'pendente';
+                            if (situacao) {
+                              const sitUpper = situacao.toUpperCase();
+                              if (sitUpper.includes('ATIVA')) cnpjStatus = 'ativa';
+                              else if (sitUpper.includes('INAPTA') || sitUpper.includes('SUSPENSA') || sitUpper.includes('BAIXADA')) cnpjStatus = 'inativo';
+                              else if (sitUpper.includes('NULA')) cnpjStatus = 'inexistente';
+                            }
+                            
+                            return <QuarantineCNPJStatusBadge cnpj={c.cnpj || undefined} cnpjStatus={cnpjStatus} />;
+                          })()}
+                        </TableCell>
+                        <TableCell className="w-[10rem] max-w-[10rem] truncate">
+                          {(() => {
+                            // ✅ PRIORIZAR APOLLO INDUSTRY > RECEITA FEDERAL (igual Base de Empresas)
+                            const setor = c.raw_data?.apollo_organization?.industry ||
+                                         c.segmento || 
+                                         c.setor ||
+                                         c.raw_data?.receita_federal?.atividade_principal?.[0]?.text ||
+                                         c.raw_data?.receita?.atividade_principal?.[0]?.text ||
+                                         c.raw_data?.atividade_economica ||
+                                         c.raw_data?.setor_amigavel;
+                            return setor ? (
+                              <span className="text-xs">{setor}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Não identificado</span>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell className="w-[5rem]">
+                          <div className="flex flex-col gap-1">
+                            {c.uf ? (
+                              <>
+                                <Badge variant="secondary" className="w-fit">
+                                  {c.uf}
+                                </Badge>
+                                {c.municipio && (
+                                  <span className="text-xs text-muted-foreground truncate" title={c.municipio}>
+                                    {c.municipio}
+                                  </span>
                                 )}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </TableCell>
-                    {/* ✅ NOVA COLUNA: LinkedIn */}
-                    <TableCell className="w-[8rem]">
-                      {company.linkedin_url ? (
-                        <a
-                          href={company.linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1 text-xs"
-                        >
-                          <span className="truncate max-w-[100px]">LinkedIn</span>
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="w-[10rem]">
-                      <div className="flex items-center justify-end gap-2">
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">N/A</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[7rem] text-center">
+                          <ICPScoreTooltip
+                            score={c.icp_score || 0}
+                            porte={c.porte}
+                            setor={c.segmento || c.setor}
+                            uf={c.uf}
+                            is_cliente_totvs={c.totvs_status === 'cliente'}
+                            hasReceitaData={!!c.raw_data?.receita_federal}
+                            hasApolloData={!!c.raw_data?.apollo || !!c.raw_data?.enrichment_360}
+                            hasWebsite={!!(c.website || c.website_encontrado)}
+                            hasContact={!!(c.email || c.telefone)}
+                          />
+                        </TableCell>
+                        <TableCell className="w-[9rem]">
+                          <QuarantineEnrichmentStatusBadge 
+                            rawAnalysis={c.raw_data}
+                            totvsStatus={c.totvs_status}
+                            showProgress
+                          />
+                        </TableCell>
+                        {/* ✅ COLUNA: Status Verificação */}
+                        <TableCell className="w-[9rem]">
+                          <VerificationStatusBadge 
+                            status={c.totvs_status || 'nao-verificado'}
+                          />
+                        </TableCell>
+                        {/* ✅ COLUNA ICP */}
+                        <TableCell className="w-[7rem]">
+                          {(() => {
+                            const icpId = c.icp_id;
+                            const icpName = c.raw_data?.best_icp_name || c.raw_data?.icp_name;
+                            
+                            // Se tiver icp_id mas não tiver nome, usar fallback
+                            if (icpId && !icpName) {
+                              return (
+                                <Badge variant="outline" className="text-xs">
+                                  ICP Principal
+                                </Badge>
+                              );
+                            }
+                            
+                            if (icpName) {
+                              return (
+                                <Badge variant="outline" className="text-xs">
+                                  {icpName}
+                                </Badge>
+                              );
+                            }
+                            return <span className="text-xs text-muted-foreground">N/A</span>;
+                          })()}
+                        </TableCell>
+                        {/* ✅ COLUNA FIT SCORE */}
+                        <TableCell className="w-[7rem]">
+                          {(() => {
+                            // ✅ LER fit_score de múltiplas fontes (igual Base de Empresas)
+                            const fitScore = c.fit_score ?? c.raw_data?.fit_score ?? c.icp_score ?? 0;
+                            
+                            if (fitScore != null && fitScore > 0) {
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-2 cursor-help group">
+                                        <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                        <span className="font-medium">{fitScore.toFixed(1)}%</span>
+                                        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="max-w-sm p-4">
+                                      <div className="space-y-2">
+                                        <p className="font-semibold text-sm border-b pb-2">
+                                          Fit Score: {fitScore.toFixed(1)}%
+                                        </p>
+                                        <div className="text-xs space-y-1.5">
+                                          <p>Cálculo baseado em:</p>
+                                          <ul className="list-disc list-inside space-y-1">
+                                            <li>Setor (40%): Match com ICP</li>
+                                            <li>Localização (30%): UF/Cidade</li>
+                                            <li>Dados completos (20%): Qualidade dos dados</li>
+                                            <li>Website (5%): Presença digital</li>
+                                            <li>Contato (5%): Email/Telefone</li>
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              );
+                            }
+                            return <span className="text-xs text-muted-foreground">N/A</span>;
+                          })()}
+                        </TableCell>
+                        {/* ✅ COLUNA GRADE */}
+                        <TableCell className="w-[6rem]">
+                          {(() => {
+                            // ✅ LER grade de múltiplas fontes (igual Base de Empresas)
+                            const grade = c.grade || c.raw_data?.grade;
+                            
+                            if (!grade || grade === '-' || grade === 'null') {
+                              return <Badge variant="outline">-</Badge>;
+                            }
+                            
+                            const colors: Record<string, string> = {
+                              'A+': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+                              'A': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+                              'B': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+                              'C': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+                              'D': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+                            };
+                            
+                            return (
+                              <Badge className={colors[grade] || 'bg-gray-100 text-gray-800'}>
+                                {grade}
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
+                        {/* ✅ COLUNA: Purchase Intent Score (igual Base de Empresas) */}
+                        <TableCell className="w-[10rem]">
+                          <PurchaseIntentBadge 
+                            score={c.purchase_intent_score || 0} 
+                            intentType={c.purchase_intent_type || 'potencial'}
+                            size="sm"
+                          />
+                        </TableCell>
+                        {/* ✅ COLUNA: Website (igual Base de Empresas) */}
+                        <TableCell className="w-[10rem]">
+                          {c.website_encontrado || c.website ? (
+                            <a
+                              href={c.website_encontrado || c.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline flex items-center gap-1 text-xs"
+                            >
+                              <Globe className="h-3.5 w-3.5" />
+                              <span className="truncate max-w-[120px]">{c.website_encontrado || c.website}</span>
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+                        {/* ✅ COLUNA: Website Fit Score (igual Base de Empresas) */}
+                        <TableCell className="w-[8rem]">
+                          {c.website_fit_score != null && c.website_fit_score > 0 ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30 text-xs">
+                                    +{c.website_fit_score}pts
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="space-y-1">
+                                    <p className="font-semibold">Website Fit Score: +{c.website_fit_score} pontos</p>
+                                    {c.website_products_match && Array.isArray(c.website_products_match) && c.website_products_match.length > 0 && (
+                                      <div className="text-xs mt-2">
+                                        <p className="font-medium">Produtos compatíveis:</p>
+                                        <ul className="list-disc list-inside mt-1 space-y-0.5">
+                                          {c.website_products_match.slice(0, 3).map((match: any, idx: number) => (
+                                            <li key={idx}>
+                                              {match.tenant_product} ↔ {match.prospect_product}
+                                            </li>
+                                          ))}
+                                          {c.website_products_match.length > 3 && (
+                                            <li className="text-muted-foreground">+{c.website_products_match.length - 3} mais...</li>
+                                          )}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+                        {/* ✅ COLUNA: LinkedIn (igual Base de Empresas) */}
+                        <TableCell className="w-[8rem]">
+                          {c.linkedin_url ? (
+                            <a
+                              href={c.linkedin_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline flex items-center gap-1 text-xs"
+                            >
+                              <span className="truncate max-w-[100px]">LinkedIn</span>
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="w-[10rem]">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
                         {/* STC */}
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div>
+                              <div className="flex-shrink-0">
                                 <STCAgent
-                                  companyId={company.company_id || company.id}
-                                  companyName={company.razao_social}
-                                  cnpj={company.cnpj}
+                                  companyId={c.company_id || c.id}
+                                  companyName={c.razao_social}
+                                  cnpj={c.cnpj}
                                 />
                               </div>
                             </TooltipTrigger>
@@ -2516,107 +2579,118 @@ export default function ICPQuarantine() {
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                        
-                        {/* MC8 */}
-                        <div>
-                          <MC8Badge
-                            mc8={(company as any).mc8Assessment}
-                            onRunMC8={activeICP ? () => handleRunMC8(company) : undefined}
-                            icpName={activeICP?.nome}
-                          />
-                          {runningMC8 === company.id && (
-                            <div className="mt-1">
-                              <Badge variant="outline" className="text-[9px] flex items-center gap-1">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Processando...
-                              </Badge>
+                            
+                            {/* ✅ BOTÃO EYE PARA ABRIR MODAL DE DETALHES */}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex-shrink-0">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 hover:bg-primary/10"
+                                      onClick={() => {
+                                        setPreviewCompany(c);
+                                        setPreviewOpen(true);
+                                      }}
+                                      title="Ver detalhes"
+                                    >
+                                      <Eye className="h-4 w-4 text-muted-foreground hover:text-primary transition-colors" />
+                                    </Button>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                  <p className="font-semibold">Ver Detalhes</p>
+                                  <p className="text-xs">Abrir modal com informações completas</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            
+                            {/* Menu de Ações */}
+                            <div className="flex-shrink-0">
+                              <QuarantineRowActions
+                                company={c}
+                                onApprove={handleApproveSingle}
+                                onReject={handleRejectSingle}
+                                onDelete={handleDeleteSingle}
+                                onPreview={handlePreviewSingle}
+                                onRefresh={handleRefreshSingle}
+                                onEnrichReceita={handleEnrichReceita}
+                                onEnrichApollo={handleEnrichApollo}
+                                onEnrich360={handleEnrich360}
+                                onEnrichCompleto={handleEnrichCompleto}
+                                onEnrichVerification={handleEnrichVerification}
+                                onDiscoverCNPJ={handleDiscoverCNPJ}
+                                onEnrichWebsite={handleEnrichWebsite}
+                                onCalculatePurchaseIntent={handleCalculatePurchaseIntent}
+                                onRestoreIndividual={async (cnpj) => {
+                                  // Restaurar empresa individual
+                                  try {
+                                    // 1. Buscar empresa descartada
+                                    const { data: discarded } = await supabase
+                                      .from('discarded_companies')
+                                      .select('*')
+                                      .eq('cnpj', cnpj)
+                                      .single();
+                                    
+                                    if (!discarded) {
+                                      toast.error('Empresa não encontrada em descartadas');
+                                      return;
+                                    }
+                                    
+                                    // 2. Verificar se já existe na quarentena
+                                    const { data: existing } = await supabase
+                                      .from('icp_analysis_results')
+                                      .select('id')
+                                      .eq('cnpj', cnpj)
+                                      .maybeSingle();
+                                    
+                                    if (existing) {
+                                      // Atualizar status
+                                      await supabase
+                                        .from('icp_analysis_results')
+                                        .update({ status: 'pendente' })
+                                        .eq('id', existing.id);
+                                    }
+                                    
+                                    // 3. Remover de descartadas
+                                    await supabase
+                                      .from('discarded_companies')
+                                      .delete()
+                                      .eq('cnpj', cnpj);
+                                    
+                                    toast.success('✅ Empresa restaurada!');
+                                    refetch();
+                                  } catch (error: any) {
+                                    console.error('[RESTORE] Erro:', error);
+                                    toast.error('Erro ao restaurar', { description: error.message });
+                                  }
+                                }}
+                                onOpenExecutiveReport={() => {
+                                  if (c.company_id) {
+                                    setExecutiveReportCompanyId(c.company_id);
+                                    setExecutiveReportOpen(true);
+                                  } else {
+                                    toast.info('Empresa ainda não possui relatório completo', {
+                                      description: 'Aprove a empresa primeiro para gerar o relatório executivo'
+                                    });
+                                  }
+                                }}
+                              />
                             </div>
-                          )}
-                        </div>
-                        
-                        {/* Menu de Ações */}
-                        <QuarantineRowActions
-                          company={company}
-                          onApprove={handleApproveSingle}
-                          onReject={handleRejectSingle}
-                          onDelete={handleDeleteSingle}
-                          onPreview={handlePreviewSingle}
-                          onRefresh={handleRefreshSingle}
-                          onEnrichReceita={handleEnrichReceita}
-                          onEnrichApollo={handleEnrichApollo}
-                          onEnrich360={handleEnrich360}
-                          onEnrichCompleto={handleEnrichCompleto}
-                          onEnrichVerification={handleEnrichVerification}
-                          onDiscoverCNPJ={handleDiscoverCNPJ}
-                          onEnrichWebsite={handleEnrichWebsite}
-                          onCalculatePurchaseIntent={handleCalculatePurchaseIntent}
-                          onRestoreIndividual={async (cnpj) => {
-                          // Restaurar empresa individual
-                          try {
-                            // 1. Buscar empresa descartada
-                            const { data: discarded } = await supabase
-                              .from('discarded_companies')
-                              .select('*')
-                              .eq('cnpj', cnpj)
-                              .single();
-                            
-                            if (!discarded) {
-                              toast.error('Empresa não encontrada em descartadas');
-                              return;
-                            }
-                            
-                            // 2. Verificar se já existe na quarentena
-                            const { data: existing } = await supabase
-                              .from('icp_analysis_results')
-                              .select('id')
-                              .eq('cnpj', cnpj)
-                              .maybeSingle();
-                            
-                            if (existing) {
-                              // Atualizar status
-                              await supabase
-                                .from('icp_analysis_results')
-                                .update({ status: 'pendente' })
-                                .eq('id', existing.id);
-                            }
-                            
-                            // 3. Remover de descartadas
-                            await supabase
-                              .from('discarded_companies')
-                              .delete()
-                              .eq('cnpj', cnpj);
-                            
-                            toast.success('✅ Empresa restaurada!');
-                            refetch();
-                          } catch (error: any) {
-                            console.error('[RESTORE] Erro:', error);
-                            toast.error('Erro ao restaurar', { description: error.message });
-                          }
-                        }}
-                        onOpenExecutiveReport={() => {
-                          if (company.company_id) {
-                            setExecutiveReportCompanyId(company.company_id);
-                            setExecutiveReportOpen(true);
-                          } else {
-                            toast.info('Empresa ainda não possui relatório completo', {
-                              description: 'Aprove a empresa primeiro para gerar o relatório executivo'
-                            });
-                          }
-                        }}
-                      />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  
-                  {/* 🎨 LINHA EXPANDIDA COM CARD COMPLETO */}
-                  {expandedRow === company.id && (
-                    <TableRow>
-                      <TableCell colSpan={15} className="bg-muted/20 p-0 border-t-0">
-                        <ExpandedCompanyCard company={company} />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  </>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      
+                      {/* 🎨 LINHA EXPANDIDA COM CARD COMPLETO */}
+                      {expandedRow === c.id && (
+                        <TableRow>
+                          <TableCell colSpan={19} className="bg-muted/20 p-0 border-t-0">
+                            <ExpandedCompanyCard company={c} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                 );
                 })
               )}

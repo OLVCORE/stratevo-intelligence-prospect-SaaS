@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { MC8MatchAssessment, ICPReportRow } from '@/types/icp';
+import { normalizeFromICPResults } from '@/lib/utils/companyDataNormalizer';
 
 export const ICP_QUARANTINE_QUERY_KEY = ['icp-quarantine'];
 
@@ -205,10 +206,19 @@ export function useQuarantineCompanies(filters?: {
       const { data, error } = await query;
       if (error) throw error;
 
+      // 🔧 NORMALIZAR DADOS usando normalizador universal
+      const normalizedData = (data || []).map((item: any) => {
+        const normalized = normalizeFromICPResults(item);
+        return {
+          ...normalized,
+          ...item, // Preservar campos adicionais que não estão no normalizador
+        };
+      });
+
       // MC8: Enriquecer com mc8Assessment para cada empresa
-      if (tenantId && data && data.length > 0) {
+      if (tenantId && normalizedData && normalizedData.length > 0) {
         const enrichedData = await Promise.all(
-          data.map(async (item: any) => {
+          normalizedData.map(async (item: any) => {
             // Buscar mc8Assessment se houver CNPJ
             if (item.cnpj) {
               const mc8Assessment = await fetchMC8AssessmentForCNPJ(item.cnpj, tenantId);
@@ -225,7 +235,7 @@ export function useQuarantineCompanies(filters?: {
         return enrichedData;
       }
 
-      return data || [];
+      return normalizedData;
     },
     staleTime: 5 * 1000,
     refetchInterval: 10 * 1000,
