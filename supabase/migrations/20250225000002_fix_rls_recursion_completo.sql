@@ -244,6 +244,59 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- PASSO 7: Corrigir políticas de icp_profiles_metadata (também pode ter recursão)
+-- ============================================================================
+DO $$
+BEGIN
+  -- Remover TODAS as políticas antigas de icp_profiles_metadata
+  DROP POLICY IF EXISTS "Users can view ICPs from their tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Users can create ICPs in their tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Users can update ICPs from their tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Users can delete ICPs from their tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "icp_profiles_metadata_select_tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "icp_profiles_metadata_insert_tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "icp_profiles_metadata_update_tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "icp_profiles_metadata_delete_tenant" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Multi-tenant SELECT for icp_profiles_metadata" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Multi-tenant INSERT for icp_profiles_metadata" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Multi-tenant UPDATE for icp_profiles_metadata" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Multi-tenant DELETE for icp_profiles_metadata" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "SAAS Secure: View ICPs" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "SAAS Secure: Create ICPs" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "SAAS Secure: Update ICPs" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "SAAS Secure: Delete ICPs" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "Admins can view all ICPs" ON public.icp_profiles_metadata;
+  DROP POLICY IF EXISTS "DEV: All authenticated users can view all ICPs" ON public.icp_profiles_metadata;
+  
+  -- Criar políticas corretas usando função SECURITY DEFINER
+  CREATE POLICY "Users can view ICPs from their tenant"
+    ON public.icp_profiles_metadata FOR SELECT
+    USING (
+      tenant_id = ANY(SELECT public.get_user_tenant_ids())
+    );
+  
+  CREATE POLICY "Users can create ICPs in their tenant"
+    ON public.icp_profiles_metadata FOR INSERT
+    WITH CHECK (
+      tenant_id = ANY(SELECT public.get_user_tenant_ids())
+    );
+  
+  CREATE POLICY "Users can update ICPs from their tenant"
+    ON public.icp_profiles_metadata FOR UPDATE
+    USING (
+      tenant_id = ANY(SELECT public.get_user_tenant_ids())
+    );
+  
+  CREATE POLICY "Users can delete ICPs from their tenant"
+    ON public.icp_profiles_metadata FOR DELETE
+    USING (
+      tenant_id = ANY(SELECT public.get_user_tenant_ids())
+    );
+  
+  RAISE NOTICE '✅ Políticas de icp_profiles_metadata corrigidas (usando função SECURITY DEFINER)';
+END $$;
+
+-- ============================================================================
 -- LOG DE CONCLUSÃO
 -- ============================================================================
 DO $$
@@ -253,5 +306,6 @@ BEGIN
   RAISE NOTICE '✅ Políticas de tenant_users corrigidas (sem recursão)';
   RAISE NOTICE '✅ Políticas de prospect_qualification_jobs corrigidas';
   RAISE NOTICE '✅ Políticas de legal_data e purchase_intent_signals corrigidas';
+  RAISE NOTICE '✅ Políticas de icp_profiles_metadata corrigidas';
   RAISE NOTICE '✅ Todas as políticas agora usam função SECURITY DEFINER';
 END $$;
