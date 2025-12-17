@@ -422,17 +422,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           ai_analysis: p.ai_analysis || null,
         };
 
-        // ✅ DEBUG: Logar dados de website para o primeiro prospect (apenas uma vez)
-        if (enrichedProspects.length === 0 && enriched.website_encontrado) {
-          console.log('[Estoque] 🔍 DEBUG - Prospect enriquecido com website:', {
-            id: enriched.id,
-            razao_social: enriched.razao_social,
-            website_encontrado: enriched.website_encontrado,
-            website_fit_score: enriched.website_fit_score,
-            linkedin_url: enriched.linkedin_url,
-          });
-        }
-
         return enriched;
       });
 
