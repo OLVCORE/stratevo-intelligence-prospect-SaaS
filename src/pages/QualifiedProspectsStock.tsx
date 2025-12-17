@@ -404,6 +404,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           website_fit_score: p.website_fit_score ?? (p.website_fit_score === 0 ? 0 : null), // ✅ Preservar 0 como 0, não null
           website_products_match: p.website_products_match || null,
           linkedin_url: p.linkedin_url || null,
+          // ✅ STATUS DO PIPELINE (garantir que esteja presente)
+          pipeline_status: p.pipeline_status || 'new',
           // ✅ DADOS DE ENRIQUECIMENTO
           icp: p.icp_id ? icpMap[p.icp_id] : undefined,
           match_breakdown: matchBreakdown,
