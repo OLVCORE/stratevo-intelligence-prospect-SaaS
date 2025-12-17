@@ -274,6 +274,89 @@ export function normalizeFromQualifiedProspects(prospect: any): NormalizedCompan
 }
 
 /**
+ * Normaliza dados brutos de APIs externas (API Brasil, ReceitaWS, EmpresasAqui) para formato padrão
+ * Usado principalmente no DealFormDialog para enriquecimento de empresas
+ */
+export function normalizeCompanyData(rawData: any, source: 'api_brasil' | 'receitaws' | 'empresas_aqui'): {
+  company_name: string;
+  cnpj: string;
+  industry?: string;
+  location?: {
+    city?: string;
+    state?: string;
+    address?: string;
+    cep?: string;
+  };
+} {
+  if (source === 'api_brasil') {
+    // API Brasil retorna: razao_social, cnpj, descricao_situacao_cadastral, descricao_tipo_logradouro, logradouro, numero, bairro, municipio, uf, cep, descricao_atividade_principal
+    return {
+      company_name: rawData.razao_social || rawData.nome || 'N/A',
+      cnpj: rawData.cnpj || '',
+      industry: rawData.descricao_atividade_principal?.[0]?.descricao || rawData.atividade_principal?.[0]?.text || null,
+      location: {
+        city: rawData.municipio || null,
+        state: rawData.uf || null,
+        address: [
+          rawData.descricao_tipo_logradouro,
+          rawData.logradouro,
+          rawData.numero,
+          rawData.bairro
+        ].filter(Boolean).join(', ') || null,
+        cep: rawData.cep || null,
+      },
+    };
+  } else if (source === 'receitaws') {
+    // ReceitaWS retorna: nome, fantasia, cnpj, atividade_principal, logradouro, numero, bairro, municipio, uf, cep
+    return {
+      company_name: rawData.nome || rawData.fantasia || 'N/A',
+      cnpj: rawData.cnpj || '',
+      industry: rawData.atividade_principal?.[0]?.text || null,
+      location: {
+        city: rawData.municipio || null,
+        state: rawData.uf || null,
+        address: [
+          rawData.logradouro,
+          rawData.numero,
+          rawData.bairro
+        ].filter(Boolean).join(', ') || null,
+        cep: rawData.cep || null,
+      },
+    };
+  } else if (source === 'empresas_aqui') {
+    // EmpresasAqui - formato pode variar, tentar campos comuns
+    return {
+      company_name: rawData.razao_social || rawData.nome || rawData.fantasia || 'N/A',
+      cnpj: rawData.cnpj || '',
+      industry: rawData.atividade_principal?.[0]?.text || rawData.descricao_atividade_principal || null,
+      location: {
+        city: rawData.municipio || rawData.cidade || null,
+        state: rawData.uf || rawData.estado || null,
+        address: [
+          rawData.logradouro,
+          rawData.numero,
+          rawData.bairro
+        ].filter(Boolean).join(', ') || null,
+        cep: rawData.cep || null,
+      },
+    };
+  }
+  
+  // Fallback genérico
+  return {
+    company_name: rawData.razao_social || rawData.nome || rawData.fantasia || 'N/A',
+    cnpj: rawData.cnpj || '',
+    industry: rawData.atividade_principal?.[0]?.text || rawData.industry || null,
+    location: {
+      city: rawData.municipio || rawData.cidade || null,
+      state: rawData.uf || rawData.estado || null,
+      address: rawData.logradouro || rawData.address || null,
+      cep: rawData.cep || null,
+    },
+  };
+}
+
+/**
  * Prepara dados para inserção em `icp_analysis_results` a partir de dados normalizados
  */
 export function prepareForICPInsertion(normalized: NormalizedCompanyData, tenantId: string): any {
