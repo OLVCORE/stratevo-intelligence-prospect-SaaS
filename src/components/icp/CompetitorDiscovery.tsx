@@ -59,7 +59,8 @@ export default function CompetitorDiscovery({
 }: Props) {
   const [searching, setSearching] = useState(false);
   const [candidates, setCandidates] = useState<CompetitorCandidate[]>([]);
-  const [customQuery, setCustomQuery] = useState('');
+  // 🔥 CORRIGIDO: Inicializar customQuery com industry, mas permitir apagar completamente
+  const [customQuery, setCustomQuery] = useState(industry || '');
   const [maxResults, setMaxResults] = useState(10);
   // 🔥 CORRIGIDO: State controlado para location (editável)
   const [location, setLocation] = useState(initialLocation ?? '');
@@ -72,12 +73,19 @@ export default function CompetitorDiscovery({
     }
   }, [initialLocation]); // Só roda quando initialLocation muda, não sobrescreve se usuário já digitou
 
+  // 🔥 CORRIGIDO: Sincronizar industry apenas na primeira renderização (se customQuery estiver vazio)
+  useEffect(() => {
+    if (industry && customQuery === '') {
+      setCustomQuery(industry);
+    }
+  }, []); // Só roda uma vez na montagem
+
   // Função para gerar preview da query
   const generateQueryPreview = () => {
     const queryParts: string[] = [];
     
     // Setor/Indústria
-    const industryQuery = customQuery || industry;
+    const industryQuery = customQuery.trim();
     if (industryQuery) {
       queryParts.push(industryQuery);
     }
@@ -97,7 +105,8 @@ export default function CompetitorDiscovery({
   };
 
   const handleSearch = async () => {
-    if (!industry && !customQuery) {
+    const queryToUse = customQuery.trim();
+    if (!queryToUse) {
       toast({
         title: 'Erro',
         description: 'Informe o setor ou uma busca customizada',
@@ -122,7 +131,7 @@ export default function CompetitorDiscovery({
 
       const { data, error } = await supabase.functions.invoke('search-competitors-serper', {
         body: {
-          industry: customQuery || industry,
+          industry: customQuery.trim(), // 🔥 CORRIGIDO: Usar apenas customQuery (não fallback para industry)
           products: products.slice(0, 5), // Top 5 produtos
           location: location.trim() || 'Brasil', // Se vazio, busca Brasil sem filtro de cidade/UF
           excludeDomains: allExcludedDomains,
@@ -189,7 +198,7 @@ export default function CompetitorDiscovery({
             <div className="space-y-2">
               <Label>Setor/Indústria</Label>
               <Input 
-                value={customQuery || industry}
+                value={customQuery}
                 onChange={(e) => setCustomQuery(e.target.value)}
                 placeholder="Ex: Fabricante de EPIs"
                 disabled={searching}
