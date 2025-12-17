@@ -655,14 +655,54 @@ if (selectedIcpIds && selectedIcpIds.length > 0) {
 } else {
   console.log('[BulkUpload] 🔍 Nenhum ICP selecionado, buscando ICP principal...');
   // Se nenhum ICP foi selecionado, buscar o ICP principal automaticamente
-  const { data: icpData, error: icpError } = await supabase
+  // Tentar múltiplas estratégias de busca
+  let icpData: any = null;
+  let icpError: any = null;
+  
+  // Estratégia 1: Buscar por icp_principal = true
+  const { data: icpData1, error: icpError1 } = await supabase
     .from('icp_profiles_metadata' as any)
     .select('id')
     .eq('tenant_id', tenantId)
-    .order('icp_principal', { ascending: false })
-    .order('created_at', { ascending: true })
+    .eq('icp_principal', true)
     .limit(1)
     .maybeSingle();
+  
+  if (!icpError1 && icpData1) {
+    icpData = icpData1;
+    console.log('[BulkUpload] ✅ ICP principal encontrado (icp_principal=true):', icpData.id);
+  } else {
+    // Estratégia 2: Buscar por ativo = true
+    const { data: icpData2, error: icpError2 } = await supabase
+      .from('icp_profiles_metadata' as any)
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('ativo', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (!icpError2 && icpData2) {
+      icpData = icpData2;
+      console.log('[BulkUpload] ✅ ICP ativo encontrado:', icpData.id);
+    } else {
+      // Estratégia 3: Buscar qualquer ICP do tenant (mais recente)
+      const { data: icpData3, error: icpError3 } = await supabase
+        .from('icp_profiles_metadata' as any)
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (!icpError3 && icpData3) {
+        icpData = icpData3;
+        console.log('[BulkUpload] ✅ ICP mais recente encontrado:', icpData.id);
+      } else {
+        icpError = icpError3 || icpError2 || icpError1;
+      }
+    }
+  }
 
   console.log('[BulkUpload] 🔍 Resultado busca ICP:', { icpData, icpError });
 
@@ -677,10 +717,7 @@ if (selectedIcpIds && selectedIcpIds.length > 0) {
   }
   
   icpIdToUse = icpData.id;
-  console.log('[BulkUpload] ✅ ICP principal encontrado:', icpIdToUse);
-  toast.info('Usando ICP principal automaticamente', {
-    description: 'Você pode selecionar outro ICP no card de upload ou depois na página de qualificação'
-  });
+  console.log('[BulkUpload] ✅ ICP encontrado:', icpIdToUse);
 }
 
 // Preparar columnMapping
