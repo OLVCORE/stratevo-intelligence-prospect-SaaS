@@ -1247,7 +1247,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               .single();
 
             if (createError) {
-              console.error('[Qualified → Companies] ❌ Erro Supabase ao inserir em companies', {
+              // ✅ Log detalhado do erro para debug
+              const errorLog = {
                 error: createError,
                 error_code: createError.code,
                 error_message: createError.message,
@@ -1260,12 +1261,31 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                 has_name: !!insertPayload.name,
                 has_company_name: !!insertPayload.company_name,
                 has_tenant_id: !!insertPayload.tenant_id,
-              });
+                tenant_id_value: insertPayload.tenant_id,
+                cnpj_value: insertPayload.cnpj,
+                prospect_id: prospect.id,
+              };
+              
+              console.error('[Qualified → Companies] ❌ Erro Supabase ao inserir em companies', errorLog);
               
               // ✅ Exibir erro detalhado para o usuário
-              const errorMsg = createError.message || 'Erro desconhecido';
-              const errorDetails = createError.details || createError.hint || '';
-              errors.push(`CNPJ ${prospect.cnpj}: ${errorMsg}${errorDetails ? ` (${errorDetails})` : ''}`);
+              let errorMsg = createError.message || 'Erro desconhecido';
+              if (createError.code) {
+                errorMsg += ` (código: ${createError.code})`;
+              }
+              if (createError.details) {
+                errorMsg += ` - Detalhes: ${createError.details}`;
+              }
+              if (createError.hint) {
+                errorMsg += ` - Dica: ${createError.hint}`;
+              }
+              
+              // ✅ Verificar se é erro de RLS/permissão
+              if (createError.code === '42501' || createError.message?.includes('permission') || createError.message?.includes('policy')) {
+                errorMsg += ' [ERRO DE PERMISSÃO RLS - Verifique as políticas de acesso]';
+              }
+              
+              errors.push(`CNPJ ${prospect.cnpj}: ${errorMsg}`);
               continue;
             }
 
@@ -1306,12 +1326,33 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             promotedCount++;
           }
         } catch (err: any) {
-          console.error('[Qualified → Companies] ❌ Erro inesperado ao processar prospect', {
+          // ✅ Log detalhado do erro para debug
+          const errorDetails = {
             prospect_id: prospect.id,
             cnpj: prospect.cnpj,
-            error: err,
-          });
-          errors.push(`CNPJ ${prospect.cnpj}: ${err?.message || 'Erro desconhecido'}`);
+            error_message: err?.message || 'Erro desconhecido',
+            error_code: err?.code,
+            error_details: err?.details,
+            error_hint: err?.hint,
+            error_stack: err?.stack,
+            error_stringified: JSON.stringify(err, Object.getOwnPropertyNames(err)),
+          };
+          
+          console.error('[Qualified → Companies] ❌ Erro inesperado ao processar prospect', errorDetails);
+          
+          // ✅ Mensagem de erro mais informativa
+          let errorMsg = err?.message || 'Erro desconhecido';
+          if (err?.code) {
+            errorMsg += ` (código: ${err.code})`;
+          }
+          if (err?.details) {
+            errorMsg += ` - Detalhes: ${err.details}`;
+          }
+          if (err?.hint) {
+            errorMsg += ` - Dica: ${err.hint}`;
+          }
+          
+          errors.push(`CNPJ ${prospect.cnpj}: ${errorMsg}`);
         }
       }
 
