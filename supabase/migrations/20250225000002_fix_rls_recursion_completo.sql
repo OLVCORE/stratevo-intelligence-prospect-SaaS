@@ -25,16 +25,37 @@ SET search_path = public
 STABLE
 AS $$
 BEGIN
-  -- Acessa tenant_users diretamente, bypassando RLS
+  -- Estratégia 1: Buscar em tenant_users (relação muitos-para-muitos)
   RETURN QUERY
-  SELECT tu.tenant_id
+  SELECT DISTINCT tu.tenant_id
   FROM public.tenant_users tu
   WHERE tu.user_id = auth.uid() 
-    AND tu.status = 'active';
+    AND (tu.status = 'active' OR tu.status IS NULL);
+  
+  -- Estratégia 2: Se não encontrou em tenant_users, buscar em users (fallback)
+  -- Isso garante compatibilidade com sistema antigo que usa users.tenant_id
+  IF NOT FOUND THEN
+    RETURN QUERY
+    SELECT DISTINCT u.tenant_id
+    FROM public.users u
+    WHERE u.auth_user_id = auth.uid()
+      AND u.tenant_id IS NOT NULL;
+  END IF;
+  
 EXCEPTION
   WHEN others THEN
-    -- Em caso de erro, retornar vazio (evita erro 500)
-    RETURN;
+    -- Em caso de erro, tentar fallback para users
+    BEGIN
+      RETURN QUERY
+      SELECT DISTINCT u.tenant_id
+      FROM public.users u
+      WHERE u.auth_user_id = auth.uid()
+        AND u.tenant_id IS NOT NULL;
+    EXCEPTION
+      WHEN others THEN
+        -- Se ainda falhar, retornar vazio (evita erro 500)
+        RETURN;
+    END;
 END;
 $$;
 
