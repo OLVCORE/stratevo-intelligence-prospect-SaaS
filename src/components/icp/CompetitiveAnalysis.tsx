@@ -333,8 +333,11 @@ export default function CompetitiveAnalysis({
       }
     };
     
-    loadCompetitorsWithProducts();
-  }, [competitors, companyCapitalSocial, refreshTrigger, tenantId]); // 🔥 CORRIGIDO: tenantId
+    if (tenantId) {
+      // 🔥 CORRIGIDO: Só carregar se tiver tenantId válido
+      loadCompetitorsWithProducts();
+    }
+  }, [competitors, companyCapitalSocial, refreshTrigger, tenantId]); // 🔥 CORRIGIDO: tenantId como dependência crítica
 
   // Calcular totais
   const totalCapitalConcorrentes = enrichedCompetitors.reduce((sum, c) => sum + (c.capitalSocial || 0), 0);

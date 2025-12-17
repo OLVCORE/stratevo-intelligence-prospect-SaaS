@@ -231,10 +231,13 @@ export function ProductComparisonMatrix({ icpId }: Props) {
       }
   };
 
-  // 🔥 EXECUTAR LIMPEZA ao montar componente
+  // 🔥 EXECUTAR LIMPEZA ao montar componente OU quando tenant mudar
   useEffect(() => {
-    cleanDatabaseAndLoadCompetitors();
-  }, [tenant?.id]);
+    if (tenant?.id) {
+      console.log('[ProductComparison] 🔄 Tenant mudou, recarregando concorrentes:', tenant.id);
+      cleanDatabaseAndLoadCompetitors();
+    }
+  }, [tenant?.id]); // 🔥 CORRIGIDO: tenant?.id como dependência crítica
 
   // Carregar produtos do tenant e concorrentes
   useEffect(() => {
@@ -365,7 +368,7 @@ export function ProductComparisonMatrix({ icpId }: Props) {
     };
 
     loadProducts();
-  }, [tenant?.id, icpId, concorrentesAtuais]); // 🔥 ADICIONAR concorrentesAtuais como dependência
+  }, [tenant?.id, icpId, concorrentesAtuais]); // 🔥 CORRIGIDO: tenant?.id como dependência crítica para recarregar quando tenant mudar
 
   // 🔥 OTIMIZADO: Função para calcular matches entre produtos
   const calculateMatches = (
@@ -419,6 +422,15 @@ export function ProductComparisonMatrix({ icpId }: Props) {
   const calcularAltaConcorrencia = () => {
     console.log('🔥 [CALC ALTA CONCORRÊNCIA] Total matches disponíveis:', matches.length);
     console.log('🔥 [CALC ALTA CONCORRÊNCIA] Tenant atual:', (tenant as any)?.nome);
+    console.log('🔥 [CALC ALTA CONCORRÊNCIA] Tenant ID:', tenant?.id);
+    console.log('🔥 [CALC ALTA CONCORRÊNCIA] Produtos tenant:', tenantProducts.length);
+    console.log('🔥 [CALC ALTA CONCORRÊNCIA] Produtos concorrentes:', competitorProducts.length);
+    
+    // 🔥 CORRIGIDO: Verificar se matches está vazio ou desatualizado
+    if (matches.length === 0) {
+      console.warn('🔥 [CALC ALTA CONCORRÊNCIA] ⚠️ Matches vazio - pode estar desatualizado');
+      return [];
+    }
     
     // Usar matches existente (não recalcular!)
     const resultado = matches
@@ -442,6 +454,10 @@ export function ProductComparisonMatrix({ icpId }: Props) {
         matches: r.qtdMatches,
         empresas: r.empresas
       })));
+    } else if (matches.length > 0) {
+      // 🔥 DEBUG: Se há matches mas nenhum com score >= 60, mostrar os scores
+      const scores = matches.map(m => m.bestScore).sort((a, b) => b - a);
+      console.log('🔥 [ALTA CONCORRÊNCIA] ⚠️ Há matches mas nenhum com score >= 60. Scores máximos:', scores.slice(0, 10));
     }
     
     return resultado;

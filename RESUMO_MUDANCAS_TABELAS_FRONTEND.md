@@ -151,3 +151,4 @@
 - [ ] Pipeline atualizado
 - [ ] Migration aplicada no Supabase
 
+

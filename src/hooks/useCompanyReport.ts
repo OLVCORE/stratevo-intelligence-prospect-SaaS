@@ -251,8 +251,15 @@ export function useCompanyReport(companyId: string | undefined) {
       });
       
       if (error) {
-        console.error('Error generating report:', error);
-        throw error;
+        console.error('[useCompanyReport] Erro ao gerar relatório:', error);
+        // Não lançar erro para não quebrar a UI, apenas logar
+        // O componente pode lidar com a ausência de dados
+        return null;
+      }
+
+      if (!data || (data as any).error) {
+        console.error('[useCompanyReport] Resposta de erro da Edge Function:', data);
+        return null;
       }
 
       return data;

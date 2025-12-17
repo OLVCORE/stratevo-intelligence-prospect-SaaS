@@ -90,3 +90,4 @@ COMMENT ON TRIGGER trigger_scan_website_on_qualified_prospect_insert ON public.q
 COMMENT ON TRIGGER trigger_scan_website_on_qualified_prospect_update ON public.qualified_prospects IS 
 'Dispara re-escaneamento de website se website for atualizado e website_fit_score ainda estiver zerado';
 
+

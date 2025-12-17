@@ -81,12 +81,21 @@ export default function ICPDetail() {
       });
     }
     
+    // 🔥 CORRIGIDO: Invalidar cache quando tenant mudar
+    if (tenantId) {
+      console.log('[ICPDetail] 🔄 Invalidando cache para tenant:', tenantId);
+      queryClient.invalidateQueries({ queryKey: ['onboarding_sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant_competitor_products'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant_products'] });
+      queryClient.invalidateQueries({ queryKey: ['icp_profiles_metadata'] });
+    }
+    
     if (tenantId && id) {
       loadProfile();
     } else {
       console.warn('[ICPDetail] ⚠️ Aguardando tenantId ou id:', { tenantId, id });
     }
-  }, [tenantId, id, tenant]);
+  }, [tenantId, id, tenant, queryClient]);
 
   const loadProfile = async () => {
     if (!tenantId || !id) {
@@ -134,11 +143,11 @@ export default function ICPDetail() {
 
       // 🔥 Buscar dados completos do onboarding_sessions para obter benchmarking, clientes E CONCORRENTES
       // 🔥 CRÍTICO: Sempre buscar a sessão mais recente (sem cache) para garantir dados atualizados
-      // 🔥 CORRIGIDO: Usar o tenant_id do metadata carregado (não do contexto)
+      // 🔥 CORRIGIDO: Usar tenantId do contexto atual (não metadata.tenant_id) para garantir dados do tenant correto
       const { data: sessionData, error: sessionError } = await (supabase as any)
         .from('onboarding_sessions')
         .select('*')
-        .eq('tenant_id', metadata.tenant_id)
+        .eq('tenant_id', tenantId) // 🔥 CORRIGIDO: usar tenantId do contexto, não metadata.tenant_id
         .order('updated_at', { ascending: false })
         .limit(1);
 

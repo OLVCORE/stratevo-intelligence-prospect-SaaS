@@ -309,3 +309,4 @@ COMMENT ON FUNCTION mark_purchase_intent_as_real IS
 -- NOTA: Este trigger será ativado quando detectarmos sinais comportamentais
 -- Por enquanto, deixamos como função manual que pode ser chamada após engajamento
 
+

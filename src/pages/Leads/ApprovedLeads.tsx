@@ -1115,33 +1115,72 @@ export default function ApprovedLeads() {
   // ✅ NOVA FUNÇÃO: Calcular Purchase Intent Score
   const handleCalculatePurchaseIntent = async (analysisId: string) => {
     const company = filteredCompanies.find(c => c.id === analysisId);
-    if (!company || !tenantId || !company.cnpj) return;
+    if (!company || !tenantId) return;
 
     try {
-      toast.info('🎯 Calculando Intenção de Compra...');
+      toast.info('🎯 Calculando Purchase Intent Avançado...');
 
-      // Usar função SQL diretamente com CNPJ
-      const { data, error } = await supabase.rpc('calculate_purchase_intent_score', {
-        p_tenant_id: tenantId,
-        p_cnpj: company.cnpj,
-        p_company_id: company.company_id || null,
-      });
+      // Buscar prospect_id (pode estar em qualified_prospect_id ou company_id)
+      let prospectId = (company as any).qualified_prospect_id || company.id;
+      
+      // Se não tem prospect_id direto, buscar em qualified_prospects pelo CNPJ
+      if (!prospectId && company.cnpj) {
+        const { data: prospect } = await supabase
+          .from('qualified_prospects')
+          .select('id')
+          .eq('cnpj', company.cnpj)
+          .eq('tenant_id', tenantId)
+          .single();
+        
+        if (prospect) {
+          prospectId = prospect.id;
+        }
+      }
+
+      if (!prospectId) {
+        throw new Error('Prospect não encontrado. A empresa precisa estar no estoque qualificado.');
+      }
+
+      // Buscar ICP ID se disponível
+      const icpId = (company as any).icp_id || (company as any).icp?.id || null;
+
+      // Chamar Edge Function de análise avançada
+      const { data, error } = await supabase.functions.invoke(
+        'calculate-enhanced-purchase-intent',
+        {
+          body: {
+            tenant_id: tenantId,
+            prospect_id: prospectId,
+            icp_id: icpId
+          }
+        }
+      );
 
       if (error) throw error;
 
-      const score = typeof data === 'number' ? data : 0;
+      const response = data as any;
+      if (!response.success) {
+        throw new Error(response.error || 'Erro ao calcular Purchase Intent avançado');
+      }
 
-      // Atualizar icp_analysis_results
+      // Atualizar icp_analysis_results com score e análise
       await supabase
         .from('icp_analysis_results')
-        .update({ purchase_intent_score: score })
+        .update({ 
+          purchase_intent_score: response.analysis?.overall_fit_score || 0,
+          purchase_intent_analysis: response.analysis,
+          purchase_intent_calculated_at: new Date().toISOString()
+        })
         .eq('id', analysisId);
 
-      toast.success('✅ Intenção de Compra calculada!');
+      toast.success('✅ Purchase Intent Avançado calculado com sucesso!', {
+        description: `Score: ${response.analysis?.overall_fit_score || 0}/100 - Grade: ${response.analysis?.recommended_grade || 'N/A'}`
+      });
+      
       refetch();
     } catch (error: any) {
-      console.error('[Purchase Intent] Erro:', error);
-      toast.error('Erro ao calcular intenção de compra', { description: error.message });
+      console.error('[Purchase Intent Avançado] Erro:', error);
+      toast.error('Erro ao calcular Purchase Intent avançado', { description: error.message });
     }
   };
 

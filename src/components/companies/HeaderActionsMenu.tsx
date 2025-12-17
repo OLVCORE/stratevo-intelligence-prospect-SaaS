@@ -197,7 +197,7 @@ export function HeaderActionsMenu({
                 className="text-blue-600 font-bold hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-all duration-200 cursor-pointer hover:bg-blue-500/10 hover:shadow-md hover:border-l-4 hover:border-blue-600"
               >
                 <Target className="h-4 w-4 mr-2" />
-                🎯 Integrar para ICP
+                🎯 Mover para Quarentena ICP
                 <span className="ml-auto text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">
                   FLUXO
                 </span>

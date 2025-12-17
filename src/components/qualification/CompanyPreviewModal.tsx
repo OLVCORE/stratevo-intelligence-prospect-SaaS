@@ -15,9 +15,14 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Maximize, Minimize, TrendingUp, CheckCircle2, XCircle } from 'lucide-react';
+import { Building2, Maximize, Minimize, TrendingUp, CheckCircle2, XCircle, RefreshCw, Loader2, Sparkles, Target, Users, TrendingDown, AlertTriangle, Lightbulb } from 'lucide-react';
 import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
+import { useEnhancedPurchaseIntent, useRecalculatePurchaseIntent } from '@/hooks/useEnhancedPurchaseIntent';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Separator } from '@/components/ui/separator';
 
 interface CompanyPreviewModalProps {
   open: boolean;
@@ -27,6 +32,16 @@ interface CompanyPreviewModalProps {
 
 export function CompanyPreviewModal({ open, onOpenChange, company }: CompanyPreviewModalProps) {
   const [isModalFullscreen, setIsModalFullscreen] = useState(false);
+  const [showAdvancedAnalysis, setShowAdvancedAnalysis] = useState(false);
+
+  // Buscar análise avançada de Purchase Intent
+  const prospectId = company?.id;
+  const icpId = (company as any)?.icp_id || (company as any)?.icp?.id;
+  const { data: advancedAnalysis, isLoading: isLoadingAnalysis } = useEnhancedPurchaseIntent(
+    prospectId,
+    icpId
+  );
+  const { mutate: recalculate, isPending: isRecalculating } = useRecalculatePurchaseIntent();
 
   if (!company) return null;
 
@@ -182,6 +197,281 @@ export function CompanyPreviewModal({ open, onOpenChange, company }: CompanyPrev
             linkedinUrl={(company as any).linkedin_url}
             isModalFullscreen={isModalFullscreen}
           />
+
+          {/* ✅ Análise Avançada de Purchase Intent */}
+          <Card className="border-l-4 border-l-indigo-600/90 shadow-md">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
+                  <CardTitle className="text-lg">Análise Avançada de Purchase Intent</CardTitle>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (prospectId) {
+                      recalculate({ prospectId, icpId: icpId || undefined });
+                    }
+                  }}
+                  disabled={isRecalculating || !prospectId}
+                  className="h-8"
+                >
+                  {isRecalculating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Recalculando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Recalcular
+                    </>
+                  )}
+                </Button>
+              </div>
+              <CardDescription>
+                Análise completa considerando produtos, ICP, clientes similares, competitividade e timing de mercado
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingAnalysis ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Carregando análise...</span>
+                </div>
+              ) : advancedAnalysis ? (
+                <Tabs defaultValue="overview" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+                    <TabsTrigger value="products">Produtos</TabsTrigger>
+                    <TabsTrigger value="competitive">Competitivo</TabsTrigger>
+                    <TabsTrigger value="recommendations">Recomendações</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="overview" className="space-y-4 mt-4">
+                    {/* Scores Parciais */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="p-3 bg-gradient-to-br from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 rounded-lg border">
+                        <p className="text-xs text-muted-foreground mb-1">Fit de Produtos</p>
+                        <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">
+                          {advancedAnalysis.product_fit_score}/100
+                        </p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 rounded-lg border">
+                        <p className="text-xs text-muted-foreground mb-1">Fit com ICP</p>
+                        <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+                          {advancedAnalysis.icp_fit_score}/100
+                        </p>
+                      </div>
+                      <div className="p-3 bg-gradient-to-br from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 rounded-lg border">
+                        <p className="text-xs text-muted-foreground mb-1">Similaridade Clientes</p>
+                        <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">
+                          {advancedAnalysis.similarity_to_customers_score}/100
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Grade Recomendada */}
+                    <div className="p-4 bg-gradient-to-r from-indigo-50/60 to-indigo-100/40 dark:from-indigo-900/20 dark:to-indigo-800/10 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-1">
+                            Grade Recomendada
+                          </p>
+                          <Badge className={`text-lg px-3 py-1 ${
+                            advancedAnalysis.recommended_grade === 'A+' ? 'bg-emerald-600 text-white' :
+                            advancedAnalysis.recommended_grade === 'A' ? 'bg-emerald-500 text-white' :
+                            advancedAnalysis.recommended_grade === 'B' ? 'bg-sky-500 text-white' :
+                            'bg-orange-500 text-white'
+                          }`}>
+                            {advancedAnalysis.recommended_grade}
+                          </Badge>
+                        </div>
+                        <Target className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                    </div>
+
+                    {/* Fatores-Chave */}
+                    {advancedAnalysis.key_factors && advancedAnalysis.key_factors.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                          <Lightbulb className="h-4 w-4" />
+                          Fatores-Chave
+                        </p>
+                        <div className="space-y-1">
+                          {advancedAnalysis.key_factors.map((factor, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-sm">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                              <span>{factor}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="products" className="space-y-4 mt-4">
+                    {advancedAnalysis.product_matches && advancedAnalysis.product_matches.length > 0 ? (
+                      <div className="space-y-3">
+                        {advancedAnalysis.product_matches.map((match, idx) => (
+                          <div key={idx} className="p-3 border rounded-lg hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <p className="font-medium text-sm">{match.tenant_product}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Match com: {match.prospect_product}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="ml-2">
+                                {Math.round(match.confidence * 100)}%
+                              </Badge>
+                            </div>
+                            {match.reason && (
+                              <p className="text-xs text-muted-foreground italic">{match.reason}</p>
+                            )}
+                            <Badge variant="secondary" className="mt-2 text-xs">
+                              {match.match_type}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Nenhum match de produtos encontrado
+                      </p>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="competitive" className="space-y-4 mt-4">
+                    <div className="space-y-3">
+                      <div className="p-3 border rounded-lg">
+                        <p className="text-sm font-medium mb-2">Análise Competitiva</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Usa concorrente direto</span>
+                            <Badge variant={advancedAnalysis.competitive_analysis.uses_competitor ? "destructive" : "outline"}>
+                              {advancedAnalysis.competitive_analysis.uses_competitor ? 'Sim' : 'Não'}
+                            </Badge>
+                          </div>
+                          {advancedAnalysis.competitive_analysis.uses_competitor && advancedAnalysis.competitive_analysis.competitor_name && (
+                            <p className="text-xs text-muted-foreground">
+                              Concorrente: {advancedAnalysis.competitive_analysis.competitor_name}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Oportunidade de migração</span>
+                            <Badge variant={advancedAnalysis.competitive_analysis.migration_opportunity ? "default" : "outline"}>
+                              {advancedAnalysis.competitive_analysis.migration_opportunity ? 'Sim' : 'Não'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Oportunidade greenfield</span>
+                            <Badge variant={advancedAnalysis.competitive_analysis.greenfield_opportunity ? "default" : "outline"}>
+                              {advancedAnalysis.competitive_analysis.greenfield_opportunity ? 'Sim' : 'Não'}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+
+                      {advancedAnalysis.similarity_to_customers && advancedAnalysis.similarity_to_customers.similar_customers_count > 0 && (
+                        <div className="p-3 border rounded-lg">
+                          <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Clientes Similares
+                          </p>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {advancedAnalysis.similarity_to_customers.similar_customers_count} clientes similares encontrados
+                            (Score médio: {advancedAnalysis.similarity_to_customers.average_similarity_score}/100)
+                          </p>
+                          {advancedAnalysis.similarity_to_customers.similar_customers && advancedAnalysis.similarity_to_customers.similar_customers.length > 0 && (
+                            <div className="space-y-1">
+                              {advancedAnalysis.similarity_to_customers.similar_customers.slice(0, 3).map((customer, idx) => (
+                                <div key={idx} className="text-xs flex items-center justify-between">
+                                  <span>{customer.customer_name}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {customer.similarity_score}% similar
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="p-3 border rounded-lg">
+                        <p className="text-sm font-medium mb-2">Timing de Mercado</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Época favorável</span>
+                            <Badge variant={advancedAnalysis.market_timing.favorable_period ? "default" : "outline"}>
+                              {advancedAnalysis.market_timing.favorable_period ? 'Sim' : 'Não'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Crescimento do setor</span>
+                            <Badge variant="outline">
+                              {advancedAnalysis.market_timing.sector_growth}
+                            </Badge>
+                          </div>
+                          {advancedAnalysis.market_timing.recommended_approach_timing && (
+                            <p className="text-xs text-muted-foreground mt-2 italic">
+                              {advancedAnalysis.market_timing.recommended_approach_timing}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="recommendations" className="space-y-4 mt-4">
+                    {advancedAnalysis.recommendations && advancedAnalysis.recommendations.length > 0 ? (
+                      <div className="space-y-2">
+                        {advancedAnalysis.recommendations.map((rec, idx) => (
+                          <div key={idx} className="p-3 border-l-4 border-l-indigo-600 bg-indigo-50/30 dark:bg-indigo-950/20 rounded-r-lg">
+                            <p className="text-sm">{rec}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Nenhuma recomendação disponível
+                      </p>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <div className="text-center py-8">
+                  <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Análise avançada não disponível
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (prospectId) {
+                        recalculate({ prospectId, icpId: icpId || undefined });
+                      }
+                    }}
+                    disabled={isRecalculating || !prospectId}
+                  >
+                    {isRecalculating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Calculando...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Calcular Análise Avançada
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* ✅ Detalhamento de Matching com match_breakdown */}
           {(company as any).match_breakdown && Array.isArray((company as any).match_breakdown) && (company as any).match_breakdown.length > 0 && (
