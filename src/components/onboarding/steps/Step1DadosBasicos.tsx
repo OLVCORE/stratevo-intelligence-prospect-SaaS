@@ -20,6 +20,7 @@ import { TenantProductsCatalog } from '@/components/products/TenantProductsCatal
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import CompetitorDiscovery from '@/components/icp/CompetitorDiscovery';
 
 interface Props {
   onNext: (data: any) => void;
@@ -2278,6 +2279,31 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
           </Card>
         </CollapsibleContent>
       </Collapsible>
+
+      {/* 🔥 NOVO: Descobrir Concorrentes Automaticamente */}
+      <Separator className="my-6" />
+      
+      <CompetitorDiscovery
+        industry={cnpjData?.setor || cnpjData?.cnaePrincipalDescricao || 'Manufatura'}
+        products={tenantProducts.map(p => p.nome)}
+        location={cnpjData?.cidade && cnpjData?.estado ? `${cnpjData.cidade}, ${cnpjData.estado}` : cnpjData?.cidade || ''}
+        excludeWebsites={concorrentes
+          .map(c => {
+            try {
+              if (c.website) return new URL(c.website).hostname.replace('www.', '');
+              return '';
+            } catch {
+              return '';
+            }
+          })
+          .filter(Boolean)}
+        onCompetitorSelected={(candidate) => {
+          // Quando um concorrente é selecionado, tentar buscar pelo website
+          toast.info(`Concorrente "${candidate.nome}" identificado. Adicione manualmente usando o CNPJ abaixo.`);
+          // Opcional: preencher o campo de busca de CNPJ com uma dica
+          console.log('[Step1] Concorrente descoberto:', candidate);
+        }}
+      />
 
       {/* 🔥 NOVO: Seção de Concorrentes */}
       <Separator className="my-6" />

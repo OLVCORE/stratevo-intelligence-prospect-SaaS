@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -22,6 +23,7 @@ import {
   Linkedin, 
   Search,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   XCircle,
   Lightbulb,
@@ -1281,24 +1283,40 @@ Use dados específicos, seja direto e pragmático. Foque em ações executáveis
 
           {/* Descoberta de Concorrentes via SERPER */}
           <TabsContent value="discovery" className="space-y-4">
-            <CompetitorDiscovery 
-              industry={competitors[0]?.setor || 'Manufatura'}
-              products={[]} // Produtos virão do tenant
-              location={competitors[0]?.cidade}
-              excludeWebsites={competitors.map(c => {
-                try {
-                  return new URL(c.website || '').hostname.replace('www.', '');
-                } catch {
-                  return '';
-                }
-              }).filter(Boolean)}
-              onCompetitorSelected={(candidate) => {
-                toast({
-                  title: 'Concorrente identificado',
-                  description: `${candidate.nome} - Adicione manualmente na Step 1 do onboarding`,
-                });
-              }}
-            />
+            <Card className="border-l-4 border-l-blue-600">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5 text-blue-600" />
+                  Descobrir Concorrentes Automaticamente
+                </CardTitle>
+                <CardDescription>
+                  Esta funcionalidade foi movida para a Etapa 1 do Tenant Onboarding
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Para descobrir concorrentes automaticamente, acesse:
+                    <br />
+                    <strong>Tenant Onboarding → Etapa 1: Dados Básicos da Empresa</strong>
+                    <br />
+                    <span className="text-xs text-muted-foreground mt-2 block">
+                      A funcionalidade está disponível antes da seção "Meus Concorrentes" no onboarding.
+                    </span>
+                  </AlertDescription>
+                </Alert>
+                <Button
+                  onClick={() => {
+                    // Navegar para o onboarding se possível
+                    window.location.href = '/onboarding';
+                  }}
+                  className="w-full"
+                >
+                  Ir para Tenant Onboarding
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* 📊 Análise de Mercado (antiga SWOT) */}

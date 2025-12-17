@@ -2,13 +2,13 @@
  * 🔍 Descoberta Automática de Concorrentes via SERPER
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, ExternalLink, Plus, Sparkles, AlertCircle } from 'lucide-react';
+import { Loader2, Search, ExternalLink, Plus, Sparkles, AlertCircle, Eye, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -28,10 +28,32 @@ interface Props {
   onCompetitorSelected?: (candidate: CompetitorCandidate) => void;
 }
 
+// Marketplaces a serem excluídos automaticamente
+const EXCLUDED_MARKETPLACES = [
+  'mercadolivre.com.br',
+  'mercadolivre.com',
+  'shopee.com.br',
+  'shopee.com',
+  'amazon.com.br',
+  'amazon.com',
+  'alibaba.com',
+  'aliexpress.com',
+  'magazineluiza.com.br',
+  'americanas.com.br',
+  'casasbahia.com.br',
+  'extra.com.br',
+  'pontofrio.com.br',
+  'submarino.com.br',
+  'shoptime.com.br',
+  'walmart.com.br',
+  'carrefour.com.br',
+  'casasbahia.com.br',
+];
+
 export default function CompetitorDiscovery({
   industry,
   products,
-  location,
+  location: initialLocation,
   excludeWebsites = [],
   onCompetitorSelected,
 }: Props) {
@@ -39,6 +61,40 @@ export default function CompetitorDiscovery({
   const [candidates, setCandidates] = useState<CompetitorCandidate[]>([]);
   const [customQuery, setCustomQuery] = useState('');
   const [maxResults, setMaxResults] = useState(10);
+  // 🔥 CORRIGIDO: State controlado para location (editável)
+  const [location, setLocation] = useState(initialLocation ?? '');
+  const [showPreview, setShowPreview] = useState(false);
+
+  // 🔥 CORRIGIDO: Sincronizar initialLocation apenas uma vez (primeiro preenchimento)
+  useEffect(() => {
+    if (initialLocation && location.trim() === '') {
+      setLocation(initialLocation);
+    }
+  }, [initialLocation]); // Só roda quando initialLocation muda, não sobrescreve se usuário já digitou
+
+  // Função para gerar preview da query
+  const generateQueryPreview = () => {
+    const queryParts: string[] = [];
+    
+    // Setor/Indústria
+    const industryQuery = customQuery || industry;
+    if (industryQuery) {
+      queryParts.push(industryQuery);
+    }
+    
+    // Produtos com aspas para busca exata
+    const productsToUse = products.slice(0, 5);
+    if (productsToUse.length > 0) {
+      const productsQuoted = productsToUse.map(p => `"${p}"`).join(' OR ');
+      queryParts.push(`(${productsQuoted})`);
+    }
+    
+    // Localização
+    const locationQuery = location.trim() || 'Brasil';
+    queryParts.push(locationQuery);
+    
+    return queryParts.join(' ');
+  };
 
   const handleSearch = async () => {
     if (!industry && !customQuery) {
@@ -56,12 +112,20 @@ export default function CompetitorDiscovery({
     try {
       console.log('[CompetitorDiscovery] 🔍 Iniciando busca SERPER');
 
+      // 🔥 MELHORADO: Combinar excludeWebsites com marketplaces padrão
+      const allExcludedDomains = [
+        ...new Set([
+          ...excludeWebsites,
+          ...EXCLUDED_MARKETPLACES,
+        ])
+      ];
+
       const { data, error } = await supabase.functions.invoke('search-competitors-serper', {
         body: {
           industry: customQuery || industry,
           products: products.slice(0, 5), // Top 5 produtos
-          location,
-          excludeDomains: excludeWebsites,
+          location: location.trim() || 'Brasil', // Se vazio, busca Brasil sem filtro de cidade/UF
+          excludeDomains: allExcludedDomains,
           maxResults,
         },
       });
@@ -72,14 +136,19 @@ export default function CompetitorDiscovery({
         console.log('[CompetitorDiscovery] ✅ Candidatos encontrados:', data.candidates.length);
         setCandidates(data.candidates);
         
+        // 🔥 MELHORADO: Calcular relevância média
+        const avgRelevancia = data.candidates.length > 0
+          ? Math.round(data.candidates.reduce((sum: number, c: CompetitorCandidate) => sum + c.relevancia, 0) / data.candidates.length)
+          : 0;
+        
         toast({
           title: 'Busca concluída',
-          description: `${data.candidates.length} concorrentes potenciais encontrados`,
+          description: `${data.candidates.length} concorrentes encontrados (relevância média: ${avgRelevancia}%)`,
         });
       } else {
         toast({
           title: 'Nenhum resultado',
-          description: 'Tente ajustar os termos de busca',
+          description: 'Tente ajustar os termos de busca ou adicionar mais produtos',
           variant: 'default',
         });
       }
@@ -95,8 +164,13 @@ export default function CompetitorDiscovery({
     }
   };
 
+  // Calcular relevância média dos resultados
+  const avgRelevancia = candidates.length > 0
+    ? Math.round(candidates.reduce((sum, c) => sum + c.relevancia, 0) / candidates.length)
+    : 0;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="competitor-discovery-v2">
       {/* Painel de Busca */}
       <Card className="border-l-4 border-l-blue-600 shadow-lg">
         <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
@@ -124,10 +198,14 @@ export default function CompetitorDiscovery({
             <div className="space-y-2">
               <Label>Localização (opcional)</Label>
               <Input 
-                value={location || ''}
-                placeholder="Ex: São Paulo"
-                disabled
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Ex: São Paulo, SP ou deixe em branco para Brasil"
+                disabled={searching}
               />
+              <p className="text-xs text-muted-foreground">
+                💡 Deixe em branco para buscar em todo o Brasil
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Máx. Resultados</Label>
@@ -142,25 +220,69 @@ export default function CompetitorDiscovery({
             </div>
           </div>
 
-          {products.length > 0 && (
-            <div>
-              <Label className="text-xs text-muted-foreground">
-                Produtos para refinar busca ({products.length}):
+          {/* 🔥 MELHORADO: Badges de produtos mais visíveis */}
+          {products.length > 0 ? (
+            <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+              <Label className="text-sm font-medium text-foreground mb-2 block">
+                Produtos usados na busca ({products.length}):
               </Label>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2">
                 {products.slice(0, 5).map((prod, idx) => (
-                  <Badge key={idx} variant="outline" className="text-xs">
+                  <Badge key={idx} variant="default" className="bg-blue-600 text-white text-xs px-2 py-1">
                     {prod}
                   </Badge>
                 ))}
                 {products.length > 5 && (
-                  <Badge variant="secondary" className="text-xs">
+                  <Badge variant="secondary" className="text-xs px-2 py-1">
                     +{products.length - 5} mais
                   </Badge>
                 )}
               </div>
             </div>
+          ) : (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                  <strong>Aviso:</strong> Nenhum produto cadastrado. Adicione produtos para refinar a busca e obter resultados mais precisos.
+                </p>
+              </div>
+            </div>
           )}
+
+          {/* 🔥 NOVO: Preview da Query */}
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                Preview da Query
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPreview(!showPreview)}
+                className="h-6 px-2 text-xs"
+              >
+                {showPreview ? 'Ocultar' : 'Mostrar'}
+              </Button>
+            </div>
+            {showPreview && (
+              <div className="mt-2 p-2 bg-white dark:bg-slate-900 rounded border border-blue-300 dark:border-blue-700">
+                <code className="text-xs text-blue-900 dark:text-blue-100 font-mono break-all">
+                  {generateQueryPreview()}
+                </code>
+                <div className="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                  <p>• Excluindo automaticamente: {EXCLUDED_MARKETPLACES.slice(0, 5).join(', ')}...</p>
+                  {location.trim() ? (
+                    <p>• Localização: {location}</p>
+                  ) : (
+                    <p>• Localização: Brasil (sem filtro de cidade/UF)</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           <Button 
             onClick={handleSearch}
@@ -186,12 +308,16 @@ export default function CompetitorDiscovery({
       {candidates.length > 0 && (
         <Card className="border-l-4 border-l-emerald-600">
           <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
-            <CardTitle className="text-slate-800 dark:text-slate-100">
-              Candidatos Encontrados ({candidates.length})
-            </CardTitle>
-            <CardDescription>
-              Clique em "Adicionar" para incluir na lista de concorrentes
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-slate-800 dark:text-slate-100">
+                  Candidatos Encontrados ({candidates.length})
+                </CardTitle>
+                <CardDescription>
+                  Relevância média: <strong>{avgRelevancia}%</strong> • Clique em "Adicionar" para incluir na lista de concorrentes
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="pt-6">
             <div className="space-y-3">
@@ -202,9 +328,16 @@ export default function CompetitorDiscovery({
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <p className="font-semibold text-sm truncate">{candidate.nome}</p>
-                        <Badge className="bg-blue-600 text-white text-xs shrink-0">
+                        <Badge 
+                          className={`text-xs shrink-0 ${
+                            candidate.relevancia >= 80 ? 'bg-green-600 text-white' :
+                            candidate.relevancia >= 60 ? 'bg-blue-600 text-white' :
+                            candidate.relevancia >= 40 ? 'bg-yellow-600 text-white' :
+                            'bg-gray-600 text-white'
+                          }`}
+                        >
                           {Math.round(candidate.relevancia)}% match
                         </Badge>
                       </div>
