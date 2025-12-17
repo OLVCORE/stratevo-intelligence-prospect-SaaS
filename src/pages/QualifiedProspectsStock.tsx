@@ -1983,12 +1983,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         website_encontrado: websiteData.website,
         website_fit_score: scanData.website_fit_score || 0,
         linkedin_url: scanData.linkedin_url || null,
+        linkedin_found: !!scanData.linkedin_url,
         products_found: scanData.products_found || 0,
         compatible_products: scanData.compatible_products?.length || 0,
       });
 
       // ✅ Aguardar um momento para garantir que a atualização da Edge Function foi concluída
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000)); // ✅ Aumentado para 1s para garantir sincronização
 
       // ✅ Verificar se os dados foram salvos corretamente
       const { data: updatedProspect, error: checkError } = await ((supabase as any).from('qualified_prospects'))
@@ -2002,8 +2003,17 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         console.log('[Enriquecimento Website] ✅ Dados confirmados no banco:', {
           website_encontrado: updatedProspect?.website_encontrado,
           linkedin_url: updatedProspect?.linkedin_url,
+          linkedin_url_present: !!updatedProspect?.linkedin_url,
           website_fit_score: updatedProspect?.website_fit_score,
         });
+        
+        // ✅ ALERTA: Se LinkedIn foi encontrado mas não foi salvo
+        if (scanData.linkedin_url && !updatedProspect?.linkedin_url) {
+          console.error('[Enriquecimento Website] ⚠️⚠️⚠️ PROBLEMA: LinkedIn encontrado mas NÃO salvo no banco!', {
+            linkedin_from_response: scanData.linkedin_url,
+            linkedin_in_db: updatedProspect?.linkedin_url,
+          });
+        }
       }
 
       toast({

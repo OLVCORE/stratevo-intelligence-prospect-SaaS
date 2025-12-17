@@ -476,6 +476,14 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
       }
     }
 
+    console.log('[ScanProspect] 📤 Retornando resposta final:', {
+      success: true,
+      products_found: extractedProducts.length,
+      website_fit_score: websiteFitScore,
+      linkedin_url: linkedinUrl,
+      linkedin_found: !!linkedinUrl,
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -484,7 +492,7 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
         compatible_products: compatibleProducts.length,
         website_fit_score: websiteFitScore, // ✅ ADICIONADO
         website_products_match: formattedCompatibleProducts, // ✅ FORMATADO
-        linkedin_url: linkedinUrl,
+        linkedin_url: linkedinUrl, // ✅ CRÍTICO: Retornar LinkedIn na resposta
         compatible_products_details: compatibleProducts,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
