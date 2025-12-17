@@ -228,11 +228,30 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
 
         if (linkedinResponse.ok) {
           const linkedinData = await linkedinResponse.json();
-          const linkedinResult = linkedinData.organic?.[0];
-          if (linkedinResult?.link?.includes('linkedin.com/company')) {
-            linkedinUrl = linkedinResult.link;
-            console.log('[ScanProspect] ✅ LinkedIn encontrado:', linkedinUrl);
+          const organicResults = linkedinData.organic || [];
+          console.log('[ScanProspect] 🔍 Resultados SERPER LinkedIn:', {
+            total_results: organicResults.length,
+            first_result: organicResults[0]?.link,
+          });
+          
+          // ✅ Buscar em todos os resultados, não apenas o primeiro
+          for (const result of organicResults) {
+            if (result?.link && (
+              result.link.includes('linkedin.com/company') || 
+              result.link.includes('linkedin.com/company/')
+            )) {
+              linkedinUrl = result.link;
+              console.log('[ScanProspect] ✅ LinkedIn encontrado:', linkedinUrl);
+              break;
+            }
           }
+          
+          if (!linkedinUrl) {
+            console.log('[ScanProspect] ⚠️ LinkedIn não encontrado nos resultados SERPER');
+          }
+        } else {
+          const errorText = await linkedinResponse.text();
+          console.warn('[ScanProspect] ⚠️ Erro na busca SERPER LinkedIn:', linkedinResponse.status, errorText);
         }
       } catch (error) {
         console.warn('[ScanProspect] ⚠️ Erro ao buscar LinkedIn:', error);
