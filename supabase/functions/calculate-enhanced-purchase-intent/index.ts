@@ -266,12 +266,47 @@ serve(async (req) => {
     );
 
     if (rpcError) {
-      console.error('[EnhancedPurchaseIntent] ❌ Erro ao buscar dados:', rpcError);
-      throw rpcError;
+      console.error('[EnhancedPurchaseIntent] ❌ Erro ao buscar dados via RPC:', {
+        code: rpcError.code,
+        message: rpcError.message,
+        details: rpcError.details,
+        hint: rpcError.hint,
+        tenant_id,
+        prospect_id,
+        icp_id
+      });
+      
+      // Retornar erro mais descritivo
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Erro ao buscar dados: ${rpcError.message || rpcError.code || 'Erro desconhecido'}`,
+          rpc_error: {
+            code: rpcError.code,
+            message: rpcError.message,
+            details: rpcError.details,
+            hint: rpcError.hint
+          }
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
     if (!contextData) {
-      throw new Error('Dados não encontrados');
+      console.error('[EnhancedPurchaseIntent] ❌ RPC retornou null/undefined');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Dados não encontrados. Verifique se o prospect_id e tenant_id são válidos.' 
+        }),
+        { 
+          status: 404, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
     console.log('[EnhancedPurchaseIntent] ✅ Dados coletados:', {
