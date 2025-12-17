@@ -75,6 +75,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     endereco?: string; // 🔥 NOVO: Endereço
     bairro?: string; // 🔥 NOVO: Bairro
     numero?: string; // 🔥 NOVO: Número
+    cnpjPendente?: boolean; // 🔥 NOVO: Flag para indicar que CNPJ é placeholder e precisa ser preenchido
   }
   
   const [concorrentes, setConcorrentes] = useState<ConcorrenteDireto[]>(
@@ -110,6 +111,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
   const [showAlertaEnderecos, setShowAlertaEnderecos] = useState(false);
   const [scanningConcorrente, setScanningConcorrente] = useState<Record<string, boolean>>({});
   const cnpjConcorrenteUltimoBuscadoRef = useRef<string>('');
+  // 🔥 NOVO: Estados para busca de CNPJ em concorrentes já adicionados
+  const [buscandoCNPJConcorrenteCard, setBuscandoCNPJConcorrenteCard] = useState<Record<number, boolean>>({});
+  const [erroCNPJConcorrenteCard, setErroCNPJConcorrenteCard] = useState<Record<number, string | null>>({});
+  const cnpjConcorrenteCardUltimoBuscadoRef = useRef<Record<number, string>>({});
   const [bulkExtracting, setBulkExtracting] = useState(false); // 🔥 NOVO: Estado para extração em massa
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 }); // 🔥 NOVO: Progresso da extração em massa
   const [extractionStatus, setExtractionStatus] = useState<Record<string, 'pending' | 'extracting' | 'success' | 'error'>>({}); // 🔥 NOVO: Status de extração por CNPJ/tenant
@@ -1423,6 +1428,129 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     }
   }, [novoConcorrente.cnpj, buscandoCNPJConcorrente]);
 
+  // 🔥 NOVO: Buscar dados de CNPJ para concorrente já adicionado (no card)
+  const buscarDadosCNPJConcorrenteCard = async (index: number, cnpjClean: string) => {
+    setBuscandoCNPJConcorrenteCard(prev => ({ ...prev, [index]: true }));
+    setErroCNPJConcorrenteCard(prev => ({ ...prev, [index]: null }));
+
+    try {
+      const result = await consultarReceitaFederal(cnpjClean);
+      
+      if (!result.success || !result.data) {
+        setErroCNPJConcorrenteCard(prev => ({ ...prev, [index]: result.error || 'Erro ao buscar dados do CNPJ' }));
+        return;
+      }
+
+      const data = result.data;
+      
+      // Extrair setor do CNAE
+      let setorExtraido = '';
+      if (data.atividade_principal?.[0]?.code) {
+        const cnaeCode = data.atividade_principal[0].code.replace(/\D/g, '');
+        const secao = cnaeCode.substring(0, 1);
+        const setores: Record<string, string> = {
+          '1': 'Agricultura', '2': 'Indústria', '3': 'Indústria',
+          '4': 'Energia', '5': 'Construção', '6': 'Comércio',
+          '7': 'Transporte', '8': 'Serviços', '9': 'Serviços'
+        };
+        setorExtraido = setores[secao] || 'Outros';
+      }
+
+      // Enriquecer endereço via ViaCEP se necessário
+      let enderecoEnriquecido = {
+        cep: data.cep || '',
+        endereco: data.logradouro || '',
+        bairro: data.bairro || '',
+        numero: data.numero || '',
+      };
+
+      if (data.cep && !data.logradouro) {
+        try {
+          const viaCepResponse = await fetch(`https://viacep.com.br/ws/${data.cep.replace(/\D/g, '')}/json/`);
+          const viaCepData = await viaCepResponse.json();
+          
+          if (!viaCepData.erro) {
+            enderecoEnriquecido = {
+              cep: viaCepData.cep,
+              endereco: viaCepData.logradouro || '',
+              bairro: viaCepData.bairro || '',
+              numero: '',
+            };
+          }
+        } catch (viaCepError) {
+          console.warn('[Step1] ⚠️ Erro ao buscar ViaCEP:', viaCepError);
+        }
+      }
+
+      // Formatar CNPJ
+      const cnpjFormatado = `${cnpjClean.substring(0, 2)}.${cnpjClean.substring(2, 5)}.${cnpjClean.substring(5, 8)}/${cnpjClean.substring(8, 12)}-${cnpjClean.substring(12, 14)}`;
+
+      // Atualizar concorrente na lista
+      const updatedConcorrentes = [...concorrentes];
+      updatedConcorrentes[index] = {
+        ...updatedConcorrentes[index],
+        cnpj: cnpjFormatado,
+        razaoSocial: data.nome || data.fantasia || updatedConcorrentes[index].razaoSocial,
+        nomeFantasia: data.fantasia || updatedConcorrentes[index].nomeFantasia || '',
+        setor: setorExtraido || updatedConcorrentes[index].setor,
+        cidade: data.municipio || updatedConcorrentes[index].cidade,
+        estado: data.uf || updatedConcorrentes[index].estado,
+        capitalSocial: (data as any)?.capital_social ? parseFloat(String((data as any).capital_social).replace(/[^\d.,]/g, '').replace(',', '.')) : updatedConcorrentes[index].capitalSocial,
+        cnaePrincipal: data.atividade_principal?.[0]?.code || updatedConcorrentes[index].cnaePrincipal,
+        cnaePrincipalDescricao: data.atividade_principal?.[0]?.text || updatedConcorrentes[index].cnaePrincipalDescricao,
+        cep: enderecoEnriquecido.cep || updatedConcorrentes[index].cep,
+        endereco: enderecoEnriquecido.endereco || updatedConcorrentes[index].endereco,
+        bairro: enderecoEnriquecido.bairro || updatedConcorrentes[index].bairro,
+        numero: enderecoEnriquecido.numero || updatedConcorrentes[index].numero,
+        cnpjPendente: false, // 🔥 Remover flag de pendente
+      };
+
+      setConcorrentes(updatedConcorrentes);
+
+      // Salvar imediatamente
+      if (onSave) {
+        const dataToSave = {
+          ...formData,
+          concorrentesDiretos: updatedConcorrentes,
+        };
+        await onSave(dataToSave);
+      }
+
+      toast.success(`✅ Dados de ${updatedConcorrentes[index].razaoSocial} atualizados com sucesso!`);
+      
+    } catch (error: any) {
+      setErroCNPJConcorrenteCard(prev => ({ ...prev, [index]: error.message || 'Erro ao buscar dados do CNPJ' }));
+    } finally {
+      setBuscandoCNPJConcorrenteCard(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
+  // 🔥 NOVO: Busca automática quando CNPJ é atualizado no card (para concorrentes com cnpjPendente)
+  useEffect(() => {
+    const cnpjsPendentes = concorrentes
+      .map((c, idx) => ({ cnpj: c.cnpj, index: idx, pendente: c.cnpjPendente }))
+      .filter(c => c.pendente);
+    
+    cnpjsPendentes.forEach(({ cnpj, index }) => {
+      const cnpjClean = cnpj.replace(/\D/g, '');
+      const ultimoBuscado = cnpjConcorrenteCardUltimoBuscadoRef.current[index];
+      
+      // Só buscar se tiver 14 dígitos, não estiver buscando, for diferente do último buscado e não for placeholder
+      if (cnpjClean.length === 14 && 
+          !buscandoCNPJConcorrenteCard[index] && 
+          cnpjClean !== ultimoBuscado && 
+          cnpjClean !== '00000000000000') {
+        cnpjConcorrenteCardUltimoBuscadoRef.current[index] = cnpjClean;
+        buscarDadosCNPJConcorrenteCard(index, cnpjClean);
+      } else if (cnpjClean.length < 14 && ultimoBuscado) {
+        // Resetar se CNPJ foi apagado
+        cnpjConcorrenteCardUltimoBuscadoRef.current[index] = '';
+        setErroCNPJConcorrenteCard(prev => ({ ...prev, [index]: null }));
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [concorrentes.map((c, i) => c.cnpjPendente ? `${i}-${c.cnpj}` : '').filter(Boolean).join('|')]);
+
   // 🔥 NOVO: Scan de URL do concorrente
   const handleScanConcorrenteURL = async (concorrente: ConcorrenteDireto, index: number) => {
     if (!concorrente.urlParaScan || !tenant?.id) {
@@ -1709,6 +1837,162 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     setReprocessandoEnderecos(false);
   };
 
+  // 🔥 NOVO: Adicionar concorrente descoberto automaticamente (via CompetitorDiscovery)
+  const adicionarConcorrenteDescoberto = async (candidate: { nome: string; website: string; descricao: string; relevancia: number; fonte?: 'serper' }) => {
+    console.log('[Step1] 🔍 Adicionando concorrente descoberto:', candidate);
+    
+    toast.loading(`Buscando dados completos de ${candidate.nome}...`, { id: 'adicionar-concorrente' });
+    
+    try {
+      // 1. Tentar descobrir CNPJ a partir do website
+      let cnpjEncontrado: string | null = null;
+      let dadosCompletos: any = null;
+      
+      try {
+        const { data: discoveryData, error: discoveryError } = await supabase.functions.invoke('discover-cnpj', {
+          body: {
+            company_name: candidate.nome,
+            website: candidate.website,
+            location: cnpjData?.cidade || '',
+          },
+        });
+        
+        if (!discoveryError && discoveryData?.candidates && discoveryData.candidates.length > 0) {
+          // Pegar o candidato com maior confiança
+          const bestCandidate = discoveryData.candidates.sort((a: any, b: any) => b.confidence - a.confidence)[0];
+          if (bestCandidate.cnpj && bestCandidate.confidence >= 40) {
+            cnpjEncontrado = bestCandidate.cnpj.replace(/\D/g, '');
+            console.log('[Step1] ✅ CNPJ descoberto:', cnpjEncontrado, `(${bestCandidate.confidence}% confiança)`);
+          }
+        }
+      } catch (discoveryErr) {
+        console.warn('[Step1] ⚠️ Erro ao descobrir CNPJ, continuando sem CNPJ:', discoveryErr);
+      }
+      
+      // 2. Se encontrou CNPJ, buscar dados completos na Receita Federal
+      if (cnpjEncontrado && cnpjEncontrado.length === 14) {
+        const result = await consultarReceitaFederal(cnpjEncontrado);
+        
+        if (result.success && result.data) {
+          dadosCompletos = result.data;
+          console.log('[Step1] ✅ Dados completos obtidos da Receita Federal');
+        }
+      }
+      
+      // 3. Extrair setor do CNAE (se tiver dados completos)
+      let setorExtraido = '';
+      if (dadosCompletos?.atividade_principal?.[0]?.code) {
+        const cnaeCode = dadosCompletos.atividade_principal[0].code.replace(/\D/g, '');
+        const secao = cnaeCode.substring(0, 1);
+        const setores: Record<string, string> = {
+          '1': 'Agricultura', '2': 'Indústria', '3': 'Indústria',
+          '4': 'Energia', '5': 'Construção', '6': 'Comércio',
+          '7': 'Transporte', '8': 'Serviços', '9': 'Serviços'
+        };
+        setorExtraido = setores[secao] || 'Outros';
+      } else {
+        // Tentar inferir setor da descrição ou usar padrão
+        setorExtraido = 'Manufatura';
+      }
+      
+      // 4. Enriquecer endereço via ViaCEP se necessário
+      let enderecoEnriquecido = {
+        cep: dadosCompletos?.cep || '',
+        endereco: dadosCompletos?.logradouro || '',
+        bairro: dadosCompletos?.bairro || '',
+        numero: dadosCompletos?.numero || '',
+      };
+      
+      if (dadosCompletos?.cep && !dadosCompletos?.logradouro) {
+        try {
+          const viaCepResponse = await fetch(`https://viacep.com.br/ws/${dadosCompletos.cep.replace(/\D/g, '')}/json/`);
+          const viaCepData = await viaCepResponse.json();
+          
+          if (!viaCepData.erro) {
+            enderecoEnriquecido = {
+              cep: viaCepData.cep,
+              endereco: viaCepData.logradouro || '',
+              bairro: viaCepData.bairro || '',
+              numero: '',
+            };
+          }
+        } catch (viaCepError) {
+          console.warn('[Step1] ⚠️ Erro ao buscar ViaCEP:', viaCepError);
+        }
+      }
+      
+      // 5. Formatar CNPJ
+      let cnpjFormatado = '';
+      if (cnpjEncontrado && cnpjEncontrado.length === 14) {
+        cnpjFormatado = `${cnpjEncontrado.substring(0, 2)}.${cnpjEncontrado.substring(2, 5)}.${cnpjEncontrado.substring(5, 8)}/${cnpjEncontrado.substring(8, 12)}-${cnpjEncontrado.substring(12, 14)}`;
+      }
+      
+      // 6. Verificar se já existe (por CNPJ ou website)
+      const websiteHost = new URL(candidate.website).hostname.replace('www.', '');
+      const jaExiste = concorrentes.some(c => {
+        const cnpjMatch = cnpjFormatado && c.cnpj.replace(/\D/g, '') === cnpjEncontrado;
+        const websiteMatch = c.website && new URL(c.website).hostname.replace('www.', '') === websiteHost;
+        return cnpjMatch || websiteMatch;
+      });
+      
+      if (jaExiste) {
+        toast.dismiss('adicionar-concorrente');
+        toast.warning('Este concorrente já foi adicionado');
+        return;
+      }
+      
+      // 7. Criar objeto ConcorrenteDireto completo
+      const temCNPJValido = cnpjFormatado && cnpjFormatado !== '00.000.000/0001-00';
+      const novoConcorrenteCompleto: ConcorrenteDireto = {
+        cnpj: cnpjFormatado || `00.000.000/0001-00`, // Placeholder se não tiver CNPJ
+        razaoSocial: dadosCompletos?.nome || dadosCompletos?.fantasia || candidate.nome,
+        nomeFantasia: dadosCompletos?.fantasia || candidate.nome,
+        setor: setorExtraido,
+        cidade: dadosCompletos?.municipio || '',
+        estado: dadosCompletos?.uf || '',
+        capitalSocial: (dadosCompletos as any)?.capital_social ? parseFloat(String((dadosCompletos as any).capital_social).replace(/[^\d.,]/g, '').replace(',', '.')) : 0,
+        cnaePrincipal: dadosCompletos?.atividade_principal?.[0]?.code || '',
+        cnaePrincipalDescricao: dadosCompletos?.atividade_principal?.[0]?.text || '',
+        website: candidate.website,
+        urlParaScan: candidate.website, // Usar website para scan de produtos
+        cep: enderecoEnriquecido.cep,
+        endereco: enderecoEnriquecido.endereco,
+        bairro: enderecoEnriquecido.bairro,
+        numero: enderecoEnriquecido.numero,
+        produtos: [],
+        produtosExtraidos: 0,
+        cnpjPendente: !temCNPJValido, // 🔥 Marcar como pendente se não tiver CNPJ válido
+      };
+      
+      // 8. Adicionar à lista
+      const updatedConcorrentes = [...concorrentes, novoConcorrenteCompleto];
+      setConcorrentes(updatedConcorrentes);
+      
+      // 9. Salvar imediatamente
+      if (onSave) {
+        const dataToSave = {
+          ...formData,
+          concorrentesDiretos: updatedConcorrentes,
+        };
+        await onSave(dataToSave);
+      }
+      
+      toast.dismiss('adicionar-concorrente');
+      toast.success(`✅ ${candidate.nome} adicionado com sucesso!`, {
+        description: cnpjFormatado ? `CNPJ: ${cnpjFormatado}` : 'Website: ' + websiteHost,
+      });
+      
+      console.log('[Step1] ✅ Concorrente adicionado automaticamente:', novoConcorrenteCompleto);
+      
+    } catch (error: any) {
+      console.error('[Step1] ❌ Erro ao adicionar concorrente descoberto:', error);
+      toast.dismiss('adicionar-concorrente');
+      toast.error('Erro ao adicionar concorrente', {
+        description: error.message || 'Tente adicionar manualmente pelo CNPJ',
+      });
+    }
+  };
+
   // 🔥 NOVO: Adicionar concorrente
   const adicionarConcorrente = () => {
     const cnpjClean = novoConcorrente.cnpj.replace(/\D/g, '');
@@ -1789,6 +2073,14 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
+      e.stopPropagation(); // 🔥 CRÍTICO: Prevenir propagação de eventos
+    }
+
+    // 🔥 CRÍTICO: Verificar se foi chamado explicitamente pelo botão "Próximo"
+    // Se não tiver evento, pode ser chamada automaticamente - não avançar
+    if (!e) {
+      console.warn('[Step1] ⚠️ handleSubmit chamado sem evento - ignorando para evitar navegação automática');
+      return;
     }
 
     if (!formData.cnpj || !formData.email) {
@@ -1859,8 +2151,35 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     onNext(dataToSave);
   };
 
+  // 🔥 CRÍTICO: Handler para prevenir submit automático por Enter
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+      // Permitir Enter apenas em textareas, bloquear em outros campos
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'text') {
+        // Permitir Enter em inputs de tipo específico (number, etc)
+        return;
+      }
+      if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[Step1] ⚠️ Enter bloqueado - use o botão "Próximo" para avançar');
+      }
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form 
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // 🔥 CRÍTICO: Só avançar se for submit explícito do formulário (Enter no último campo)
+        // Mas na prática, vamos desabilitar submit por Enter e só permitir pelo botão
+        console.log('[Step1] ⚠️ Submit do formulário bloqueado - use o botão "Próximo"');
+      }}
+      onKeyDown={handleFormKeyDown}
+      className="space-y-6"
+    >
       <div>
         <CardTitle className="text-2xl font-bold text-foreground mb-2">
           Dados Básicos da Empresa
@@ -2297,12 +2616,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             }
           })
           .filter(Boolean)}
-        onCompetitorSelected={(candidate) => {
-          // Quando um concorrente é selecionado, tentar buscar pelo website
-          toast.info(`Concorrente "${candidate.nome}" identificado. Adicione manualmente usando o CNPJ abaixo.`);
-          // Opcional: preencher o campo de busca de CNPJ com uma dica
-          console.log('[Step1] Concorrente descoberto:', candidate);
-        }}
+        onCompetitorSelected={adicionarConcorrenteDescoberto}
       />
 
       {/* 🔥 NOVO: Seção de Concorrentes */}
@@ -2687,8 +3001,44 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
                         <>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                         <div>
-                          <span className="font-medium text-muted-foreground">CNPJ:</span>
-                          <div className="font-mono text-foreground">{concorrente.cnpj}</div>
+                          <Label className="font-medium text-muted-foreground">CNPJ:</Label>
+                          {concorrente.cnpjPendente ? (
+                            <div className="space-y-1">
+                              <Input
+                                value={concorrente.cnpj}
+                                onChange={(e) => {
+                                  const clean = e.target.value.replace(/\D/g, '');
+                                  let formatted = clean;
+                                  if (clean.length > 2) formatted = clean.substring(0, 2) + '.' + clean.substring(2);
+                                  if (clean.length > 5) formatted = formatted.substring(0, 6) + '.' + clean.substring(5);
+                                  if (clean.length > 8) formatted = formatted.substring(0, 10) + '/' + clean.substring(8);
+                                  if (clean.length > 12) formatted = formatted.substring(0, 15) + '-' + clean.substring(12);
+                                  
+                                  // Atualizar CNPJ no concorrente
+                                  const updatedConcorrentes = [...concorrentes];
+                                  updatedConcorrentes[index] = { ...concorrente, cnpj: formatted };
+                                  setConcorrentes(updatedConcorrentes);
+                                }}
+                                placeholder="00.000.000/0000-00"
+                                className="font-mono text-sm"
+                                disabled={buscandoCNPJConcorrenteCard[index]}
+                              />
+                              {buscandoCNPJConcorrenteCard[index] && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  Buscando dados...
+                                </p>
+                              )}
+                              {erroCNPJConcorrenteCard[index] && (
+                                <p className="text-xs text-red-600 dark:text-red-400">{erroCNPJConcorrenteCard[index]}</p>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                💡 Digite o CNPJ para buscar dados automaticamente
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="font-mono text-foreground">{concorrente.cnpj}</div>
+                          )}
                         </div>
                         {concorrente.setor && (
                           <div>
@@ -2979,7 +3329,14 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             window.location.href = '/dashboard';
           }
         }}
-        onNext={handleSubmit}
+        onNext={() => {
+          // 🔥 CRÍTICO: Criar evento sintético para garantir que handleSubmit sabe que foi chamado explicitamente
+          const syntheticEvent = {
+            preventDefault: () => {},
+            stopPropagation: () => {},
+          } as React.FormEvent;
+          handleSubmit(syntheticEvent);
+        }}
         onSave={onSaveExplicit || onSave}
         showSave={!!onSave}
         saveLoading={isSaving}
