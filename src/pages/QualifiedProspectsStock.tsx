@@ -1080,17 +1080,21 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             }
             
             // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
-            // NOTA: Esses campos não existem na tabela companies, então salvamos apenas em raw_data
+            // ✅ CORRIGIDO: Salvar nas colunas diretas E em raw_data (colunas existem na tabela companies)
             if (prospect.website_encontrado) {
+              updatePayload.website_encontrado = prospect.website_encontrado;
               rawData.website_encontrado = prospect.website_encontrado;
             }
             if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
+              updatePayload.website_fit_score = Number(prospect.website_fit_score);
               rawData.website_fit_score = Number(prospect.website_fit_score);
             }
             if (prospect.website_products_match) {
+              updatePayload.website_products_match = prospect.website_products_match;
               rawData.website_products_match = prospect.website_products_match;
             }
             if (prospect.linkedin_url) {
+              updatePayload.linkedin_url = prospect.linkedin_url;
               rawData.linkedin_url = prospect.linkedin_url;
             }
             
@@ -1233,17 +1237,21 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             }
             
             // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
-            // NOTA: Esses campos não existem na tabela companies, então salvamos apenas em raw_data
+            // ✅ CORRIGIDO: Salvar nas colunas diretas E em raw_data (colunas existem na tabela companies)
             if (prospect.website_encontrado) {
+              insertPayload.website_encontrado = prospect.website_encontrado;
               rawData.website_encontrado = prospect.website_encontrado;
             }
             if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
+              insertPayload.website_fit_score = Number(prospect.website_fit_score);
               rawData.website_fit_score = Number(prospect.website_fit_score);
             }
             if (prospect.website_products_match) {
+              insertPayload.website_products_match = prospect.website_products_match;
               rawData.website_products_match = prospect.website_products_match;
             }
             if (prospect.linkedin_url) {
+              insertPayload.linkedin_url = prospect.linkedin_url;
               rawData.linkedin_url = prospect.linkedin_url;
             }
             
