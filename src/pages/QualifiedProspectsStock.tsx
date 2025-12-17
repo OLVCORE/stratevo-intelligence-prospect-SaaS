@@ -909,6 +909,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       let promotedCount = 0;
       let updatedCount = 0;
       const errors: string[] = [];
+      
+      // ✅ Declarar jobData fora do loop para reutilizar entre prospects do mesmo job
+      let jobData: any = null;
 
       console.log('[Qualified → Companies] 📤 Iniciando envio de prospects para Banco de Empresas', {
         total: selectedProspects.length,
@@ -999,12 +1002,37 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               cnpj: prospect.cnpj,
             });
 
+            // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo) - se ainda não foi buscado
+            if (!jobData && prospect.job_id) {
+              try {
+                const { data: job } = await ((supabase as any).from('prospect_qualification_jobs'))
+                  .select('job_name, source_file_name, source_type')
+                  .eq('id', prospect.job_id)
+                  .maybeSingle();
+                if (job) {
+                  jobData = job;
+                }
+              } catch (jobError) {
+                console.warn('[Qualified → Companies] ⚠️ Erro ao buscar job:', jobError);
+              }
+            }
+
+            // ✅ ORIGEM: Priorizar source_file_name (nome do arquivo), depois job_name, depois source_name, depois default
+            const origemUpdate = jobData?.source_file_name || 
+                                jobData?.job_name || 
+                                prospect.source_name || 
+                                (jobData?.source_type === 'upload_csv' ? 'CSV Upload' :
+                                 jobData?.source_type === 'upload_excel' ? 'Excel Upload' :
+                                 jobData?.source_type === 'google_sheets' ? 'Google Sheets' :
+                                 jobData?.source_type === 'api_empresas_aqui' ? 'API Empresas Aqui' :
+                                 'Qualification Engine');
+
             // ✅ Payload de update simplificado e seguro - apenas campos que EXISTEM na tabela
             const updatePayload: any = {
               company_name: companyName || existingCompany.company_name || 'Empresa Sem Nome',
               name: companyName || existingCompany.name || 'Empresa Sem Nome', // Campo obrigatório
-              origem: origem, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
-              source_name: origem, // ✅ PRESERVAR source_name também
+              origem: origemUpdate, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
+              source_name: origemUpdate, // ✅ PRESERVAR source_name também
               updated_at: new Date().toISOString(),
             };
 
@@ -1123,17 +1151,24 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             });
 
             // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo) - se ainda não foi buscado
-            if (!jobData && prospect.job_id) {
+            // Buscar apenas se o job_id mudou ou se ainda não foi buscado
+            if (prospect.job_id && (!jobData || jobData.id !== prospect.job_id)) {
               try {
                 const { data: job } = await ((supabase as any).from('prospect_qualification_jobs'))
-                  .select('job_name, source_file_name, source_type')
+                  .select('id, job_name, source_file_name, source_type')
                   .eq('id', prospect.job_id)
                   .maybeSingle();
                 if (job) {
                   jobData = job;
+                  console.log('[Qualified → Companies] ✅ Job data carregado', {
+                    job_id: prospect.job_id,
+                    source_file_name: job.source_file_name,
+                    job_name: job.job_name,
+                  });
                 }
               } catch (jobError) {
                 console.warn('[Qualified → Companies] ⚠️ Erro ao buscar job:', jobError);
+                // Continuar sem jobData, usar fallback
               }
             }
 
