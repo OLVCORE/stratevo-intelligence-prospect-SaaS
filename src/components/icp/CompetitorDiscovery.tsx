@@ -395,9 +395,21 @@ export default function CompetitorDiscovery({
                   <li>Calcula relevância baseada em múltiplos fatores</li>
                   <li>Retorna apenas websites oficiais de empresas</li>
                 </ul>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-3">
-                  💡 <strong>Dica:</strong> Quanto mais produtos você tiver cadastrados, mais precisos serão os resultados.
-                </p>
+                <div className="mt-3 p-2 bg-blue-100 dark:bg-blue-900/30 rounded border border-blue-300 dark:border-blue-700">
+                  <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                    📊 Peso dos Critérios na Relevância:
+                  </p>
+                  <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-0.5">
+                    <li>• <strong>Posição no Google:</strong> Base (1º = 95%, 2º = 90%, etc.)</li>
+                    <li>• <strong>Setor/Indústria no título:</strong> +10 pontos</li>
+                    <li>• <strong>Produtos no título:</strong> +15 pontos</li>
+                    <li>• <strong>Palavras-chave (fabricante/fornecedor):</strong> +10 pontos</li>
+                    <li>• <strong>Localização no snippet:</strong> +10 pontos</li>
+                  </ul>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                    💡 <strong>Dica:</strong> O setor/indústria tem peso PRIMÁRIO na busca (primeiro termo da query) e +10 pontos no fit quando aparece no título.
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
