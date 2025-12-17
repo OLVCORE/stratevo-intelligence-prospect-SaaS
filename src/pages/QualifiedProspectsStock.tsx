@@ -266,8 +266,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
     setLoading(true);
     try {
       // ✅ CORRIGIDO: Query simplificada (sem relacionamento que pode causar erro 400)
+      // ✅ EXPLÍCITO: Selecionar campos de website e LinkedIn explicitamente
       let query = ((supabase as any).from('qualified_prospects'))
-        .select('*')
+        .select('*, website_encontrado, website_fit_score, website_products_match, linkedin_url')
         .eq('tenant_id', tenantId)
         .eq('pipeline_status', 'new') // ✅ FLUXO OFICIAL: apenas empresas com status 'new'
         .order('fit_score', { ascending: false });
@@ -297,6 +298,21 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       if (error) {
         console.error('[Estoque] Erro na query:', error);
         throw error;
+      }
+
+      // ✅ DEBUG: Verificar se os campos de website estão sendo retornados
+      if (data && data.length > 0) {
+        const firstProspect = data[0] as any;
+        console.log('[Estoque] 🔍 DEBUG - Primeiro prospect carregado:', {
+          id: firstProspect.id,
+          razao_social: firstProspect.razao_social,
+          website_encontrado: firstProspect.website_encontrado,
+          website_fit_score: firstProspect.website_fit_score,
+          linkedin_url: firstProspect.linkedin_url,
+          has_website_encontrado: 'website_encontrado' in firstProspect,
+          has_website_fit_score: 'website_fit_score' in firstProspect,
+          has_linkedin_url: 'linkedin_url' in firstProspect,
+        });
       }
 
       // ✅ Buscar nomes dos ICPs separadamente (icp_id não tem FK)
@@ -368,7 +384,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         const enrichment = enrichmentMap[p.id] || null;
         
         // ✅ PRESERVAR TODOS OS DADOS: usar objeto original completo + dados enriquecidos
-        return {
+        const enriched = {
           ...p, // ✅ PRESERVAR TODOS OS CAMPOS ORIGINAIS
           // ✅ DADOS BÁSICOS (garantir que estejam presentes)
           cnpj: p.cnpj || '',
@@ -382,10 +398,10 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           fit_score: enrichment?.fit_score ?? p.fit_score ?? null,
           grade: enrichment?.grade || p.grade || null,
           icp_score: p.icp_score || enrichment?.icp_score || 0,
-          // ✅ DADOS DE WEBSITE E LINKEDIN (preservar explicitamente)
+          // ✅ DADOS DE WEBSITE E LINKEDIN (preservar explicitamente - CRÍTICO)
           website: p.website || null,
-          website_encontrado: p.website_encontrado || null,
-          website_fit_score: p.website_fit_score ?? null,
+          website_encontrado: p.website_encontrado || p.website || null, // ✅ Fallback para website se website_encontrado não existir
+          website_fit_score: p.website_fit_score ?? (p.website_fit_score === 0 ? 0 : null), // ✅ Preservar 0 como 0, não null
           website_products_match: p.website_products_match || null,
           linkedin_url: p.linkedin_url || null,
           // ✅ DADOS DE ENRIQUECIMENTO
@@ -405,6 +421,19 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           enrichment_data: p.enrichment_data || null,
           ai_analysis: p.ai_analysis || null,
         };
+
+        // ✅ DEBUG: Logar dados de website para o primeiro prospect (apenas uma vez)
+        if (enrichedProspects.length === 0 && enriched.website_encontrado) {
+          console.log('[Estoque] 🔍 DEBUG - Prospect enriquecido com website:', {
+            id: enriched.id,
+            razao_social: enriched.razao_social,
+            website_encontrado: enriched.website_encontrado,
+            website_fit_score: enriched.website_fit_score,
+            linkedin_url: enriched.linkedin_url,
+          });
+        }
+
+        return enriched;
       });
 
       // ✅ APLICAR FILTROS LOCALMENTE (igual a Gerenciar Empresas)
