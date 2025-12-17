@@ -382,6 +382,12 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           fit_score: enrichment?.fit_score ?? p.fit_score ?? null,
           grade: enrichment?.grade || p.grade || null,
           icp_score: p.icp_score || enrichment?.icp_score || 0,
+          // ✅ DADOS DE WEBSITE E LINKEDIN (preservar explicitamente)
+          website: p.website || null,
+          website_encontrado: p.website_encontrado || null,
+          website_fit_score: p.website_fit_score ?? null,
+          website_products_match: p.website_products_match || null,
+          linkedin_url: p.linkedin_url || null,
           // ✅ DADOS DE ENRIQUECIMENTO
           icp: p.icp_id ? icpMap[p.icp_id] : undefined,
           match_breakdown: matchBreakdown,
@@ -1941,22 +1947,40 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       }
 
       // 3. Atualizar qualified_prospects com os dados
-      const { error: updateError } = await ((supabase as any).from('qualified_prospects'))
-        .update({
-          website_encontrado: websiteData.website,
-          website_fit_score: scanData.website_fit_score || 0,
-          website_products_match: scanData.compatible_products_count > 0 ? scanData.compatible_products : [],
-          linkedin_url: scanData.linkedin_url || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', prospectId);
+      const updatePayload = {
+        website_encontrado: websiteData.website,
+        website_fit_score: scanData.website_fit_score || 0,
+        website_products_match: scanData.website_products_match || scanData.compatible_products || [],
+        linkedin_url: scanData.linkedin_url || null,
+        updated_at: new Date().toISOString(),
+      };
 
-      if (updateError) throw updateError;
+      console.log('[Enriquecimento Website] 📦 Payload de atualização:', {
+        prospect_id: prospectId,
+        website_encontrado: updatePayload.website_encontrado,
+        website_fit_score: updatePayload.website_fit_score,
+        linkedin_url: updatePayload.linkedin_url,
+        products_match_count: Array.isArray(updatePayload.website_products_match) ? updatePayload.website_products_match.length : 0,
+      });
+
+      const { error: updateError, data: updateData } = await ((supabase as any).from('qualified_prospects'))
+        .update(updatePayload)
+        .eq('id', prospectId)
+        .select('id, website_encontrado, linkedin_url, website_fit_score');
+
+      if (updateError) {
+        console.error('[Enriquecimento Website] ❌ Erro ao atualizar:', updateError);
+        throw updateError;
+      }
+
+      console.log('[Enriquecimento Website] ✅ Dados atualizados:', updateData);
 
       toast({
         title: '✅ Website enriquecido com sucesso!',
-        description: `${scanData.products_found} produtos encontrados, Fit Score: +${scanData.website_fit_score} pontos`,
+        description: `${scanData.products_found || 0} produtos encontrados, Fit Score: +${scanData.website_fit_score || 0} pontos${scanData.linkedin_url ? ', LinkedIn encontrado' : ''}`,
       });
+      
+      // ✅ Recarregar prospects para atualizar a tabela
       await loadProspects();
     } catch (error: any) {
       console.error('[Enriquecimento Website] Erro:', error);
