@@ -654,70 +654,104 @@ if (selectedIcpIds && selectedIcpIds.length > 0) {
   console.log('[BulkUpload] ✅ Usando ICP selecionado:', icpIdToUse);
 } else {
   console.log('[BulkUpload] 🔍 Nenhum ICP selecionado, buscando ICP principal...');
+  console.log('[BulkUpload] 🔍 Tenant ID:', tenantId);
+  
   // Se nenhum ICP foi selecionado, buscar o ICP principal automaticamente
   // Tentar múltiplas estratégias de busca
   let icpData: any = null;
   let icpError: any = null;
   
+  // Primeiro, verificar se há algum ICP no tenant (para debug)
+  const { data: allIcps, error: allIcpsError } = await supabase
+    .from('icp_profiles_metadata' as any)
+    .select('id, nome, icp_principal, ativo, tenant_id')
+    .eq('tenant_id', tenantId);
+  
+  console.log('[BulkUpload] 🔍 Total de ICPs no tenant:', allIcps?.length || 0, allIcpsError ? `(erro: ${allIcpsError.message})` : '');
+  if (allIcps && allIcps.length > 0) {
+    console.log('[BulkUpload] 🔍 ICPs encontrados:', allIcps.map((icp: any) => ({ id: icp.id, nome: icp.nome, principal: icp.icp_principal, ativo: icp.ativo })));
+  }
+  
   // Estratégia 1: Buscar por icp_principal = true
   const { data: icpData1, error: icpError1 } = await supabase
     .from('icp_profiles_metadata' as any)
-    .select('id')
+    .select('id, nome')
     .eq('tenant_id', tenantId)
     .eq('icp_principal', true)
     .limit(1)
     .maybeSingle();
   
+  console.log('[BulkUpload] 🔍 Estratégia 1 (icp_principal=true):', { data: icpData1, error: icpError1 });
+  
   if (!icpError1 && icpData1) {
     icpData = icpData1;
-    console.log('[BulkUpload] ✅ ICP principal encontrado (icp_principal=true):', icpData.id);
+    console.log('[BulkUpload] ✅ ICP principal encontrado (icp_principal=true):', icpData.id, icpData.nome);
   } else {
     // Estratégia 2: Buscar por ativo = true
     const { data: icpData2, error: icpError2 } = await supabase
       .from('icp_profiles_metadata' as any)
-      .select('id')
+      .select('id, nome')
       .eq('tenant_id', tenantId)
       .eq('ativo', true)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     
+    console.log('[BulkUpload] 🔍 Estratégia 2 (ativo=true):', { data: icpData2, error: icpError2 });
+    
     if (!icpError2 && icpData2) {
       icpData = icpData2;
-      console.log('[BulkUpload] ✅ ICP ativo encontrado:', icpData.id);
+      console.log('[BulkUpload] ✅ ICP ativo encontrado:', icpData.id, icpData.nome);
     } else {
       // Estratégia 3: Buscar qualquer ICP do tenant (mais recente)
       const { data: icpData3, error: icpError3 } = await supabase
         .from('icp_profiles_metadata' as any)
-        .select('id')
+        .select('id, nome')
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
       
+      console.log('[BulkUpload] 🔍 Estratégia 3 (qualquer ICP):', { data: icpData3, error: icpError3 });
+      
       if (!icpError3 && icpData3) {
         icpData = icpData3;
-        console.log('[BulkUpload] ✅ ICP mais recente encontrado:', icpData.id);
+        console.log('[BulkUpload] ✅ ICP mais recente encontrado:', icpData.id, icpData.nome);
       } else {
         icpError = icpError3 || icpError2 || icpError1;
+        console.log('[BulkUpload] ⚠️ Nenhuma estratégia encontrou ICP. Erros:', { icpError1, icpError2, icpError3 });
       }
     }
   }
 
-  console.log('[BulkUpload] 🔍 Resultado busca ICP:', { icpData, icpError });
+  console.log('[BulkUpload] 🔍 Resultado final busca ICP:', { icpData, icpError });
 
   if (icpError || !icpData) {
-    console.error('[BulkUpload] ❌ Erro ao buscar ICP:', icpError);
-    toast.error('Erro: Nenhum ICP encontrado para o tenant', {
-      description: 'Crie um ICP antes de importar empresas ou selecione um ICP no card de upload'
-    });
+    const errorMessage = icpError?.message || 'Nenhum ICP encontrado';
+    console.error('[BulkUpload] ❌ Erro ao buscar ICP:', { error: icpError, tenantId, totalIcps: allIcps?.length || 0 });
+    
+    // Mensagem mais clara baseada no erro
+    if (icpError?.code === 'PGRST116' || icpError?.message?.includes('permission') || icpError?.message?.includes('policy')) {
+      toast.error('Erro de permissão ao buscar ICP', {
+        description: 'Verifique as políticas RLS ou contate o suporte. Erro: ' + errorMessage
+      });
+    } else if (allIcps && allIcps.length === 0) {
+      toast.error('Nenhum ICP cadastrado', {
+        description: 'Você precisa criar um ICP antes de importar empresas. Vá em Central ICP → Criar ICP'
+      });
+    } else {
+      toast.error('Erro ao buscar ICP', {
+        description: errorMessage + '. Crie um ICP antes de importar empresas ou selecione um ICP no card de upload'
+      });
+    }
+    
     setIsUploading(false);
     setProgress(0);
     return;
   }
   
   icpIdToUse = icpData.id;
-  console.log('[BulkUpload] ✅ ICP encontrado:', icpIdToUse);
+  console.log('[BulkUpload] ✅ ICP encontrado e será usado:', icpIdToUse, icpData.nome);
 }
 
 // Preparar columnMapping
