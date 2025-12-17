@@ -1954,34 +1954,37 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         throw new Error(scanData.error || 'Erro ao escanear website');
       }
 
-      // 3. Atualizar qualified_prospects com os dados
-      const updatePayload = {
+      // ✅ CORRIGIDO: A Edge Function scan-prospect-website JÁ atualiza a tabela qualified_prospects
+      // Não precisamos fazer uma atualização duplicada aqui, apenas aguardar um momento
+      // e recarregar os dados para garantir que estão sincronizados
+      
+      console.log('[Enriquecimento Website] ✅ Edge Function concluída:', {
+        prospect_id: prospectId,
         website_encontrado: websiteData.website,
         website_fit_score: scanData.website_fit_score || 0,
-        website_products_match: scanData.website_products_match || scanData.compatible_products || [],
         linkedin_url: scanData.linkedin_url || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      console.log('[Enriquecimento Website] 📦 Payload de atualização:', {
-        prospect_id: prospectId,
-        website_encontrado: updatePayload.website_encontrado,
-        website_fit_score: updatePayload.website_fit_score,
-        linkedin_url: updatePayload.linkedin_url,
-        products_match_count: Array.isArray(updatePayload.website_products_match) ? updatePayload.website_products_match.length : 0,
+        products_found: scanData.products_found || 0,
+        compatible_products: scanData.compatible_products?.length || 0,
       });
 
-      const { error: updateError, data: updateData } = await ((supabase as any).from('qualified_prospects'))
-        .update(updatePayload)
+      // ✅ Aguardar um momento para garantir que a atualização da Edge Function foi concluída
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // ✅ Verificar se os dados foram salvos corretamente
+      const { data: updatedProspect, error: checkError } = await ((supabase as any).from('qualified_prospects'))
+        .select('id, website_encontrado, linkedin_url, website_fit_score, website_products_match')
         .eq('id', prospectId)
-        .select('id, website_encontrado, linkedin_url, website_fit_score');
+        .single();
 
-      if (updateError) {
-        console.error('[Enriquecimento Website] ❌ Erro ao atualizar:', updateError);
-        throw updateError;
+      if (checkError) {
+        console.warn('[Enriquecimento Website] ⚠️ Erro ao verificar dados atualizados:', checkError);
+      } else {
+        console.log('[Enriquecimento Website] ✅ Dados confirmados no banco:', {
+          website_encontrado: updatedProspect?.website_encontrado,
+          linkedin_url: updatedProspect?.linkedin_url,
+          website_fit_score: updatedProspect?.website_fit_score,
+        });
       }
-
-      console.log('[Enriquecimento Website] ✅ Dados atualizados:', updateData);
 
       toast({
         title: '✅ Website enriquecido com sucesso!',

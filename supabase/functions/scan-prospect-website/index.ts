@@ -431,41 +431,48 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
 
     // ✅ CRÍTICO: Atualizar qualified_prospects com os dados calculados
     if (qualified_prospect_id) {
-      // Buscar prospect atual para verificar se já tem website_encontrado
-      const { data: currentProspect } = await supabase
-        .from('qualified_prospects')
-        .select('website_encontrado')
-        .eq('id', qualified_prospect_id)
-        .eq('tenant_id', tenant_id)
-        .single();
-
       const updatePayload: any = {
         website_fit_score: websiteFitScore,
         website_products_match: formattedCompatibleProducts,
         updated_at: new Date().toISOString(),
       };
 
-      // Se website_encontrado não estiver preenchido, usar o website_url fornecido
-      if (!currentProspect?.website_encontrado && website_url) {
+      // ✅ CORRIGIDO: Sempre atualizar website_encontrado com o website_url fornecido
+      // (não verificar se já existe, pois pode ser um website mais atualizado)
+      if (website_url) {
         updatePayload.website_encontrado = website_url;
       }
 
-      // Se linkedin_url foi encontrado, atualizar
+      // ✅ CORRIGIDO: Sempre atualizar linkedin_url se foi encontrado
       if (linkedinUrl) {
         updatePayload.linkedin_url = linkedinUrl;
       }
 
-      const { error: updateError } = await supabase
+      console.log('[ScanProspect] 📦 Atualizando qualified_prospects:', {
+        qualified_prospect_id,
+        website_encontrado: updatePayload.website_encontrado,
+        website_fit_score: updatePayload.website_fit_score,
+        linkedin_url: updatePayload.linkedin_url,
+        products_match_count: formattedCompatibleProducts.length,
+      });
+
+      const { error: updateError, data: updateData } = await supabase
         .from('qualified_prospects')
         .update(updatePayload)
         .eq('id', qualified_prospect_id)
-        .eq('tenant_id', tenant_id);
+        .eq('tenant_id', tenant_id)
+        .select('id, website_encontrado, linkedin_url, website_fit_score, website_products_match');
 
       if (updateError) {
-        console.error('[ScanProspect] ⚠️ Erro ao atualizar qualified_prospects:', updateError);
-        // Não falhar a requisição se a atualização falhar
+        console.error('[ScanProspect] ❌ Erro ao atualizar qualified_prospects:', updateError);
+        // Não falhar a requisição se a atualização falhar, mas logar o erro
       } else {
-        console.log('[ScanProspect] ✅ qualified_prospects atualizado com website_fit_score:', websiteFitScore);
+        console.log('[ScanProspect] ✅ qualified_prospects atualizado com sucesso:', {
+          id: updateData?.[0]?.id,
+          website_encontrado: updateData?.[0]?.website_encontrado,
+          linkedin_url: updateData?.[0]?.linkedin_url,
+          website_fit_score: updateData?.[0]?.website_fit_score,
+        });
       }
     }
 
