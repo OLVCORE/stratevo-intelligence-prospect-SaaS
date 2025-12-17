@@ -46,12 +46,16 @@ Você deve ver:
 
 ## 📊 O QUE A MIGRATION FAZ
 
-1. ✅ **Cria função `get_user_tenant_ids()`** com `SECURITY DEFINER` para bypassar RLS completamente
+1. ✅ **Cria função `get_user_tenant_ids()`** com `SECURITY DEFINER` que:
+   - Verifica `tenant_users` primeiro (relação muitos-para-muitos)
+   - Usa `users` como fallback (compatibilidade com sistema antigo)
+   - Bypassa RLS completamente para evitar recursão
 2. ✅ **Remove TODAS as políticas problemáticas** de `tenant_users` que causam recursão
 3. ✅ **Recria políticas de `tenant_users`** usando a função (sem recursão)
 4. ✅ **Remove TODAS as políticas** de `prospect_qualification_jobs` que causam recursão
 5. ✅ **Recria políticas de `prospect_qualification_jobs`** usando a função (sem recursão)
 6. ✅ **Corrige políticas de `legal_data` e `purchase_intent_signals`** que também usam `tenant_users`
+7. ✅ **Corrige políticas de `icp_profiles_metadata`** para resolver problema de ICPs não aparecendo
 
 ---
 
