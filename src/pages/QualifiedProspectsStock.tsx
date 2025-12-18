@@ -1307,6 +1307,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               has_fit_score: insertPayload.fit_score !== undefined,
               has_grade: !!insertPayload.grade,
               has_icp_id: !!insertPayload.icp_id,
+              // ✅ CRÍTICO: Verificar campos de website
+              has_website_encontrado: !!insertPayload.website_encontrado,
+              has_website_fit_score: insertPayload.website_fit_score !== undefined,
+              has_website_products_match: !!insertPayload.website_products_match,
+              has_linkedin_url: !!insertPayload.linkedin_url,
+              website_fit_score_value: insertPayload.website_fit_score,
+              linkedin_url_value: insertPayload.linkedin_url,
               payload_keys: Object.keys(insertPayload),
             });
 
@@ -1333,7 +1340,24 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                 tenant_id_value: insertPayload.tenant_id,
                 cnpj_value: insertPayload.cnpj,
                 prospect_id: prospect.id,
+                // ✅ CRÍTICO: Verificar se campos de website estão no payload
+                has_website_encontrado: 'website_encontrado' in insertPayload,
+                has_website_fit_score: 'website_fit_score' in insertPayload,
+                has_website_products_match: 'website_products_match' in insertPayload,
+                has_linkedin_url: 'linkedin_url' in insertPayload,
+                website_fit_score_value: insertPayload.website_fit_score,
+                linkedin_url_value: insertPayload.linkedin_url,
               };
+              
+              // ✅ ALERTA ESPECÍFICO: Se erro for PGRST204 (coluna não encontrada)
+              if (createError.code === 'PGRST204' || createError.message?.includes('column') || createError.message?.includes('schema cache')) {
+                console.error('[Qualified → Companies] ⚠️⚠️⚠️ ERRO DE SCHEMA: Coluna não encontrada na tabela companies!', {
+                  error_message: createError.message,
+                  error_hint: createError.hint,
+                  campos_no_payload: Object.keys(insertPayload).filter(k => k.includes('website') || k.includes('linkedin')),
+                  acao_necessaria: 'Aplicar migration 20250225000004_ensure_website_columns_all_tables.sql',
+                });
+              }
               
               console.error('[Qualified → Companies] ❌ Erro Supabase ao inserir em companies', errorLog);
               
