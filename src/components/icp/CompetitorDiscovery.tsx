@@ -229,23 +229,21 @@ export default function CompetitorDiscovery({
             </div>
           </div>
 
-          {/* 🔥 MELHORADO: Badges de produtos mais visíveis */}
+          {/* 🔥 MELHORADO: Badges de produtos mais visíveis com scroll para 100% dos produtos */}
           {products.length > 0 ? (
             <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
               <Label className="text-sm font-medium text-foreground mb-2 block">
                 Produtos usados na busca ({products.length}):
               </Label>
-              <div className="flex flex-wrap gap-2">
-                {products.slice(0, 5).map((prod, idx) => (
-                  <Badge key={idx} variant="default" className="bg-blue-600 text-white text-xs px-2 py-1">
-                    {prod}
-                  </Badge>
-                ))}
-                {products.length > 5 && (
-                  <Badge variant="secondary" className="text-xs px-2 py-1">
-                    +{products.length - 5} mais
-                  </Badge>
-                )}
+              {/* ✅ NOVO: Container com scroll para mostrar 100% dos produtos */}
+              <div className="max-h-32 overflow-y-auto pr-2">
+                <div className="flex flex-wrap gap-2">
+                  {products.map((prod, idx) => (
+                    <Badge key={idx} variant="default" className="bg-blue-600 text-white text-xs px-2 py-1">
+                      {prod}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
