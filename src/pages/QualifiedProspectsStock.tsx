@@ -3172,7 +3172,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                                 disabled={enrichingIds.has(prospect.id)}
                               >
                                 <Globe className="w-4 h-4 mr-2" />
-                                Enriquecer Website + Fit Score
+                                Enriquecer Website & LinkedIn
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => handleCalculatePurchaseIntent(prospect.id)}

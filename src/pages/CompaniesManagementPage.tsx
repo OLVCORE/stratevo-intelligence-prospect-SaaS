@@ -1730,6 +1730,7 @@ export default function CompaniesManagementPage() {
               onBatchEnrichReceita={handleBatchEnrichReceitaWS}
               onBatchEnrich360={handleBatchEnrich360}
               onBatchEnrichApollo={handleBatchEnrichApollo}
+              onBatchEnrichWebsite={handleBulkEnrichWebsite}
               onSendToQuarantine={async () => {
                 try {
                   // 🎯 USAR EMPRESAS SELECIONADAS OU FILTRADAS
@@ -2138,6 +2139,24 @@ export default function CompaniesManagementPage() {
                         const normalized = normalizeFromCompanies(fullCompany);
                         const insertPayload = prepareForICPInsertion(normalized, tenant?.id || fullCompany.tenant_id);
                         
+                        // ✅ CORRIGIDO: Garantir que origem use job_name se disponível (nome do arquivo)
+                        const rawData = (fullCompany.raw_data && typeof fullCompany.raw_data === 'object' && !Array.isArray(fullCompany.raw_data))
+                          ? fullCompany.raw_data as Record<string, any>
+                          : {};
+                        if (rawData.job_name) {
+                          insertPayload.origem = rawData.job_name;
+                          // Também preservar em raw_data e raw_analysis
+                          if (insertPayload.raw_data) {
+                            insertPayload.raw_data.job_name = rawData.job_name;
+                            insertPayload.raw_data.source_file_name = rawData.source_file_name || rawData.job_name;
+                          }
+                          if (insertPayload.raw_analysis) {
+                            insertPayload.raw_analysis.job_name = rawData.job_name;
+                            insertPayload.raw_analysis.source_file_name = rawData.source_file_name || rawData.job_name;
+                            insertPayload.raw_analysis.origem = rawData.job_name;
+                          }
+                        }
+                        
                         // 🔥 REMOVER raw_analysis se a coluna não existir (será detectado pelo erro)
                         // Por enquanto, vamos tentar inserir. Se falhar, vamos remover e tentar novamente
                         
@@ -2203,11 +2222,29 @@ export default function CompaniesManagementPage() {
                           console.error(`   🔍 TENANT DO CONTEXTO:`, tenant?.id);
                           console.error(`   🔍 TENANT_ID DA COMPANY:`, fullCompany.tenant_id);
                           
-                          // 🚨 ERRO CRÍTICO: Mostrar toast com detalhes
-                          toast.error(`Erro ao mover ${fullCompany.company_name} para Quarentena`, {
-                            description: insertError.message || insertError.details || 'Erro desconhecido. Verifique o console para detalhes.',
-                            duration: 10000
-                          });
+                          // ✅ VERIFICAR SE ERRO É DE COLUNA NÃO ENCONTRADA (PGRST204)
+                          if (insertError.code === 'PGRST204' || insertError.message?.includes('column') || insertError.message?.includes('schema cache') || insertError.message?.includes('Could not find')) {
+                            console.error(`⚠️⚠️⚠️ ERRO DE SCHEMA: Coluna não encontrada na tabela icp_analysis_results!`, {
+                              error_code: insertError.code,
+                              error_message: insertError.message,
+                              error_hint: insertError.hint,
+                              error_details: insertError.details,
+                              campos_no_payload: Object.keys(insertPayload),
+                              acao_necessaria: 'Aplicar migration 20250225000006_ensure_all_columns_icp_analysis_results.sql',
+                            });
+                            
+                            // 🚨 TOAST ESPECÍFICO PARA ERRO DE SCHEMA
+                            toast.error(`⚠️ Erro de Schema ao mover ${fullCompany.company_name}`, {
+                              description: `Coluna não encontrada na tabela. Aplique a migration 20250225000006. Detalhes: ${insertError.message || insertError.hint || 'Erro desconhecido'}`,
+                              duration: 15000
+                            });
+                          } else {
+                            // 🚨 ERRO CRÍTICO: Mostrar toast com detalhes
+                            toast.error(`Erro ao mover ${fullCompany.company_name} para Quarentena`, {
+                              description: insertError.message || insertError.details || 'Erro desconhecido. Verifique o console para detalhes.',
+                              duration: 10000
+                            });
+                          }
                           
                           errors++;
                           continue; // ✅ Continuar com próxima empresa ao invés de quebrar tudo

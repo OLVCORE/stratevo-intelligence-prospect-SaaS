@@ -1369,6 +1369,47 @@ export default function ApprovedLeads() {
     });
   };
 
+  // ✅ NOVO: Enriquecer Website & LinkedIn em massa
+  const handleBulkEnrichWebsite = async () => {
+    if (selectedIds.length === 0) {
+      toast.error('Nenhuma empresa selecionada');
+      return;
+    }
+
+    const companiesToEnrich = filteredCompanies.filter(c => selectedIds.includes(c.id));
+    if (companiesToEnrich.length === 0) {
+      toast.error('Nenhuma empresa válida para enriquecer');
+      return;
+    }
+
+    toast.info(`🌐 Enriquecendo ${companiesToEnrich.length} empresa(s)...`);
+    
+    let enrichedCount = 0;
+    const errors: string[] = [];
+
+    for (const company of companiesToEnrich) {
+      try {
+        await handleEnrichWebsite(company.id);
+        enrichedCount++;
+      } catch (error: any) {
+        console.error(`[Bulk Enrich Website] Erro ao enriquecer ${company.razao_social}:`, error);
+        errors.push(`${company.razao_social}: ${error.message || 'Erro desconhecido'}`);
+      }
+    }
+
+    if (enrichedCount > 0) {
+      toast.success(`✅ ${enrichedCount} empresa(s) enriquecida(s) com sucesso!`);
+    }
+    if (errors.length > 0) {
+      toast.error(`⚠️ ${errors.length} erro(s) ao enriquecer`, {
+        description: errors.slice(0, 3).join(', ') + (errors.length > 3 ? '...' : ''),
+        duration: 8000
+      });
+    }
+
+    refetch();
+  };
+
   const handleBulkEnrich360 = async () => {
     if (selectedIds.length === 0) {
       toast.error('Selecione pelo menos uma empresa');
@@ -1849,6 +1890,7 @@ export default function ApprovedLeads() {
                 onBulkEnrichReceita={handleBulkEnrichReceita}
                 onBulkEnrichApollo={handleBulkEnrichApollo}
                 onBulkEnrich360={handleBulkEnrich360}
+                onBulkEnrichWebsite={handleBulkEnrichWebsite}
                 onBulkVerification={handleBulkVerification}
                 onBulkDiscoverCNPJ={handleBulkDiscoverCNPJ}
                 onBulkApprove={handleSendToPipelineBatch}

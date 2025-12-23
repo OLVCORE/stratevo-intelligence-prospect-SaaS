@@ -340,7 +340,7 @@ export function QuarantineRowActions({
 
           <DropdownMenuSeparator />
 
-          {/* ✅ NOVO: Enriquecer Website + Fit Score */}
+          {/* ✅ CORRIGIDO: Enriquecer Website & LinkedIn */}
           {onEnrichWebsite && (
             <Tooltip delayDuration={100}>
               <TooltipTrigger asChild>
@@ -352,12 +352,12 @@ export function QuarantineRowActions({
                   className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
                 >
                   <Globe className="h-4 w-4 mr-2" />
-                  Enriquecer Website + Fit Score
+                  Enriquecer Website & LinkedIn
                 </DropdownMenuItem>
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-xs">
                 <p className="font-semibold text-sm">Enriquecer Website & LinkedIn</p>
-                <p className="text-xs text-muted-foreground mt-1">Escaneia website, extrai produtos, encontra LinkedIn e calcula Website Fit Score</p>
+                <p className="text-xs text-muted-foreground mt-1">Busca website oficial, escaneia produtos, encontra LinkedIn e calcula Website Fit Score</p>
               </TooltipContent>
             </Tooltip>
           )}

@@ -127,3 +127,7 @@ BEGIN
   RAISE NOTICE '✅ Função SECURITY DEFINER criada para evitar recursão';
   RAISE NOTICE '✅ Políticas corretas garantidas';
 END $$;
+
+
+
+

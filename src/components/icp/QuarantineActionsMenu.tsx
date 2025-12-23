@@ -21,7 +21,8 @@ import {
   Sparkles,
   Search,
   CheckCircle,
-  Undo2
+  Undo2,
+  Globe
 } from 'lucide-react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { useState } from 'react';
@@ -35,6 +36,7 @@ interface QuarantineActionsMenuProps {
   onBulkEnrichReceita?: () => Promise<void>;
   onBulkEnrichApollo?: () => Promise<void>;
   onBulkEnrich360?: () => Promise<void>;
+  onBulkEnrichWebsite?: () => Promise<void>; // ✅ NOVO: Enriquecer Website e LinkedIn
   onBulkVerification?: () => Promise<void>;
   onBulkDiscoverCNPJ?: () => Promise<void>;
   onBulkApprove?: () => Promise<void>;
@@ -55,6 +57,7 @@ export function QuarantineActionsMenu({
   onBulkEnrichReceita,
   onBulkEnrichApollo,
   onBulkEnrich360,
+  onBulkEnrichWebsite, // ✅ NOVO
   onBulkVerification,
   onBulkDiscoverCNPJ,
   onBulkApprove,
@@ -271,6 +274,21 @@ export function QuarantineActionsMenu({
             >
               <Sparkles className="h-4 w-4 mr-2" />
               360° Completo
+            </DropdownMenuItem>
+          )}
+
+          {/* ✅ NOVO: Enriquecer Website & LinkedIn */}
+          {onBulkEnrichWebsite && (
+            <DropdownMenuItem 
+              onClick={() => {
+                if (selectedCount === 0 || !onBulkEnrichWebsite) return;
+                onBulkEnrichWebsite();
+              }}
+              disabled={selectedCount === 0 || isProcessing}
+              className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              Enriquecer Website & LinkedIn
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>

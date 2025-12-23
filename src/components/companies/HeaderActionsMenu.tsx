@@ -17,7 +17,8 @@ import {
   Loader2,
   MoreHorizontal,
   Target,
-  Users
+  Users,
+  Globe
 } from 'lucide-react';
 import { useState } from 'react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
@@ -27,6 +28,7 @@ interface HeaderActionsMenuProps {
   onBatchEnrichReceita: () => Promise<void>;
   onBatchEnrich360: () => Promise<void>;
   onBatchEnrichApollo: () => Promise<void>;
+  onBatchEnrichWebsite?: () => Promise<void>; // ✅ NOVO: Enriquecer Website e LinkedIn
   onSendToQuarantine?: () => Promise<void>; // 🆕 NOVO
   onApolloImport: () => void;
   onSearchCompanies: () => void;
@@ -39,6 +41,7 @@ export function HeaderActionsMenu({
   onBatchEnrichReceita,
   onBatchEnrich360,
   onBatchEnrichApollo,
+  onBatchEnrichWebsite, // ✅ NOVO
   onSendToQuarantine, // 🆕 NOVO
   onApolloImport,
   onSearchCompanies,
@@ -165,6 +168,23 @@ export function HeaderActionsMenu({
             )}
             Apollo (Decisores & Contatos)
           </DropdownMenuItem>
+
+          {/* ✅ NOVO: Enriquecer Website e LinkedIn */}
+          {onBatchEnrichWebsite && (
+            <DropdownMenuItem
+              onClick={() => handleEnrich('Website e LinkedIn', onBatchEnrichWebsite)}
+              disabled={isEnriching}
+              data-testid="action-batch-website-linkedin"
+              className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
+            >
+              {enrichingAction === 'Website e LinkedIn' ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Globe className="h-4 w-4 mr-2" />
+              )}
+              Enriquecer Website & LinkedIn
+            </DropdownMenuItem>
+          )}
 
           <DropdownMenuSeparator />
 

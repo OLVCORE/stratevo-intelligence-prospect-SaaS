@@ -384,18 +384,19 @@ export function prepareForICPInsertion(normalized: NormalizedCompanyData, tenant
     status: normalized.status || 'pendente',
     temperatura: normalized.temperatura,
     totvs_status: normalized.totvs_status,
-    // ✅ ORIGEM: Priorizar origem normalizada, depois source_name, depois raw_data, depois default
-    // ✅ ORIGEM: Mapear para valores permitidos no CHECK constraint
-    // Valores permitidos: 'upload_massa', 'icp_individual', 'icp_massa'
-    // Se vier nome de arquivo, usar 'upload_massa'
+    // ✅ ORIGEM: Priorizar job_name (nome do arquivo), depois source_file_name, depois origem normalizada
+    // ✅ CORRIGIDO: Usar job_name para mostrar nome do arquivo na coluna origem (igual Estoque Qualificado)
     origem: (() => {
-      const origemRaw = normalized.origem || normalized.source_name || (normalized.raw_data as any)?.origem || (normalized.raw_data as any)?.source_name || 'upload_massa';
-      // Mapear para valores permitidos
-      if (origemRaw === 'icp_individual' || origemRaw === 'icp_massa') {
-        return origemRaw;
-      }
-      // Qualquer outro valor (incluindo nomes de arquivo) → 'upload_massa'
-      return 'upload_massa';
+      const rawData = normalized.raw_data as any || {};
+      // Prioridade: job_name > source_file_name > origem > source_name > default
+      const origemFinal = rawData.job_name || 
+                         rawData.source_file_name || 
+                         normalized.origem || 
+                         normalized.source_name || 
+                         rawData.origem || 
+                         rawData.source_name || 
+                         'upload_massa';
+      return origemFinal;
     })(),
     raw_data: normalized.raw_data || {},
     raw_analysis: {

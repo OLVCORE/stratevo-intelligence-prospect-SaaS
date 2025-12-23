@@ -161,7 +161,7 @@ export function QualifiedStockActionsMenu({
             Enriquecer Receita Federal
           </DropdownMenuItem>
 
-          {onBulkEnrichWebsite && (
+              {onBulkEnrichWebsite && (
             <DropdownMenuItem 
               onClick={handleEnrichWebsite}
               disabled={selectedCount === 0 || isEnriching || isEnrichingWebsite || isCalculatingIntent}
@@ -172,7 +172,7 @@ export function QualifiedStockActionsMenu({
               ) : (
                 <Globe className="h-4 w-4 mr-2" />
               )}
-              Enriquecer Website + Fit Score
+              Enriquecer Website & LinkedIn
             </DropdownMenuItem>
           )}
 
