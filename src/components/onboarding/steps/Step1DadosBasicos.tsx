@@ -807,7 +807,127 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     }
   };
 
+  // ✅ NOVO: Função para usar sistema 360º com polling automático
+  const handleScanTenantWebsite360 = async () => {
+    if (!formData.website || !tenant?.id) {
+      toast.error('Informe a URL para escanear');
+      return;
+    }
+
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.id);
+    if (!isUUID) {
+      toast.error('Aguarde a criação do tenant no banco de dados antes de extrair produtos');
+      return;
+    }
+
+    setScanningTenantWebsite(true);
+    setExtractionStatus(prev => ({ ...prev, tenant: 'extracting' }));
+    
+    const loadingToast = toast.loading(`🌐 Iniciando varredura completa de ${formData.website}...`);
+
+    try {
+      let jobId: string | null = null;
+      let hasMore = true;
+      let currentBatch = 0;
+      let totalBatches = 0;
+
+      // Criar job inicial
+      const { data: initialData, error: initialError } = await supabase.functions.invoke('scan-website-products-360', {
+        body: {
+          tenant_id: tenant.id,
+          website_url: formData.website,
+        },
+      });
+
+      if (initialError) throw initialError;
+      if (!initialData?.job_id) throw new Error('Job não criado');
+
+      jobId = initialData.job_id;
+      hasMore = initialData.has_more || false;
+      currentBatch = initialData.current_batch || 0;
+      totalBatches = initialData.total_batches || 1;
+
+      toast.dismiss(loadingToast);
+      const progressToast = toast.loading(`🔄 Processando... Lote ${currentBatch}/${totalBatches}`);
+
+      // Polling até completar
+      while (hasMore && jobId) {
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Aguardar 2s entre lotes
+
+        const { data: pollData, error: pollError } = await supabase.functions.invoke('scan-website-products-360', {
+          body: {
+            tenant_id: tenant.id,
+            website_url: formData.website,
+            job_id: jobId,
+          },
+        });
+
+        if (pollError) {
+          console.error('[Step1] Erro no polling:', pollError);
+          break;
+        }
+
+        hasMore = pollData?.has_more || false;
+        currentBatch = pollData?.current_batch || currentBatch;
+        totalBatches = pollData?.total_batches || totalBatches;
+
+        toast.dismiss(progressToast);
+        if (hasMore) {
+          toast.loading(`🔄 Processando... Lote ${currentBatch}/${totalBatches} (${pollData?.pages_scanned || 0}/${pollData?.pages_total || 0} páginas)`);
+        }
+      }
+
+      toast.dismiss(progressToast);
+
+      // Resultado final
+      const { data: finalData } = await supabase.functions.invoke('scan-website-products-360', {
+        body: {
+          tenant_id: tenant.id,
+          website_url: formData.website,
+          job_id: jobId,
+        },
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await loadTenantProducts();
+
+      const productsInserted = finalData?.products_inserted || 0;
+      const productsFound = finalData?.products_found || 0;
+      const totalProdutos = tenantProductsCount;
+
+      setExtractionStatus(prev => ({ ...prev, tenant: 'success' }));
+      setTimeout(() => {
+        setExtractionStatus(prev => {
+          const newStatus = { ...prev };
+          delete newStatus.tenant;
+          return newStatus;
+        });
+      }, 3000);
+
+      if (productsInserted > 0) {
+        toast.success(`✅ ${productsInserted} novos produtos inseridos! Total: ${totalProdutos} produtos`, {
+          description: `${productsFound} produtos encontrados em ${finalData?.pages_scanned || 0} páginas escaneadas`
+        });
+      } else if (productsFound > 0) {
+        toast.info(`${productsFound} produtos encontrados, mas já estavam cadastrados. Total: ${totalProdutos} produtos`);
+      } else {
+        toast.warning('Nenhum produto encontrado');
+      }
+
+      if (onSave) {
+        onSave({ ...formData });
+      }
+    } catch (err: any) {
+      console.error('[Step1] Erro no scan 360:', err);
+      setExtractionStatus(prev => ({ ...prev, tenant: 'error' }));
+      toast.error('Erro ao escanear website', { description: err.message });
+    } finally {
+      setScanningTenantWebsite(false);
+    }
+  };
+
   // 🔥 CORRIGIDO: Usar scan-website-products para o tenant (salva em tenant_products)
+  // ✅ MANTIDO: Função original preservada para compatibilidade
   const handleScanTenantWebsite = async () => {
     if (!formData.website || !tenant?.id) {
       toast.error('Informe a URL para escanear');
@@ -832,6 +952,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       console.log('[Step1] 🔍 Escaneando website do tenant:', formData.website);
 
       // 🔥 CORRIGIDO: Usar scan-website-products (salva em tenant_products)
+      // ✅ MELHORADO: Agora com sitemap, SERPER 50, e detecção de paginação
       const { data, error } = await supabase.functions.invoke('scan-website-products', {
         body: {
           tenant_id: tenant.id,
@@ -2373,7 +2494,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
               onClick={handleScanTenantWebsite}
               disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
               className="flex items-center gap-2"
-              title={!formData.website?.trim() ? 'Informe o website primeiro' : !tenant?.id ? 'Tenant não identificado' : 'Extrair produtos do website'}
+              title={!formData.website?.trim() ? 'Informe o website primeiro' : !tenant?.id ? 'Tenant não identificado' : 'Extrair produtos do website (rápido)'}
             >
               {scanningTenantWebsite ? (
                 <>
@@ -2384,6 +2505,28 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
                 <>
                   <Sparkles className="h-4 w-4" />
                   Extrair Produtos
+                </>
+              )}
+            </Button>
+            {/* ✅ NOVO: Botão para varredura completa 360º */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleScanTenantWebsite360}
+              disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
+              className="flex items-center gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+              title="Varredura completa 360º - Escaneia TODAS as páginas do website (recomendado para sites grandes)"
+            >
+              {scanningTenantWebsite ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Escaneando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  360º Completo
                 </>
               )}
             </Button>

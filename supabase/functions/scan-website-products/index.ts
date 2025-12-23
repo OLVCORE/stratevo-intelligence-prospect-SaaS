@@ -90,9 +90,64 @@ serve(async (req) => {
     let structuredData: any = {}; // Para schema.org / JSON-LD
     let menuLinks: string[] = []; // Links do menu de navegação
     let imageAltTexts: string[] = []; // Alt text de imagens com produtos
+    let discoveredUrls = new Set<string>(); // ✅ NOVO: Rastrear URLs já descobertas para evitar duplicatas
     
-    // 🔥 CRÍTICO: SEMPRE acessar a HOMEPAGE primeiro (onde geralmente há produtos em destaque)
+    // ✅ FASE 1: Buscar sitemap.xml para descobrir TODAS as URLs de produtos
     const baseUrl = website_url.startsWith('http') ? website_url : `https://${website_url}`;
+    const sitemapUrls: string[] = [];
+    
+    try {
+      console.log(`[ScanWebsite] 🔍 Buscando sitemap.xml...`);
+      const sitemapPaths = ['/sitemap.xml', '/sitemap_index.xml', '/sitemap1.xml'];
+      
+      for (const sitemapPath of sitemapPaths) {
+        try {
+          const sitemapUrl = `${baseUrl}${sitemapPath}`;
+          const sitemapResponse = await fetch(sitemapUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            signal: AbortSignal.timeout(10000),
+          });
+          
+          if (sitemapResponse.ok) {
+            const sitemapXml = await sitemapResponse.text();
+            console.log(`[ScanWebsite] ✅ Sitemap encontrado: ${sitemapPath}`);
+            
+            // Extrair URLs do sitemap (suporta sitemap_index e sitemap normal)
+            const urlMatches = sitemapXml.match(/<loc>(.*?)<\/loc>/gi);
+            if (urlMatches) {
+              for (const match of urlMatches) {
+                const url = match.replace(/<\/?loc>/gi, '').trim();
+                // Filtrar apenas URLs de produtos/catálogo
+                if (url && (
+                  url.toLowerCase().includes('produto') ||
+                  url.toLowerCase().includes('categoria') ||
+                  url.toLowerCase().includes('catalogo') ||
+                  url.toLowerCase().includes('product') ||
+                  url.toLowerCase().includes('category') ||
+                  url.toLowerCase().includes('shop') ||
+                  url.toLowerCase().includes('/p/') ||
+                  url.toLowerCase().includes('/produto/')
+                )) {
+                  if (!discoveredUrls.has(url)) {
+                    sitemapUrls.push(url);
+                    discoveredUrls.add(url);
+                  }
+                }
+              }
+              console.log(`[ScanWebsite] ✅ ${sitemapUrls.length} URLs de produtos encontradas no sitemap`);
+              break; // Se encontrou um sitemap válido, não precisa tentar os outros
+            }
+          }
+        } catch (sitemapError) {
+          // Sitemap não existe ou erro de acesso, continuar
+          console.log(`[ScanWebsite] ⚠️ Sitemap ${sitemapPath} não encontrado ou erro de acesso`);
+        }
+      }
+    } catch (sitemapException) {
+      console.log(`[ScanWebsite] ⚠️ Erro ao buscar sitemap:`, sitemapException);
+    }
+
+    // 🔥 CRÍTICO: SEMPRE acessar a HOMEPAGE primeiro (onde geralmente há produtos em destaque)
     try {
       console.log(`[ScanWebsite] Acessando homepage: ${baseUrl}`);
       const homepageResponse = await fetch(baseUrl, {
@@ -220,39 +275,100 @@ serve(async (req) => {
       }
     }
 
-    // 1. Buscar páginas do site via SERPER (com mais palavras-chave)
+    // 1. Buscar páginas do site via SERPER (com múltiplas queries para máximo de cobertura)
     if (serperKey) {
       try {
-        const serperResponse = await fetch('https://google.serper.dev/search', {
-          method: 'POST',
-          headers: {
-            'X-API-KEY': serperKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            q: `site:${domain} (produtos OR serviços OR catálogo OR soluções OR linha OR equipamentos OR EPI OR luvas OR produtos em destaque)`,
-            num: 15, // Aumentado de 10 para 15
-            gl: 'br',
-            hl: 'pt-br',
-          }),
-        });
+        // ✅ NOVO: Múltiplas queries SERPER para cobrir mais páginas (até 50 resultados por query)
+        const serperQueries = [
+          `site:${domain} (produtos OR serviços OR catálogo OR soluções)`,
+          `site:${domain} (linha OR equipamentos OR EPI OR luvas)`,
+          `site:${domain} (produtos em destaque OR novidades OR lançamentos)`,
+          `site:${domain} (categoria OR categorias OR subcategoria)`,
+        ];
+        
+        const allSerperResults: any[] = [];
+        
+        for (const query of serperQueries) {
+          try {
+            const serperResponse = await fetch('https://google.serper.dev/search', {
+              method: 'POST',
+              headers: {
+                'X-API-KEY': serperKey,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                q: query,
+                num: 50, // ✅ AUMENTADO: Máximo do SERPER (era 15)
+                gl: 'br',
+                hl: 'pt-br',
+              }),
+            });
 
-        if (serperResponse.ok) {
-          const serperData = await serperResponse.json();
-          const organicResults = serperData.organic || [];
-          
-          for (const result of organicResults) {
-            // Evitar duplicatas da homepage
-            if (!result.link.includes(domain) || result.link === baseUrl || result.link === `${baseUrl}/`) {
-              continue;
+            if (serperResponse.ok) {
+              const serperData = await serperResponse.json();
+              const organicResults = serperData.organic || [];
+              
+              for (const result of organicResults) {
+                // Evitar duplicatas da homepage e URLs já descobertas
+                if (result.link && 
+                    result.link.includes(domain) && 
+                    result.link !== baseUrl && 
+                    result.link !== `${baseUrl}/` &&
+                    !discoveredUrls.has(result.link)) {
+                  allSerperResults.push(result);
+                  discoveredUrls.add(result.link);
+                }
+              }
+              
+              console.log(`[ScanWebsite] ✅ Query "${query.substring(0, 50)}..." retornou ${organicResults.length} resultados`);
             }
-            pagesContent.push(`Página: ${result.title}\nURL: ${result.link}\nDescrição: ${result.snippet || ''}`);
+            
+            // Pequeno delay entre queries para não sobrecarregar API
+            await new Promise(resolve => setTimeout(resolve, 300));
+          } catch (queryError) {
+            console.error(`[ScanWebsite] ⚠️ Erro na query SERPER "${query}":`, queryError);
           }
-
-          console.log(`[ScanWebsite] Encontradas ${organicResults.length} páginas via SERPER`);
         }
+        
+        // Adicionar resultados únicos ao pagesContent
+        for (const result of allSerperResults) {
+          pagesContent.push(`Página: ${result.title}\nURL: ${result.link}\nDescrição: ${result.snippet || ''}`);
+        }
+
+        console.log(`[ScanWebsite] ✅ Total de ${allSerperResults.length} páginas únicas encontradas via SERPER (múltiplas queries)`);
       } catch (serperError) {
         console.error('[ScanWebsite] Erro no SERPER:', serperError);
+      }
+    }
+
+    // ✅ NOVO: Processar URLs do sitemap encontradas
+    console.log(`[ScanWebsite] 🔍 Processando ${sitemapUrls.length} URLs do sitemap...`);
+    for (let i = 0; i < Math.min(sitemapUrls.length, 50); i++) { // Limitar a 50 URLs do sitemap por execução
+      const sitemapUrl = sitemapUrls[i];
+      try {
+        const sitemapPageResponse = await fetch(sitemapUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(10000),
+        });
+        
+        if (sitemapPageResponse.ok) {
+          const html = await sitemapPageResponse.text();
+          const textContent = html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .substring(0, 12000);
+          
+          pagesContent.push(`URL: ${sitemapUrl} (Sitemap)\nConteúdo: ${textContent}`);
+          console.log(`[ScanWebsite] ✅ URL do sitemap processada (${i + 1}/${Math.min(sitemapUrls.length, 50)}): ${sitemapUrl}`);
+        }
+      } catch (e) {
+        console.log(`[ScanWebsite] ⚠️ Erro ao acessar URL do sitemap ${sitemapUrl}:`, e);
+      }
+      if (i < Math.min(sitemapUrls.length, 50) - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
 
@@ -261,6 +377,10 @@ serve(async (req) => {
     console.log(`[ScanWebsite] 🔍 Processando ${menuLinks.length} links do menu (100% de cobertura)`);
     for (let i = 0; i < menuLinks.length; i++) {
       const menuLink = menuLinks[i];
+      if (discoveredUrls.has(menuLink)) {
+        console.log(`[ScanWebsite] ⏭️ Link do menu já processado: ${menuLink}`);
+        continue;
+      }
       try {
         console.log(`[ScanWebsite] 🔍 Acessando link do menu: ${menuLink}`);
         const menuResponse = await fetch(menuLink, {
@@ -270,6 +390,56 @@ serve(async (req) => {
         
         if (menuResponse.ok) {
           const html = await menuResponse.text();
+          
+          // ✅ NOVO: Detectar paginação na página (ex: /page/2, ?page=2, /p/2)
+          const paginationLinks: string[] = [];
+          const paginationPatterns = [
+            /href=["']([^"']*\/page\/[2-9][^"']*)["']/gi,
+            /href=["']([^"']*\?page=[2-9][^"']*)["']/gi,
+            /href=["']([^"']*\/p\/[2-9][^"']*)["']/gi,
+          ];
+          
+          for (const pattern of paginationPatterns) {
+            const matches = html.matchAll(pattern);
+            for (const match of matches) {
+              if (match[1]) {
+                const fullPaginationUrl = match[1].startsWith('http') 
+                  ? match[1] 
+                  : match[1].startsWith('/') 
+                    ? `${baseUrl}${match[1]}` 
+                    : `${baseUrl}/${match[1]}`;
+                if (fullPaginationUrl.includes(domain) && !discoveredUrls.has(fullPaginationUrl)) {
+                  paginationLinks.push(fullPaginationUrl);
+                  discoveredUrls.add(fullPaginationUrl);
+                }
+              }
+            }
+          }
+          
+          // Processar até 3 páginas de paginação encontradas
+          for (let p = 0; p < Math.min(paginationLinks.length, 3); p++) {
+            try {
+              const paginationResponse = await fetch(paginationLinks[p], {
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                signal: AbortSignal.timeout(10000),
+              });
+              if (paginationResponse.ok) {
+                const pagHtml = await paginationResponse.text();
+                const pagText = pagHtml
+                  .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                  .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                  .replace(/<[^>]+>/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim()
+                  .substring(0, 12000);
+                pagesContent.push(`URL: ${paginationLinks[p]} (Paginação)\nConteúdo: ${pagText}`);
+                console.log(`[ScanWebsite] ✅ Página de paginação processada: ${paginationLinks[p]}`);
+              }
+            } catch (pagError) {
+              console.log(`[ScanWebsite] ⚠️ Erro ao processar paginação ${paginationLinks[p]}:`, pagError);
+            }
+          }
+          
           const textContent = html
             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
             .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -279,6 +449,7 @@ serve(async (req) => {
             .substring(0, 12000);
           
           pagesContent.push(`URL: ${menuLink} (Menu)\nConteúdo: ${textContent}`);
+          discoveredUrls.add(menuLink);
           console.log(`[ScanWebsite] ✅ Página do menu acessada (${i + 1}/${menuLinks.length}): ${menuLink}`);
         }
       } catch (e) {
@@ -503,15 +674,28 @@ Conteúdo das páginas:\n\n${pagesContent.join('\n\n---\n\n').substring(0, 25000
         continue;
       }
 
-      // 🔥 CRÍTICO: Verificar se já existe (com tratamento robusto de erros)
+      // 🔥 CRÍTICO: Verificar se já existe (com tratamento robusto de erros e normalização melhorada)
       let produtoJaExiste = false;
       try {
-        const { data: existing, error: checkError } = await supabase
+        // ✅ MELHORADO: Normalizar nome para comparação (remover acentos, lowercase, remover espaços extras)
+        const normalizeForComparison = (str: string): string => {
+          return str
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+            .replace(/[^\w\s]/g, '') // Remove caracteres especiais
+            .replace(/\s+/g, ' ') // Normaliza espaços
+            .trim();
+        };
+        
+        const normalizedProductName = normalizeForComparison(product.nome.trim());
+        
+        // Buscar produtos existentes e comparar com normalização
+        const { data: existingProducts, error: checkError } = await supabase
           .from('tenant_products')
-          .select('id')
+          .select('id, nome')
           .eq('tenant_id', tenant_id)
-          .ilike('nome', product.nome.trim()) // Usar ilike para comparação case-insensitive
-          .limit(1);
+          .limit(100); // Buscar mais produtos para comparação normalizada
 
         if (checkError) {
           console.error(`[ScanWebsite] ⚠️ Erro ao verificar produto existente (${product.nome}):`, checkError);
@@ -522,10 +706,20 @@ Conteúdo das páginas:\n\n${pagesContent.join('\n\n---\n\n').substring(0, 25000
             // Outros erros: continuar sem verificar
             console.warn(`[ScanWebsite] ⚠️ Erro na verificação, tentando inserir: ${product.nome}`);
           }
-        } else if (existing && existing.length > 0) {
-          produtoJaExiste = true;
-          console.log(`[ScanWebsite] ⏭️ Produto já existe: ${product.nome}`);
-          productsSkipped++;
+        } else if (existingProducts && existingProducts.length > 0) {
+          // Comparar com normalização
+          for (const existing of existingProducts) {
+            const normalizedExisting = normalizeForComparison(existing.nome || '');
+            // ✅ MELHORADO: Considerar duplicata se nomes normalizados são muito similares (90%+ similaridade)
+            if (normalizedExisting === normalizedProductName || 
+                (normalizedProductName.length > 10 && normalizedExisting.includes(normalizedProductName.substring(0, Math.floor(normalizedProductName.length * 0.9)))) ||
+                (normalizedExisting.length > 10 && normalizedProductName.includes(normalizedExisting.substring(0, Math.floor(normalizedExisting.length * 0.9))))) {
+              produtoJaExiste = true;
+              console.log(`[ScanWebsite] ⏭️ Produto já existe (normalizado): ${product.nome} ≈ ${existing.nome}`);
+              productsSkipped++;
+              break;
+            }
+          }
         }
       } catch (checkException: any) {
         console.error(`[ScanWebsite] ⚠️ Exceção ao verificar produto (${product.nome}):`, checkException);
