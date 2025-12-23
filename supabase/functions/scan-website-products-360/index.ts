@@ -12,6 +12,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 interface Scan360Request {
@@ -25,8 +26,15 @@ const BATCH_SIZE = 25; // Páginas por lote
 const MAX_PAGES = 200; // Limite máximo de páginas por website
 
 serve(async (req) => {
+  // ✅ CRÍTICO: Tratar CORS preflight explicitamente (ANTES DE QUALQUER COISA)
+  // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
+  // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    console.log('[Scan360] ✅ OPTIONS preflight recebido');
+    return new Response('', { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   try {
