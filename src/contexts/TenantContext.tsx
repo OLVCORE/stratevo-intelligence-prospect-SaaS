@@ -78,6 +78,29 @@ export function TenantProvider({ children }: { children: ReactNode }) {
           }
         } catch (localError: any) {
           console.warn('[TenantContext] Erro ao buscar tenant do localStorage:', localError);
+          // 🔥 NOVO: Se houver erro mas temos tenant no localStorage, tentar via RPC como último recurso
+          if (preferredTenantId) {
+            try {
+              const { createClient } = await import('@supabase/supabase-js');
+              const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+              const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+              const supabaseClient = createClient(supabaseUrl, supabaseKey);
+              
+              const { data: tenantsList, error: listError } = await supabaseClient.rpc('get_user_tenants_complete');
+              if (!listError && tenantsList && tenantsList.length > 0) {
+                const foundTenant = tenantsList.find((t: any) => t.id === preferredTenantId);
+                if (foundTenant) {
+                  console.log('[TenantContext] ✅ Tenant encontrado na lista após erro:', preferredTenantId);
+                  tenantData = foundTenant as any;
+                } else if (tenantsList.length > 0) {
+                  console.log('[TenantContext] ⚠️ Usando primeiro tenant da lista após erro');
+                  tenantData = tenantsList[0] as any;
+                }
+              }
+            } catch (finalError) {
+              console.warn('[TenantContext] Erro final ao buscar lista de tenants:', finalError);
+            }
+          }
         }
       }
 
@@ -94,23 +117,42 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setTenant(tenantData);
     } catch (err: any) {
       console.error('Erro ao carregar tenant:', err);
-      // ✅ Se erro 500, tentar usar tenant do localStorage como último recurso
-      if (err.status === 500 || err.code === 'PGRST301') {
+      // 🔥 NOVO: Se erro 406 (Not Acceptable) ou 500, tentar usar tenant do localStorage como último recurso
+      if (err.status === 406 || err.status === 500 || err.code === 'PGRST301') {
         const localTenantId = localStorage.getItem('selectedTenantId');
         if (localTenantId) {
           try {
-            // ✅ Tentar buscar via RPC primeiro
+            // ✅ Tentar buscar via obterTenant primeiro
             const tenantData = await multiTenantService.obterTenant(localTenantId);
             if (tenantData) {
-              console.log('[TenantContext] ✅ Usando tenant do localStorage após erro 500');
+              console.log('[TenantContext] ✅ Usando tenant do localStorage após erro', err.status);
               setTenant(tenantData);
               setError(null);
               return;
             }
             
-            // ❌ REMOVIDO: Dados hardcoded são PROIBIDOS em plataforma SaaS multi-tenant
-            // Os dados DEVEM vir do banco de dados
-            console.warn('[TenantContext] ⚠️ Não foi possível buscar tenant do banco após erro 500');
+            // Se obterTenant falhou, tentar via RPC get_user_tenants_complete
+            try {
+              const { createClient } = await import('@supabase/supabase-js');
+              const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+              const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+              const supabaseClient = createClient(supabaseUrl, supabaseKey);
+              
+              const { data: tenantsList, error: listError } = await supabaseClient.rpc('get_user_tenants_complete');
+              if (!listError && tenantsList && tenantsList.length > 0) {
+                const foundTenant = tenantsList.find((t: any) => t.id === localTenantId) || tenantsList[0];
+                if (foundTenant) {
+                  console.log('[TenantContext] ✅ Tenant encontrado via RPC após erro', err.status);
+                  setTenant(foundTenant as any);
+                  setError(null);
+                  return;
+                }
+              }
+            } catch (rpcError) {
+              console.warn('[TenantContext] Erro ao buscar via RPC no fallback:', rpcError);
+            }
+            
+            console.warn('[TenantContext] ⚠️ Não foi possível buscar tenant do banco após erro', err.status);
           } catch (fallbackError) {
             console.warn('[TenantContext] Erro no fallback:', fallbackError);
           }

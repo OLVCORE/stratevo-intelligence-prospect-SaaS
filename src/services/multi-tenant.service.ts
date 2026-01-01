@@ -488,18 +488,34 @@ export class MultiTenantService {
             .eq('tenant_id', preferredTenantId)
             .maybeSingle();
           
-          // Se erro 500, pular verificação e tentar buscar tenant diretamente
-          if (accessError && (accessError.status === 500 || accessError.code === 'PGRST301')) {
-            console.warn('[MultiTenant] ⚠️ Erro 500 ao verificar acesso - tentando buscar tenant diretamente');
+          // 🔥 NOVO: Se erro 406 (Not Acceptable) ou 500, pular verificação e tentar buscar tenant diretamente
+          if (accessError && (accessError.status === 406 || accessError.status === 500 || accessError.code === 'PGRST301')) {
+            console.warn('[MultiTenant] ⚠️ Erro', accessError.status, 'ao verificar acesso - tentando buscar tenant diretamente');
             // Tentar buscar tenant diretamente mesmo com erro
             try {
-              return await this.obterTenant(preferredTenantId);
+              const tenant = await this.obterTenant(preferredTenantId);
+              if (tenant) {
+                console.log('[MultiTenant] ✅ Tenant encontrado diretamente apesar do erro:', preferredTenantId);
+                return tenant;
+              }
             } catch {
               // Se falhar, continuar fluxo normal
             }
           } else if (hasAccess && !accessError) {
             console.log('[MultiTenant] ✅ Usando tenant preferido:', preferredTenantId);
             return this.obterTenant(preferredTenantId);
+          } else if (accessError) {
+            // 🔥 NOVO: Se houver erro mas não for 406/500, tentar buscar diretamente mesmo assim
+            console.warn('[MultiTenant] ⚠️ Erro ao verificar acesso:', accessError.status, '- tentando buscar tenant diretamente');
+            try {
+              const tenant = await this.obterTenant(preferredTenantId);
+              if (tenant) {
+                console.log('[MultiTenant] ✅ Tenant encontrado diretamente apesar do erro');
+                return tenant;
+              }
+            } catch {
+              // Continuar fluxo normal
+            }
           } else {
             console.log('[MultiTenant] ⚠️ Tenant preferido não acessível, buscando primeiro disponível');
             // Limpar preferência inválida
@@ -508,11 +524,15 @@ export class MultiTenantService {
             }
           }
         } catch (error: any) {
-          // Se erro 500, pular e tentar buscar tenant diretamente
-          if (error.status === 500 || error.code === 'PGRST301') {
-            console.warn('[MultiTenant] ⚠️ Erro 500 - tentando buscar tenant diretamente');
+          // 🔥 NOVO: Se erro 406 ou 500, pular e tentar buscar tenant diretamente
+          if (error.status === 406 || error.status === 500 || error.code === 'PGRST301') {
+            console.warn('[MultiTenant] ⚠️ Erro', error.status, '- tentando buscar tenant diretamente');
             try {
-              return await this.obterTenant(preferredTenantId);
+              const tenant = await this.obterTenant(preferredTenantId);
+              if (tenant) {
+                console.log('[MultiTenant] ✅ Tenant encontrado diretamente apesar do erro');
+                return tenant;
+              }
             } catch {
               // Continuar fluxo normal
             }
@@ -537,6 +557,42 @@ export class MultiTenantService {
           .order('created_at', { ascending: false });
         
         if (error) {
+          // 🔥 NOVO: Se erro 406 (Not Acceptable), usar tenant do localStorage ou RPC
+          if (error.status === 406) {
+            console.warn('[MultiTenant] ⚠️ Erro 406 (Not Acceptable) ao buscar users - tentando usar tenant do localStorage ou RPC');
+            // Tentar primeiro pelo localStorage
+            const localTenantId = typeof localStorage !== 'undefined' 
+              ? localStorage.getItem('selectedTenantId') 
+              : null;
+            if (localTenantId) {
+              try {
+                const tenant = await this.obterTenant(localTenantId);
+                if (tenant) {
+                  console.log('[MultiTenant] ✅ Tenant encontrado via localStorage após erro 406');
+                  return tenant;
+                }
+              } catch {
+                // Continuar para tentar RPC
+              }
+            }
+            // Tentar via RPC get_user_tenants_complete como fallback
+            try {
+              const { data: tenantsList, error: rpcError } = await (supabase as any).rpc('get_user_tenants_complete');
+              if (!rpcError && tenantsList && tenantsList.length > 0) {
+                const tenantIdToUse = localTenantId 
+                  ? tenantsList.find((t: any) => t.id === localTenantId)?.id || tenantsList[0].id
+                  : tenantsList[0].id;
+                const tenant = await this.obterTenant(tenantIdToUse);
+                if (tenant) {
+                  console.log('[MultiTenant] ✅ Tenant encontrado via RPC após erro 406');
+                  return tenant;
+                }
+              }
+            } catch {
+              // Se tudo falhar, retornar null
+            }
+            return null;
+          }
           // 🔥 CRÍTICO: Se erro 42P17, bloquear e usar tenant do localStorage
           if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
             console.warn('[MultiTenant] ⚠️ Erro 42P17 ao buscar users - usando tenant do localStorage');
