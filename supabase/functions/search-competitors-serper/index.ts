@@ -811,70 +811,50 @@ serve(async (req) => {
     
     const productKeywords = extractKeywords(productsToUse);
     
-    // 🔥 MELHORADO: Construir queries mais específicas usando produtos com AND/OR inteligente
-    // ESTRATÉGIA: Priorizar produtos específicos, reduzir termos genéricos
+    // 🔥 MELHORADO: Queries NATURAIS como um humano faria no Google
+    // Foco em encontrar empresas reais que oferecem os mesmos produtos/serviços
     const queries: string[] = [];
     
-    // 🔥 AJUSTADO: Filtrar produtos muito genéricos (menos de 1 palavra)
-    // Mas manter mais produtos para ter mais cobertura
+    // Filtrar produtos muito genéricos
     const specificProducts = productsToUse.filter(p => {
       const words = p.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      return words.length >= 1; // Pelo menos 1 palavra (era 2)
+      return words.length >= 1;
     });
-    
-    // 🔥 CRÍTICO: Sempre usar produtos (não filtrar demais)
-    // Se não houver produtos específicos suficientes, usar todos
     const productsForQueries = specificProducts.length >= 2 ? specificProducts : productsToUse;
     
-    // Query 1: Primeiros 2 produtos com AND (alta especificidade)
+    // Query 1: "empresas similares que oferecem [produto1] [produto2]"
     if (productsForQueries.length >= 2) {
-      queries.push(`"${productsForQueries[0]}" AND "${productsForQueries[1]}" Brasil`);
+      queries.push(`empresas similares que oferecem ${productsForQueries.slice(0, 2).join(' e ')}`);
     }
     
-    // Query 2: Primeiros 3 produtos com OR (cobertura ampla) - IMPORTANTE
+    // Query 2: "empresas que trabalham com [produto1] [produto2] [produto3]"
     if (productsForQueries.length >= 3) {
-      queries.push(`"${productsForQueries[0]}" OR "${productsForQueries[1]}" OR "${productsForQueries[2]}" Brasil`);
+      queries.push(`empresas que trabalham com ${productsForQueries.slice(0, 3).join(' ')}`);
     }
     
-    // Query 3: Produtos 4-6 com OR (variação de produtos)
-    if (productsForQueries.length >= 6) {
-      queries.push(`"${productsForQueries[3]}" OR "${productsForQueries[4]}" OR "${productsForQueries[5]}" Brasil`);
-    }
-    
-    // Query 4: Indústria + primeiros 2 produtos (combinação)
-    if (productsForQueries.length >= 2 && industry) {
-      queries.push(`${industry} "${productsForQueries[0]}" OR "${productsForQueries[1]}" Brasil`);
-    }
-    
-    // Query 5: Produtos relacionados agrupados (ex: Importação + Exportação)
+    // Query 3: "concorrentes [produto1] [produto2]"
     if (productsForQueries.length >= 2) {
-      const importExport = productsForQueries.filter(p => 
-        p.toLowerCase().includes('import') || p.toLowerCase().includes('export') || 
-        p.toLowerCase().includes('comércio exterior') || p.toLowerCase().includes('supply chain')
-      );
-      if (importExport.length >= 2) {
-        queries.push(`"${importExport[0]}" AND "${importExport[1]}" Brasil`);
-      }
+      queries.push(`concorrentes ${productsForQueries.slice(0, 2).join(' ')}`);
     }
     
-    // Query 6: Produtos industriais agrupados (ex: Gaveteiro + Armário)
+    // Query 4: "empresas [produto1] [produto2] [localização]" (se tiver localização)
+    if (productsForQueries.length >= 2 && location) {
+      queries.push(`empresas ${productsForQueries.slice(0, 2).join(' ')} ${location}`);
+    }
+    
+    // Query 5: "fornecedores [produto1] [produto2]"
     if (productsForQueries.length >= 2) {
-      const industrialProducts = productsForQueries.filter(p => 
-        p.toLowerCase().includes('industrial') || p.toLowerCase().includes('gaveteiro') ||
-        p.toLowerCase().includes('armário') || p.toLowerCase().includes('bancada') ||
-        p.toLowerCase().includes('carrinho') || p.toLowerCase().includes('rack')
-      );
-      if (industrialProducts.length >= 2) {
-        queries.push(`"${industrialProducts[0]}" OR "${industrialProducts[1]}" Brasil`);
-      }
+      queries.push(`fornecedores ${productsForQueries.slice(0, 2).join(' ')}`);
     }
     
-    // Query 7: Produtos de consultoria (se houver múltiplos)
-    const consultoriaProducts = productsForQueries.filter(p => 
-      p.toLowerCase().includes('consultoria')
-    );
-    if (consultoriaProducts.length >= 2) {
-      queries.push(`"${consultoriaProducts[0]}" OR "${consultoriaProducts[1]}" Brasil`);
+    // Query 6: "empresas [indústria] [produto1]" (se tiver indústria)
+    if (productsForQueries.length >= 1 && industry) {
+      queries.push(`empresas ${industry} ${productsForQueries[0]}`);
+    }
+    
+    // Query 7: Fallback com primeiro produto
+    if (productsForQueries.length >= 1) {
+      queries.push(`empresas que oferecem ${productsForQueries[0]}`);
     }
     
     // Query 8: Produtos + supply chain/logística
