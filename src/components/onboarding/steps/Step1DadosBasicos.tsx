@@ -34,11 +34,23 @@ interface Props {
 }
 
 export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false, isNewTenant = false }: Props) {
-  const [formData, setFormData] = useState({
-    cnpj: initialData?.cnpj || '',
-    email: initialData?.email || '',
-    website: initialData?.website || '',
-    telefone: initialData?.telefone || '',
+  // 🔥 CRÍTICO: Se é novo tenant, SEMPRE começar com campos vazios (ignorar initialData)
+  const [formData, setFormData] = useState(() => {
+    if (isNewTenant) {
+      console.log('[Step1] 🆕 Novo tenant - inicializando com campos vazios');
+      return {
+        cnpj: '',
+        email: '',
+        website: '',
+        telefone: '',
+      };
+    }
+    return {
+      cnpj: initialData?.cnpj || '',
+      email: initialData?.email || '',
+      website: initialData?.website || '',
+      telefone: initialData?.telefone || '',
+    };
   });
 
   const [loadingCNPJ, setLoadingCNPJ] = useState(false);
@@ -79,9 +91,14 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     cnpjPendente?: boolean; // 🔥 NOVO: Flag para indicar que CNPJ é placeholder e precisa ser preenchido
   }
   
-  const [concorrentes, setConcorrentes] = useState<ConcorrenteDireto[]>(
-    initialData?.concorrentesDiretos || []
-  );
+  // 🔥 CRÍTICO: Se é novo tenant, SEMPRE começar com concorrentes vazios
+  const [concorrentes, setConcorrentes] = useState<ConcorrenteDireto[]>(() => {
+    if (isNewTenant) {
+      console.log('[Step1] 🆕 Novo tenant - inicializando concorrentes vazios');
+      return [];
+    }
+    return initialData?.concorrentesDiretos || [];
+  });
   
   // 🔥 NOVO: Estados para cards colapsáveis
   const [expandedCards, setExpandedCards] = useState<Record<number, boolean>>({});
@@ -382,6 +399,12 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       hasInitializedRef.current = false;
     }
     
+    // 🔥 CRÍTICO: Se é novo tenant, NÃO atualizar com initialData (deve ficar vazio)
+    if (isNewTenant) {
+      console.log('[Step1] 🆕 Novo tenant - não atualizando com initialData');
+      return;
+    }
+    
     // 🔥 CORRIGIDO: Só atualizar se initialData realmente mudou - MERGE não-destrutivo
     // 🔥 CRÍTICO: NÃO resetar campos que o usuário está digitando
     if (initialData && initialData !== initialDataRef.current) {
@@ -415,48 +438,50 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
         };
       });
       
-      // 🔥 CRÍTICO: Restaurar cnpjData PRIMEIRO (antes de carregar produtos)
-      // 🔥 CORRIGIDO: Sempre restaurar se houver cnpjData OU dados individuais
-      if (initialData.cnpjData) {
-        // Se tem cnpjData completo, usar diretamente
-        setCnpjData(initialData.cnpjData);
-        console.log('[Step1] ✅ cnpjData restaurado (completo):', initialData.cnpjData);
-      } else if (initialData.razaoSocial || initialData.nomeFantasia || initialData.situacaoCadastral) {
-        // Se não tem cnpjData mas tem dados individuais, reconstruir
-        const cnpjDataToSet = {
-          nome: initialData.razaoSocial || '',
-          fantasia: initialData.nomeFantasia || '',
-          situacao: initialData.situacaoCadastral || '',
-          abertura: initialData.dataAbertura || '',
-          natureza_juridica: initialData.naturezaJuridica || '',
-          capital_social: initialData.capitalSocial || null,
-          porte: initialData.porteEmpresa || '',
-          email: initialData.email || '',
-          telefone: initialData.telefone || '',
-          logradouro: initialData.endereco?.logradouro || '',
-          numero: initialData.endereco?.numero || '',
-          complemento: initialData.endereco?.complemento || '',
-          bairro: initialData.endereco?.bairro || '',
-          municipio: initialData.endereco?.municipio || '',
-          uf: initialData.endereco?.uf || '',
-          cep: initialData.endereco?.cep || '',
-          cnaes: initialData.cnaes || [],
-          atividade_principal: initialData.cnaes?.[0] ? [{ code: initialData.cnaes[0], text: '' }] : [],
-        };
-        setCnpjData(cnpjDataToSet);
-        console.log('[Step1] ✅ cnpjData restaurado (reconstruído):', cnpjDataToSet);
-      } else if (cnpjData) {
-        // Se já tem cnpjData no estado, manter (não resetar)
-        console.log('[Step1] ℹ️ Mantendo cnpjData existente no estado');
-      }
-      
-      // 🔥 NOVO: Carregar produtos do tenant ao montar (apenas se tenant não mudou)
-      if (tenant?.id && tenant.id === lastTenantIdRef.current) {
-        loadTenantProducts();
-      }
-      
-      // 🔥 NOVO: Carregar concorrentes e seus produtos
-      if (initialData.concorrentesDiretos && Array.isArray(initialData.concorrentesDiretos) && initialData.concorrentesDiretos.length > 0) {
+      // 🔥 CRÍTICO: Se é novo tenant, NÃO restaurar cnpjData nem carregar dados
+      if (!isNewTenant) {
+        // 🔥 CRÍTICO: Restaurar cnpjData PRIMEIRO (antes de carregar produtos)
+        // 🔥 CORRIGIDO: Sempre restaurar se houver cnpjData OU dados individuais
+        if (initialData.cnpjData) {
+          // Se tem cnpjData completo, usar diretamente
+          setCnpjData(initialData.cnpjData);
+          console.log('[Step1] ✅ cnpjData restaurado (completo):', initialData.cnpjData);
+        } else if (initialData.razaoSocial || initialData.nomeFantasia || initialData.situacaoCadastral) {
+          // Se não tem cnpjData mas tem dados individuais, reconstruir
+          const cnpjDataToSet = {
+            nome: initialData.razaoSocial || '',
+            fantasia: initialData.nomeFantasia || '',
+            situacao: initialData.situacaoCadastral || '',
+            abertura: initialData.dataAbertura || '',
+            natureza_juridica: initialData.naturezaJuridica || '',
+            capital_social: initialData.capitalSocial || null,
+            porte: initialData.porteEmpresa || '',
+            email: initialData.email || '',
+            telefone: initialData.telefone || '',
+            logradouro: initialData.endereco?.logradouro || '',
+            numero: initialData.endereco?.numero || '',
+            complemento: initialData.endereco?.complemento || '',
+            bairro: initialData.endereco?.bairro || '',
+            municipio: initialData.endereco?.municipio || '',
+            uf: initialData.endereco?.uf || '',
+            cep: initialData.endereco?.cep || '',
+            cnaes: initialData.cnaes || [],
+            atividade_principal: initialData.cnaes?.[0] ? [{ code: initialData.cnaes[0], text: '' }] : [],
+          };
+          setCnpjData(cnpjDataToSet);
+          console.log('[Step1] ✅ cnpjData restaurado (reconstruído):', cnpjDataToSet);
+        } else if (cnpjData) {
+          // Se já tem cnpjData no estado, manter (não resetar)
+          console.log('[Step1] ℹ️ Mantendo cnpjData existente no estado');
+        }
+        
+        // 🔥 NOVO: Carregar produtos do tenant ao montar (apenas se tenant não mudou)
+        if (tenant?.id && tenant.id === lastTenantIdRef.current) {
+          loadTenantProducts();
+        }
+        
+        // 🔥 NOVO: Carregar concorrentes e seus produtos
+        if (initialData.concorrentesDiretos && Array.isArray(initialData.concorrentesDiretos) && initialData.concorrentesDiretos.length > 0) {
         const loadConcorrentesComProdutos = async () => {
           const concorrentesComProdutos = await Promise.all(
             initialData.concorrentesDiretos.map(async (conc: ConcorrenteDireto) => {
@@ -499,6 +524,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
         };
         
         loadConcorrentesComProdutos();
+        }
       } else if (initialData.concorrentesDiretos === undefined && !hasInitializedRef.current) {
         // 🔥 CORRIGIDO: Só resetar se for a primeira inicialização E não tiver concorrentes
         // Não resetar se já tiver concorrentes no estado
@@ -510,7 +536,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       // Se initialData foi limpo, resetar
       console.log('[Step1] ⚠️ initialData foi limpo, mantendo estado atual');
     }
-  }, [initialData?.cnpj, initialData?.email, initialData?.website, initialData?.telefone, initialData?.razaoSocial, tenant?.id, loadTenantProducts]); // ✅ Adicionar loadTenantProducts às dependências
+  }, [initialData?.cnpj, initialData?.email, initialData?.website, initialData?.telefone, initialData?.razaoSocial, tenant?.id, loadTenantProducts, isNewTenant]); // ✅ Adicionar isNewTenant às dependências
 
   // 🔥 CRÍTICO: Auto-save quando cnpjData ou formData mudarem (para garantir persistência)
   useEffect(() => {
