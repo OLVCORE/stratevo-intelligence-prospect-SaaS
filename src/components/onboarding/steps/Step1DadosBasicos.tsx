@@ -720,7 +720,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             
             if (localTenantsJson) {
               const localTenants = JSON.parse(localTenantsJson);
-              const tenantIndex = localTenants.findIndex((t: any) => t.id === tenant.id);
+              const tenantIndex = localTenants.findIndex((t: any) => t.id === tenantIdToUse);
               
               if (tenantIndex !== -1) {
                 // Atualizar nome e CNPJ do tenant local
@@ -735,7 +735,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
                 // Disparar evento customizado para refetch do useUserTenants
                 window.dispatchEvent(new CustomEvent('tenant-updated', { 
                   detail: { 
-                    tenantId: tenant.id, 
+                    tenantId: tenantIdToUse, 
                     nome: data.nome,
                     cnpj: cnpjLimpo 
                   } 
