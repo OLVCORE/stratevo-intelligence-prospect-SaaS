@@ -376,14 +376,183 @@ function calculateSemanticSimilarity(
 }
 
 /**
- * Calcula relevância completa (posição + similaridade + filtros)
+ * 🔥 NOVO: Gera embedding usando OpenAI
  */
-function calculateRelevance(
+async function generateEmbedding(text: string, openaiKey: string): Promise<number[]> {
+  try {
+    const response = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-3-small',
+        input: text,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn('[Embeddings] ⚠️ Erro ao gerar embedding:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.data[0]?.embedding || [];
+  } catch (error) {
+    console.warn('[Embeddings] ⚠️ Erro ao gerar embedding:', error);
+    return [];
+  }
+}
+
+/**
+ * 🔥 NOVO: Calcula similaridade de cosseno entre dois vetores
+ */
+function calculateCosineSimilarity(vec1: number[], vec2: number[]): number {
+  if (vec1.length === 0 || vec2.length === 0 || vec1.length !== vec2.length) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  let norm1 = 0;
+  let norm2 = 0;
+
+  for (let i = 0; i < vec1.length; i++) {
+    dotProduct += vec1[i] * vec2[i];
+    norm1 += vec1[i] * vec1[i];
+    norm2 += vec2[i] * vec2[i];
+  }
+
+  const denominator = Math.sqrt(norm1) * Math.sqrt(norm2);
+  if (denominator === 0) return 0;
+
+  return dotProduct / denominator;
+}
+
+/**
+ * 🔥 NOVO: Classifica empresa por indústria usando OpenAI
+ */
+async function classifyIndustry(
+  title: string,
+  snippet: string,
+  openaiKey: string
+): Promise<string[]> {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{
+          role: 'system',
+          content: 'Você é um especialista em classificação de empresas por indústria. Retorne APENAS um JSON válido com o formato: {"industries": ["indústria1", "indústria2"]}. Use termos em português brasileiro. Se não conseguir identificar, retorne array vazio.'
+        }, {
+          role: 'user',
+          content: `Classifique a empresa por indústria(s). Título: ${title}\nDescrição: ${snippet}`
+        }],
+        temperature: 0.1,
+        max_tokens: 100,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn('[ClassifyIndustry] ⚠️ Erro ao classificar indústria:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content || '{}';
+    
+    try {
+      const parsed = JSON.parse(content);
+      return parsed.industries || [];
+    } catch {
+      return [];
+    }
+  } catch (error) {
+    console.warn('[ClassifyIndustry] ⚠️ Erro ao classificar indústria:', error);
+    return [];
+  }
+}
+
+/**
+ * 🔥 NOVO: Calcula match de indústria
+ */
+function calculateIndustryMatch(
+  targetIndustry: string,
+  candidateIndustries: string[]
+): number {
+  if (candidateIndustries.length === 0) return 0;
+  
+  const targetLower = targetIndustry.toLowerCase();
+  for (const industry of candidateIndustries) {
+    const industryLower = industry.toLowerCase();
+    if (industryLower.includes(targetLower) || targetLower.includes(industryLower)) {
+      return 100; // Match perfeito
+    }
+    // Match parcial
+    const targetWords = targetLower.split(/\s+/);
+    const industryWords = industryLower.split(/\s+/);
+    const commonWords = targetWords.filter(w => industryWords.includes(w) && w.length > 3);
+    if (commonWords.length > 0) {
+      return 50; // Match parcial
+    }
+  }
+  return 0;
+}
+
+/**
+ * 🔥 NOVO: Calcula match geográfico
+ */
+function calculateGeographicMatch(
+  targetLocation: string | undefined,
+  candidateUrl: string
+): number {
+  if (!targetLocation || targetLocation === 'Brasil') return 50; // Neutro se não especificado
+  
+  const locationLower = targetLocation.toLowerCase();
+  const urlLower = candidateUrl.toLowerCase();
+  
+  // Extrair estado/cidade do location
+  const locationParts = locationLower.split(',').map(p => p.trim());
+  
+  for (const part of locationParts) {
+    if (urlLower.includes(part)) {
+      return 100; // Match perfeito
+    }
+  }
+  
+  return 0;
+}
+
+/**
+ * 🔥 NOVO: Calcula autoridade do domínio (baseado em posição no Google)
+ */
+function calculateDomainAuthority(position: number): number {
+  // Posição 1 = 100, posição 10 = 10, posição 20+ = 0
+  if (position <= 1) return 100;
+  if (position <= 5) return 80;
+  if (position <= 10) return 60;
+  if (position <= 20) return 40;
+  return 20;
+}
+
+/**
+ * 🔥 MELHORADO: Calcula relevância completa com múltiplos critérios (SEMrush/SimilarWeb style)
+ * Agora usa: produtos (40%), embeddings (30%), indústria (15%), geografia (10%), autoridade (5%)
+ */
+async function calculateRelevance(
   result: SerperResult['organic'][0],
   industry: string,
   products: string[],
-  location?: string
-): { relevancia: number; similarityScore: number; businessType: CompetitorCandidate['businessType']; productMatches: number; exactMatches: number } {
+  location: string | undefined,
+  openaiKey: string | undefined,
+  tenantProductsText: string | undefined,
+  tenantEmbedding: number[] | undefined
+): Promise<{ relevancia: number; similarityScore: number; businessType: CompetitorCandidate['businessType']; productMatches: number; exactMatches: number; semanticSimilarity: number; industryMatch: number; geographicMatch: number; domainAuthority: number }> {
   const businessType = detectBusinessType(result.title, result.snippet, result.link);
   
   // 🔥 PENALIZAR tipos não-empresa (MELHORADO: inclui marketplace, pdf, reportagem)
@@ -397,21 +566,58 @@ function calculateRelevance(
     typePenalty = -30; // Penalidade para outros tipos não-empresa
   }
   
-  // Base: posição no Google (peso: 25%)
-  let relevancia = Math.max(0, 100 - (result.position * 3)); // 1º = 97, 2º = 94, etc.
-  
-  // 🔥 MELHORADO: Similaridade semântica com foco em produtos (peso: 60% - aumentado)
+  // 🔥 NOVO: Similaridade semântica com foco em produtos (peso: 40%)
   const similarityResult = calculateSemanticSimilarity(
     industry,
     products,
     result.title,
     result.snippet
   );
-  const similarityScore = similarityResult.score;
-  relevancia += (similarityScore * 0.6); // 60% do peso (era 50%)
+  const productSimilarityScore = similarityResult.score;
+  
+  // 🔥 NOVO: Embeddings semânticos (peso: 30%)
+  let semanticSimilarity = 0;
+  if (openaiKey && tenantEmbedding && tenantEmbedding.length > 0) {
+    const candidateText = `${result.title} ${result.snippet}`;
+    const candidateEmbedding = await generateEmbedding(candidateText, openaiKey);
+    if (candidateEmbedding.length > 0) {
+      const cosineSim = calculateCosineSimilarity(tenantEmbedding, candidateEmbedding);
+      semanticSimilarity = Math.round(cosineSim * 100); // Converter para 0-100
+    }
+  }
+  
+  // 🔥 NOVO: Classificação de indústria (peso: 15%)
+  let industryMatch = 0;
+  let candidateIndustries: string[] = [];
+  if (openaiKey) {
+    candidateIndustries = await classifyIndustry(result.title, result.snippet, openaiKey);
+    industryMatch = calculateIndustryMatch(industry, candidateIndustries);
+  }
+  
+  // 🔥 NOVO: Match geográfico (peso: 10%)
+  const geographicMatch = calculateGeographicMatch(location, result.link);
+  
+  // 🔥 NOVO: Autoridade do domínio (peso: 5%)
+  const domainAuthority = calculateDomainAuthority(result.position);
+  
+  // 🔥 MELHORADO: Relevância com múltiplos critérios (SEMrush/SimilarWeb style)
+  const weights = {
+    productMatches: 0.40,      // 40% - Produtos específicos encontrados
+    semanticSimilarity: 0.30,    // 30% - Similaridade semântica (embeddings)
+    industryMatch: 0.15,        // 15% - Classificação por indústria
+    geographicMatch: 0.10,      // 10% - Localização geográfica
+    domainAuthority: 0.05       // 5% - Autoridade/ranqueamento do site
+  };
+  
+  let relevancia = (
+    productSimilarityScore * weights.productMatches +
+    semanticSimilarity * weights.semanticSimilarity +
+    industryMatch * weights.industryMatch +
+    geographicMatch * weights.geographicMatch +
+    domainAuthority * weights.domainAuthority
+  );
   
   // 🔥 NOVO: Bonus baseado no número de produtos encontrados
-  // Mais produtos = mais relevante
   if (similarityResult.exactMatches >= 5) {
     relevancia += 20; // Bonus máximo
   } else if (similarityResult.exactMatches >= 3) {
@@ -423,10 +629,12 @@ function calculateRelevance(
   }
   
   // 🔥 AJUSTADO: Penalizar menos se não encontrou nenhum produto específico
-  // Reduzir penalidade para permitir mais resultados
   if (similarityResult.productMatches === 0) {
-    relevancia -= 10; // Penalidade reduzida (era 20)
+    relevancia -= 10; // Penalidade reduzida
   }
+  
+  // Usar productSimilarityScore como similarityScore para compatibilidade
+  const similarityScore = productSimilarityScore;
   
   // Palavras-chave no título (peso: 15%)
   const titleLower = result.title.toLowerCase();
@@ -472,7 +680,11 @@ function calculateRelevance(
     similarityScore,
     businessType,
     productMatches: similarityResult.productMatches,
-    exactMatches: similarityResult.exactMatches
+    exactMatches: similarityResult.exactMatches,
+    semanticSimilarity,
+    industryMatch,
+    geographicMatch,
+    domainAuthority
   };
 }
 
@@ -496,6 +708,23 @@ serve(async (req) => {
     const serperApiKey = Deno.env.get('SERPER_API_KEY');
     if (!serperApiKey) {
       throw new Error('SERPER_API_KEY não configurada');
+    }
+
+    // 🔥 NOVO: Obter chave OpenAI e gerar embedding dos produtos do tenant
+    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    const tenantProductsText = products.length > 0 ? products.join(', ') : '';
+    let tenantEmbedding: number[] = [];
+    
+    if (openaiKey && tenantProductsText) {
+      console.log('[SERPER Search] 🔥 Gerando embedding dos produtos do tenant...');
+      tenantEmbedding = await generateEmbedding(tenantProductsText, openaiKey);
+      if (tenantEmbedding.length > 0) {
+        console.log('[SERPER Search] ✅ Embedding gerado com sucesso (dimensões:', tenantEmbedding.length, ')');
+      } else {
+        console.warn('[SERPER Search] ⚠️ Falha ao gerar embedding, continuando sem embeddings semânticos');
+      }
+    } else {
+      console.warn('[SERPER Search] ⚠️ OpenAI não configurado ou sem produtos, continuando sem embeddings semânticos');
     }
 
     // 🔥 MELHORADO: Múltiplas queries usando TODOS os produtos do tenant dinamicamente
@@ -698,12 +927,15 @@ serve(async (req) => {
 
         if (isMarketplace) continue;
 
-        // Calcular relevância e similaridade
-        const { relevancia, similarityScore, businessType, productMatches, exactMatches } = calculateRelevance(
+        // 🔥 MELHORADO: Calcular relevância com múltiplos critérios (embeddings, indústria, geografia, autoridade)
+        const { relevancia, similarityScore, businessType, productMatches, exactMatches } = await calculateRelevance(
           result,
           industry,
           products,
-          location
+          location,
+          openaiKey,
+          tenantProductsText,
+          tenantEmbedding
         );
 
         // 🔥 AJUSTADO: Threshold de similaridade mínima (10% - muito reduzido)
