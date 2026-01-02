@@ -329,7 +329,7 @@ serve(async (req) => {
       );
     }
 
-    // FASE 3: Extrair produtos com OpenAI
+    // FASE 3: Extrair produtos com OpenAI (🔥 MESMA INTELIGÊNCIA DO SCAN-WEBSITE-PRODUCTS)
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -341,15 +341,68 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é um especialista em extrair produtos de websites. Extraia TODOS os produtos mencionados. Retorne APENAS JSON válido: {"produtos": [{"nome": "...", "descricao": "...", "categoria": "...", "referencia": "..."}]}`,
+            content: `Você é um especialista em identificar produtos e serviços em websites corporativos, especialmente produtos industriais, EPIs, equipamentos de proteção, luvas, e produtos físicos.
+
+🔥 CRÍTICO - EXTRAÇÃO DE PRIMEIRO MUNDO:
+- Procure por NOMES DE PRODUTOS específicos mencionados no site (ex: "Grip Defender", "Total Power", "Max Defender", etc.)
+- Procure por CATEGORIAS de produtos (ex: "Alta Temperatura", "Arco Elétrico", "Corte/Perfuração", etc.)
+- Procure por PRODUTOS EM DESTAQUE ou seções de produtos
+- NÃO ignore produtos mencionados na homepage ou em seções de "Produtos em Destaque"
+- Se houver categorias, liste os produtos de cada categoria
+- 🔥 NOVO: Identifique REFERÊNCIAS/CÓDIGOS de produtos (ex: "Ref.: 50T18", "Código: ABC123", "SKU: XYZ", "Modelo: 123")
+- 🔥 NOVO: Use dados estruturados (Schema.org) se disponíveis
+- 🔥 NOVO: Use alt text de imagens para identificar produtos
+- 🔥 NOVO: Identifique HIERARQUIA de categorias (categoria principal → subcategoria → produto)
+
+Analise o conteúdo das páginas e identifique TODOS os produtos/serviços oferecidos pela empresa.
+
+Para cada produto/serviço encontrado, extraia:
+- nome: Nome EXATO do produto/serviço INCLUINDO referência se houver (ex: "Tênis linha New Prime (Ref.: 50T18 CO ELETRICISTA)", "Grip Defender Vulca", etc.)
+- descricao: Breve descrição do produto
+- categoria: Categoria do produto (ex: "Alta Temperatura e Solda", "Arco Elétrico", "Corte/Perfuração", "Proteção Mecânica", "Proteção Química", "EPI", "Luvas", "Calçados", etc.)
+- subcategoria: Subcategoria se houver (ex: "Linha New Prime", "Linha Composite", etc.)
+- referencia: Código/referência do produto se mencionado (ex: "50T18 CO ELETRICISTA", "72B29-TXT-E-BP-LR")
+- setores_alvo: Setores que podem usar (baseado no contexto, ex: "Indústria", "Construção", "Mineração", etc.)
+- diferenciais: Diferenciais mencionados (ex: "Alta performance", "Tecnologia de última geração", etc.)
+- confianca: Sua confiança (0.0 a 1.0)
+
+Se encontrar categorias sem produtos específicos, crie produtos genéricos para cada categoria.
+
+Responda APENAS com JSON válido:
+{
+  "empresa": "Nome da empresa",
+  "produtos": [
+    {
+      "nome": "Nome exato do produto",
+      "descricao": "Descrição do produto",
+      "categoria": "Categoria do produto",
+      "subcategoria": "Subcategoria se houver",
+      "referencia": "Código/referência se houver",
+      "setores_alvo": ["Setor 1", "Setor 2"],
+      "diferenciais": ["Diferencial 1", "Diferencial 2"],
+      "confianca": 0.9
+    }
+  ]
+}`
           },
           {
             role: 'user',
-            content: `Extraia todos os produtos das seguintes páginas:\n\n${pagesContent.join('\n\n---\n\n').substring(0, 30000)}`,
-          },
+            content: `Extraia TODOS os produtos e serviços mencionados nas seguintes páginas. Preste atenção especial a:
+- Produtos em destaque na homepage
+- Nomes de produtos específicos COM suas referências/códigos
+- Categorias e subcategorias de produtos
+- Seções de catálogo ou linha de produtos
+- Dados estruturados (Schema.org) se disponíveis
+- Alt text de imagens que mencionam produtos
+- Links do menu de navegação que podem ter mais produtos
+
+IMPORTANTE: Se encontrar um produto com referência (ex: "Ref.: 50T18"), inclua a referência no nome do produto para garantir unicidade.
+
+Conteúdo das páginas:\n\n${pagesContent.join('\n\n---\n\n').substring(0, 30000)}`
+          }
         ],
-        temperature: 0.1,
-        max_tokens: 12000,
+        temperature: 0.1, // 🔥 MESMA PRECISÃO do scan-website-products
+        max_tokens: 15000, // 🔥 AUMENTADO para processar mais produtos por lote (era 12000)
       }),
     });
 
@@ -360,15 +413,54 @@ serve(async (req) => {
     const aiResult = await openaiResponse.json();
     const content = aiResult.choices?.[0]?.message?.content || '{"produtos":[]}';
     
+    console.log('[Scan360] 📥 Resposta da OpenAI recebida (tamanho):', content.length, 'caracteres');
+    console.log('[Scan360] 📄 Preview da resposta (primeiros 500 chars):', content.substring(0, 500));
+    
+    // 🔥 MELHORADO: Parsing robusto igual ao scan-website-products
     let extractedProducts: any[] = [];
     try {
-      const jsonMatch = content.match(/\[[\s\S]*\]/) || content.match(/\{[\s\S]*"produtos"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      console.log('[Scan360] 🧹 Conteúdo limpo (tamanho):', cleanContent.length, 'caracteres');
+      
+      // Tentar encontrar JSON válido mesmo se houver texto antes/depois
+      let jsonStart = cleanContent.indexOf('{');
+      let jsonEnd = cleanContent.lastIndexOf('}') + 1;
+      
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        const jsonContent = cleanContent.substring(jsonStart, jsonEnd);
+        console.log('[Scan360] 🔍 Tentando parsear JSON extraído (tamanho):', jsonContent.length, 'caracteres');
+        
+        const parsed = JSON.parse(jsonContent);
         extractedProducts = parsed.produtos || parsed.products || [];
+        
+        console.log('[Scan360] ✅ Produtos parseados:', extractedProducts.length);
+        if (extractedProducts.length > 0) {
+          console.log('[Scan360] 📦 Primeiro produto:', JSON.stringify(extractedProducts[0], null, 2));
+        } else {
+          console.log('[Scan360] ⚠️ NENHUM PRODUTO ENCONTRADO! Resposta completa:', cleanContent.substring(0, 2000));
+        }
+      } else {
+        console.error('[Scan360] ❌ Não foi possível encontrar JSON válido na resposta');
+        console.error('[Scan360] 📄 Conteúdo completo (primeiros 2000 chars):', cleanContent.substring(0, 2000));
+        extractedProducts = [];
       }
-    } catch (e) {
-      console.error('[Scan360] Erro ao parsear produtos:', e);
+    } catch (parseError: any) {
+      console.error('[Scan360] ❌ Erro ao parsear resposta da IA:', parseError);
+      console.error('[Scan360] 📄 Conteúdo que falhou (primeiros 2000 chars):', content.substring(0, 2000));
+      console.error('[Scan360] 🔍 Tentando extrair JSON manualmente...');
+      
+      // Tentar extrair JSON manualmente usando regex
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*"produtos"[\s\S]*\}/) || content.match(/\{[\s\S]*"products"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          extractedProducts = parsed.produtos || parsed.products || [];
+          console.log('[Scan360] ✅ Produtos extraídos manualmente:', extractedProducts.length);
+        }
+      } catch (manualParseError) {
+        console.error('[Scan360] ❌ Falha também no parse manual:', manualParseError);
+        extractedProducts = [];
+      }
     }
 
     // FASE 4: Inserir produtos
@@ -401,6 +493,7 @@ serve(async (req) => {
       }
 
       if (!isDuplicate) {
+        // 🔥 MELHORADO: Inserir com todos os campos extraídos (mesma estrutura do scan-website-products)
         const { error: insertError } = await supabase
           .from('tenant_products')
           .insert({
@@ -411,7 +504,10 @@ serve(async (req) => {
             subcategoria: product.subcategoria?.trim() || null,
             codigo_interno: product.referencia?.trim() || null,
             extraido_de: 'website',
-            confianca_extracao: 0.8,
+            confianca_extracao: product.confianca || 0.8, // Usar confiança da IA se disponível
+            // 🔥 NOVO: Campos adicionais se disponíveis
+            setores_alvo: product.setores_alvo?.join(', ') || null,
+            diferenciais: product.diferenciais?.join(', ') || null,
           });
 
         if (!insertError) {
