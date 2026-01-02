@@ -235,80 +235,119 @@ function detectBusinessType(
 }
 
 /**
- * Calcula similaridade semântica de serviços/produtos usando análise de texto
+ * 🔥 MELHORADO: Calcula similaridade semântica com foco em produtos específicos
+ * Rankeamento baseado no número de produtos específicos encontrados
  */
 function calculateSemanticSimilarity(
   targetIndustry: string,
   targetProducts: string[],
   candidateTitle: string,
   candidateSnippet: string
-): number {
+): { score: number; productMatches: number; exactMatches: number } {
   let score = 0;
   const text = `${candidateTitle} ${candidateSnippet}`.toLowerCase();
   const industryLower = targetIndustry.toLowerCase();
   
-  // Similaridade de indústria (peso: 30%)
+  // 🔥 REDUZIDO: Similaridade de indústria (peso: 15% - era 30%)
+  // Menos peso porque indústria pode ser genérica
   if (text.includes(industryLower)) {
-    score += 30;
+    score += 15;
   } else {
-    // Buscar palavras-chave relacionadas
     const industryWords = industryLower.split(/\s+/);
     const matchedWords = industryWords.filter(word => 
       word.length > 3 && text.includes(word)
     );
     if (matchedWords.length > 0) {
-      score += (matchedWords.length / industryWords.length) * 20;
+      score += (matchedWords.length / industryWords.length) * 10;
     }
   }
   
-  // 🔥 CRÍTICO: Similaridade de produtos/serviços (peso: 60% - AUMENTADO)
-  // Usar TODOS os produtos do tenant, não apenas os 5 primeiros
+  // 🔥 CRÍTICO: Similaridade de produtos/serviços (peso: 70% - AUMENTADO de 60%)
+  // Usar TODOS os produtos do tenant e contar matches exatos
   let productMatches = 0;
   let exactProductMatches = 0;
+  let partialProductMatches = 0;
+  
+  // Filtrar termos genéricos dos produtos para evitar matches falsos
+  const genericProductTerms = ['consultoria', 'soluções', 'serviços', 'empresa', 'fornecedor'];
   
   for (const product of targetProducts) { // 🔥 USAR TODOS OS PRODUTOS
     const productLower = product.toLowerCase().trim();
     
-    // Match exato do produto completo (peso maior)
+    // Ignorar produtos muito genéricos (menos de 3 palavras)
+    const productWords = productLower.split(/\s+/).filter(w => w.length > 2);
+    if (productWords.length < 2) continue;
+    
+    // Verificar se produto não é apenas termo genérico
+    const isGeneric = genericProductTerms.some(term => 
+      productLower === term || productLower === `${term} em` || productLower === `${term} de`
+    );
+    if (isGeneric && productWords.length < 3) continue;
+    
+    // Match exato do produto completo (peso MUITO maior)
     if (text.includes(productLower)) {
       exactProductMatches++;
-      score += 15; // 🔥 AUMENTADO: +15 pontos por produto encontrado (era 8)
+      score += 25; // 🔥 AUMENTADO: +25 pontos por produto encontrado (era 15)
       productMatches++;
     } else {
       // Match parcial: buscar palavras-chave do produto
-      const productWords = productLower.split(/\s+/).filter(w => w.length > 2);
       let matchedWords = 0;
+      let importantWordsMatched = 0;
+      
+      // Identificar palavras importantes (não genéricas)
+      const importantWords = productWords.filter(w => 
+        w.length > 3 && !genericProductTerms.includes(w)
+      );
       
       for (const word of productWords) {
         if (word.length > 3 && text.includes(word)) {
           matchedWords++;
+          if (importantWords.includes(word)) {
+            importantWordsMatched++;
+          }
         }
       }
       
-      // Se encontrou pelo menos 50% das palavras do produto, considerar match parcial
-      if (matchedWords > 0 && productWords.length > 0) {
+      // Se encontrou pelo menos 60% das palavras importantes, considerar match parcial
+      if (importantWords.length > 0 && importantWordsMatched > 0) {
+        const matchRatio = importantWordsMatched / importantWords.length;
+        if (matchRatio >= 0.6) {
+          partialProductMatches++;
+          productMatches++;
+          score += Math.round(15 * matchRatio); // Peso proporcional ao match
+        } else if (matchRatio >= 0.4) {
+          score += Math.round(8 * matchRatio); // Match fraco, peso menor
+        }
+      } else if (matchedWords > 0 && productWords.length > 0) {
+        // Fallback: usar todas as palavras se não houver palavras importantes
         const matchRatio = matchedWords / productWords.length;
         if (matchRatio >= 0.5) {
+          partialProductMatches++;
           productMatches++;
-          score += Math.round(8 * matchRatio); // Peso proporcional ao match
-        } else if (matchRatio >= 0.3) {
-          score += Math.round(4 * matchRatio); // Match fraco, peso menor
+          score += Math.round(10 * matchRatio);
         }
       }
     }
   }
   
-  // Bonus se encontrou múltiplos produtos
-  if (exactProductMatches >= 2) {
-    score += 10; // Bonus por múltiplos matches
-  }
-  if (exactProductMatches >= 3) {
-    score += 5; // Bonus adicional
+  // 🔥 BONUS ESCALONADO: Mais produtos = mais bonus
+  if (exactProductMatches >= 5) {
+    score += 30; // Bonus máximo para 5+ produtos
+  } else if (exactProductMatches >= 4) {
+    score += 25;
+  } else if (exactProductMatches >= 3) {
+    score += 20;
+  } else if (exactProductMatches >= 2) {
+    score += 15;
   }
   
-  // Palavras-chave de negócio genéricas (peso: 10% - REDUZIDO)
-  // 🔥 REMOVIDO: Termos hardcoded específicos (Supply Chain, Comex, etc.)
-  // Agora usa apenas termos genéricos que podem aparecer em qualquer setor
+  // Bonus adicional para múltiplos matches parciais
+  if (partialProductMatches >= 3) {
+    score += 10;
+  }
+  
+  // 🔥 REDUZIDO: Palavras-chave genéricas (peso: 5% - era 10%)
+  // Muito menos peso para termos genéricos
   const genericKeywords = [
     'consultoria', 'soluções', 'serviços', 'empresa', 'fornecedor',
     'gestão', 'estratégia', 'compliance', 'governança'
@@ -317,19 +356,23 @@ function calculateSemanticSimilarity(
   let genericScore = 0;
   for (const kw of genericKeywords) {
     if (text.includes(kw)) {
-      genericScore += 1;
+      genericScore += 0.5; // 🔥 REDUZIDO: 0.5 pontos por termo genérico (era 1)
     }
   }
-  genericScore = Math.min(genericScore, 10); // Máximo 10 pontos
+  genericScore = Math.min(genericScore, 5); // Máximo 5 pontos (era 10)
   
   score += genericScore;
   
-  // Estrutura de empresa (peso: 10%)
+  // Estrutura de empresa (peso: 5% - reduzido)
   if (text.includes('empresa') || text.includes('ltda') || text.includes('sa')) {
-    score += 10;
+    score += 5;
   }
   
-  return Math.min(100, Math.round(score));
+  return {
+    score: Math.min(100, Math.round(score)),
+    productMatches,
+    exactMatches: exactProductMatches
+  };
 }
 
 /**
@@ -340,7 +383,7 @@ function calculateRelevance(
   industry: string,
   products: string[],
   location?: string
-): { relevancia: number; similarityScore: number; businessType: CompetitorCandidate['businessType'] } {
+): { relevancia: number; similarityScore: number; businessType: CompetitorCandidate['businessType']; productMatches: number; exactMatches: number } {
   const businessType = detectBusinessType(result.title, result.snippet, result.link);
   
   // 🔥 PENALIZAR tipos não-empresa (MELHORADO: inclui marketplace, pdf, reportagem)
@@ -357,14 +400,32 @@ function calculateRelevance(
   // Base: posição no Google (peso: 25%)
   let relevancia = Math.max(0, 100 - (result.position * 3)); // 1º = 97, 2º = 94, etc.
   
-  // Similaridade semântica (peso: 50%)
-  const similarityScore = calculateSemanticSimilarity(
+  // 🔥 MELHORADO: Similaridade semântica com foco em produtos (peso: 60% - aumentado)
+  const similarityResult = calculateSemanticSimilarity(
     industry,
     products,
     result.title,
     result.snippet
   );
-  relevancia += (similarityScore * 0.5); // 50% do peso
+  const similarityScore = similarityResult.score;
+  relevancia += (similarityScore * 0.6); // 60% do peso (era 50%)
+  
+  // 🔥 NOVO: Bonus baseado no número de produtos encontrados
+  // Mais produtos = mais relevante
+  if (similarityResult.exactMatches >= 5) {
+    relevancia += 20; // Bonus máximo
+  } else if (similarityResult.exactMatches >= 3) {
+    relevancia += 15;
+  } else if (similarityResult.exactMatches >= 2) {
+    relevancia += 10;
+  } else if (similarityResult.exactMatches >= 1) {
+    relevancia += 5;
+  }
+  
+  // Penalizar se não encontrou nenhum produto específico
+  if (similarityResult.productMatches === 0) {
+    relevancia -= 20; // Penalidade por não mencionar produtos específicos
+  }
   
   // Palavras-chave no título (peso: 15%)
   const titleLower = result.title.toLowerCase();
@@ -408,7 +469,9 @@ function calculateRelevance(
   return {
     relevancia: Math.max(0, Math.min(100, Math.round(relevancia))),
     similarityScore,
-    businessType
+    businessType,
+    productMatches: similarityResult.productMatches,
+    exactMatches: similarityResult.exactMatches
   };
 }
 
@@ -559,7 +622,8 @@ serve(async (req) => {
                 q: query,
                 gl: 'br',
                 hl: 'pt',
-                num: Math.max(20, maxResults * 3), // 🔥 AUMENTADO: Pegar mais resultados para filtrar melhor
+                num: Math.max(30, maxResults * 3), // 🔥 AUMENTADO: Pegar mais resultados para filtrar melhor (30 mínimo)
+                start: (page - 1) * 10, // 🔥 NOVO: Paginação (10 resultados por página)
               }),
         });
 
@@ -621,28 +685,28 @@ serve(async (req) => {
         if (isMarketplace) continue;
 
         // Calcular relevância e similaridade
-        const { relevancia, similarityScore, businessType } = calculateRelevance(
+        const { relevancia, similarityScore, businessType, productMatches, exactMatches } = calculateRelevance(
           result,
           industry,
           products,
           location
         );
 
-        // 🔥 MELHORADO: Filtrar com threshold mais baixo mas verificar produtos
-        // Se encontrou produtos específicos, aceitar mesmo com relevância menor
-        const hasProductMatch = products.some((p: string) => {
-          const productLower = p.toLowerCase();
-          const text = `${result.title} ${result.snippet}`.toLowerCase();
-          return text.includes(productLower);
-        });
-        
+        // 🔥 MELHORADO: Threshold de similaridade mínima (30%)
+        // Exigir que a similaridade seja pelo menos 30% para evitar resultados genéricos
+        if (similarityScore < 30) {
+          console.log(`[SERPER Search] ❌ Filtrado (similaridade baixa): ${result.title} (similaridade: ${similarityScore}%, mín: 30%)`);
+          continue;
+        }
+
+        // 🔥 MELHORADO: Filtrar com threshold dinâmico baseado em produtos
         // Threshold dinâmico: mais baixo se encontrou produtos, mais alto se não encontrou
-        const minRelevancia = hasProductMatch ? 25 : 40;
+        const minRelevancia = exactMatches >= 2 ? 30 : (exactMatches >= 1 ? 40 : 50);
         
         // 🔥 MELHORADO: Filtrar todos os tipos não-empresa
         const nonCompanyTypes = ['vaga', 'artigo', 'perfil', 'marketplace', 'pdf', 'reportagem', 'associacao', 'educacional'];
         if (relevancia < minRelevancia || (businessType && nonCompanyTypes.includes(businessType))) {
-          console.log(`[SERPER Search] ❌ Filtrado: ${result.title} (${businessType}, relevância: ${relevancia}, min: ${minRelevancia}, hasProduct: ${hasProductMatch})`);
+          console.log(`[SERPER Search] ❌ Filtrado: ${result.title} (${businessType}, relevância: ${relevancia}, min: ${minRelevancia}, produtos: ${exactMatches}, similaridade: ${similarityScore}%)`);
           continue;
         }
         
@@ -651,6 +715,10 @@ serve(async (req) => {
           console.log(`[SERPER Search] ❌ Filtrado (não é empresa): ${result.title} (${businessType})`);
           continue;
         }
+        
+        // 🔥 NOVO: Priorizar resultados com mais produtos encontrados
+        // Log para debug
+        console.log(`[SERPER Search] ✅ Aceito: ${result.title} (produtos: ${exactMatches}/${productMatches}, similaridade: ${similarityScore}%, relevância: ${relevancia})`);
 
         // Extrair nome da empresa do título (remover sufixos comuns)
         let nome = result.title
@@ -666,7 +734,9 @@ serve(async (req) => {
           similarityScore,
           businessType,
           fonte: 'serper',
-        });
+          exactMatches, // 🔥 NOVO: Adicionar número de produtos encontrados
+          productMatches, // 🔥 NOVO: Adicionar número total de matches
+        } as any);
 
       } catch (error) {
         console.error('[SERPER Search] ❌ Erro ao processar resultado:', error);
@@ -674,22 +744,31 @@ serve(async (req) => {
       }
     }
 
-    // Ordenar por relevância (similaridade tem peso maior)
+    // 🔥 MELHORADO: Ordenar por número de produtos encontrados PRIMEIRO, depois relevância
+    // Priorizar empresas que mencionam mais produtos específicos
     candidates.sort((a, b) => {
       // Priorizar empresas reais
       if (a.businessType === 'empresa' && b.businessType !== 'empresa') return -1;
       if (b.businessType === 'empresa' && a.businessType !== 'empresa') return 1;
       
-      // Depois por relevância
-      if (b.relevancia !== a.relevancia) {
-        return b.relevancia - a.relevancia;
+      // Primeiro: número de produtos encontrados (maior primeiro)
+      const aProducts = (a as any).exactMatches || 0;
+      const bProducts = (b as any).exactMatches || 0;
+      if (aProducts !== bProducts) {
+        return bProducts - aProducts;
       }
-      
-      // Por último por similaridade
-      return (b.similarityScore || 0) - (a.similarityScore || 0);
+      // Segundo: similaridade (maior primeiro)
+      const aSim = a.similarityScore || 0;
+      const bSim = b.similarityScore || 0;
+      if (aSim !== bSim) {
+        return bSim - aSim;
+      }
+      // Terceiro: relevância (maior primeiro)
+      return b.relevancia - a.relevancia;
     });
 
-    const finalCandidates = candidates.slice(0, maxResults);
+    // 🔥 AUMENTADO: Retornar no mínimo 20 empresas (ou maxResults se maior)
+    const finalCandidates = candidates.slice(0, Math.max(20, maxResults));
     console.log('[SERPER Search] ✅ Candidatos finais:', finalCandidates.length);
     console.log('[SERPER Search] 📊 Estatísticas:', {
       totalCandidates: candidates.length,
