@@ -2582,6 +2582,7 @@ export function OnboardingWizard() {
       initialData,
       isSaving: isSaving, // Não incluir isSubmitting para não bloquear botão Próximo
       hasUnsavedChanges,
+      isNewTenant, // 🔥 NOVO: Passar flag para Step1 não carregar dados quando é novo tenant
     };
 
     switch (currentStep) {

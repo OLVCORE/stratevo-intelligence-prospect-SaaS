@@ -30,9 +30,10 @@ interface Props {
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
+  isNewTenant?: boolean; // 🔥 NOVO: Flag para indicar se é novo tenant (não carregar dados)
 }
 
-export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false, isNewTenant = false }: Props) {
   const [formData, setFormData] = useState({
     cnpj: initialData?.cnpj || '',
     email: initialData?.email || '',
@@ -123,6 +124,12 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
   
   // 🔥 CRÍTICO: Carregar dados do tenant do banco quando tenant muda
   const loadTenantData = useCallback(async () => {
+    // 🔥 CRÍTICO: Se é novo tenant, NÃO carregar dados do banco (deve começar vazio)
+    if (isNewTenant) {
+      console.log('[Step1] 🆕 Novo tenant detectado - não carregando dados do banco');
+      return;
+    }
+    
     if (!tenant?.id) {
       console.warn('[Step1] ⚠️ Tenant não identificado para carregar dados');
       return;
@@ -187,14 +194,28 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
   
   // 🔥 CRÍTICO: Carregar dados do tenant quando tenant muda
   useEffect(() => {
+    // 🔥 CRÍTICO: Se é novo tenant, NÃO carregar dados (deve começar vazio)
+    if (isNewTenant) {
+      console.log('[Step1] 🆕 Novo tenant - pulando carregamento de dados');
+      return;
+    }
+    
     if (tenant?.id) {
       loadTenantData();
     }
-  }, [tenant?.id, loadTenantData]);
+  }, [tenant?.id, loadTenantData, isNewTenant]);
 
   // 🔥 NOVO: Carregar produtos do tenant (BUSCA DE AMBAS AS TABELAS)
   // ✅ useCallback para evitar loops infinitos
   const loadTenantProducts = useCallback(async () => {
+    // 🔥 CRÍTICO: Se é novo tenant, NÃO carregar produtos (deve começar vazio)
+    if (isNewTenant) {
+      console.log('[Step1] 🆕 Novo tenant detectado - não carregando produtos do banco');
+      setTenantProducts([]);
+      setTenantProductsCount(0);
+      return;
+    }
+    
     if (!tenant?.id) {
       console.warn('[Step1] ⚠️ Tenant não identificado para carregar produtos');
       return;
@@ -294,7 +315,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       setTenantProductsCount(0);
       setTenantProducts([]);
     }
-  }, [tenant?.id, formData.cnpj]); // ✅ Dependências do useCallback
+  }, [tenant?.id, formData.cnpj, isNewTenant]); // ✅ Dependências do useCallback
 
   // 🔥 NOVO: Carregar produtos de um concorrente específico
   const loadCompetitorProducts = async (competitorCnpj: string) => {
