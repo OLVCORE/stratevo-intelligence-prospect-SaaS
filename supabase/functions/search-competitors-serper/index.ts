@@ -575,23 +575,33 @@ async function calculateRelevance(
   );
   const productSimilarityScore = similarityResult.score;
   
-  // 🔥 NOVO: Embeddings semânticos (peso: 30%)
+  // 🔥 NOVO: Embeddings semânticos (peso: 30%) - OPCIONAL (não bloquear se falhar)
   let semanticSimilarity = 0;
-  if (openaiKey && tenantEmbedding && tenantEmbedding.length > 0) {
-    const candidateText = `${result.title} ${result.snippet}`;
-    const candidateEmbedding = await generateEmbedding(candidateText, openaiKey);
-    if (candidateEmbedding.length > 0) {
-      const cosineSim = calculateCosineSimilarity(tenantEmbedding, candidateEmbedding);
-      semanticSimilarity = Math.round(cosineSim * 100); // Converter para 0-100
+  try {
+    if (openaiKey && tenantEmbedding && tenantEmbedding.length > 0) {
+      const candidateText = `${result.title} ${result.snippet}`;
+      const candidateEmbedding = await generateEmbedding(candidateText, openaiKey);
+      if (candidateEmbedding.length > 0) {
+        const cosineSim = calculateCosineSimilarity(tenantEmbedding, candidateEmbedding);
+        semanticSimilarity = Math.round(cosineSim * 100); // Converter para 0-100
+      }
     }
+  } catch (error) {
+    console.warn('[calculateRelevance] ⚠️ Erro ao calcular embedding, continuando sem ele:', error);
+    semanticSimilarity = 0; // Continuar sem embedding se falhar
   }
   
-  // 🔥 NOVO: Classificação de indústria (peso: 15%)
+  // 🔥 NOVO: Classificação de indústria (peso: 15%) - OPCIONAL (não bloquear se falhar)
   let industryMatch = 0;
   let candidateIndustries: string[] = [];
-  if (openaiKey) {
-    candidateIndustries = await classifyIndustry(result.title, result.snippet, openaiKey);
-    industryMatch = calculateIndustryMatch(industry, candidateIndustries);
+  try {
+    if (openaiKey) {
+      candidateIndustries = await classifyIndustry(result.title, result.snippet, openaiKey);
+      industryMatch = calculateIndustryMatch(industry, candidateIndustries);
+    }
+  } catch (error) {
+    console.warn('[calculateRelevance] ⚠️ Erro ao classificar indústria, continuando sem ela:', error);
+    industryMatch = 0; // Continuar sem classificação se falhar
   }
   
   // 🔥 NOVO: Match geográfico (peso: 10%)
@@ -600,14 +610,31 @@ async function calculateRelevance(
   // 🔥 NOVO: Autoridade do domínio (peso: 5%)
   const domainAuthority = calculateDomainAuthority(result.position);
   
-  // 🔥 MELHORADO: Relevância com múltiplos critérios (SEMrush/SimilarWeb style)
-  const weights = {
+  // 🔥 AJUSTADO: Relevância com múltiplos critérios (SEMrush/SimilarWeb style)
+  // Se embeddings/indústria não estiverem disponíveis, redistribuir pesos
+  const hasSemantic = semanticSimilarity > 0;
+  const hasIndustry = industryMatch > 0;
+  
+  // Pesos dinâmicos: redistribuir se algum critério não estiver disponível
+  let weights = {
     productMatches: 0.40,      // 40% - Produtos específicos encontrados
     semanticSimilarity: 0.30,    // 30% - Similaridade semântica (embeddings)
     industryMatch: 0.15,        // 15% - Classificação por indústria
     geographicMatch: 0.10,      // 10% - Localização geográfica
     domainAuthority: 0.05       // 5% - Autoridade/ranqueamento do site
   };
+  
+  // Se não houver embeddings, redistribuir peso para produtos
+  if (!hasSemantic) {
+    weights.productMatches = 0.60; // Aumentar para 60%
+    weights.semanticSimilarity = 0; // Remover
+  }
+  
+  // Se não houver classificação de indústria, redistribuir peso
+  if (!hasIndustry) {
+    weights.productMatches += 0.10; // Aumentar produtos para 70% (ou 60% se não houver embeddings)
+    weights.industryMatch = 0; // Remover
+  }
   
   let relevancia = (
     productSimilarityScore * weights.productMatches +
@@ -902,8 +929,11 @@ serve(async (req) => {
 
     // Processar e filtrar resultados
     const candidates: CompetitorCandidate[] = [];
+    let processedCount = 0;
+    let filteredCount = 0;
 
     for (const result of allResults) {
+      processedCount++;
       try {
         // Extrair domínio
         const url = new URL(result.link);
@@ -916,6 +946,7 @@ serve(async (req) => {
 
         // Filtrar domínios genéricos
         if (GENERIC_DOMAINS.some(generic => domain.includes(generic))) {
+          filteredCount++;
           continue;
         }
 
@@ -925,7 +956,10 @@ serve(async (req) => {
           'americanas', 'magazineluiza', 'casasbahia', 'pontofrio',
         ].some(m => domain.includes(m));
 
-        if (isMarketplace) continue;
+        if (isMarketplace) {
+          filteredCount++;
+          continue;
+        }
 
         // 🔥 MELHORADO: Calcular relevância com múltiplos critérios (embeddings, indústria, geografia, autoridade)
         const { relevancia, similarityScore, businessType, productMatches, exactMatches } = await calculateRelevance(
@@ -938,29 +972,38 @@ serve(async (req) => {
           tenantEmbedding
         );
 
-        // 🔥 AJUSTADO: Threshold de similaridade mínima (10% - muito reduzido)
-        // Exigir que a similaridade seja pelo menos 10% para evitar resultados genéricos
-        // Mas permitir resultados com produtos específicos mesmo com similaridade menor
-        const minSimilarity = exactMatches >= 2 ? 5 : (exactMatches >= 1 ? 10 : 15);
+        // 🔥 CRÍTICO: Threshold de similaridade MUITO reduzido (0% se tiver produtos)
+        // Remover filtro de similaridade se encontrou produtos específicos
+        const minSimilarity = exactMatches >= 2 ? 0 : (exactMatches >= 1 ? 0 : 5);
         if (similarityScore < minSimilarity) {
+          filteredCount++;
           console.log(`[SERPER Search] ❌ Filtrado (similaridade baixa): ${result.title} (similaridade: ${similarityScore}%, mín: ${minSimilarity}%, produtos: ${exactMatches})`);
           continue;
         }
 
-        // 🔥 AJUSTADO: Filtrar com threshold dinâmico baseado em produtos
+        // 🔥 CRÍTICO: Threshold de relevância MUITO reduzido
         // Threshold dinâmico: mais baixo se encontrou produtos, mais alto se não encontrou
-        const minRelevancia = exactMatches >= 2 ? 20 : (exactMatches >= 1 ? 30 : 40);
+        const minRelevancia = exactMatches >= 2 ? 5 : (exactMatches >= 1 ? 10 : 15);
         
-        // 🔥 MELHORADO: Filtrar todos os tipos não-empresa
-        const nonCompanyTypes = ['vaga', 'artigo', 'perfil', 'marketplace', 'pdf', 'reportagem', 'associacao', 'educacional'];
-        if (relevancia < minRelevancia || (businessType && nonCompanyTypes.includes(businessType))) {
-          console.log(`[SERPER Search] ❌ Filtrado: ${result.title} (${businessType}, relevância: ${relevancia}, min: ${minRelevancia}, produtos: ${exactMatches}, similaridade: ${similarityScore}%)`);
+        // 🔥 MELHORADO: Filtrar todos os tipos não-empresa (mas ser mais permissivo)
+        const nonCompanyTypes = ['vaga', 'artigo', 'perfil', 'marketplace', 'pdf', 'reportagem'];
+        // Aceitar associacao e educacional se tiver produtos
+        if (businessType && nonCompanyTypes.includes(businessType) && exactMatches === 0) {
+          filteredCount++;
+          console.log(`[SERPER Search] ❌ Filtrado (tipo não-empresa): ${result.title} (${businessType})`);
           continue;
         }
         
-        // 🔥 CRÍTICO: Aceitar apenas empresas reais
-        if (businessType !== 'empresa') {
-          console.log(`[SERPER Search] ❌ Filtrado (não é empresa): ${result.title} (${businessType})`);
+        if (relevancia < minRelevancia && exactMatches === 0) {
+          filteredCount++;
+          console.log(`[SERPER Search] ❌ Filtrado (relevância baixa): ${result.title} (relevância: ${relevancia}, min: ${minRelevancia}, produtos: ${exactMatches})`);
+          continue;
+        }
+        
+        // 🔥 AJUSTADO: Aceitar empresas e outros tipos se tiver produtos
+        if (businessType !== 'empresa' && exactMatches === 0) {
+          filteredCount++;
+          console.log(`[SERPER Search] ❌ Filtrado (não é empresa e sem produtos): ${result.title} (${businessType})`);
           continue;
         }
         
@@ -1019,10 +1062,11 @@ serve(async (req) => {
     const finalCandidates = candidates.slice(0, Math.max(20, maxResults));
     console.log('[SERPER Search] ✅ Candidatos finais:', finalCandidates.length);
     console.log('[SERPER Search] 📊 Estatísticas:', {
+      totalResults: allResults.length,
+      processed: processedCount,
+      filtered: filteredCount,
       totalCandidates: candidates.length,
       finalCandidates: finalCandidates.length,
-      totalResults: allResults.length,
-      filtered: allResults.length - candidates.length,
       queriesExecuted: queries.length,
     });
 
