@@ -1015,9 +1015,21 @@ serve(async (req) => {
           productMatches = similarityResult.productMatches || 0;
           exactMatches = similarityResult.exactMatches || 0;
           
-          // Calcular relevância simples (sem múltiplos critérios por enquanto)
-          relevancia = similarityScore; // Usar similaridade como relevância base
-          relevancia += Math.max(0, 100 - ((result.position || 100) * 3)); // Bonus por posição
+          // Calcular relevância com base em múltiplos fatores
+          relevancia = similarityScore; // Base: similaridade
+          
+          // Bonus por posição no Google (1º = +30, 2º = +27, etc.)
+          const positionBonus = Math.max(0, 30 - ((result.position || 100) * 0.3));
+          relevancia += positionBonus;
+          
+          // Bonus por produtos encontrados
+          if (exactMatches >= 3) relevancia += 20;
+          else if (exactMatches >= 2) relevancia += 15;
+          else if (exactMatches >= 1) relevancia += 10;
+          
+          // Penalidade se não encontrou produtos
+          if (exactMatches === 0 && productMatches === 0) relevancia -= 30;
+          
           relevancia = Math.min(100, Math.max(0, relevancia)); // Garantir entre 0-100
         } catch (calcError) {
           console.warn('[SERPER Search] ⚠️ Erro ao calcular similaridade/relevância, usando valores padrão:', calcError);

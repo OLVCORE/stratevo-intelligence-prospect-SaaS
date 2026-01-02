@@ -472,13 +472,14 @@ export default function CompetitorDiscovery({
                   Candidatos Encontrados ({candidates.length})
                 </CardTitle>
                 <CardDescription>
-                  Relevância média: <strong>{avgRelevancia}%</strong> • Clique em "Adicionar" para incluir na lista de concorrentes
+                  Relevância média: <strong>{avgRelevancia}%</strong> • Mostrando 10 de {candidates.length} • Clique em "Adicionar" para incluir na lista de concorrentes
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="space-y-3" key={`candidates-list-${searchId}-${searchKeyRef.current}`}>
+            {/* 🔥 NOVO: Container com scroll para mostrar 10 inicialmente, scroll para ver os outros */}
+            <div className="max-h-[600px] overflow-y-auto pr-2 space-y-3" key={`candidates-list-${searchId}-${searchKeyRef.current}`}>
               {candidates.map((candidate, idx) => (
                 <div 
                   key={`${searchId}-${searchKeyRef.current}-${candidate.website}-${idx}-${Date.now()}`}
@@ -490,9 +491,10 @@ export default function CompetitorDiscovery({
                         <p className="font-semibold text-sm truncate">{candidate.nome}</p>
                         <Badge 
                           className={`text-xs shrink-0 ${
-                            candidate.relevancia >= 80 ? 'bg-green-600 text-white' :
-                            candidate.relevancia >= 60 ? 'bg-blue-600 text-white' :
-                            candidate.relevancia >= 40 ? 'bg-yellow-600 text-white' :
+                            candidate.relevancia === 100 ? 'bg-green-600 text-white' :
+                            candidate.relevancia >= 80 ? 'bg-blue-600 text-white' :
+                            candidate.relevancia >= 75 ? 'bg-yellow-600 text-white' :
+                            candidate.relevancia >= 50 ? 'bg-orange-600 text-white' :
                             'bg-gray-600 text-white'
                           }`}
                         >
