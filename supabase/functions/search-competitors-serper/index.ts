@@ -344,7 +344,10 @@ serve(async (req) => {
     console.log('[SERPER Search] 🏭 Indústria recebida:', industry);
     console.log('[SERPER Search] 📍 Localização recebida:', location);
     console.log('[SERPER Search] 🔢 Total de queries geradas:', queries.length);
-    console.log('[SERPER Search] 📝 Queries completas:', queries);
+    console.log('[SERPER Search] 📝 Queries completas:');
+    queries.forEach((q, idx) => {
+      console.log(`  ${idx + 1}. ${q}`);
+    });
 
     const allResults: SerperResult['organic'] = [];
     const seenDomains = new Set<string>();
