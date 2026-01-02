@@ -962,15 +962,32 @@ serve(async (req) => {
         }
 
         // 🔥 MELHORADO: Calcular relevância com múltiplos critérios (embeddings, indústria, geografia, autoridade)
-        const { relevancia, similarityScore, businessType, productMatches, exactMatches } = await calculateRelevance(
-          result,
-          industry,
-          products,
-          location,
-          openaiKey,
-          tenantProductsText,
-          tenantEmbedding
-        );
+        let relevancia = 50; // Default
+        let similarityScore = 10; // Default
+        let businessType: CompetitorCandidate['businessType'] = 'empresa'; // Default
+        let productMatches = 0;
+        let exactMatches = 0;
+        
+        try {
+          const relevanceResult = await calculateRelevance(
+            result,
+            industry,
+            products,
+            location,
+            openaiKey,
+            tenantProductsText,
+            tenantEmbedding
+          );
+          relevancia = relevanceResult.relevancia;
+          similarityScore = relevanceResult.similarityScore;
+          businessType = relevanceResult.businessType;
+          productMatches = relevanceResult.productMatches;
+          exactMatches = relevanceResult.exactMatches;
+        } catch (error) {
+          console.warn('[SERPER Search] ⚠️ Erro ao calcular relevância, usando valores padrão:', error);
+          // Usar valores padrão se falhar
+          businessType = detectBusinessType(result.title, result.snippet, result.link);
+        }
 
         // 🔥 CRÍTICO: REMOVER filtro de similaridade completamente (aceitar todos)
         // Não filtrar por similaridade - deixar passar todos para depois ordenar
