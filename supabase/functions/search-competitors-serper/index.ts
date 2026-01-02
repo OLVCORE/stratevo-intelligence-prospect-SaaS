@@ -341,14 +341,19 @@ serve(async (req) => {
     console.log('[SERPER Search] 📦 Produtos usados na busca:', productsToUse.length, 'produtos');
     console.log('[SERPER Search] 📋 Primeiros produtos:', productsToUse.slice(0, 5));
     console.log('[SERPER Search] 🔑 Palavras-chave extraídas:', productKeywords.slice(0, 5));
+    console.log('[SERPER Search] 🏭 Indústria recebida:', industry);
+    console.log('[SERPER Search] 📍 Localização recebida:', location);
+    console.log('[SERPER Search] 🔢 Total de queries geradas:', queries.length);
+    console.log('[SERPER Search] 📝 Queries completas:', queries);
 
     const allResults: SerperResult['organic'] = [];
     const seenDomains = new Set<string>();
 
     // Executar todas as queries
-    for (const query of queries) {
+    for (let i = 0; i < queries.length; i++) {
+      const query = queries[i];
       try {
-        console.log('[SERPER Search] 🔍 Query:', query);
+        console.log(`[SERPER Search] 🔍 Query ${i + 1}/${queries.length}:`, query);
         
         const serperResponse = await fetch('https://google.serper.dev/search', {
           method: 'POST',
