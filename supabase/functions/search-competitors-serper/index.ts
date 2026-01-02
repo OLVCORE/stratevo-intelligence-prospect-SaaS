@@ -315,24 +315,77 @@ serve(async (req) => {
     
     const productKeywords = extractKeywords(productsToUse);
     
-    // Construir queries mais específicas usando produtos com aspas (busca exata)
-    // 🔥 ESTRATÉGIA: Criar queries que combinem produtos relacionados
-    const queries = [
-      // Query 1: Produtos específicos com aspas (busca exata) + consultoria
-      `${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} consultoria empresa Brasil`,
-      // Query 2: Produtos específicos + fornecedor/soluções
-      `${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} fornecedor soluções Brasil`,
-      // Query 3: Indústria + produtos específicos
-      `${industry} ${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} empresa Brasil`,
-      // Query 4: Palavras-chave dos produtos + consultoria especializada
-      `${productKeywords.slice(0, 5).join(' OR ')} consultoria especializada Brasil`,
-      // Query 5: Produtos específicos + serviços
-      `${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} serviços ${industry} Brasil`,
-      // Query 6: 🔥 NOVO - Produtos agrupados por similaridade (ex: "Consultoria em Importação" + "Consultoria em Exportação")
-      productsToUse.length >= 2 ? `${productsToUse.slice(0, 2).map(p => `"${p}"`).join(' AND ')} consultoria Brasil` : null,
-      // Query 7: 🔥 NOVO - Produtos + termos de negócio específicos
-      `${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} (empresa OR fornecedor OR consultoria) Brasil`,
-    ].filter(q => q !== null) as string[];
+    // 🔥 MELHORADO: Construir queries mais variadas e específicas
+    // ESTRATÉGIA: Criar queries que variem produtos, termos e combinações
+    const queries: string[] = [];
+    
+    // Query 1: Primeiros 3 produtos + consultoria (alta especificidade)
+    if (productsToUse.length >= 3) {
+      queries.push(`"${productsToUse[0]}" OR "${productsToUse[1]}" OR "${productsToUse[2]}" consultoria Brasil`);
+    }
+    
+    // Query 2: Produtos 4-6 + fornecedor (variação de produtos)
+    if (productsToUse.length >= 6) {
+      queries.push(`"${productsToUse[3]}" OR "${productsToUse[4]}" OR "${productsToUse[5]}" fornecedor soluções Brasil`);
+    }
+    
+    // Query 3: Indústria + primeiros 2 produtos (combinação indústria+produtos)
+    if (productsToUse.length >= 2 && industry) {
+      queries.push(`${industry} "${productsToUse[0]}" OR "${productsToUse[1]}" empresa Brasil`);
+    }
+    
+    // Query 4: Palavras-chave dos produtos + consultoria especializada
+    if (productKeywords.length >= 3) {
+      queries.push(`${productKeywords.slice(0, 3).join(' OR ')} consultoria especializada Brasil`);
+    }
+    
+    // Query 5: Produtos relacionados (ex: Importação + Exportação)
+    if (productsToUse.length >= 2) {
+      // Buscar produtos que contenham palavras relacionadas
+      const importExport = productsToUse.filter(p => 
+        p.toLowerCase().includes('import') || p.toLowerCase().includes('export') || 
+        p.toLowerCase().includes('comércio exterior') || p.toLowerCase().includes('supply chain')
+      );
+      if (importExport.length >= 2) {
+        queries.push(`"${importExport[0]}" AND "${importExport[1]}" consultoria Brasil`);
+      }
+    }
+    
+    // Query 6: Produtos de consultoria (se houver múltiplos)
+    const consultoriaProducts = productsToUse.filter(p => 
+      p.toLowerCase().includes('consultoria') || p.toLowerCase().includes('consulting')
+    );
+    if (consultoriaProducts.length >= 2) {
+      queries.push(`${consultoriaProducts.slice(0, 2).map(p => `"${p}"`).join(' OR ')} empresa Brasil`);
+    }
+    
+    // Query 7: Produtos + termos de negócio (variação de termos)
+    if (productsToUse.length >= 3) {
+      queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} (empresa OR fornecedor OR soluções) Brasil`);
+    }
+    
+    // Query 8: Produtos + supply chain/logística (se aplicável)
+    const supplyChainProducts = productsToUse.filter(p => 
+      p.toLowerCase().includes('supply') || p.toLowerCase().includes('logística') || 
+      p.toLowerCase().includes('logistica') || p.toLowerCase().includes('chain')
+    );
+    if (supplyChainProducts.length > 0) {
+      queries.push(`${supplyChainProducts.slice(0, 2).map(p => `"${p}"`).join(' OR ')} consultoria especializada Brasil`);
+    }
+    
+    // Query 9: Produtos + compliance/governança (se aplicável)
+    const complianceProducts = productsToUse.filter(p => 
+      p.toLowerCase().includes('compliance') || p.toLowerCase().includes('governança') ||
+      p.toLowerCase().includes('governanca') || p.toLowerCase().includes('riscos')
+    );
+    if (complianceProducts.length > 0) {
+      queries.push(`${complianceProducts.slice(0, 2).map(p => `"${p}"`).join(' OR ')} consultoria Brasil`);
+    }
+    
+    // Query 10: Fallback - Primeiros 5 produtos genéricos (se não houver queries específicas)
+    if (queries.length === 0 && productsToUse.length > 0) {
+      queries.push(`${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} consultoria empresa Brasil`);
+    }
 
     if (location && location !== 'Brasil') {
       queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} ${location} consultoria`);
