@@ -489,6 +489,13 @@ serve(async (req) => {
 
     const finalCandidates = candidates.slice(0, maxResults);
     console.log('[SERPER Search] ✅ Candidatos finais:', finalCandidates.length);
+    console.log('[SERPER Search] 📊 Estatísticas:', {
+      totalCandidates: candidates.length,
+      finalCandidates: finalCandidates.length,
+      totalResults: allResults.length,
+      filtered: allResults.length - candidates.length,
+      queriesExecuted: queries.length,
+    });
 
     return new Response(
       JSON.stringify({
@@ -496,7 +503,17 @@ serve(async (req) => {
         query: queries[0],
         candidates: finalCandidates,
         total: candidates.length,
+        totalFound: candidates.length, // 🔥 CORRIGIDO: Adicionar campo esperado pelo frontend
+        queriesExecuted: queries.length, // 🔥 CORRIGIDO: Adicionar campo esperado pelo frontend
         filtered: allResults.length - candidates.length,
+        debug: {
+          productsUsed: productsToUse.length,
+          industry,
+          location,
+          queriesGenerated: queries.length,
+          totalResults: allResults.length,
+          candidatesBeforeFilter: candidates.length,
+        },
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
