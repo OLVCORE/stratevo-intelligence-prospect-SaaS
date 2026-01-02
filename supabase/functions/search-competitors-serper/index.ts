@@ -1006,10 +1006,6 @@ serve(async (req) => {
         
         // Se chegou aqui, aceitar o resultado
         acceptedCount++;
-        
-        // 🔥 NOVO: Priorizar resultados com mais produtos encontrados
-        // Log para debug
-        acceptedCount++;
         console.log(`[SERPER Search] ✅ Aceito: ${result.title} (produtos: ${exactMatches}/${productMatches}, similaridade: ${similarityScore}%, relevância: ${relevancia}, tipo: ${businessType})`);
 
         // Extrair nome da empresa do título (remover sufixos comuns)
