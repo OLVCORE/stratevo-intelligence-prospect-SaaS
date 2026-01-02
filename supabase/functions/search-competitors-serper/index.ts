@@ -981,15 +981,46 @@ serve(async (req) => {
           continue;
         }
 
-        // Filtrar marketplaces
+        // 🔥 MELHORADO: Filtrar marketplaces e lojas/e-commerce
         const isMarketplace = [
           'mercadolivre', 'amazon', 'alibaba', 'aliexpress',
           'americanas', 'magazineluiza', 'casasbahia', 'pontofrio',
+          'netshoes', 'centauro', 'kanui', 'dafiti', 'zattini',
+          'submarino', 'shoptime', 'walmart', 'carrefour',
+          'extra', 'ponto', 'fastshop', 'riachuelo', 'renner',
+          'c&a', 'marisa', 'lupo', 'havaianas', 'tiktok',
+          'loja.', 'shop.', 'store.', 'ecommerce', 'e-commerce'
         ].some(m => domain.includes(m));
 
         if (isMarketplace) {
           filteredByMarketplace++;
           continue;
+        }
+        
+        // 🔥 NOVO: Filtrar lojas genéricas (quando buscar produtos)
+        // Se o tenant tem produtos físicos, filtrar lojas que não são fábricas/distribuidores
+        const titleLower = (result.title || '').toLowerCase();
+        const snippetLower = (result.snippet || '').toLowerCase();
+        const isGenericStore = [
+          'loja', 'shop', 'store', 'comprar', 'vender',
+          'preço', 'melhor preço', 'promoção', 'desconto',
+          'ofertas', 'liquidação'
+        ].some(keyword => titleLower.includes(keyword) || snippetLower.includes(keyword));
+        
+        // Se for loja genérica E não mencionar "fabricante" ou "distribuidor", filtrar
+        if (isGenericStore && products.length > 0) {
+          const mentionsManufacturer = titleLower.includes('fabricante') ||
+                                      snippetLower.includes('fabricante') ||
+                                      titleLower.includes('distribuidor') ||
+                                      snippetLower.includes('distribuidor') ||
+                                      titleLower.includes('indústria') ||
+                                      snippetLower.includes('indústria') ||
+                                      titleLower.includes('industrial') ||
+                                      snippetLower.includes('industrial');
+          if (!mentionsManufacturer) {
+            filteredByMarketplace++;
+            continue;
+          }
         }
 
         // 🔥 TEMPORÁRIO: Usar calculateSemanticSimilarity simples ao invés de calculateRelevance completo
