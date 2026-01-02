@@ -29,29 +29,79 @@ interface CompetitorCandidate {
   relevancia: number;
   fonte: 'serper';
   similarityScore?: number; // Score de similaridade de website (0-100)
-  businessType?: 'empresa' | 'vaga' | 'artigo' | 'perfil' | 'associacao' | 'educacional' | 'outro';
+  businessType?: 'empresa' | 'vaga' | 'artigo' | 'perfil' | 'associacao' | 'educacional' | 'marketplace' | 'pdf' | 'reportagem' | 'outro';
 }
 
 // 🔥 DOMÍNIOS GENÉRICOS A EXCLUIR (não são empresas)
 const GENERIC_DOMAINS = [
+  // Redes sociais
   'linkedin.com', 'facebook.com', 'instagram.com', 'twitter.com', 'youtube.com',
+  // Vagas/Recrutamento
   'glassdoor.com', 'indeed.com', 'vagas.com', 'catho.com', 'gupy.io',
+  // Enciclopédias
   'wikipedia.org', 'wikimedia.org',
+  // Governo
   'gov.br', '.gov.', 'receita.fazenda.gov.br',
+  // Blogs/Plataformas de conteúdo
   'blogspot.com', 'wordpress.com', 'medium.com',
-  'acate.com.br', 'abiquifi.org.br', 'abiquim.org.br', // Associações
-  'insper.edu.br', 'espm.br', 'fia.com.br', // Educacionais
-  'portalerp.com', // Portal de vagas
+  // Associações
+  'acate.com.br', 'abiquifi.org.br', 'abiquim.org.br',
+  // Educacionais
+  'insper.edu.br', 'espm.br', 'fia.com.br',
+  // Portais de vagas
+  'portalerp.com',
+  // 🔥 NOVO: Marketplaces
+  'ebay.com', 'ebay.es', 'ebay.com.br', 'ebay.co.uk',
+  'amazon.com', 'amazon.com.br', 'amazon.co.uk',
+  'mercadolivre.com.br', 'mercadolivre.com',
+  'magazine-luiza.com.br', 'americanas.com.br', 'submarino.com.br',
+  'casasbahia.com.br', 'extra.com.br', 'ponto.com.br',
+  'shoptime.com.br', 'walmart.com.br',
+  // 🔥 NOVO: PDFs e Documentos
+  'pdfcoffee.com', 'anyflip.com', 'fliphtml5.com', 'issuu.com',
+  'slideshare.net', 'scribd.com', 'docplayer.com.br',
+  'pdfdrive.com', 'pdfhost.io',
+  // 🔥 NOVO: Sites de notícias/reportagens
+  'g1.com.br', 'uol.com.br', 'folha.com.br', 'estadao.com.br',
+  'oglobo.com.br', 'exame.com', 'valor.com.br', 'infomoney.com.br',
+  'abril.com.br', 'globo.com', 'r7.com',
+  // 🔥 NOVO: Sites de estudos/pesquisas
+  'scielo.org', 'scielo.br', 'researchgate.net', 'academia.edu',
+  'scholar.google.com', 'pubmed.ncbi.nlm.nih.gov',
+  // 🔥 NOVO: Sites de anúncios/classificados
+  'olx.com.br', 'encontra.com.br', 'bomnegocio.com',
+  // 🔥 NOVO: Sites de e-commerce genéricos (marketplaces)
+  'shopee.com.br', 'alibaba.com', 'alibaba.com.br',
+  'wish.com', 'wish.com.br', 'etsy.com',
 ];
 
 // 🔥 PALAVRAS-CHAVE QUE INDICAM NÃO-EMPRESA
 const NON_COMPANY_KEYWORDS = [
-  'vaga', 'vagas', 'oportunidade', 'trabalhe conosco', 'carreira',
-  'artigo', 'blog', 'post', 'notícia', 'reportagem',
-  'curso', 'pós-graduação', 'mba', 'treinamento', 'capacitação',
-  'associação', 'sindicato', 'federação',
+  // Vagas
+  'vaga', 'vagas', 'oportunidade', 'trabalhe conosco', 'carreira', 'recrutamento',
+  // Conteúdo/Artigos
+  'artigo', 'blog', 'post', 'notícia', 'reportagem', 'matéria', 'publicação',
+  'estudo', 'pesquisa', 'análise de mercado', 'tendências',
+  // Educacional
+  'curso', 'pós-graduação', 'mba', 'treinamento', 'capacitação', 'workshop',
+  // Associações
+  'associação', 'sindicato', 'federação', 'confederação',
+  // Perfis
   'perfil', 'profile', 'linkedin.com/in',
-  'evento', 'feira', 'congresso', 'palestra',
+  // Eventos
+  'evento', 'feira', 'congresso', 'palestra', 'webinar',
+  // 🔥 NOVO: PDFs e Documentos
+  '.pdf', 'download pdf', 'baixar pdf', 'documento pdf',
+  'ebook', 'manual', 'catálogo pdf', 'folheto',
+  // 🔥 NOVO: Marketplaces/Anúncios
+  'comprar online', 'loja online', 'e-commerce', 'marketplace',
+  'anúncio', 'classificado', 'vender', 'comprar',
+  // 🔥 NOVO: Reportagens/Notícias
+  'reportagem', 'notícia', 'jornal', 'revista', 'publicação',
+  'entrevista', 'cobertura', 'matéria especial',
+  // 🔥 NOVO: Estudos/Pesquisas
+  'estudo de caso', 'pesquisa acadêmica', 'tese', 'dissertação',
+  'paper', 'artigo científico', 'publicação científica',
 ];
 
 // 🔥 PALAVRAS-CHAVE QUE INDICAM EMPRESA REAL
@@ -64,36 +114,121 @@ const COMPANY_KEYWORDS = [
 
 /**
  * Detecta tipo de negócio baseado em título, snippet e URL
+ * 🔥 MELHORADO: Filtros mais rigorosos para excluir marketplaces, PDFs, reportagens
  */
 function detectBusinessType(
   title: string,
   snippet: string,
   url: string
-): 'empresa' | 'vaga' | 'artigo' | 'perfil' | 'associacao' | 'educacional' | 'outro' {
+): 'empresa' | 'vaga' | 'artigo' | 'perfil' | 'associacao' | 'educacional' | 'marketplace' | 'pdf' | 'reportagem' | 'outro' {
   const text = `${title} ${snippet} ${url}`.toLowerCase();
+  const urlLower = url.toLowerCase();
   
-  // Verificar se é vaga
+  // 🔥 CRÍTICO: Verificar domínios genéricos primeiro
+  if (GENERIC_DOMAINS.some(domain => urlLower.includes(domain))) {
+    // Verificar se é marketplace
+    if (urlLower.includes('ebay') || urlLower.includes('amazon') || 
+        urlLower.includes('mercadolivre') || urlLower.includes('shopee') ||
+        urlLower.includes('alibaba') || urlLower.includes('wish') ||
+        urlLower.includes('magazine') || urlLower.includes('americanas') ||
+        urlLower.includes('casasbahia') || urlLower.includes('extra') ||
+        urlLower.includes('walmart') || urlLower.includes('olx')) {
+      return 'marketplace';
+    }
+    // Verificar se é PDF
+    if (urlLower.includes('pdfcoffee') || urlLower.includes('anyflip') ||
+        urlLower.includes('fliphtml5') || urlLower.includes('issuu') ||
+        urlLower.includes('slideshare') || urlLower.includes('scribd') ||
+        urlLower.includes('docplayer') || urlLower.includes('pdfdrive') ||
+        urlLower.includes('pdfhost') || urlLower.endsWith('.pdf')) {
+      return 'pdf';
+    }
+    // Verificar se é reportagem/notícia
+    if (urlLower.includes('g1') || urlLower.includes('uol') || 
+        urlLower.includes('folha') || urlLower.includes('estadao') ||
+        urlLower.includes('oglobo') || urlLower.includes('exame') ||
+        urlLower.includes('valor') || urlLower.includes('infomoney') ||
+        urlLower.includes('globo') || urlLower.includes('r7')) {
+      return 'reportagem';
+    }
+    // Outros domínios genéricos
+    return 'outro';
+  }
+  
+  // 🔥 Verificar palavras-chave que indicam não-empresa
   if (NON_COMPANY_KEYWORDS.some(kw => text.includes(kw))) {
-    if (text.includes('vaga') || text.includes('oportunidade') || text.includes('trabalhe')) {
+    // Vagas
+    if (text.includes('vaga') || text.includes('oportunidade') || 
+        text.includes('trabalhe') || text.includes('recrutamento') ||
+        text.includes('carreira')) {
       return 'vaga';
     }
-    if (text.includes('artigo') || text.includes('blog') || text.includes('post')) {
+    // PDFs/Documentos
+    if (text.includes('.pdf') || text.includes('download pdf') ||
+        text.includes('baixar pdf') || text.includes('documento pdf') ||
+        text.includes('ebook') || text.includes('manual') ||
+        text.includes('catálogo pdf') || text.includes('folheto') ||
+        urlLower.endsWith('.pdf')) {
+      return 'pdf';
+    }
+    // Reportagens/Notícias
+    if (text.includes('reportagem') || text.includes('notícia') ||
+        text.includes('jornal') || text.includes('revista') ||
+        text.includes('publicação') || text.includes('entrevista') ||
+        text.includes('cobertura') || text.includes('matéria especial')) {
+      return 'reportagem';
+    }
+    // Artigos/Blogs
+    if (text.includes('artigo') || text.includes('blog') || 
+        text.includes('post') || text.includes('publicação')) {
       return 'artigo';
     }
-    if (text.includes('curso') || text.includes('mba') || text.includes('pós-graduação')) {
+    // Estudos/Pesquisas
+    if (text.includes('estudo de caso') || text.includes('pesquisa acadêmica') ||
+        text.includes('tese') || text.includes('dissertação') ||
+        text.includes('paper') || text.includes('artigo científico') ||
+        text.includes('publicação científica')) {
+      return 'artigo';
+    }
+    // Marketplaces/Anúncios
+    if (text.includes('comprar online') || text.includes('loja online') ||
+        text.includes('e-commerce') || text.includes('marketplace') ||
+        text.includes('anúncio') || text.includes('classificado') ||
+        text.includes('vender') || text.includes('comprar')) {
+      return 'marketplace';
+    }
+    // Educacional
+    if (text.includes('curso') || text.includes('mba') || 
+        text.includes('pós-graduação') || text.includes('workshop')) {
       return 'educacional';
     }
-    if (text.includes('associação') || text.includes('sindicato')) {
+    // Associações
+    if (text.includes('associação') || text.includes('sindicato') ||
+        text.includes('federação') || text.includes('confederação')) {
       return 'associacao';
     }
-    if (text.includes('linkedin.com/in') || text.includes('perfil')) {
+    // Perfis
+    if (text.includes('linkedin.com/in') || text.includes('perfil') ||
+        text.includes('profile')) {
       return 'perfil';
     }
   }
   
-  // Verificar se é empresa real
+  // 🔥 Verificar se é empresa real (apenas se passou todos os filtros)
   if (COMPANY_KEYWORDS.some(kw => text.includes(kw))) {
     return 'empresa';
+  }
+  
+  // Se não passou em nenhum filtro, mas tem estrutura de URL de empresa (.com.br, etc.)
+  if (urlLower.match(/\.com\.br$|\.com$|\.net\.br$|\.org\.br$/) && 
+      !urlLower.includes('blog') && !urlLower.includes('wiki') &&
+      !urlLower.includes('gov') && !urlLower.includes('edu')) {
+    // Verificar se tem palavras que indicam empresa
+    if (text.includes('empresa') || text.includes('ltda') || 
+        text.includes('soluções') || text.includes('serviços') ||
+        text.includes('consultoria') || text.includes('fornecedor')) {
+      return 'empresa';
+    }
   }
   
   return 'outro';
@@ -501,8 +636,16 @@ serve(async (req) => {
         // Threshold dinâmico: mais baixo se encontrou produtos, mais alto se não encontrou
         const minRelevancia = hasProductMatch ? 25 : 40;
         
-        if (relevancia < minRelevancia || businessType === 'vaga' || businessType === 'artigo' || businessType === 'perfil') {
+        // 🔥 MELHORADO: Filtrar todos os tipos não-empresa
+        const nonCompanyTypes = ['vaga', 'artigo', 'perfil', 'marketplace', 'pdf', 'reportagem', 'associacao', 'educacional'];
+        if (relevancia < minRelevancia || (businessType && nonCompanyTypes.includes(businessType))) {
           console.log(`[SERPER Search] ❌ Filtrado: ${result.title} (${businessType}, relevância: ${relevancia}, min: ${minRelevancia}, hasProduct: ${hasProductMatch})`);
+          continue;
+        }
+        
+        // 🔥 CRÍTICO: Aceitar apenas empresas reais
+        if (businessType !== 'empresa') {
+          console.log(`[SERPER Search] ❌ Filtrado (não é empresa): ${result.title} (${businessType})`);
           continue;
         }
 
