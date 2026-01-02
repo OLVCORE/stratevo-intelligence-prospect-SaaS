@@ -60,7 +60,9 @@ export default function CompetitorDiscovery({
   onCompetitorSelected,
 }: Props) {
   const [searching, setSearching] = useState(false);
+  // 🔥 CRÍTICO: Usar estado intermediário para garantir limpeza completa
   const [candidates, setCandidates] = useState<CompetitorCandidate[]>([]);
+  const [searchId, setSearchId] = useState(0); // 🔥 NOVO: ID único para forçar re-render completo
   // 🔥 CORRIGIDO: Inicializar customQuery com industry, mas permitir apagar completamente
   const [customQuery, setCustomQuery] = useState(industry || '');
   const [maxResults, setMaxResults] = useState(10);
@@ -71,6 +73,8 @@ export default function CompetitorDiscovery({
   const searchKeyRef = useRef(0);
   // 🔥 CRÍTICO: Flag para garantir que busca sempre execute (evitar cache de estado)
   const isSearchingRef = useRef(false);
+  // 🔥 NOVO: Ref para armazenar última busca (evitar duplicação)
+  const lastSearchParamsRef = useRef<string>('');
 
   // 🔥 CORRIGIDO: Sincronizar initialLocation apenas uma vez (primeiro preenchimento)
   useEffect(() => {
@@ -113,15 +117,13 @@ export default function CompetitorDiscovery({
   // 🔥 NOVO: Função para limpar completamente e iniciar nova busca
   const handleNewSearch = () => {
     console.log('[CompetitorDiscovery] 🆕 Iniciando NOVA busca - limpando tudo');
-    // 🔥 CRÍTICO: Limpar estado completamente
+    // 🔥 CRÍTICO: Limpar estado completamente de forma síncrona
     isSearchingRef.current = false; // Resetar flag
-    setCandidates([]);
-    searchKeyRef.current += 1; // Incrementar chave única para forçar re-render
+    lastSearchParamsRef.current = ''; // Limpar parâmetros da última busca
+    searchKeyRef.current += 1; // Incrementar chave única
+    setSearchId(prev => prev + 1); // 🔥 NOVO: Incrementar searchId para forçar re-render
+    setCandidates([]); // Limpar imediatamente
     setSearching(false);
-    // 🔥 NOVO: Forçar re-render imediato
-    setTimeout(() => {
-      setCandidates([]); // Garantir que está vazio
-    }, 0);
   };
 
   const handleSearch = async () => {
@@ -135,6 +137,22 @@ export default function CompetitorDiscovery({
       return;
     }
 
+    // 🔥 CRÍTICO: Criar hash único dos parâmetros da busca
+    const searchParams = JSON.stringify({
+      query: queryToUse,
+      products: products.slice(0, 5).join(','), // Primeiros 5 para hash
+      location: location.trim(),
+      maxResults,
+    });
+    
+    // 🔥 NOVO: Verificar se é a mesma busca (evitar duplicação)
+    if (lastSearchParamsRef.current === searchParams && candidates.length > 0) {
+      console.log('[CompetitorDiscovery] ⚠️ Mesma busca, mas forçando atualização...');
+      // Mesmo sendo a mesma busca, vamos forçar atualização
+    }
+    
+    lastSearchParamsRef.current = searchParams;
+
     // 🔥 CRÍTICO: Verificar se já está buscando (evitar múltiplas chamadas)
     if (isSearchingRef.current) {
       console.log('[CompetitorDiscovery] ⚠️ Busca já em andamento, ignorando...');
@@ -146,12 +164,14 @@ export default function CompetitorDiscovery({
 
     // 🔥 CRÍTICO: Limpar candidatos ANTES de iniciar busca (forçar atualização imediata)
     console.log('[CompetitorDiscovery] 🗑️ Limpando candidatos antigos...');
+    // 🔥 NOVO: Limpar de forma síncrona e forçar re-render
     setCandidates([]);
+    setSearchId(prev => prev + 1); // 🔥 NOVO: Incrementar searchId para forçar re-render completo
     searchKeyRef.current += 1; // 🔥 NOVO: Incrementar chave única para forçar nova busca
     setSearching(true);
     
-    // 🔥 NOVO: Forçar re-render imediato limpando estado
-    await new Promise(resolve => setTimeout(resolve, 50)); // Aumentado para 50ms para garantir limpeza
+    // 🔥 NOVO: Forçar re-render imediato limpando estado (aumentado para garantir)
+    await new Promise(resolve => setTimeout(resolve, 100)); // 🔥 AUMENTADO para 100ms
 
     try {
       console.log('[CompetitorDiscovery] 🔍 Iniciando busca SERPER (chave:', searchKeyRef.current, ')');
@@ -396,7 +416,7 @@ export default function CompetitorDiscovery({
 
       {/* Resultados */}
       {candidates.length > 0 && (
-        <Card className="border-l-4 border-l-emerald-600">
+        <Card key={`results-card-${searchId}`} className="border-l-4 border-l-emerald-600">
           <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
             <div className="flex items-center justify-between">
               <div>
@@ -410,10 +430,10 @@ export default function CompetitorDiscovery({
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="space-y-3" key={`candidates-list-${searchKeyRef.current}`}>
+            <div className="space-y-3" key={`candidates-list-${searchId}-${searchKeyRef.current}`}>
               {candidates.map((candidate, idx) => (
                 <div 
-                  key={`${searchKeyRef.current}-${candidate.website}-${idx}`}
+                  key={`${searchId}-${searchKeyRef.current}-${candidate.website}-${idx}-${Date.now()}`}
                   className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-4">
