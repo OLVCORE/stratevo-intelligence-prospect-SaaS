@@ -2590,58 +2590,60 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
           <Label htmlFor="website" className="text-foreground">
             Website
           </Label>
-          <div className="flex gap-2 mt-2">
+          <div className="flex flex-col gap-2 mt-2">
             <Input
               id="website"
               type="url"
               value={formData.website}
               onChange={(e) => setFormData({ ...formData, website: e.target.value })}
               placeholder="https://exemplo.com.br"
-              className="flex-1"
+              className="w-full"
             />
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={handleScanTenantWebsite}
-              disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
-              className="flex items-center gap-2"
-              title={!formData.website?.trim() ? 'Informe o website primeiro' : !tenant?.id ? 'Tenant não identificado' : 'Extrair produtos do website (rápido)'}
-            >
-              {scanningTenantWebsite ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Escaneando...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Extrair Produtos
-                </>
-              )}
-            </Button>
-            {/* ✅ NOVO: Botão para varredura completa 360º */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleScanTenantWebsite360}
-              disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
-              className="flex items-center gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-              title="Varredura completa 360º - Escaneia TODAS as páginas do website (recomendado para sites grandes)"
-            >
-              {scanningTenantWebsite ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Escaneando...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  360º Completo
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleScanTenantWebsite}
+                disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
+                className="flex items-center gap-2 flex-1"
+                title={!formData.website?.trim() ? 'Informe o website primeiro' : !tenant?.id ? 'Tenant não identificado' : 'Extrair produtos do website (rápido - até 10 páginas)'}
+              >
+                {scanningTenantWebsite ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Escaneando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Extrair Produtos
+                  </>
+                )}
+              </Button>
+              {/* ✅ NOVO: Botão para varredura completa 360º */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleScanTenantWebsite360}
+                disabled={scanningTenantWebsite || !formData.website?.trim() || !tenant?.id}
+                className="flex items-center gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground flex-1"
+                title="Varredura completa 360º - Escaneia TODAS as páginas do website em lotes (até 500 páginas). Recomendado para sites grandes com muitos produtos."
+              >
+                {scanningTenantWebsite ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Escaneando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    360º Completo
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
           {tenantProductsCount > 0 && (
             <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
@@ -2661,7 +2663,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             value={formData.telefone}
             onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
             placeholder="(00) 00000-0000"
-            className="mt-2"
+            className="mt-2 w-full"
           />
         </div>
       </div>
