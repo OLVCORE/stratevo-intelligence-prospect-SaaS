@@ -1050,12 +1050,37 @@ serve(async (req) => {
         // 🔥 CRÍTICO: REMOVER filtro de relevância completamente (aceitar todos)
         // Não filtrar por relevância - deixar passar todos para depois ordenar
         
-        // 🔥 AJUSTADO: Filtrar apenas tipos claramente não-empresa (vaga, artigo, perfil)
-        // Aceitar todos os outros tipos (empresa, associacao, educacional, outro)
-        const strictNonCompanyTypes = ['vaga', 'artigo', 'perfil'];
+        // 🔥 MELHORADO: Filtrar tipos não-empresa (vaga, artigo, perfil, educacional)
+        // Aceitar apenas: empresa, associacao (se tiver produtos), outro (se tiver produtos)
+        const strictNonCompanyTypes = ['vaga', 'artigo', 'perfil', 'educacional'];
         if (businessType && strictNonCompanyTypes.includes(businessType)) {
           filteredByBusinessType++;
-          console.log(`[SERPER Search] ❌ Filtrado (tipo não-empresa estrito): ${result.title} (${businessType})`);
+          console.log(`[SERPER Search] ❌ Filtrado (tipo não-empresa): ${result.title} (${businessType})`);
+          continue;
+        }
+        
+        // 🔥 NOVO: Filtrar domínios educacionais explicitamente
+        const educationalDomains = [
+          'passeidireto', 'aprovadotcc', 'educamaisbrasil', 'anhanguera',
+          'cruzeirodosul', 'uninter', 'ens.edu', 'teses.usp', 'portfolio',
+          'acadportfolios', 'consultoriaportfolios', 'portfoliooead', 'portfolio-pronto'
+        ];
+        if (educationalDomains.some(edu => domain.includes(edu))) {
+          filteredByBusinessType++;
+          console.log(`[SERPER Search] ❌ Filtrado (domínio educacional): ${result.title} (${domain})`);
+          continue;
+        }
+        
+        // 🔥 NOVO: Filtrar artigos/estudos por palavras-chave no título
+        const articleKeywords = [
+          'curso', 'cursos', 'treinamento', 'capacitação', 'graduação',
+          'pós-graduação', 'mba', 'projeto de extensão', 'tcc', 'trabalho acadêmico',
+          'estudo', 'pesquisa', 'análise de', 'tendências', 'artigo sobre'
+        ];
+        const titleLower = (result.title || '').toLowerCase();
+        if (articleKeywords.some(keyword => titleLower.includes(keyword))) {
+          filteredByBusinessType++;
+          console.log(`[SERPER Search] ❌ Filtrado (palavra-chave educacional no título): ${result.title}`);
           continue;
         }
         
