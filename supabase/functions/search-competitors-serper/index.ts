@@ -343,12 +343,15 @@ function calculateRelevance(
 ): { relevancia: number; similarityScore: number; businessType: CompetitorCandidate['businessType'] } {
   const businessType = detectBusinessType(result.title, result.snippet, result.link);
   
-  // 🔥 PENALIZAR tipos não-empresa
+  // 🔥 PENALIZAR tipos não-empresa (MELHORADO: inclui marketplace, pdf, reportagem)
   let typePenalty = 0;
-  if (businessType === 'vaga' || businessType === 'artigo' || businessType === 'perfil') {
-    typePenalty = -50; // Penalidade alta
+  if (businessType === 'vaga' || businessType === 'artigo' || businessType === 'perfil' ||
+      businessType === 'marketplace' || businessType === 'pdf' || businessType === 'reportagem') {
+    typePenalty = -100; // 🔥 Penalidade máxima (excluir completamente)
   } else if (businessType === 'associacao' || businessType === 'educacional') {
-    typePenalty = -30; // Penalidade média
+    typePenalty = -50; // Penalidade alta
+  } else if (businessType !== 'empresa') {
+    typePenalty = -30; // Penalidade para outros tipos não-empresa
   }
   
   // Base: posição no Google (peso: 25%)
