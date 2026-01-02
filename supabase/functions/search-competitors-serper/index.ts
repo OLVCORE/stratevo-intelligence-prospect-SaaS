@@ -701,16 +701,18 @@ serve(async (req) => {
           location
         );
 
-        // 🔥 MELHORADO: Threshold de similaridade mínima (30%)
-        // Exigir que a similaridade seja pelo menos 30% para evitar resultados genéricos
-        if (similarityScore < 30) {
-          console.log(`[SERPER Search] ❌ Filtrado (similaridade baixa): ${result.title} (similaridade: ${similarityScore}%, mín: 30%)`);
+        // 🔥 AJUSTADO: Threshold de similaridade mínima (20% - reduzido de 30%)
+        // Exigir que a similaridade seja pelo menos 20% para evitar resultados genéricos
+        // Mas permitir resultados com produtos específicos mesmo com similaridade menor
+        const minSimilarity = exactMatches >= 2 ? 15 : (exactMatches >= 1 ? 20 : 25);
+        if (similarityScore < minSimilarity) {
+          console.log(`[SERPER Search] ❌ Filtrado (similaridade baixa): ${result.title} (similaridade: ${similarityScore}%, mín: ${minSimilarity}%, produtos: ${exactMatches})`);
           continue;
         }
 
-        // 🔥 MELHORADO: Filtrar com threshold dinâmico baseado em produtos
+        // 🔥 AJUSTADO: Filtrar com threshold dinâmico baseado em produtos
         // Threshold dinâmico: mais baixo se encontrou produtos, mais alto se não encontrou
-        const minRelevancia = exactMatches >= 2 ? 30 : (exactMatches >= 1 ? 40 : 50);
+        const minRelevancia = exactMatches >= 2 ? 20 : (exactMatches >= 1 ? 30 : 40);
         
         // 🔥 MELHORADO: Filtrar todos os tipos não-empresa
         const nonCompanyTypes = ['vaga', 'artigo', 'perfil', 'marketplace', 'pdf', 'reportagem', 'associacao', 'educacional'];
