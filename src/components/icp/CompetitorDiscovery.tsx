@@ -111,9 +111,14 @@ export default function CompetitorDiscovery({
   // 🔥 NOVO: Função para limpar completamente e iniciar nova busca
   const handleNewSearch = () => {
     console.log('[CompetitorDiscovery] 🆕 Iniciando NOVA busca - limpando tudo');
+    // 🔥 CRÍTICO: Limpar estado completamente
     setCandidates([]);
     searchKeyRef.current += 1; // Incrementar chave única para forçar re-render
     setSearching(false);
+    // 🔥 NOVO: Forçar re-render imediato
+    setTimeout(() => {
+      setCandidates([]); // Garantir que está vazio
+    }, 0);
   };
 
   const handleSearch = async () => {
@@ -148,6 +153,12 @@ export default function CompetitorDiscovery({
         ])
       ];
 
+      // 🔥 CRÍTICO: Adicionar timestamp único para evitar cache do navegador/Edge Function
+      const searchTimestamp = Date.now();
+      const uniqueSearchId = `${searchKeyRef.current}-${searchTimestamp}`;
+      
+      console.log('[CompetitorDiscovery] 🔑 ID único da busca:', uniqueSearchId);
+      
       const { data, error } = await supabase.functions.invoke('search-competitors-serper', {
         body: {
           industry: customQuery.trim(), // 🔥 CORRIGIDO: Usar apenas customQuery (não fallback para industry)
@@ -155,6 +166,8 @@ export default function CompetitorDiscovery({
           location: location.trim() || 'Brasil', // Se vazio, busca Brasil sem filtro de cidade/UF
           excludeDomains: allExcludedDomains,
           maxResults,
+          forceRefresh: true, // 🔥 NOVO: Forçar busca sem cache
+          searchId: uniqueSearchId, // 🔥 NOVO: ID único para rastreamento
         },
       });
 
@@ -164,9 +177,17 @@ export default function CompetitorDiscovery({
       if (data.success && data.candidates) {
         console.log('[CompetitorDiscovery] ✅ Candidatos encontrados:', data.candidates.length);
         console.log('[CompetitorDiscovery] 📋 Primeiros candidatos:', data.candidates.slice(0, 3).map(c => c.nome));
+        console.log('[CompetitorDiscovery] 🔑 ID da busca que retornou:', uniqueSearchId);
         
-        // 🔥 CRÍTICO: Forçar atualização com nova referência de array
-        setCandidates([...data.candidates]);
+        // 🔥 CRÍTICO: Limpar ANTES de atualizar (garantir que não há dados antigos)
+        setCandidates([]);
+        
+        // 🔥 CRÍTICO: Aguardar um tick para garantir que limpeza foi aplicada
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        // 🔥 CRÍTICO: Forçar atualização com nova referência de array (criar array completamente novo)
+        const newCandidates = data.candidates.map(c => ({ ...c })); // Criar novos objetos também
+        setCandidates(newCandidates);
         
         // 🔥 MELHORADO: Calcular relevância média
         const avgRelevancia = data.candidates.length > 0
@@ -373,10 +394,10 @@ export default function CompetitorDiscovery({
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="space-y-3">
+            <div className="space-y-3" key={`candidates-list-${searchKeyRef.current}`}>
               {candidates.map((candidate, idx) => (
                 <div 
-                  key={idx}
+                  key={`${searchKeyRef.current}-${candidate.website}-${idx}`}
                   className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-4">
