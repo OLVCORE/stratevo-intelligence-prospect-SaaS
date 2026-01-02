@@ -2583,6 +2583,7 @@ export function OnboardingWizard() {
       isSaving: isSaving, // Não incluir isSubmitting para não bloquear botão Próximo
       hasUnsavedChanges,
       isNewTenant, // 🔥 NOVO: Passar flag para Step1 não carregar dados quando é novo tenant
+      tenantIdFromUrl: tenantIdDetermined, // 🔥 NOVO: Passar tenant_id correto da URL para Step1 usar ao buscar CNPJ
     };
 
     switch (currentStep) {

@@ -31,9 +31,10 @@ interface Props {
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
   isNewTenant?: boolean; // 🔥 NOVO: Flag para indicar se é novo tenant (não carregar dados)
+  tenantIdFromUrl?: string | null; // 🔥 NOVO: Tenant_id da URL (correto para novo tenant)
 }
 
-export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false, isNewTenant = false }: Props) {
+export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false, isNewTenant = false, tenantIdFromUrl }: Props) {
   // 🔥 CRÍTICO: Se é novo tenant, SEMPRE começar com campos vazios (ignorar initialData)
   const [formData, setFormData] = useState(() => {
     if (isNewTenant) {
@@ -647,15 +648,21 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       setFormData(updatedFormData);
       
       // 🔥 CRÍTICO: Atualizar nome E CNPJ do tenant se já existir (banco OU localStorage)
-      if (tenant?.id && data.nome) {
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant.id);
+      // 🔥 CORRIGIDO: Se é novo tenant, usar tenantIdFromUrl (da URL) em vez de tenant?.id (do contexto)
+      const tenantIdToUse = isNewTenant && tenantIdFromUrl ? tenantIdFromUrl : tenant?.id;
+      
+      if (tenantIdToUse && data.nome) {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantIdToUse);
         const cnpjLimpo = formData.cnpj.replace(/\D/g, '');
         
         if (isUUID) {
           // Tenant do banco - atualizar no banco
           try {
             console.log('[Step1] 🔄 Atualizando nome e CNPJ do tenant no banco:', { 
-              tenantId: tenant.id, 
+              tenantId: tenantIdToUse,
+              tenantIdFromUrl,
+              tenantIdFromContext: tenant?.id,
+              isNewTenant,
               nome: data.nome,
               cnpj: cnpjLimpo 
             });
@@ -663,9 +670,9 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
               .from('tenants')
               .update({ 
                 nome: data.nome,
-                cnpj: cnpjLimpo || tenant.cnpj || null
+                cnpj: cnpjLimpo || null
               })
-              .eq('id', tenant.id);
+              .eq('id', tenantIdToUse);
             
             if (updateError) {
               console.warn('[Step1] ⚠️ Erro ao atualizar tenant no banco:', updateError);
@@ -673,7 +680,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
               // O nome será atualizado quando o erro RLS for corrigido
               window.dispatchEvent(new CustomEvent('tenant-updated', { 
                 detail: { 
-                  tenantId: tenant.id, 
+                  tenantId: tenantIdToUse, 
                   nome: data.nome,
                   cnpj: cnpjLimpo 
                 } 
@@ -683,7 +690,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
               // Disparar evento customizado para refetch do useUserTenants
               window.dispatchEvent(new CustomEvent('tenant-updated', { 
                 detail: { 
-                  tenantId: tenant.id, 
+                  tenantId: tenantIdToUse, 
                   nome: data.nome,
                   cnpj: cnpjLimpo 
                 } 
@@ -694,7 +701,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             // 🔥 NOVO: Mesmo com erro, disparar evento para atualizar UI
             window.dispatchEvent(new CustomEvent('tenant-updated', { 
               detail: { 
-                tenantId: tenant.id, 
+                tenantId: tenantIdToUse, 
                 nome: data.nome,
                 cnpj: cnpjLimpo 
               } 
@@ -704,7 +711,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
           // Tenant local - atualizar no localStorage
           try {
             console.log('[Step1] 🔄 Atualizando nome e CNPJ do tenant local no localStorage:', { 
-              tenantId: tenant.id, 
+              tenantId: tenantIdToUse, 
               nome: data.nome,
               cnpj: cnpjLimpo 
             });
