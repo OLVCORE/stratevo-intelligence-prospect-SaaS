@@ -274,15 +274,15 @@ function calculateSemanticSimilarity(
   for (const product of targetProducts) { // 🔥 USAR TODOS OS PRODUTOS
     const productLower = product.toLowerCase().trim();
     
-    // Ignorar produtos muito genéricos (menos de 3 palavras)
+    // 🔥 AJUSTADO: Ignorar apenas produtos muito genéricos (1 palavra)
     const productWords = productLower.split(/\s+/).filter(w => w.length > 2);
-    if (productWords.length < 2) continue;
+    if (productWords.length < 1) continue; // Apenas 1 palavra mínima (era 2)
     
-    // Verificar se produto não é apenas termo genérico
+    // 🔥 AJUSTADO: Verificar se produto não é apenas termo genérico (mais permissivo)
     const isGeneric = genericProductTerms.some(term => 
       productLower === term || productLower === `${term} em` || productLower === `${term} de`
     );
-    if (isGeneric && productWords.length < 3) continue;
+    if (isGeneric && productWords.length < 2) continue; // Reduzido de 3 para 2
     
     // Match exato do produto completo (peso MUITO maior)
     if (text.includes(productLower)) {
