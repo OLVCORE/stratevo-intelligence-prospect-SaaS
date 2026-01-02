@@ -92,11 +92,11 @@ export default function CompetitorDiscovery({
       queryParts.push(industryQuery);
     }
     
-    // Produtos com aspas para busca exata
-    const productsToUse = products.slice(0, 5);
+    // Produtos com aspas para busca exata (usar até 10 para preview)
+    const productsToUse = products.slice(0, 10);
     if (productsToUse.length > 0) {
       const productsQuoted = productsToUse.map(p => `"${p}"`).join(' OR ');
-      queryParts.push(`(${productsQuoted})`);
+      queryParts.push(`(${productsQuoted}${products.length > 10 ? ' ...' : ''})`);
     }
     
     // Localização
@@ -134,7 +134,7 @@ export default function CompetitorDiscovery({
       const { data, error } = await supabase.functions.invoke('search-competitors-serper', {
         body: {
           industry: customQuery.trim(), // 🔥 CORRIGIDO: Usar apenas customQuery (não fallback para industry)
-          products: products.slice(0, 5), // Top 5 produtos
+          products: products, // 🔥 MELHORADO: Passar TODOS os produtos do tenant (não apenas 5)
           location: location.trim() || 'Brasil', // Se vazio, busca Brasil sem filtro de cidade/UF
           excludeDomains: allExcludedDomains,
           maxResults,

@@ -126,33 +126,68 @@ function calculateSemanticSimilarity(
     }
   }
   
-  // Similaridade de produtos/serviços (peso: 40%)
+  // 🔥 CRÍTICO: Similaridade de produtos/serviços (peso: 60% - AUMENTADO)
+  // Usar TODOS os produtos do tenant, não apenas os 5 primeiros
   let productMatches = 0;
-  for (const product of targetProducts.slice(0, 5)) {
-    const productLower = product.toLowerCase();
+  let exactProductMatches = 0;
+  
+  for (const product of targetProducts) { // 🔥 USAR TODOS OS PRODUTOS
+    const productLower = product.toLowerCase().trim();
+    
+    // Match exato do produto completo (peso maior)
     if (text.includes(productLower)) {
+      exactProductMatches++;
+      score += 15; // 🔥 AUMENTADO: +15 pontos por produto encontrado (era 8)
       productMatches++;
-      score += 8; // +8 pontos por produto encontrado
     } else {
-      // Buscar palavras-chave do produto
-      const productWords = productLower.split(/\s+/);
-      const matchedProductWords = productWords.filter(word => 
-        word.length > 3 && text.includes(word)
-      );
-      if (matchedProductWords.length > 0) {
-        score += (matchedProductWords.length / productWords.length) * 4;
+      // Match parcial: buscar palavras-chave do produto
+      const productWords = productLower.split(/\s+/).filter(w => w.length > 2);
+      let matchedWords = 0;
+      
+      for (const word of productWords) {
+        if (word.length > 3 && text.includes(word)) {
+          matchedWords++;
+        }
+      }
+      
+      // Se encontrou pelo menos 50% das palavras do produto, considerar match parcial
+      if (matchedWords > 0 && productWords.length > 0) {
+        const matchRatio = matchedWords / productWords.length;
+        if (matchRatio >= 0.5) {
+          productMatches++;
+          score += Math.round(8 * matchRatio); // Peso proporcional ao match
+        } else if (matchRatio >= 0.3) {
+          score += Math.round(4 * matchRatio); // Match fraco, peso menor
+        }
       }
     }
   }
   
-  // Palavras-chave de negócio (peso: 20%)
-  const businessKeywords = [
-    'consultoria', 'soluções', 'serviços', 'comércio exterior',
-    'supply chain', 'logística', 'importação', 'exportação',
+  // Bonus se encontrou múltiplos produtos
+  if (exactProductMatches >= 2) {
+    score += 10; // Bonus por múltiplos matches
+  }
+  if (exactProductMatches >= 3) {
+    score += 5; // Bonus adicional
+  }
+  
+  // Palavras-chave de negócio genéricas (peso: 10% - REDUZIDO)
+  // 🔥 REMOVIDO: Termos hardcoded específicos (Supply Chain, Comex, etc.)
+  // Agora usa apenas termos genéricos que podem aparecer em qualquer setor
+  const genericKeywords = [
+    'consultoria', 'soluções', 'serviços', 'empresa', 'fornecedor',
     'gestão', 'estratégia', 'compliance', 'governança'
   ];
-  const matchedBusiness = businessKeywords.filter(kw => text.includes(kw));
-  score += (matchedBusiness.length / businessKeywords.length) * 20;
+  
+  let genericScore = 0;
+  for (const kw of genericKeywords) {
+    if (text.includes(kw)) {
+      genericScore += 1;
+    }
+  }
+  genericScore = Math.min(genericScore, 10); // Máximo 10 pontos
+  
+  score += genericScore;
   
   // Estrutura de empresa (peso: 10%)
   if (text.includes('empresa') || text.includes('ltda') || text.includes('sa')) {
@@ -199,9 +234,20 @@ function calculateRelevance(
   if (products.some((p: string) => titleLower.includes(p.toLowerCase()))) relevancia += 5;
   
   // Palavras-chave no snippet (peso: 10%)
+  // 🔥 MELHORADO: Verificar se produtos específicos do tenant aparecem no snippet
   const snippetLower = result.snippet.toLowerCase();
-  if (snippetLower.includes('consultoria') || snippetLower.includes('soluções')) relevancia += 5;
-  if (snippetLower.includes('comércio exterior') || snippetLower.includes('supply chain')) relevancia += 5;
+  
+  // Verificar produtos específicos no snippet (peso maior)
+  let productMatchesInSnippet = 0;
+  for (const product of products.slice(0, 5)) {
+    if (snippetLower.includes(product.toLowerCase())) {
+      productMatchesInSnippet++;
+      relevancia += 5; // +5 pontos por produto encontrado no snippet
+    }
+  }
+  
+  // Termos genéricos (peso menor)
+  if (snippetLower.includes('consultoria') || snippetLower.includes('soluções')) relevancia += 3;
   if (location && snippetLower.includes(location.toLowerCase())) relevancia += 3;
   
   // Aplicar penalidade de tipo
@@ -236,19 +282,28 @@ serve(async (req) => {
       throw new Error('SERPER_API_KEY não configurada');
     }
 
-    // 🔥 MELHORADO: Múltiplas queries mais específicas
+    // 🔥 MELHORADO: Múltiplas queries usando TODOS os produtos do tenant dinamicamente
+    // Usar mais produtos (até 10) para melhor cobertura
+    const productsToUse = products.slice(0, 10); // 🔥 AUMENTADO: de 3 para 10 produtos
+    
+    // Construir queries usando os produtos específicos do tenant
     const queries = [
-      // Query 1: Empresa + Indústria + Produtos
-      `${industry} ${products.slice(0, 3).join(' OR ')} empresa consultoria Brasil`,
-      // Query 2: Consultoria especializada
-      `consultoria ${industry} ${products.slice(0, 2).join(' OR ')} Brasil`,
-      // Query 3: Serviços específicos
-      `${products.slice(0, 2).join(' OR ')} ${industry} serviços soluções Brasil`,
+      // Query 1: Indústria + Top 5 produtos mais relevantes
+      `${industry} ${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} empresa consultoria Brasil`,
+      // Query 2: Consultoria + produtos específicos
+      `consultoria ${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} Brasil`,
+      // Query 3: Produtos específicos + serviços
+      `${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} ${industry} serviços soluções Brasil`,
+      // Query 4: Produtos específicos + fornecedor
+      `${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} fornecedor ${industry} Brasil`,
     ];
 
     if (location && location !== 'Brasil') {
-      queries.push(`${industry} ${products[0] || ''} ${location} consultoria`);
+      queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} ${location} consultoria`);
     }
+    
+    console.log('[SERPER Search] 📦 Produtos usados na busca:', productsToUse.length, 'produtos');
+    console.log('[SERPER Search] 📋 Primeiros produtos:', productsToUse.slice(0, 5));
 
     const allResults: SerperResult['organic'] = [];
     const seenDomains = new Set<string>();
