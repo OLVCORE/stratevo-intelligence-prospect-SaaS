@@ -117,11 +117,16 @@ export default function CompetitorDiscovery({
       return;
     }
 
-    setSearching(true);
+    // 🔥 CRÍTICO: Limpar candidatos ANTES de iniciar busca (forçar atualização imediata)
     setCandidates([]);
+    setSearching(true);
+    
+    // 🔥 NOVO: Forçar re-render imediato limpando estado
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
       console.log('[CompetitorDiscovery] 🔍 Iniciando busca SERPER');
+      console.log('[CompetitorDiscovery] 📦 Produtos sendo usados:', products.length, products.slice(0, 5));
 
       // 🔥 MELHORADO: Combinar excludeWebsites com marketplaces padrão
       const allExcludedDomains = [
@@ -143,9 +148,13 @@ export default function CompetitorDiscovery({
 
       if (error) throw error;
 
+      // 🔥 CRÍTICO: Sempre limpar e atualizar, mesmo se não houver candidatos
       if (data.success && data.candidates) {
         console.log('[CompetitorDiscovery] ✅ Candidatos encontrados:', data.candidates.length);
-        setCandidates(data.candidates);
+        console.log('[CompetitorDiscovery] 📋 Primeiros candidatos:', data.candidates.slice(0, 3).map(c => c.nome));
+        
+        // 🔥 CRÍTICO: Forçar atualização com nova referência de array
+        setCandidates([...data.candidates]);
         
         // 🔥 MELHORADO: Calcular relevância média
         const avgRelevancia = data.candidates.length > 0
@@ -157,6 +166,8 @@ export default function CompetitorDiscovery({
           description: `${data.candidates.length} concorrentes encontrados (relevância média: ${avgRelevancia}%)`,
         });
       } else {
+        // 🔥 CRÍTICO: Garantir que está vazio se não houver resultados
+        setCandidates([]);
         toast({
           title: 'Nenhum resultado',
           description: 'Tente ajustar os termos de busca ou adicionar mais produtos',
@@ -165,6 +176,8 @@ export default function CompetitorDiscovery({
       }
     } catch (error: any) {
       console.error('[CompetitorDiscovery] ❌ Erro:', error);
+      // 🔥 CRÍTICO: Limpar candidatos em caso de erro também
+      setCandidates([]);
       toast({
         title: 'Erro na busca',
         description: error.message || 'Não foi possível buscar concorrentes',
