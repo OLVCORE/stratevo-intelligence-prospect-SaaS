@@ -704,10 +704,10 @@ serve(async (req) => {
           location
         );
 
-        // 🔥 AJUSTADO: Threshold de similaridade mínima (20% - reduzido de 30%)
-        // Exigir que a similaridade seja pelo menos 20% para evitar resultados genéricos
+        // 🔥 AJUSTADO: Threshold de similaridade mínima (10% - muito reduzido)
+        // Exigir que a similaridade seja pelo menos 10% para evitar resultados genéricos
         // Mas permitir resultados com produtos específicos mesmo com similaridade menor
-        const minSimilarity = exactMatches >= 2 ? 15 : (exactMatches >= 1 ? 20 : 25);
+        const minSimilarity = exactMatches >= 2 ? 5 : (exactMatches >= 1 ? 10 : 15);
         if (similarityScore < minSimilarity) {
           console.log(`[SERPER Search] ❌ Filtrado (similaridade baixa): ${result.title} (similaridade: ${similarityScore}%, mín: ${minSimilarity}%, produtos: ${exactMatches})`);
           continue;
