@@ -774,17 +774,23 @@ serve(async (req) => {
     const tenantProductsText = products.length > 0 ? products.join(', ') : '';
     let tenantEmbedding: number[] = [];
     
-    if (openaiKey && tenantProductsText) {
-      console.log('[SERPER Search] 🔥 Gerando embedding dos produtos do tenant...');
-      tenantEmbedding = await generateEmbedding(tenantProductsText, openaiKey);
-      if (tenantEmbedding.length > 0) {
-        console.log('[SERPER Search] ✅ Embedding gerado com sucesso (dimensões:', tenantEmbedding.length, ')');
-      } else {
-        console.warn('[SERPER Search] ⚠️ Falha ao gerar embedding, continuando sem embeddings semânticos');
-      }
-    } else {
-      console.warn('[SERPER Search] ⚠️ OpenAI não configurado ou sem produtos, continuando sem embeddings semânticos');
-    }
+    // 🔥 TEMPORÁRIO: Desabilitar embeddings para evitar erro 500
+    // if (openaiKey && tenantProductsText) {
+    //   console.log('[SERPER Search] 🔥 Gerando embedding dos produtos do tenant...');
+    //   try {
+    //     tenantEmbedding = await generateEmbedding(tenantProductsText, openaiKey);
+    //     if (tenantEmbedding.length > 0) {
+    //       console.log('[SERPER Search] ✅ Embedding gerado com sucesso (dimensões:', tenantEmbedding.length, ')');
+    //     } else {
+    //       console.warn('[SERPER Search] ⚠️ Falha ao gerar embedding, continuando sem embeddings semânticos');
+    //     }
+    //   } catch (error) {
+    //     console.warn('[SERPER Search] ⚠️ Erro ao gerar embedding, continuando sem embeddings:', error);
+    //   }
+    // } else {
+    //   console.warn('[SERPER Search] ⚠️ OpenAI não configurado ou sem produtos, continuando sem embeddings semânticos');
+    // }
+    console.warn('[SERPER Search] ⚠️ Embeddings temporariamente desabilitados para debug');
 
     // 🔥 MELHORADO: Múltiplas queries usando TODOS os produtos do tenant dinamicamente
     // Usar mais produtos (até 15) para melhor cobertura
@@ -993,33 +999,25 @@ serve(async (req) => {
           continue;
         }
 
-        // 🔥 MELHORADO: Calcular relevância com múltiplos critérios (embeddings, indústria, geografia, autoridade)
-        let relevancia = 50; // Default
-        let similarityScore = 10; // Default
-        let businessType: CompetitorCandidate['businessType'] = 'empresa'; // Default
-        let productMatches = 0;
-        let exactMatches = 0;
+        // 🔥 TEMPORÁRIO: Usar calculateSemanticSimilarity simples ao invés de calculateRelevance completo
+        // Para evitar erro 500, vamos usar apenas a função síncrona
+        const businessType = detectBusinessType(result.title, result.snippet, result.link);
         
-        try {
-          const relevanceResult = await calculateRelevance(
-            result,
-            industry,
-            products,
-            location,
-            openaiKey,
-            tenantProductsText,
-            tenantEmbedding
-          );
-          relevancia = relevanceResult.relevancia;
-          similarityScore = relevanceResult.similarityScore;
-          businessType = relevanceResult.businessType;
-          productMatches = relevanceResult.productMatches;
-          exactMatches = relevanceResult.exactMatches;
-        } catch (error) {
-          console.warn('[SERPER Search] ⚠️ Erro ao calcular relevância, usando valores padrão:', error);
-          // Usar valores padrão se falhar
-          businessType = detectBusinessType(result.title, result.snippet, result.link);
-        }
+        // Calcular similaridade simples (sem embeddings/classificação)
+        const similarityResult = calculateSemanticSimilarity(
+          industry,
+          products,
+          result.title,
+          result.snippet
+        );
+        
+        const similarityScore = similarityResult.score;
+        const productMatches = similarityResult.productMatches;
+        const exactMatches = similarityResult.exactMatches;
+        
+        // Calcular relevância simples (sem múltiplos critérios por enquanto)
+        let relevancia = similarityScore; // Usar similaridade como relevância base
+        relevancia += Math.max(0, 100 - (result.position * 3)); // Bonus por posição
 
         // 🔥 CRÍTICO: REMOVER filtro de similaridade completamente (aceitar todos)
         // Não filtrar por similaridade - deixar passar todos para depois ordenar
