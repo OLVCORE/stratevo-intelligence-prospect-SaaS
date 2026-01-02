@@ -1131,10 +1131,16 @@ serve(async (req) => {
     );
   } catch (error: any) {
     console.error('[SERPER Search] ❌ Erro:', error);
+    console.error('[SERPER Search] ❌ Stack:', error?.stack);
+    console.error('[SERPER Search] ❌ Name:', error?.name);
+    
+    // Retornar erro detalhado para debug
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || 'Erro desconhecido' 
+        error: error?.message || 'Erro desconhecido',
+        errorType: error?.name || 'Unknown',
+        stack: error?.stack || 'No stack trace',
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
