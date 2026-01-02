@@ -59,6 +59,8 @@ export default function CompetitorDiscovery({
   excludeWebsites = [],
   onCompetitorSelected,
 }: Props) {
+  // 🔥 RADICAL: Estado de reset que força desmontagem completa
+  const [resetKey, setResetKey] = useState(0);
   const [searching, setSearching] = useState(false);
   // 🔥 CRÍTICO: Usar estado intermediário para garantir limpeza completa
   const [candidates, setCandidates] = useState<CompetitorCandidate[]>([]);
@@ -75,6 +77,18 @@ export default function CompetitorDiscovery({
   const isSearchingRef = useRef(false);
   // 🔥 NOVO: Ref para armazenar última busca (evitar duplicação)
   const lastSearchParamsRef = useRef<string>('');
+  
+  // 🔥 RADICAL: useEffect para limpar candidatos quando resetKey mudar
+  useEffect(() => {
+    if (resetKey > 0) {
+      console.log('[CompetitorDiscovery] 🔄 ResetKey mudou, limpando candidatos:', resetKey);
+      setCandidates([]);
+      setSearchId(0);
+      searchKeyRef.current = 0;
+      isSearchingRef.current = false;
+      lastSearchParamsRef.current = '';
+    }
+  }, [resetKey]);
 
   // 🔥 CORRIGIDO: Sincronizar initialLocation apenas uma vez (primeiro preenchimento)
   useEffect(() => {
@@ -116,14 +130,15 @@ export default function CompetitorDiscovery({
 
   // 🔥 NOVO: Função para limpar completamente e iniciar nova busca
   const handleNewSearch = () => {
-    console.log('[CompetitorDiscovery] 🆕 Iniciando NOVA busca - limpando tudo');
-    // 🔥 CRÍTICO: Limpar estado completamente de forma síncrona
-    isSearchingRef.current = false; // Resetar flag
-    lastSearchParamsRef.current = ''; // Limpar parâmetros da última busca
-    searchKeyRef.current += 1; // Incrementar chave única
-    setSearchId(prev => prev + 1); // 🔥 NOVO: Incrementar searchId para forçar re-render
-    setCandidates([]); // Limpar imediatamente
+    console.log('[CompetitorDiscovery] 🆕 Iniciando NOVA busca - limpando tudo (RADICAL)');
+    // 🔥 RADICAL: Forçar reset completo do componente
+    setResetKey(prev => prev + 1); // Incrementar resetKey força useEffect a limpar tudo
+    setCandidates([]); // Limpar imediatamente também
     setSearching(false);
+    isSearchingRef.current = false;
+    lastSearchParamsRef.current = '';
+    searchKeyRef.current = 0;
+    setSearchId(0);
   };
 
   const handleSearch = async () => {
@@ -162,16 +177,19 @@ export default function CompetitorDiscovery({
     // 🔥 CRÍTICO: Marcar como buscando ANTES de qualquer coisa
     isSearchingRef.current = true;
 
-    // 🔥 CRÍTICO: Limpar candidatos ANTES de iniciar busca (forçar atualização imediata)
-    console.log('[CompetitorDiscovery] 🗑️ Limpando candidatos antigos...');
-    // 🔥 NOVO: Limpar de forma síncrona e forçar re-render
-    setCandidates([]);
-    setSearchId(prev => prev + 1); // 🔥 NOVO: Incrementar searchId para forçar re-render completo
-    searchKeyRef.current += 1; // 🔥 NOVO: Incrementar chave única para forçar nova busca
+    // 🔥 RADICAL: Limpar candidatos ANTES de iniciar busca (forçar atualização imediata)
+    console.log('[CompetitorDiscovery] 🗑️ Limpando candidatos antigos (RADICAL)...');
+    // 🔥 RADICAL: Múltiplas camadas de limpeza
+    setCandidates([]); // Limpar imediatamente
+    setSearchId(prev => prev + 1); // Incrementar searchId
+    searchKeyRef.current += 1; // Incrementar chave única
     setSearching(true);
     
-    // 🔥 NOVO: Forçar re-render imediato limpando estado (aumentado para garantir)
-    await new Promise(resolve => setTimeout(resolve, 100)); // 🔥 AUMENTADO para 100ms
+    // 🔥 RADICAL: Forçar múltiplas limpezas para garantir
+    await new Promise(resolve => setTimeout(resolve, 50));
+    setCandidates([]); // Limpar novamente após 50ms
+    await new Promise(resolve => setTimeout(resolve, 50)); // Mais 50ms
+    setCandidates([]); // Limpar mais uma vez
 
     try {
       console.log('[CompetitorDiscovery] 🔍 Iniciando busca SERPER (chave:', searchKeyRef.current, ')');
@@ -212,14 +230,21 @@ export default function CompetitorDiscovery({
         console.log('[CompetitorDiscovery] 📋 Primeiros candidatos:', data.candidates.slice(0, 3).map(c => c.nome));
         console.log('[CompetitorDiscovery] 🔑 ID da busca que retornou:', uniqueSearchId);
         
-        // 🔥 CRÍTICO: Limpar ANTES de atualizar (garantir que não há dados antigos)
+        // 🔥 RADICAL: Limpar ANTES de atualizar (garantir que não há dados antigos)
+        console.log('[CompetitorDiscovery] 🗑️ Limpando ANTES de atualizar com novos dados...');
         setCandidates([]);
         
-        // 🔥 CRÍTICO: Aguardar um tick para garantir que limpeza foi aplicada
-        await new Promise(resolve => setTimeout(resolve, 10));
+        // 🔥 RADICAL: Aguardar múltiplos ticks para garantir que limpeza foi aplicada
+        await new Promise(resolve => setTimeout(resolve, 50));
+        setCandidates([]); // Limpar novamente
+        await new Promise(resolve => setTimeout(resolve, 50));
         
-        // 🔥 CRÍTICO: Forçar atualização com nova referência de array (criar array completamente novo)
-        const newCandidates = data.candidates.map(c => ({ ...c })); // Criar novos objetos também
+        // 🔥 RADICAL: Forçar atualização com nova referência de array (criar array completamente novo)
+        const newCandidates = data.candidates.map((c, idx) => ({ 
+          ...c,
+          _id: `${uniqueSearchId}-${idx}-${Date.now()}` // 🔥 NOVO: ID único para cada candidato
+        }));
+        console.log('[CompetitorDiscovery] ✅ Atualizando com', newCandidates.length, 'novos candidatos');
         setCandidates(newCandidates);
         
         // 🔥 MELHORADO: Calcular relevância média
@@ -263,7 +288,7 @@ export default function CompetitorDiscovery({
     : 0;
 
   return (
-    <div className="space-y-6" data-testid="competitor-discovery-v2">
+    <div key={`competitor-discovery-wrapper-${resetKey}`} className="space-y-6" data-testid="competitor-discovery-v2">
       {/* Painel de Busca */}
       <Card className="border-l-4 border-l-blue-600 shadow-lg">
         <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900/50 dark:to-slate-800/30">
