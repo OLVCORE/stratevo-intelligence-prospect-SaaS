@@ -516,76 +516,85 @@ serve(async (req) => {
     
     const productKeywords = extractKeywords(productsToUse);
     
-    // 🔥 MELHORADO: Construir queries mais variadas e específicas
-    // ESTRATÉGIA: Criar queries que variem produtos, termos e combinações
+    // 🔥 MELHORADO: Construir queries mais específicas usando produtos com AND/OR inteligente
+    // ESTRATÉGIA: Priorizar produtos específicos, reduzir termos genéricos
     const queries: string[] = [];
     
-    // Query 1: Primeiros 3 produtos + consultoria (alta especificidade)
-    if (productsToUse.length >= 3) {
-      queries.push(`"${productsToUse[0]}" OR "${productsToUse[1]}" OR "${productsToUse[2]}" consultoria Brasil`);
+    // 🔥 NOVO: Filtrar produtos muito genéricos (menos de 2 palavras)
+    const specificProducts = productsToUse.filter(p => {
+      const words = p.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      return words.length >= 2; // Pelo menos 2 palavras
+    });
+    
+    // Query 1: Primeiros 2 produtos específicos com AND (alta especificidade)
+    if (specificProducts.length >= 2) {
+      queries.push(`"${specificProducts[0]}" AND "${specificProducts[1]}" Brasil`);
     }
     
-    // Query 2: Produtos 4-6 + fornecedor (variação de produtos)
-    if (productsToUse.length >= 6) {
-      queries.push(`"${productsToUse[3]}" OR "${productsToUse[4]}" OR "${productsToUse[5]}" fornecedor soluções Brasil`);
+    // Query 2: Produtos 3-4 com AND (variação)
+    if (specificProducts.length >= 4) {
+      queries.push(`"${specificProducts[2]}" AND "${specificProducts[3]}" Brasil`);
     }
     
-    // Query 3: Indústria + primeiros 2 produtos (combinação indústria+produtos)
-    if (productsToUse.length >= 2 && industry) {
-      queries.push(`${industry} "${productsToUse[0]}" OR "${productsToUse[1]}" empresa Brasil`);
+    // Query 3: Primeiros 3 produtos específicos com OR (cobertura ampla)
+    if (specificProducts.length >= 3) {
+      queries.push(`"${specificProducts[0]}" OR "${specificProducts[1]}" OR "${specificProducts[2]}" Brasil`);
     }
     
-    // Query 4: Palavras-chave dos produtos + consultoria especializada
-    if (productKeywords.length >= 3) {
-      queries.push(`${productKeywords.slice(0, 3).join(' OR ')} consultoria especializada Brasil`);
+    // Query 4: Produtos 4-6 com OR (variação de produtos)
+    if (specificProducts.length >= 6) {
+      queries.push(`"${specificProducts[3]}" OR "${specificProducts[4]}" OR "${specificProducts[5]}" Brasil`);
     }
     
-    // Query 5: Produtos relacionados (ex: Importação + Exportação)
-    if (productsToUse.length >= 2) {
+    // Query 5: Indústria + primeiros 2 produtos específicos (combinação)
+    if (specificProducts.length >= 2 && industry) {
+      queries.push(`${industry} "${specificProducts[0]}" AND "${specificProducts[1]}"`);
+    }
+    
+    // Query 6: Produtos relacionados agrupados (ex: Importação + Exportação)
+    if (specificProducts.length >= 2) {
       // Buscar produtos que contenham palavras relacionadas
-      const importExport = productsToUse.filter(p => 
+      const importExport = specificProducts.filter(p => 
         p.toLowerCase().includes('import') || p.toLowerCase().includes('export') || 
         p.toLowerCase().includes('comércio exterior') || p.toLowerCase().includes('supply chain')
       );
       if (importExport.length >= 2) {
-        queries.push(`"${importExport[0]}" AND "${importExport[1]}" consultoria Brasil`);
+        queries.push(`"${importExport[0]}" AND "${importExport[1]}"`);
       }
     }
     
-    // Query 6: Produtos de consultoria (se houver múltiplos)
-    const consultoriaProducts = productsToUse.filter(p => 
-      p.toLowerCase().includes('consultoria') || p.toLowerCase().includes('consulting')
+    // Query 7: Produtos industriais agrupados (ex: Gaveteiro + Armário)
+    if (specificProducts.length >= 2) {
+      const industrialProducts = specificProducts.filter(p => 
+        p.toLowerCase().includes('industrial') || p.toLowerCase().includes('gaveteiro') ||
+        p.toLowerCase().includes('armário') || p.toLowerCase().includes('bancada') ||
+        p.toLowerCase().includes('carrinho') || p.toLowerCase().includes('rack')
+      );
+      if (industrialProducts.length >= 2) {
+        queries.push(`"${industrialProducts[0]}" AND "${industrialProducts[1]}"`);
+      }
+    }
+    
+    // Query 8: Produtos de consultoria específicos (se houver múltiplos)
+    const consultoriaProducts = specificProducts.filter(p => 
+      p.toLowerCase().includes('consultoria') && p.split(/\s+/).length >= 3 // Pelo menos 3 palavras
     );
     if (consultoriaProducts.length >= 2) {
-      queries.push(`${consultoriaProducts.slice(0, 2).map(p => `"${p}"`).join(' OR ')} empresa Brasil`);
+      queries.push(`"${consultoriaProducts[0]}" AND "${consultoriaProducts[1]}"`);
     }
     
-    // Query 7: Produtos + termos de negócio (variação de termos)
-    if (productsToUse.length >= 3) {
-      queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} (empresa OR fornecedor OR soluções) Brasil`);
-    }
-    
-    // Query 8: Produtos + supply chain/logística (se aplicável)
-    const supplyChainProducts = productsToUse.filter(p => 
+    // Query 9: Produtos + supply chain/logística específicos
+    const supplyChainProducts = specificProducts.filter(p => 
       p.toLowerCase().includes('supply') || p.toLowerCase().includes('logística') || 
       p.toLowerCase().includes('logistica') || p.toLowerCase().includes('chain')
     );
-    if (supplyChainProducts.length > 0) {
-      queries.push(`${supplyChainProducts.slice(0, 2).map(p => `"${p}"`).join(' OR ')} consultoria especializada Brasil`);
+    if (supplyChainProducts.length >= 2) {
+      queries.push(`"${supplyChainProducts[0]}" AND "${supplyChainProducts[1]}"`);
     }
     
-    // Query 9: Produtos + compliance/governança (se aplicável)
-    const complianceProducts = productsToUse.filter(p => 
-      p.toLowerCase().includes('compliance') || p.toLowerCase().includes('governança') ||
-      p.toLowerCase().includes('governanca') || p.toLowerCase().includes('riscos')
-    );
-    if (complianceProducts.length > 0) {
-      queries.push(`${complianceProducts.slice(0, 2).map(p => `"${p}"`).join(' OR ')} consultoria Brasil`);
-    }
-    
-    // Query 10: Fallback - Primeiros 5 produtos genéricos (se não houver queries específicas)
-    if (queries.length === 0 && productsToUse.length > 0) {
-      queries.push(`${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} consultoria empresa Brasil`);
+    // Query 10: Fallback - Primeiros 5 produtos específicos (se não houver queries específicas)
+    if (queries.length === 0 && specificProducts.length > 0) {
+      queries.push(`${specificProducts.slice(0, 5).map(p => `"${p}"`).join(' OR ')}`);
     }
 
     if (location && location !== 'Brasil') {
