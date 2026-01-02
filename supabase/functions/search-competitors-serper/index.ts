@@ -987,6 +987,9 @@ serve(async (req) => {
           continue;
         }
         
+        // Se chegou aqui, aceitar o resultado
+        acceptedCount++;
+        
         // 🔥 NOVO: Priorizar resultados com mais produtos encontrados
         // Log para debug
         acceptedCount++;
@@ -1047,8 +1050,6 @@ serve(async (req) => {
       processed: processedCount,
       filteredByDomain,
       filteredByMarketplace,
-      filteredBySimilarity,
-      filteredByRelevance,
       filteredByBusinessType,
       accepted: acceptedCount,
       totalCandidates: candidates.length,
@@ -1057,8 +1058,10 @@ serve(async (req) => {
     });
     
     // 🔥 CRÍTICO: Se não encontrou nenhum candidato, retornar pelo menos os primeiros resultados do SERPER
+    let finalResults = finalCandidates;
     if (finalCandidates.length === 0 && allResults.length > 0) {
       console.warn('[SERPER Search] ⚠️ NENHUM candidato passou nos filtros! Retornando primeiros resultados brutos do SERPER...');
+      const fallbackCandidates: CompetitorCandidate[] = [];
       for (let i = 0; i < Math.min(10, allResults.length); i++) {
         const result = allResults[i];
         try {
@@ -1071,7 +1074,7 @@ serve(async (req) => {
           
           let nome = result.title.replace(/\s*-\s*(Vaga|Oportunidade).*$/i, '').trim();
           
-          candidates.push({
+          fallbackCandidates.push({
             nome,
             website: result.link,
             descricao: result.snippet,
@@ -1084,18 +1087,20 @@ serve(async (req) => {
           continue;
         }
       }
-      console.log('[SERPER Search] ✅ Retornando', candidates.length, 'candidatos brutos do SERPER');
+      finalResults = fallbackCandidates;
+      console.log('[SERPER Search] ✅ Retornando', fallbackCandidates.length, 'candidatos brutos do SERPER');
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        query: queries[0],
-        candidates: finalCandidates,
-        total: candidates.length,
-        totalFound: candidates.length, // 🔥 CORRIGIDO: Adicionar campo esperado pelo frontend
+        query: queries[0] || '',
+        candidates: finalResults,
+        candidatesCount: finalResults.length,
+        total: finalResults.length,
+        totalFound: finalResults.length, // 🔥 CORRIGIDO: Adicionar campo esperado pelo frontend
         queriesExecuted: queries.length, // 🔥 CORRIGIDO: Adicionar campo esperado pelo frontend
-        filtered: allResults.length - candidates.length,
+        filtered: allResults.length - finalResults.length,
         debug: {
           productsUsed: productsToUse.length,
           industry,
@@ -1103,6 +1108,7 @@ serve(async (req) => {
           queriesGenerated: queries.length,
           totalResults: allResults.length,
           candidatesBeforeFilter: candidates.length,
+          finalCandidates: finalResults.length,
         },
       }),
       { 
