@@ -521,14 +521,16 @@ serve(async (req) => {
     // ESTRATÉGIA: Priorizar produtos específicos, reduzir termos genéricos
     const queries: string[] = [];
     
-    // 🔥 NOVO: Filtrar produtos muito genéricos (menos de 2 palavras)
+    // 🔥 AJUSTADO: Filtrar produtos muito genéricos (menos de 1 palavra)
+    // Mas manter mais produtos para ter mais cobertura
     const specificProducts = productsToUse.filter(p => {
       const words = p.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      return words.length >= 2; // Pelo menos 2 palavras
+      return words.length >= 1; // Pelo menos 1 palavra (era 2)
     });
     
+    // 🔥 CRÍTICO: Sempre usar produtos (não filtrar demais)
     // Se não houver produtos específicos suficientes, usar todos
-    const productsForQueries = specificProducts.length >= 3 ? specificProducts : productsToUse;
+    const productsForQueries = specificProducts.length >= 2 ? specificProducts : productsToUse;
     
     // Query 1: Primeiros 2 produtos com AND (alta especificidade)
     if (productsForQueries.length >= 2) {
