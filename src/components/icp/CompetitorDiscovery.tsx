@@ -69,6 +69,8 @@ export default function CompetitorDiscovery({
   const [showPreview, setShowPreview] = useState(false);
   // 🔥 NOVO: Contador de busca único para forçar re-render e evitar cache
   const searchKeyRef = useRef(0);
+  // 🔥 CRÍTICO: Flag para garantir que busca sempre execute (evitar cache de estado)
+  const isSearchingRef = useRef(false);
 
   // 🔥 CORRIGIDO: Sincronizar initialLocation apenas uma vez (primeiro preenchimento)
   useEffect(() => {
@@ -112,6 +114,7 @@ export default function CompetitorDiscovery({
   const handleNewSearch = () => {
     console.log('[CompetitorDiscovery] 🆕 Iniciando NOVA busca - limpando tudo');
     // 🔥 CRÍTICO: Limpar estado completamente
+    isSearchingRef.current = false; // Resetar flag
     setCandidates([]);
     searchKeyRef.current += 1; // Incrementar chave única para forçar re-render
     setSearching(false);
@@ -132,13 +135,23 @@ export default function CompetitorDiscovery({
       return;
     }
 
+    // 🔥 CRÍTICO: Verificar se já está buscando (evitar múltiplas chamadas)
+    if (isSearchingRef.current) {
+      console.log('[CompetitorDiscovery] ⚠️ Busca já em andamento, ignorando...');
+      return;
+    }
+
+    // 🔥 CRÍTICO: Marcar como buscando ANTES de qualquer coisa
+    isSearchingRef.current = true;
+
     // 🔥 CRÍTICO: Limpar candidatos ANTES de iniciar busca (forçar atualização imediata)
+    console.log('[CompetitorDiscovery] 🗑️ Limpando candidatos antigos...');
     setCandidates([]);
     searchKeyRef.current += 1; // 🔥 NOVO: Incrementar chave única para forçar nova busca
     setSearching(true);
     
     // 🔥 NOVO: Forçar re-render imediato limpando estado
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 50)); // Aumentado para 50ms para garantir limpeza
 
     try {
       console.log('[CompetitorDiscovery] 🔍 Iniciando busca SERPER (chave:', searchKeyRef.current, ')');
@@ -217,7 +230,10 @@ export default function CompetitorDiscovery({
         variant: 'destructive',
       });
     } finally {
+      // 🔥 CRÍTICO: Resetar flag e estado
+      isSearchingRef.current = false;
       setSearching(false);
+      console.log('[CompetitorDiscovery] ✅ Busca finalizada, flag resetada');
     }
   };
 
