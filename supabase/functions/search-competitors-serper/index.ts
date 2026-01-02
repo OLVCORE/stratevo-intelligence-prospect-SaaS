@@ -316,6 +316,7 @@ serve(async (req) => {
     const productKeywords = extractKeywords(productsToUse);
     
     // Construir queries mais específicas usando produtos com aspas (busca exata)
+    // 🔥 ESTRATÉGIA: Criar queries que combinem produtos relacionados
     const queries = [
       // Query 1: Produtos específicos com aspas (busca exata) + consultoria
       `${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} consultoria empresa Brasil`,
@@ -327,7 +328,11 @@ serve(async (req) => {
       `${productKeywords.slice(0, 5).join(' OR ')} consultoria especializada Brasil`,
       // Query 5: Produtos específicos + serviços
       `${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} serviços ${industry} Brasil`,
-    ];
+      // Query 6: 🔥 NOVO - Produtos agrupados por similaridade (ex: "Consultoria em Importação" + "Consultoria em Exportação")
+      productsToUse.length >= 2 ? `${productsToUse.slice(0, 2).map(p => `"${p}"`).join(' AND ')} consultoria Brasil` : null,
+      // Query 7: 🔥 NOVO - Produtos + termos de negócio específicos
+      `${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} (empresa OR fornecedor OR consultoria) Brasil`,
+    ].filter(q => q !== null) as string[];
 
     if (location && location !== 'Brasil') {
       queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} ${location} consultoria`);
