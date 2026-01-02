@@ -231,7 +231,21 @@ function calculateRelevance(
   // Palavras-chave no título (peso: 15%)
   const titleLower = result.title.toLowerCase();
   if (titleLower.includes(industry.toLowerCase())) relevancia += 10;
-  if (products.some((p: string) => titleLower.includes(p.toLowerCase()))) relevancia += 5;
+  
+  // 🔥 MELHORADO: Verificar produtos específicos no título (peso maior)
+  let productMatchesInTitle = 0;
+  for (const product of products.slice(0, 10)) {
+    const productLower = product.toLowerCase();
+    if (titleLower.includes(productLower)) {
+      productMatchesInTitle++;
+      relevancia += 8; // +8 pontos por produto encontrado no título (era +5 genérico)
+    }
+  }
+  
+  // Bonus se encontrou múltiplos produtos no título
+  if (productMatchesInTitle >= 2) {
+    relevancia += 5;
+  }
   
   // Palavras-chave no snippet (peso: 10%)
   // 🔥 MELHORADO: Verificar se produtos específicos do tenant aparecem no snippet
@@ -283,19 +297,36 @@ serve(async (req) => {
     }
 
     // 🔥 MELHORADO: Múltiplas queries usando TODOS os produtos do tenant dinamicamente
-    // Usar mais produtos (até 10) para melhor cobertura
-    const productsToUse = products.slice(0, 10); // 🔥 AUMENTADO: de 3 para 10 produtos
+    // Usar mais produtos (até 15) para melhor cobertura
+    const productsToUse = products.slice(0, 15);
     
-    // Construir queries usando os produtos específicos do tenant
+    // 🔥 NOVO: Extrair palavras-chave principais dos produtos para queries mais específicas
+    const extractKeywords = (productList: string[]): string[] => {
+      const keywords = new Set<string>();
+      for (const product of productList) {
+        const words = product.toLowerCase()
+          .split(/\s+/)
+          .filter(w => w.length > 3)
+          .filter(w => !['para', 'com', 'sem', 'sobre', 'sobre', 'através'].includes(w));
+        words.forEach(w => keywords.add(w));
+      }
+      return Array.from(keywords).slice(0, 10);
+    };
+    
+    const productKeywords = extractKeywords(productsToUse);
+    
+    // Construir queries mais específicas usando produtos com aspas (busca exata)
     const queries = [
-      // Query 1: Indústria + Top 5 produtos mais relevantes
-      `${industry} ${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} empresa consultoria Brasil`,
-      // Query 2: Consultoria + produtos específicos
-      `consultoria ${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} Brasil`,
-      // Query 3: Produtos específicos + serviços
-      `${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} ${industry} serviços soluções Brasil`,
-      // Query 4: Produtos específicos + fornecedor
-      `${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} fornecedor ${industry} Brasil`,
+      // Query 1: Produtos específicos com aspas (busca exata) + consultoria
+      `${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} consultoria empresa Brasil`,
+      // Query 2: Produtos específicos + fornecedor/soluções
+      `${productsToUse.slice(0, 5).map(p => `"${p}"`).join(' OR ')} fornecedor soluções Brasil`,
+      // Query 3: Indústria + produtos específicos
+      `${industry} ${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} empresa Brasil`,
+      // Query 4: Palavras-chave dos produtos + consultoria especializada
+      `${productKeywords.slice(0, 5).join(' OR ')} consultoria especializada Brasil`,
+      // Query 5: Produtos específicos + serviços
+      `${productsToUse.slice(0, 4).map(p => `"${p}"`).join(' OR ')} serviços ${industry} Brasil`,
     ];
 
     if (location && location !== 'Brasil') {
@@ -304,6 +335,7 @@ serve(async (req) => {
     
     console.log('[SERPER Search] 📦 Produtos usados na busca:', productsToUse.length, 'produtos');
     console.log('[SERPER Search] 📋 Primeiros produtos:', productsToUse.slice(0, 5));
+    console.log('[SERPER Search] 🔑 Palavras-chave extraídas:', productKeywords.slice(0, 5));
 
     const allResults: SerperResult['organic'] = [];
     const seenDomains = new Set<string>();
@@ -319,12 +351,12 @@ serve(async (req) => {
             'X-API-KEY': serperApiKey,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            q: query,
-            gl: 'br',
-            hl: 'pt',
-            num: Math.max(10, maxResults * 2), // Pegar mais resultados
-          }),
+            body: JSON.stringify({
+                q: query,
+                gl: 'br',
+                hl: 'pt',
+                num: Math.max(20, maxResults * 3), // 🔥 AUMENTADO: Pegar mais resultados para filtrar melhor
+              }),
         });
 
         if (!serperResponse.ok) {
@@ -392,9 +424,19 @@ serve(async (req) => {
           location
         );
 
-        // 🔥 FILTRAR: Apenas empresas com relevância mínima
-        if (relevancia < 30 || businessType === 'vaga' || businessType === 'artigo' || businessType === 'perfil') {
-          console.log(`[SERPER Search] ❌ Filtrado: ${result.title} (${businessType}, relevância: ${relevancia})`);
+        // 🔥 MELHORADO: Filtrar com threshold mais baixo mas verificar produtos
+        // Se encontrou produtos específicos, aceitar mesmo com relevância menor
+        const hasProductMatch = products.some((p: string) => {
+          const productLower = p.toLowerCase();
+          const text = `${result.title} ${result.snippet}`.toLowerCase();
+          return text.includes(productLower);
+        });
+        
+        // Threshold dinâmico: mais baixo se encontrou produtos, mais alto se não encontrou
+        const minRelevancia = hasProductMatch ? 25 : 40;
+        
+        if (relevancia < minRelevancia || businessType === 'vaga' || businessType === 'artigo' || businessType === 'perfil') {
+          console.log(`[SERPER Search] ❌ Filtrado: ${result.title} (${businessType}, relevância: ${relevancia}, min: ${minRelevancia}, hasProduct: ${hasProductMatch})`);
           continue;
         }
 
