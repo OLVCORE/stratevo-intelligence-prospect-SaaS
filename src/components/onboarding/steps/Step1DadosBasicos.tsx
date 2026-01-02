@@ -225,10 +225,11 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
 
   // 🔥 NOVO: Carregar produtos do tenant (BUSCA DE AMBAS AS TABELAS)
   // ✅ useCallback para evitar loops infinitos
-  const loadTenantProducts = useCallback(async () => {
-    // 🔥 CRÍTICO: Se é novo tenant, NÃO carregar produtos (deve começar vazio)
-    if (isNewTenant) {
-      console.log('[Step1] 🆕 Novo tenant detectado - não carregando produtos do banco');
+  const loadTenantProducts = useCallback(async (forceLoad = false) => {
+    // 🔥 CORRIGIDO: Se é novo tenant, só não carregar na inicialização
+    // Mas se forceLoad=true (após extração), deve carregar mesmo sendo novo tenant
+    if (isNewTenant && !forceLoad) {
+      console.log('[Step1] 🆕 Novo tenant detectado - não carregando produtos do banco (inicialização)');
       setTenantProducts([]);
       setTenantProductsCount(0);
       return;
@@ -402,42 +403,52 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     
     // 🔥 CRÍTICO: Se é novo tenant, NÃO atualizar com initialData (deve ficar vazio)
     if (isNewTenant) {
-      console.log('[Step1] 🆕 Novo tenant - não atualizando com initialData');
+      // 🔥 CORRIGIDO: Evitar log repetido - só logar uma vez
+      if (!hasInitializedRef.current) {
+        console.log('[Step1] 🆕 Novo tenant - não atualizando com initialData');
+        hasInitializedRef.current = true;
+      }
       return;
     }
     
     // 🔥 CORRIGIDO: Só atualizar se initialData realmente mudou - MERGE não-destrutivo
     // 🔥 CRÍTICO: NÃO resetar campos que o usuário está digitando
+    // 🔥 CORRIGIDO: Evitar atualizações desnecessárias se já foi inicializado com os mesmos dados
     if (initialData && initialData !== initialDataRef.current) {
-      console.log('[Step1] 🔄 Atualizando dados do initialData:', initialData);
-      initialDataRef.current = initialData;
-      hasInitializedRef.current = true;
+      // 🔥 CORRIGIDO: Verificar se os dados realmente mudaram (comparação profunda)
+      const dataChanged = JSON.stringify(initialData) !== JSON.stringify(initialDataRef.current);
       
-      // 🔥 MERGE não-destrutivo: preservar dados existentes, complementar com initialData
-      // 🔥 CRÍTICO: Se usuário está digitando (campo tem foco), NÃO sobrescrever
-      setFormData(prev => {
-        // Verificar se algum campo tem foco (usuário está digitando)
-        const activeElement = document.activeElement;
-        const isTyping = activeElement && (
-          activeElement.id === 'cnpj' ||
-          activeElement.id === 'email' ||
-          activeElement.id === 'website' ||
-          activeElement.id === 'telefone'
-        );
+      if (dataChanged) {
+        console.log('[Step1] 🔄 Atualizando dados do initialData:', initialData);
+        initialDataRef.current = initialData;
+        hasInitializedRef.current = true;
         
-        if (isTyping) {
-          console.log('[Step1] ⏸️ Usuário está digitando, mantendo valores atuais');
-          return prev; // Não atualizar enquanto digita
-        }
-        
-        // Atualizar apenas campos vazios ou que realmente mudaram
-        return {
-          cnpj: prev.cnpj || initialData.cnpj || '',
-          email: prev.email || initialData.email || '',
-          website: prev.website || initialData.website || '',
-          telefone: prev.telefone || initialData.telefone || '',
-        };
-      });
+        // 🔥 MERGE não-destrutivo: preservar dados existentes, complementar com initialData
+        // 🔥 CRÍTICO: Se usuário está digitando (campo tem foco), NÃO sobrescrever
+        setFormData(prev => {
+          // Verificar se algum campo tem foco (usuário está digitando)
+          const activeElement = document.activeElement;
+          const isTyping = activeElement && (
+            activeElement.id === 'cnpj' ||
+            activeElement.id === 'email' ||
+            activeElement.id === 'website' ||
+            activeElement.id === 'telefone'
+          );
+          
+          if (isTyping) {
+            console.log('[Step1] ⏸️ Usuário está digitando, mantendo valores atuais');
+            return prev; // Não atualizar enquanto digita
+          }
+          
+          // Atualizar apenas campos vazios ou que realmente mudaram
+          return {
+            cnpj: prev.cnpj || initialData.cnpj || '',
+            email: prev.email || initialData.email || '',
+            website: prev.website || initialData.website || '',
+            telefone: prev.telefone || initialData.telefone || '',
+          };
+        });
+      }
       
       // 🔥 CRÍTICO: Se é novo tenant, NÃO restaurar cnpjData nem carregar dados
       if (!isNewTenant) {
@@ -666,6 +677,46 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
               nome: data.nome,
               cnpj: cnpjLimpo 
             });
+            
+            // 🔥 CORRIGIDO: Verificar se o CNPJ já está sendo usado por outro tenant antes de atualizar
+            if (cnpjLimpo && cnpjLimpo.length === 14) {
+              const { data: existingTenant } = await (supabase as any)
+                .from('tenants')
+                .select('id, nome')
+                .eq('cnpj', cnpjLimpo)
+                .neq('id', tenantIdToUse)
+                .maybeSingle();
+              
+              if (existingTenant) {
+                console.warn('[Step1] ⚠️ CNPJ já está sendo usado por outro tenant:', existingTenant);
+                toast.warning('CNPJ já cadastrado', {
+                  description: `Este CNPJ já está sendo usado pela empresa "${existingTenant.nome}". O CNPJ não será atualizado.`,
+                });
+                // Atualizar apenas o nome, sem o CNPJ
+                const { error: updateError } = await (supabase as any)
+                  .from('tenants')
+                  .update({ 
+                    nome: data.nome
+                  })
+                  .eq('id', tenantIdToUse);
+                
+                if (updateError) {
+                  console.warn('[Step1] ⚠️ Erro ao atualizar nome do tenant:', updateError);
+                } else {
+                  console.log('[Step1] ✅ Nome do tenant atualizado (CNPJ não alterado - duplicado)');
+                  window.dispatchEvent(new CustomEvent('tenant-updated', { 
+                    detail: { 
+                      tenantId: tenantIdToUse, 
+                      nome: data.nome,
+                      cnpj: null // Não atualizar CNPJ
+                    } 
+                  }));
+                }
+                return; // Não continuar com a atualização do CNPJ
+              }
+            }
+            
+            // Se o CNPJ não está duplicado ou não foi informado, atualizar normalmente
             const { error: updateError } = await (supabase as any)
               .from('tenants')
               .update({ 
@@ -943,7 +994,12 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       });
 
       await new Promise(resolve => setTimeout(resolve, 2000));
-      await loadTenantProducts();
+      // 🔥 CORRIGIDO: Usar forceLoad=true para carregar produtos mesmo sendo novo tenant
+      await loadTenantProducts(true);
+      
+      // 🔥 CRÍTICO: Aguardar mais um pouco e recarregar novamente para garantir
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await loadTenantProducts(true);
 
       const productsInserted = finalData?.products_inserted || 0;
       const productsFound = finalData?.products_found || 0;
@@ -1045,16 +1101,18 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // 🔥 CRÍTICO: Recarregar produtos múltiplas vezes para garantir que apareçam
+      // 🔥 CORRIGIDO: Usar forceLoad=true para carregar mesmo sendo novo tenant
       let tentativas = 0;
-      const maxTentativas = 3;
+      const maxTentativas = 5; // Aumentado de 3 para 5
       let produtosCarregados = 0;
       
-      while (tentativas < maxTentativas && produtosCarregados === 0) {
+      while (tentativas < maxTentativas) {
         console.log(`[Step1] 🔄 Tentativa ${tentativas + 1}/${maxTentativas} de recarregar produtos...`);
-        await loadTenantProducts();
+        // 🔥 CORRIGIDO: Usar forceLoad=true para forçar carregamento após extração
+        await loadTenantProducts(true);
         
-        // Aguardar um pouco antes de verificar novamente
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Aguardar um pouco antes de verificar novamente (aumentado para 2s)
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Verificar se produtos foram carregados
         produtosCarregados = tenantProductsCount;

@@ -117,7 +117,7 @@ serve(async (req) => {
             if (urlMatches) {
               for (const match of urlMatches) {
                 const url = match.replace(/<\/?loc>/gi, '').trim();
-                // Filtrar apenas URLs de produtos/catálogo
+                // 🔥 MELHORADO: Filtrar URLs de produtos de forma mais abrangente
                 if (url && (
                   url.toLowerCase().includes('produto') ||
                   url.toLowerCase().includes('categoria') ||
@@ -125,8 +125,11 @@ serve(async (req) => {
                   url.toLowerCase().includes('product') ||
                   url.toLowerCase().includes('category') ||
                   url.toLowerCase().includes('shop') ||
+                  url.toLowerCase().includes('loja') ||
                   url.toLowerCase().includes('/p/') ||
-                  url.toLowerCase().includes('/produto/')
+                  url.toLowerCase().includes('/produto/') ||
+                  url.toLowerCase().includes('/item/') ||
+                  url.toLowerCase().includes('/product/')
                 )) {
                   if (!discoveredUrls.has(url)) {
                     sitemapUrls.push(url);
@@ -284,6 +287,8 @@ serve(async (req) => {
           `site:${domain} (linha OR equipamentos OR EPI OR luvas)`,
           `site:${domain} (produtos em destaque OR novidades OR lançamentos)`,
           `site:${domain} (categoria OR categorias OR subcategoria)`,
+          `site:${domain} (shop OR loja OR e-commerce OR vendas)`,
+          `site:${domain} (modelo OR referência OR código OR SKU)`,
         ];
         
         const allSerperResults: any[] = [];
@@ -342,8 +347,10 @@ serve(async (req) => {
     }
 
     // ✅ NOVO: Processar URLs do sitemap encontradas
+    // 🔥 CORRIGIDO: Aumentar limite para 200 URLs do sitemap (era 50)
     console.log(`[ScanWebsite] 🔍 Processando ${sitemapUrls.length} URLs do sitemap...`);
-    for (let i = 0; i < Math.min(sitemapUrls.length, 50); i++) { // Limitar a 50 URLs do sitemap por execução
+    const maxSitemapUrls = 200; // 🔥 AUMENTADO: De 50 para 200 para cobrir sites grandes
+    for (let i = 0; i < Math.min(sitemapUrls.length, maxSitemapUrls); i++) {
       const sitemapUrl = sitemapUrls[i];
       try {
         const sitemapPageResponse = await fetch(sitemapUrl, {
@@ -362,12 +369,12 @@ serve(async (req) => {
             .substring(0, 12000);
           
           pagesContent.push(`URL: ${sitemapUrl} (Sitemap)\nConteúdo: ${textContent}`);
-          console.log(`[ScanWebsite] ✅ URL do sitemap processada (${i + 1}/${Math.min(sitemapUrls.length, 50)}): ${sitemapUrl}`);
+          console.log(`[ScanWebsite] ✅ URL do sitemap processada (${i + 1}/${Math.min(sitemapUrls.length, maxSitemapUrls)}): ${sitemapUrl}`);
         }
       } catch (e) {
         console.log(`[ScanWebsite] ⚠️ Erro ao acessar URL do sitemap ${sitemapUrl}:`, e);
       }
-      if (i < Math.min(sitemapUrls.length, 50) - 1) {
+      if (i < Math.min(sitemapUrls.length, maxSitemapUrls) - 1) {
         await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
@@ -393,10 +400,14 @@ serve(async (req) => {
           
           // ✅ NOVO: Detectar paginação na página (ex: /page/2, ?page=2, /p/2)
           const paginationLinks: string[] = [];
+          // 🔥 MELHORADO: Padrões mais abrangentes de paginação
           const paginationPatterns = [
-            /href=["']([^"']*\/page\/[2-9][^"']*)["']/gi,
-            /href=["']([^"']*\?page=[2-9][^"']*)["']/gi,
-            /href=["']([^"']*\/p\/[2-9][^"']*)["']/gi,
+            /href=["']([^"']*\/page\/[2-9][0-9]*[^"']*)["']/gi, // /page/2, /page/10, etc
+            /href=["']([^"']*\?page=[2-9][0-9]*[^"']*)["']/gi, // ?page=2, ?page=10, etc
+            /href=["']([^"']*\/p\/[2-9][0-9]*[^"']*)["']/gi, // /p/2, /p/10, etc
+            /href=["']([^"']*\/pagina\/[2-9][0-9]*[^"']*)["']/gi, // /pagina/2 (português)
+            /href=["']([^"']*\/pag\/[2-9][0-9]*[^"']*)["']/gi, // /pag/2
+            /href=["']([^"']*\/offset\/[0-9]+[^"']*)["']/gi, // /offset/20, /offset/40
           ];
           
           for (const pattern of paginationPatterns) {
@@ -416,8 +427,8 @@ serve(async (req) => {
             }
           }
           
-          // Processar até 3 páginas de paginação encontradas
-          for (let p = 0; p < Math.min(paginationLinks.length, 3); p++) {
+          // 🔥 MELHORADO: Processar até 10 páginas de paginação (era 3) para sites grandes
+          for (let p = 0; p < Math.min(paginationLinks.length, 10); p++) {
             try {
               const paginationResponse = await fetch(paginationLinks[p], {
                 headers: { 'User-Agent': 'Mozilla/5.0' },

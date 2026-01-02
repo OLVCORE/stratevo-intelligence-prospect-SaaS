@@ -23,7 +23,7 @@ interface Scan360Request {
 }
 
 const BATCH_SIZE = 25; // Páginas por lote
-const MAX_PAGES = 200; // Limite máximo de páginas por website
+const MAX_PAGES = 500; // 🔥 AUMENTADO: De 200 para 500 páginas para sites grandes (era 200)
 
 serve(async (req) => {
   // ✅ CRÍTICO: Tratar CORS preflight explicitamente (ANTES DE QUALQUER COISA)
@@ -151,7 +151,19 @@ serve(async (req) => {
             if (urlMatches) {
               for (const match of urlMatches) {
                 const url = match.replace(/<\/?loc>/gi, '').trim();
-                if (url && (url.toLowerCase().includes('produto') || url.toLowerCase().includes('categoria') || url.toLowerCase().includes('catalogo') || url.toLowerCase().includes('product') || url.toLowerCase().includes('category'))) {
+                // 🔥 MELHORADO: Filtrar URLs de produtos de forma mais abrangente
+                if (url && (
+                  url.toLowerCase().includes('produto') || 
+                  url.toLowerCase().includes('categoria') || 
+                  url.toLowerCase().includes('catalogo') || 
+                  url.toLowerCase().includes('product') || 
+                  url.toLowerCase().includes('category') ||
+                  url.toLowerCase().includes('shop') ||
+                  url.toLowerCase().includes('loja') ||
+                  url.toLowerCase().includes('/p/') ||
+                  url.toLowerCase().includes('/produto/') ||
+                  url.toLowerCase().includes('/item/')
+                )) {
                   urlsSet.add(url);
                 }
               }
@@ -165,10 +177,14 @@ serve(async (req) => {
       }
 
       // 1.2 SERPER com múltiplas queries
+      // 🔥 MELHORADO: Mais queries para descobrir mais páginas
       if (serperKey) {
         const serperQueries = [
           `site:${domain} (produtos OR serviços OR catálogo)`,
           `site:${domain} (linha OR equipamentos OR categoria)`,
+          `site:${domain} (produtos em destaque OR novidades OR lançamentos)`,
+          `site:${domain} (categoria OR categorias OR subcategoria)`,
+          `site:${domain} (shop OR loja OR e-commerce)`,
         ];
         
         for (const query of serperQueries) {

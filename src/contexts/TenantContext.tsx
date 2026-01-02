@@ -203,9 +203,24 @@ export function TenantProvider({ children }: { children: ReactNode }) {
               console.log('[TenantContext] ✅ Tenant encontrado na lista de tenants via switchTenant');
               tenantData = foundTenant as any;
             } else if (tenantsList.length > 0) {
-              // Se não encontrou o desejado, usar o primeiro da lista
-              console.log('[TenantContext] ⚠️ Tenant desejado não encontrado, usando primeiro da lista');
-              tenantData = tenantsList[0] as any;
+              // 🔥 CORRIGIDO: Não usar primeiro da lista automaticamente se o tenant desejado não foi encontrado
+              // Isso evita trocar para METALIFE quando estamos criando um novo tenant
+              // Apenas usar primeiro da lista se realmente não houver alternativa
+              console.warn('[TenantContext] ⚠️ Tenant desejado não encontrado na lista. Verificando se é novo tenant...');
+              // Se o tenantId começa com "local-tenant-" ou é um UUID válido mas não está na lista,
+              // pode ser um novo tenant que ainda não foi sincronizado. Não trocar automaticamente.
+              const isNewTenant = tenantId.startsWith('local-tenant-') || 
+                                  (tenantId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) && 
+                                   !tenantsList.some((t: any) => t.id === tenantId));
+              
+              if (isNewTenant) {
+                console.log('[TenantContext] ℹ️ Parece ser um novo tenant, não trocando automaticamente');
+                // Não definir tenantData, deixar que o erro seja retornado
+              } else {
+                // Se não é novo tenant, usar o primeiro da lista como fallback
+                console.log('[TenantContext] ⚠️ Usando primeiro tenant da lista como fallback');
+                tenantData = tenantsList[0] as any;
+              }
             }
           }
         } catch (listError) {

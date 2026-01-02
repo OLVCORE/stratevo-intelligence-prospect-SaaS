@@ -367,20 +367,47 @@ export default function MyCompanies() {
       // Vincular usuário ao tenant (protegido contra 42P17) - apenas se não for tenant local
       if (!newTenant.id.startsWith('local-tenant-')) {
         try {
-          const { error: userError } = await (supabase as any)
-            .from('users')
-            .upsert({
-              email: authUser.email,
-              nome: authUser.email?.split('@')[0] || 'Usuário',
-              tenant_id: newTenant.id,
-              auth_user_id: authUser.id,
-              role: 'OWNER',
-            }, {
-              onConflict: 'auth_user_id'
-            });
+          // 🔥 CORRIGIDO: Verificar se a constraint é composta (auth_user_id, tenant_id) ou simples (auth_user_id)
+          // Tentar primeiro com constraint composta (multi-tenant)
+          let userError;
+          try {
+            const { error: error1 } = await (supabase as any)
+              .from('users')
+              .upsert({
+                email: authUser.email,
+                nome: authUser.email?.split('@')[0] || 'Usuário',
+                tenant_id: newTenant.id,
+                auth_user_id: authUser.id,
+                role: 'OWNER',
+              }, {
+                onConflict: 'auth_user_id,tenant_id'
+              });
+            userError = error1;
+          } catch (err: any) {
+            // Se falhar com constraint composta, tentar com constraint simples
+            if (err?.code === '42P10' || err?.message?.includes('ON CONFLICT')) {
+              console.log('[MyCompanies] Tentando com constraint simples auth_user_id...');
+              const { error: error2 } = await (supabase as any)
+                .from('users')
+                .upsert({
+                  email: authUser.email,
+                  nome: authUser.email?.split('@')[0] || 'Usuário',
+                  tenant_id: newTenant.id,
+                  auth_user_id: authUser.id,
+                  role: 'OWNER',
+                }, {
+                  onConflict: 'auth_user_id'
+                });
+              userError = error2;
+            } else {
+              throw err;
+            }
+          }
 
           if (userError && userError.code !== '42P17') {
             console.warn('[MyCompanies] ⚠️ Erro ao vincular usuário (não crítico):', userError);
+          } else {
+            console.log('[MyCompanies] ✅ Usuário vinculado ao tenant com sucesso');
           }
         } catch (error: any) {
           if (error?.code !== '42P17') {

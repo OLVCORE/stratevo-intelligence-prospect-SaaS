@@ -213,6 +213,9 @@ export function OnboardingWizard() {
   // 🔥 CRÍTICO: Estado para controlar quando recarregar dados (quando tenant muda)
   const [lastTenantId, setLastTenantId] = useState<string | null>(tenantIdDetermined);
   
+  // 🔥 CORRIGIDO: Ref para evitar loops infinitos no useEffect
+  const lastTenantIdRef = useRef<string | null>(tenantIdDetermined);
+  
   // 🔥 CRÍTICO: Se não temos tenant_id e não é novo tenant, redirecionar
   // 🔥 CORRIGIDO: Aguardar um pouco se temos tenant_id na URL mas ainda não foi carregado no contexto
   useEffect(() => {
@@ -660,12 +663,22 @@ export function OnboardingWizard() {
   }, [tenantIdDetermined]);
   
   // 🔥 CRÍTICO: Recarregar dados quando tenantIdDetermined muda
+  // 🔥 CORRIGIDO: Usar ref para evitar loops infinitos
   useEffect(() => {
-    if (tenantIdDetermined && tenantIdDetermined !== lastTenantId) {
+    // Atualizar ref quando lastTenantId mudar
+    lastTenantIdRef.current = lastTenantId;
+  }, [lastTenantId]);
+  
+  useEffect(() => {
+    // 🔥 CORRIGIDO: Verificar se realmente mudou usando ref para evitar loops
+    if (tenantIdDetermined && tenantIdDetermined !== lastTenantIdRef.current) {
       console.log('[OnboardingWizard] 🔄 tenantIdDetermined mudou, recarregando dados:', {
-        old: lastTenantId,
+        old: lastTenantIdRef.current,
         new: tenantIdDetermined,
       });
+      
+      // Atualizar ref imediatamente para evitar múltiplas execuções
+      lastTenantIdRef.current = tenantIdDetermined;
       
       // Carregar dados do novo tenant
       const { step: savedStep, data: savedData } = loadSavedData(tenantIdDetermined);
@@ -687,7 +700,7 @@ export function OnboardingWizard() {
       
       setLastTenantId(tenantIdDetermined);
     }
-  }, [tenantIdDetermined, lastTenantId]);
+  }, [tenantIdDetermined]);
 
   // 🔥 SAFE MODE: Carregar dados priorizando localStorage, banco como best effort
   useEffect(() => {
@@ -1572,7 +1585,53 @@ export function OnboardingWizard() {
         return;
       }
 
-      const publicUserId = await getPublicUserId(authUser.id, tenantId);
+      // 🔥 CORRIGIDO: Garantir que o usuário existe na tabela users antes de salvar sessão
+      let publicUserId = await getPublicUserId(authUser.id, tenantId);
+      
+      // Se o usuário não existe, criar na tabela users
+      if (!publicUserId) {
+        console.log('[OnboardingWizard] 🔄 Usuário não encontrado na tabela users, criando...');
+        try {
+          // Tentar criar usuário com constraint composta (multi-tenant)
+          let createError;
+          try {
+            const { data: newUser, error: error1 } = await (supabase as any)
+              .from('users')
+              .insert({
+                email: authUser.email,
+                nome: authUser.email?.split('@')[0] || 'Usuário',
+                tenant_id: tenantId,
+                auth_user_id: authUser.id,
+                role: 'OWNER',
+              })
+              .select('id')
+              .single();
+            
+            if (!error1 && newUser) {
+              publicUserId = newUser.id;
+              console.log('[OnboardingWizard] ✅ Usuário criado na tabela users:', publicUserId);
+            } else {
+              createError = error1;
+            }
+          } catch (err: any) {
+            // Se falhar, pode ser que o usuário já existe mas com constraint diferente
+            // Tentar buscar novamente
+            if (err?.code === '23505' || err?.message?.includes('duplicate')) {
+              console.log('[OnboardingWizard] Usuário já existe, buscando novamente...');
+              publicUserId = await getPublicUserId(authUser.id, tenantId);
+            } else {
+              createError = err;
+            }
+          }
+          
+          if (!publicUserId && createError) {
+            console.warn('[OnboardingWizard] ⚠️ Não foi possível criar usuário na tabela users:', createError);
+          }
+        } catch (err) {
+          console.warn('[OnboardingWizard] ⚠️ Erro ao criar usuário:', err);
+        }
+      }
+      
       const effectiveUserId = publicUserId ?? authUser.id ?? null;
 
       if (!effectiveUserId) {
