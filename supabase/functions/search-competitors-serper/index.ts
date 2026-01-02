@@ -969,13 +969,25 @@ serve(async (req) => {
     const candidates: CompetitorCandidate[] = [];
     let processedCount = 0;
     let filteredCount = 0;
+    let filteredByDomain = 0;
+    let filteredByMarketplace = 0;
+    let filteredByBusinessType = 0;
+    let acceptedCount = 0;
+
+    console.log('[SERPER Search] 🔄 Iniciando processamento de', allResults.length, 'resultados...');
 
     for (const result of allResults) {
       processedCount++;
       try {
-        // Extrair domínio
-        const url = new URL(result.link);
-        const domain = url.hostname.replace('www.', '');
+        // Extrair domínio com tratamento de erro
+        let domain = '';
+        try {
+          const url = new URL(result.link);
+          domain = url.hostname.replace('www.', '');
+        } catch (urlError) {
+          console.warn('[SERPER Search] ⚠️ Erro ao parsear URL:', result.link, urlError);
+          continue;
+        }
 
         // Filtrar domínios excluídos
         if (excludeDomains.some(excluded => domain.includes(excluded))) {
@@ -984,7 +996,7 @@ serve(async (req) => {
 
         // Filtrar domínios genéricos
         if (GENERIC_DOMAINS.some(generic => domain.includes(generic))) {
-          filteredCount++;
+          filteredByDomain++;
           continue;
         }
 
@@ -995,29 +1007,41 @@ serve(async (req) => {
         ].some(m => domain.includes(m));
 
         if (isMarketplace) {
-          filteredCount++;
+          filteredByMarketplace++;
           continue;
         }
 
         // 🔥 TEMPORÁRIO: Usar calculateSemanticSimilarity simples ao invés de calculateRelevance completo
         // Para evitar erro 500, vamos usar apenas a função síncrona
-        const businessType = detectBusinessType(result.title, result.snippet, result.link);
+        let businessType: CompetitorCandidate['businessType'] = 'empresa';
+        let similarityScore = 0;
+        let productMatches = 0;
+        let exactMatches = 0;
+        let relevancia = 50; // Default
         
-        // Calcular similaridade simples (sem embeddings/classificação)
-        const similarityResult = calculateSemanticSimilarity(
-          industry,
-          products,
-          result.title,
-          result.snippet
-        );
-        
-        const similarityScore = similarityResult.score;
-        const productMatches = similarityResult.productMatches;
-        const exactMatches = similarityResult.exactMatches;
-        
-        // Calcular relevância simples (sem múltiplos critérios por enquanto)
-        let relevancia = similarityScore; // Usar similaridade como relevância base
-        relevancia += Math.max(0, 100 - (result.position * 3)); // Bonus por posição
+        try {
+          businessType = detectBusinessType(result.title || '', result.snippet || '', result.link || '');
+          
+          // Calcular similaridade simples (sem embeddings/classificação)
+          const similarityResult = calculateSemanticSimilarity(
+            industry || '',
+            products || [],
+            result.title || '',
+            result.snippet || ''
+          );
+          
+          similarityScore = similarityResult.score || 0;
+          productMatches = similarityResult.productMatches || 0;
+          exactMatches = similarityResult.exactMatches || 0;
+          
+          // Calcular relevância simples (sem múltiplos critérios por enquanto)
+          relevancia = similarityScore; // Usar similaridade como relevância base
+          relevancia += Math.max(0, 100 - ((result.position || 100) * 3)); // Bonus por posição
+          relevancia = Math.min(100, Math.max(0, relevancia)); // Garantir entre 0-100
+        } catch (calcError) {
+          console.warn('[SERPER Search] ⚠️ Erro ao calcular similaridade/relevância, usando valores padrão:', calcError);
+          // Usar valores padrão se falhar
+        }
 
         // 🔥 CRÍTICO: REMOVER filtro de similaridade completamente (aceitar todos)
         // Não filtrar por similaridade - deixar passar todos para depois ordenar
