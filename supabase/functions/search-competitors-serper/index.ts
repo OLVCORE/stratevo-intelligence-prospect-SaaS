@@ -972,44 +972,25 @@ serve(async (req) => {
           tenantEmbedding
         );
 
-        // 🔥 CRÍTICO: Threshold de similaridade MUITO reduzido (0% se tiver produtos)
-        // Remover filtro de similaridade se encontrou produtos específicos
-        const minSimilarity = exactMatches >= 2 ? 0 : (exactMatches >= 1 ? 0 : 5);
-        if (similarityScore < minSimilarity) {
-          filteredCount++;
-          console.log(`[SERPER Search] ❌ Filtrado (similaridade baixa): ${result.title} (similaridade: ${similarityScore}%, mín: ${minSimilarity}%, produtos: ${exactMatches})`);
-          continue;
-        }
-
-        // 🔥 CRÍTICO: Threshold de relevância MUITO reduzido
-        // Threshold dinâmico: mais baixo se encontrou produtos, mais alto se não encontrou
-        const minRelevancia = exactMatches >= 2 ? 5 : (exactMatches >= 1 ? 10 : 15);
+        // 🔥 CRÍTICO: REMOVER filtro de similaridade completamente (aceitar todos)
+        // Não filtrar por similaridade - deixar passar todos para depois ordenar
         
-        // 🔥 MELHORADO: Filtrar todos os tipos não-empresa (mas ser mais permissivo)
-        const nonCompanyTypes = ['vaga', 'artigo', 'perfil', 'marketplace', 'pdf', 'reportagem'];
-        // Aceitar associacao e educacional se tiver produtos
-        if (businessType && nonCompanyTypes.includes(businessType) && exactMatches === 0) {
-          filteredCount++;
-          console.log(`[SERPER Search] ❌ Filtrado (tipo não-empresa): ${result.title} (${businessType})`);
-          continue;
-        }
+        // 🔥 CRÍTICO: REMOVER filtro de relevância completamente (aceitar todos)
+        // Não filtrar por relevância - deixar passar todos para depois ordenar
         
-        if (relevancia < minRelevancia && exactMatches === 0) {
-          filteredCount++;
-          console.log(`[SERPER Search] ❌ Filtrado (relevância baixa): ${result.title} (relevância: ${relevancia}, min: ${minRelevancia}, produtos: ${exactMatches})`);
-          continue;
-        }
-        
-        // 🔥 AJUSTADO: Aceitar empresas e outros tipos se tiver produtos
-        if (businessType !== 'empresa' && exactMatches === 0) {
-          filteredCount++;
-          console.log(`[SERPER Search] ❌ Filtrado (não é empresa e sem produtos): ${result.title} (${businessType})`);
+        // 🔥 AJUSTADO: Filtrar apenas tipos claramente não-empresa (vaga, artigo, perfil)
+        // Aceitar todos os outros tipos (empresa, associacao, educacional, outro)
+        const strictNonCompanyTypes = ['vaga', 'artigo', 'perfil'];
+        if (businessType && strictNonCompanyTypes.includes(businessType)) {
+          filteredByBusinessType++;
+          console.log(`[SERPER Search] ❌ Filtrado (tipo não-empresa estrito): ${result.title} (${businessType})`);
           continue;
         }
         
         // 🔥 NOVO: Priorizar resultados com mais produtos encontrados
         // Log para debug
-        console.log(`[SERPER Search] ✅ Aceito: ${result.title} (produtos: ${exactMatches}/${productMatches}, similaridade: ${similarityScore}%, relevância: ${relevancia})`);
+        acceptedCount++;
+        console.log(`[SERPER Search] ✅ Aceito: ${result.title} (produtos: ${exactMatches}/${productMatches}, similaridade: ${similarityScore}%, relevância: ${relevancia}, tipo: ${businessType})`);
 
         // Extrair nome da empresa do título (remover sufixos comuns)
         let nome = result.title
@@ -1061,14 +1042,50 @@ serve(async (req) => {
     // 🔥 AUMENTADO: Retornar no mínimo 20 empresas (ou maxResults se maior)
     const finalCandidates = candidates.slice(0, Math.max(20, maxResults));
     console.log('[SERPER Search] ✅ Candidatos finais:', finalCandidates.length);
-    console.log('[SERPER Search] 📊 Estatísticas:', {
-      totalResults: allResults.length,
+    console.log('[SERPER Search] 📊 Estatísticas detalhadas:', {
+      totalResultsFromSerper: allResults.length,
       processed: processedCount,
-      filtered: filteredCount,
+      filteredByDomain,
+      filteredByMarketplace,
+      filteredBySimilarity,
+      filteredByRelevance,
+      filteredByBusinessType,
+      accepted: acceptedCount,
       totalCandidates: candidates.length,
       finalCandidates: finalCandidates.length,
       queriesExecuted: queries.length,
     });
+    
+    // 🔥 CRÍTICO: Se não encontrou nenhum candidato, retornar pelo menos os primeiros resultados do SERPER
+    if (finalCandidates.length === 0 && allResults.length > 0) {
+      console.warn('[SERPER Search] ⚠️ NENHUM candidato passou nos filtros! Retornando primeiros resultados brutos do SERPER...');
+      for (let i = 0; i < Math.min(10, allResults.length); i++) {
+        const result = allResults[i];
+        try {
+          const url = new URL(result.link);
+          const domain = url.hostname.replace('www.', '');
+          
+          // Apenas filtrar marketplaces e domínios genéricos óbvios
+          if (GENERIC_DOMAINS.some(generic => domain.includes(generic))) continue;
+          if (['mercadolivre', 'amazon', 'alibaba'].some(m => domain.includes(m))) continue;
+          
+          let nome = result.title.replace(/\s*-\s*(Vaga|Oportunidade).*$/i, '').trim();
+          
+          candidates.push({
+            nome,
+            website: result.link,
+            descricao: result.snippet,
+            relevancia: 50, // Relevância padrão
+            similarityScore: 10, // Similaridade padrão
+            businessType: 'empresa',
+            fonte: 'serper',
+          } as any);
+        } catch {
+          continue;
+        }
+      }
+      console.log('[SERPER Search] ✅ Retornando', candidates.length, 'candidatos brutos do SERPER');
+    }
 
     return new Response(
       JSON.stringify({
