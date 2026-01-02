@@ -722,15 +722,47 @@ serve(async (req) => {
   }
 
   try {
-    const { 
-      industry, 
-      products = [], 
-      location, 
-      excludeDomains = [],
-      maxResults = 10 
-    } = await req.json();
+    console.log('[SERPER Search] 📥 Recebendo requisição...');
+    
+    let industry: string = '';
+    let products: string[] = [];
+    let location: string | undefined;
+    let excludeDomains: string[] = [];
+    let maxResults = 10;
+    let page = 1;
+    
+    try {
+      const body = await req.json();
+      industry = body.industry || '';
+      products = Array.isArray(body.products) ? body.products : [];
+      location = body.location;
+      excludeDomains = Array.isArray(body.excludeDomains) ? body.excludeDomains : [];
+      maxResults = typeof body.maxResults === 'number' ? body.maxResults : 10;
+      page = typeof body.page === 'number' ? body.page : 1;
+      
+      console.log('[SERPER Search] ✅ Body parseado:', { 
+        industry, 
+        productsCount: products.length, 
+        location, 
+        maxResults,
+        page 
+      });
+    } catch (parseError) {
+      console.error('[SERPER Search] ❌ Erro ao parsear body:', parseError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Erro ao parsear requisição',
+          details: parseError instanceof Error ? parseError.message : String(parseError)
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
 
-    console.log('[SERPER Search] 🚀 Iniciando busca melhorada:', { industry, products, location, maxResults });
+    console.log('[SERPER Search] 🚀 Iniciando busca melhorada:', { industry, productsCount: products.length, location, maxResults });
 
     const serperApiKey = Deno.env.get('SERPER_API_KEY');
     if (!serperApiKey) {
