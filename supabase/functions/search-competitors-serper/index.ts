@@ -422,9 +422,10 @@ function calculateRelevance(
     relevancia += 5;
   }
   
-  // Penalizar se não encontrou nenhum produto específico
+  // 🔥 AJUSTADO: Penalizar menos se não encontrou nenhum produto específico
+  // Reduzir penalidade para permitir mais resultados
   if (similarityResult.productMatches === 0) {
-    relevancia -= 20; // Penalidade por não mencionar produtos específicos
+    relevancia -= 10; // Penalidade reduzida (era 20)
   }
   
   // Palavras-chave no título (peso: 15%)
