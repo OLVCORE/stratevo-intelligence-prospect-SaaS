@@ -964,6 +964,7 @@ serve(async (req) => {
     }
 
     console.log('[SERPER Search] 📊 Total de resultados únicos:', allResults.length);
+    console.log('[SERPER Search] 📊 Produtos recebidos:', products.length, products.slice(0, 5));
 
     // Processar e filtrar resultados
     const candidates: CompetitorCandidate[] = [];
