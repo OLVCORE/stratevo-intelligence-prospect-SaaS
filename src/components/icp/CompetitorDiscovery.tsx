@@ -2,13 +2,13 @@
  * 🔍 Descoberta Automática de Concorrentes via SERPER
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, ExternalLink, Plus, Sparkles, AlertCircle, Eye, Info } from 'lucide-react';
+import { Loader2, Search, ExternalLink, Plus, Sparkles, AlertCircle, Eye, Info, RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -67,6 +67,8 @@ export default function CompetitorDiscovery({
   // 🔥 CORRIGIDO: State controlado para location (editável)
   const [location, setLocation] = useState(initialLocation ?? '');
   const [showPreview, setShowPreview] = useState(false);
+  // 🔥 NOVO: Contador de busca único para forçar re-render e evitar cache
+  const searchKeyRef = useRef(0);
 
   // 🔥 CORRIGIDO: Sincronizar initialLocation apenas uma vez (primeiro preenchimento)
   useEffect(() => {
@@ -106,6 +108,14 @@ export default function CompetitorDiscovery({
     return queryParts.join(' ');
   };
 
+  // 🔥 NOVO: Função para limpar completamente e iniciar nova busca
+  const handleNewSearch = () => {
+    console.log('[CompetitorDiscovery] 🆕 Iniciando NOVA busca - limpando tudo');
+    setCandidates([]);
+    searchKeyRef.current += 1; // Incrementar chave única para forçar re-render
+    setSearching(false);
+  };
+
   const handleSearch = async () => {
     const queryToUse = customQuery.trim();
     if (!queryToUse) {
@@ -119,14 +129,16 @@ export default function CompetitorDiscovery({
 
     // 🔥 CRÍTICO: Limpar candidatos ANTES de iniciar busca (forçar atualização imediata)
     setCandidates([]);
+    searchKeyRef.current += 1; // 🔥 NOVO: Incrementar chave única para forçar nova busca
     setSearching(true);
     
     // 🔥 NOVO: Forçar re-render imediato limpando estado
     await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
-      console.log('[CompetitorDiscovery] 🔍 Iniciando busca SERPER');
+      console.log('[CompetitorDiscovery] 🔍 Iniciando busca SERPER (chave:', searchKeyRef.current, ')');
       console.log('[CompetitorDiscovery] 📦 Produtos sendo usados:', products.length, products.slice(0, 5));
+      console.log('[CompetitorDiscovery] 🔑 Query customizada:', queryToUse);
 
       // 🔥 MELHORADO: Combinar excludeWebsites com marketplaces padrão
       const allExcludedDomains = [
@@ -306,23 +318,42 @@ export default function CompetitorDiscovery({
             )}
           </div>
 
-          <Button 
-            onClick={handleSearch}
-            disabled={searching}
-            className="w-full"
-          >
-            {searching ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Buscando concorrentes...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Buscar Concorrentes
-              </>
+          <div className="flex gap-2">
+            <Button 
+              onClick={handleSearch}
+              disabled={searching}
+              className="flex-1"
+            >
+              {searching ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Buscando concorrentes...
+                </>
+              ) : candidates.length > 0 ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Atualizar Busca
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Buscar Concorrentes
+                </>
+              )}
+            </Button>
+            {candidates.length > 0 && (
+              <Button 
+                onClick={handleNewSearch}
+                disabled={searching}
+                variant="outline"
+                className="flex-shrink-0"
+                title="Limpar resultados e iniciar nova busca"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Nova Busca
+              </Button>
             )}
-          </Button>
+          </div>
         </CardContent>
       </Card>
 
