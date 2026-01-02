@@ -18,6 +18,8 @@ interface CompetitorCandidate {
   descricao: string;
   relevancia: number;
   fonte: 'serper';
+  similarityScore?: number; // Score de similaridade de website (0-100)
+  businessType?: 'empresa' | 'vaga' | 'artigo' | 'perfil' | 'associacao' | 'educacional' | 'outro';
 }
 
 interface Props {
@@ -347,6 +349,23 @@ export default function CompetitorDiscovery({
                         >
                           {Math.round(candidate.relevancia)}% match
                         </Badge>
+                        {candidate.similarityScore !== undefined && (
+                          <Badge 
+                            variant="outline"
+                            className="text-xs shrink-0 border-purple-500 text-purple-700 dark:text-purple-400"
+                            title="Score de similaridade de website (estilo Semrush/SimilarWeb)"
+                          >
+                            Similaridade: {Math.round(candidate.similarityScore)}%
+                          </Badge>
+                        )}
+                        {candidate.businessType === 'empresa' && (
+                          <Badge 
+                            variant="outline"
+                            className="text-xs shrink-0 border-emerald-500 text-emerald-700 dark:text-emerald-400"
+                          >
+                            ✓ Empresa
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
                         {candidate.descricao}
@@ -395,17 +414,18 @@ export default function CompetitorDiscovery({
                 </ul>
                 <div className="mt-3 p-2 bg-blue-100 dark:bg-blue-900/30 rounded border border-blue-300 dark:border-blue-700">
                   <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                    📊 Peso dos Critérios na Relevância:
+                    📊 Critérios de Similaridade (estilo Semrush/SimilarWeb):
                   </p>
                   <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-0.5">
-                    <li>• <strong>Posição no Google:</strong> Base (1º = 95%, 2º = 90%, etc.)</li>
-                    <li>• <strong>Setor/Indústria no título:</strong> +10 pontos</li>
-                    <li>• <strong>Produtos no título:</strong> +15 pontos</li>
-                    <li>• <strong>Palavras-chave (fabricante/fornecedor):</strong> +10 pontos</li>
-                    <li>• <strong>Localização no snippet:</strong> +10 pontos</li>
+                    <li>• <strong>Similaridade Semântica (50%):</strong> Análise de serviços/produtos similares</li>
+                    <li>• <strong>Posição no Google (25%):</strong> Base (1º = 97%, 2º = 94%, etc.)</li>
+                    <li>• <strong>Palavras-chave no título (15%):</strong> Setor + produtos</li>
+                    <li>• <strong>Palavras-chave no snippet (10%):</strong> Consultoria, soluções, comércio exterior</li>
+                    <li>• <strong>Filtros inteligentes:</strong> Exclui vagas, artigos, perfis, associações</li>
+                    <li>• <strong>Múltiplas queries:</strong> Busca em diferentes variações para melhor cobertura</li>
                   </ul>
                   <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                    💡 <strong>Dica:</strong> O setor/indústria tem peso PRIMÁRIO na busca (primeiro termo da query) e +10 pontos no fit quando aparece no título.
+                    💡 <strong>Melhorias:</strong> Sistema agora filtra automaticamente resultados genéricos (vagas, artigos, perfis) e foca apenas em empresas reais com serviços similares.
                   </p>
                 </div>
               </div>
