@@ -210,19 +210,42 @@ export default function CompetitorDiscovery({
       
       console.log('[CompetitorDiscovery] 🔑 ID único da busca:', uniqueSearchId);
       
-      const { data, error } = await supabase.functions.invoke('search-competitors-serper', {
-        body: {
-          industry: customQuery.trim(), // 🔥 CORRIGIDO: Usar apenas customQuery (não fallback para industry)
-          products: products, // 🔥 MELHORADO: Passar TODOS os produtos do tenant (não apenas 5)
-          location: location.trim() || 'Brasil', // Se vazio, busca Brasil sem filtro de cidade/UF
-          excludeDomains: allExcludedDomains,
-          maxResults,
-          forceRefresh: true, // 🔥 NOVO: Forçar busca sem cache
-          searchId: uniqueSearchId, // 🔥 NOVO: ID único para rastreamento
-        },
+      const requestBody = {
+        industry: customQuery.trim(), // 🔥 CORRIGIDO: Usar apenas customQuery (não fallback para industry)
+        products: products, // 🔥 MELHORADO: Passar TODOS os produtos do tenant (não apenas 5)
+        location: location.trim() || 'Brasil', // Se vazio, busca Brasil sem filtro de cidade/UF
+        excludeDomains: allExcludedDomains,
+        maxResults,
+        forceRefresh: true, // 🔥 NOVO: Forçar busca sem cache
+        searchId: uniqueSearchId, // 🔥 NOVO: ID único para rastreamento
+      };
+      
+      console.log('[CompetitorDiscovery] 📤 Enviando requisição para Edge Function:', {
+        industry: requestBody.industry,
+        productsCount: requestBody.products.length,
+        products: requestBody.products.slice(0, 5),
+        location: requestBody.location,
+        maxResults: requestBody.maxResults,
+        searchId: requestBody.searchId,
       });
 
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke('search-competitors-serper', {
+        body: requestBody,
+      });
+
+      if (error) {
+        console.error('[CompetitorDiscovery] ❌ Erro na Edge Function:', error);
+        throw error;
+      }
+      
+      console.log('[CompetitorDiscovery] 📥 Resposta recebida da Edge Function:', {
+        success: data?.success,
+        candidatesCount: data?.candidates?.length || 0,
+        totalFound: data?.totalFound || 0,
+        queriesExecuted: data?.queriesExecuted || 0,
+        query: data?.query || 'N/A',
+        debug: data?.debug || {},
+      });
 
       // 🔥 CRÍTICO: Sempre limpar e atualizar, mesmo se não houver candidatos
       if (data.success && data.candidates) {
