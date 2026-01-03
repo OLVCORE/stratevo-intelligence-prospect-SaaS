@@ -1245,8 +1245,8 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     let successCount = 0;
     let errorCount = 0;
     
-    // Executar extrações em paralelo (mas limitado a 5 simultâneas para não sobrecarregar)
-    const batchSize = 5;
+    // 🔥 MELHORADO: Executar extrações em paralelo (aumentado de 5 para 10-15 para melhor performance)
+    const batchSize = 12; // 🔥 AUMENTADO: De 5 para 12 (balance entre performance e não sobrecarregar)
     for (let i = 0; i < extractionTasks.length; i += batchSize) {
       const batch = extractionTasks.slice(i, i + batchSize);
       
