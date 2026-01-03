@@ -248,6 +248,24 @@ function calculateSemanticSimilarity(
   const text = `${candidateTitle} ${candidateSnippet}`.toLowerCase();
   const industryLower = targetIndustry.toLowerCase();
   
+  // 🔥 DINÂMICO: Detectar termos específicos dos produtos do tenant (SEM hardcoding)
+  // Se os produtos do tenant mencionam termos específicos, dar bonus para candidatos que também têm
+  const candidateText = `${candidateTitle} ${candidateSnippet}`.toLowerCase();
+  
+  // Verificar se os produtos do tenant têm termos específicos e se o candidato também tem
+  for (const product of targetProducts.slice(0, 10)) {
+    const productLower = product.toLowerCase();
+    // Se o produto tem termos específicos (mais de 2 palavras), dar bonus se candidato também tem
+    const productWords = productLower.split(/\s+/).filter(w => w.length > 3);
+    if (productWords.length >= 2) {
+      // Verificar se pelo menos 2 palavras do produto aparecem no candidato
+      const matchedWords = productWords.filter(word => candidateText.includes(word));
+      if (matchedWords.length >= 2) {
+        score += 10; // Bonus por termos específicos encontrados
+      }
+    }
+  }
+  
   // 🔥 REDUZIDO: Similaridade de indústria (peso: 15% - era 30%)
   // Menos peso porque indústria pode ser genérica
   if (text.includes(industryLower)) {
@@ -817,8 +835,8 @@ serve(async (req) => {
     
     const productKeywords = extractKeywords(productsToUse);
     
-    // 🔥 MELHORADO: Queries NATURAIS como um humano faria no Google
-    // Foco em encontrar empresas reais que oferecem os mesmos produtos/serviços
+    // 🔥 MELHORADO: Queries 100% DINÂMICAS baseadas APENAS nos produtos do tenant
+    // SEM hardcoding - funciona para QUALQUER tenant (OLV, Metal Life, Uniluvas, Barclays, etc.)
     const queries: string[] = [];
     
     // Filtrar produtos muito genéricos
@@ -828,6 +846,7 @@ serve(async (req) => {
     });
     const productsForQueries = specificProducts.length >= 2 ? specificProducts : productsToUse;
     
+    // 🔥 QUERIES DINÂMICAS: Usar APENAS os produtos do campo "Produtos usados na busca"
     // Query 1: "empresas similares que oferecem [produto1] [produto2]"
     if (productsForQueries.length >= 2) {
       queries.push(`empresas similares que oferecem ${productsForQueries.slice(0, 2).join(' e ')}`);
@@ -863,27 +882,18 @@ serve(async (req) => {
       queries.push(`empresas que oferecem ${productsForQueries[0]}`);
     }
     
-    // Query 8: Produtos + supply chain/logística
-    const supplyChainProducts = productsForQueries.filter(p => 
-      p.toLowerCase().includes('supply') || p.toLowerCase().includes('logística') || 
-      p.toLowerCase().includes('logistica') || p.toLowerCase().includes('chain')
-    );
-    if (supplyChainProducts.length >= 2) {
-      queries.push(`"${supplyChainProducts[0]}" OR "${supplyChainProducts[1]}" Brasil`);
-    }
-    
-    // Query 9: Primeiros 5 produtos com OR (fallback amplo)
+    // Query 8: Primeiros 5 produtos com OR (fallback amplo)
     if (productsForQueries.length >= 5) {
       queries.push(`${productsForQueries.slice(0, 5).map(p => `"${p}"`).join(' OR ')} Brasil`);
     }
     
-    // Query 10: Fallback - Primeiros 3 produtos (se não houver queries específicas)
+    // Query 9: Fallback - Primeiros 3 produtos (se não houver queries específicas)
     if (queries.length === 0 && productsForQueries.length > 0) {
       queries.push(`${productsForQueries.slice(0, 3).map(p => `"${p}"`).join(' OR ')} Brasil`);
     }
 
     if (location && location !== 'Brasil') {
-      queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} ${location} consultoria`);
+      queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} ${location}`);
     }
     
     console.log('[SERPER Search] 📦 Produtos usados na busca:', productsToUse.length, 'produtos');
@@ -1007,6 +1017,11 @@ serve(async (req) => {
         // Se o tenant tem produtos físicos, filtrar lojas que não são fábricas/distribuidores
         const titleLower = (result.title || '').toLowerCase();
         const snippetLower = (result.snippet || '').toLowerCase();
+        const candidateText = `${titleLower} ${snippetLower}`;
+        
+        // 🔥 REMOVIDO: Lógica hardcoded de comex removida
+        // Agora usa APENAS os produtos do tenant dinamicamente
+        
         const isGenericStore = [
           'loja', 'shop', 'store', 'comprar', 'vender',
           'preço', 'melhor preço', 'promoção', 'desconto',
