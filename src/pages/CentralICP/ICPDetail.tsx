@@ -7,11 +7,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp, Users, DollarSign, MapPin, AlertTriangle, Lightbulb, TrendingDown, Info, Home, Edit } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Search, BarChart3, Target, Calendar, CheckCircle2, Zap, RefreshCw, Loader2, Building2, TrendingUp, Users, DollarSign, MapPin, AlertTriangle, Lightbulb, TrendingDown, Info, Home, Edit, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import ICPAnalysisCriteriaConfig from '@/components/icp/ICPAnalysisCriteriaConfig';
 import BCGMatrix from '@/components/reports/BCGMatrix';
 import CompetitiveAnalysis from '@/components/icp/CompetitiveAnalysis';
@@ -29,6 +30,8 @@ export default function ICPDetail() {
   const [loading, setLoading] = useState(true);
   const [icpData, setIcpData] = useState<any>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [resumoOpen, setResumoOpen] = useState(true);
+  const [configOpen, setConfigOpen] = useState(true);
   
   // Registrar ICP atual no contexto
   useEffect(() => {
@@ -444,21 +447,14 @@ export default function ICPDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="resumo" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 h-auto gap-2 bg-muted/50 p-2 rounded-lg">
+      <Tabs defaultValue="perfil" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-6 h-auto gap-2 bg-muted/50 p-2 rounded-lg">
           <TabsTrigger 
-            value="resumo" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
-          >
-            <Target className="h-4 w-4" />
-            <span className="hidden sm:inline">Resumo</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="configuracao" 
+            value="perfil" 
             className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-emerald-500 data-[state=active]:text-white flex items-center gap-2 px-4 py-3 rounded-md transition-all"
           >
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Configuração</span>
+            <Building2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Perfil do Tenant</span>
           </TabsTrigger>
           <TabsTrigger 
             value="criterios" 
@@ -497,37 +493,45 @@ export default function ICPDetail() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="resumo" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                Resumo Executivo
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Tipo</p>
-                  <p className="font-semibold">{profile.tipo || 'Geral'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge variant={profile.ativo ? 'default' : 'secondary'}>
-                    {profile.ativo ? 'Ativo' : 'Inativo'}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Criado em</p>
-                  <p className="font-semibold">
-                    {new Date(profile.created_at).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Setor Foco</p>
-                  <p className="font-semibold">{profile.setor_foco || 'N/A'}</p>
-                </div>
-              </div>
+        <TabsContent value="perfil" className="space-y-4">
+          {/* Resumo Executivo - Card Collapsible */}
+          <Collapsible open={resumoOpen} onOpenChange={setResumoOpen}>
+            <Card className="border-l-4 border-l-emerald-600/90 shadow-md transition-all duration-200">
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-emerald-50/60 hover:to-emerald-100/40 dark:hover:from-emerald-900/20 dark:hover:to-emerald-800/20 transition-all duration-200 cursor-pointer">
+                  <CardTitle className="flex items-center justify-between text-emerald-800 dark:text-emerald-100 font-semibold">
+                    <div className="flex items-center gap-2">
+                      <Target className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />
+                      Resumo Executivo
+                    </div>
+                    <ChevronDown className={`h-5 w-5 text-emerald-600 transition-transform duration-200 ${resumoOpen ? 'rotate-180' : ''}`} />
+                  </CardTitle>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-4 pt-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Tipo</p>
+                      <p className="font-semibold">{profile.tipo || 'Geral'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Status</p>
+                      <Badge variant={profile.ativo ? 'default' : 'secondary'}>
+                        {profile.ativo ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Criado em</p>
+                      <p className="font-semibold">
+                        {new Date(profile.created_at).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Setor Foco</p>
+                      <p className="font-semibold">{profile.setor_foco || 'N/A'}</p>
+                    </div>
+                  </div>
 
               {icpData && (
                 <div className="space-y-6 pt-4 border-t">
@@ -586,17 +590,17 @@ export default function ICPDetail() {
                   {icpData.empresas_benchmarking && icpData.empresas_benchmarking.length > 0 && (
                     <div className="pt-4 border-t">
                       <h3 className="font-semibold mb-3 flex items-center gap-2">
-                        <BarChart3 className="w-4 h-4 text-primary" />
+                        <BarChart3 className="w-4 h-4 text-sky-600 dark:text-sky-500" />
                         🎯 Empresas de Benchmarking (Clientes Desejados)
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {icpData.empresas_benchmarking.slice(0, 6).map((empresa: any, idx: number) => (
-                          <Card key={idx} className="bg-muted/50">
+                          <Card key={idx} className="border-l-4 border-l-sky-600/90 shadow-md bg-gradient-to-br from-slate-50 to-sky-50/50 dark:from-slate-900 dark:to-sky-950/30 border-slate-300 dark:border-slate-700 hover:shadow-lg transition-all duration-200">
                             <CardContent className="p-3">
-                              <p className="font-semibold text-sm">{empresa.nome || empresa.razaoSocial}</p>
+                              <p className="font-semibold text-sm text-sky-800 dark:text-sky-100">{empresa.nome || empresa.razaoSocial}</p>
                               <p className="text-xs text-muted-foreground">{empresa.setor || 'Setor não identificado'}</p>
                               {empresa.capitalSocial && (
-                                <p className="text-xs text-primary mt-1">
+                                <p className="text-xs text-sky-700 dark:text-sky-500 mt-1 font-medium">
                                   Capital: R$ {empresa.capitalSocial.toLocaleString('pt-BR')}
                                 </p>
                               )}
@@ -621,47 +625,44 @@ export default function ICPDetail() {
                   {icpData.concorrentes && icpData.concorrentes.length > 0 && (
                     <div className="pt-4 border-t">
                       <h3 className="font-semibold mb-3 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-500" />
                         ⚠️ Concorrentes Diretos ({icpData.concorrentes.length} cadastrado{icpData.concorrentes.length !== 1 ? 's' : ''})
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {icpData.concorrentes.slice(0, 6).map((conc: any, idx: number) => (
-                          <Card key={idx} className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-                            <CardContent className="p-3">
-                              <p className="font-semibold text-sm">{conc.razaoSocial || conc.nome || 'Concorrente'}</p>
-                              {conc.cnpj && (
-                                <p className="text-xs text-muted-foreground font-mono mt-1">CNPJ: {conc.cnpj}</p>
-                              )}
-                              {conc.setor && (
-                                <p className="text-xs text-muted-foreground mt-1">Setor: {conc.setor}</p>
-                              )}
-                              {conc.capitalSocial && conc.capitalSocial > 0 && (
-                                <p className="text-xs text-primary mt-1 font-medium">
-                                  Capital: R$ {conc.capitalSocial.toLocaleString('pt-BR')}
-                                </p>
-                              )}
-                              {conc.localizacao && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  📍 {conc.localizacao}
-                                </p>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))}
+                      <div className="max-h-[600px] overflow-y-auto pr-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {icpData.concorrentes.map((conc: any, idx: number) => (
+                            <Card key={idx} className="border-l-4 border-l-rose-600/90 shadow-md bg-gradient-to-br from-slate-50 to-rose-50/50 dark:from-slate-900 dark:to-rose-950/30 border-slate-300 dark:border-slate-700 hover:shadow-lg transition-all duration-200">
+                              <CardContent className="p-3">
+                                <p className="font-semibold text-sm text-rose-800 dark:text-rose-100">{conc.razaoSocial || conc.nome || 'Concorrente'}</p>
+                                {conc.cnpj && (
+                                  <p className="text-xs text-muted-foreground font-mono mt-1">CNPJ: {conc.cnpj}</p>
+                                )}
+                                {conc.setor && (
+                                  <p className="text-xs text-muted-foreground mt-1">Setor: {conc.setor}</p>
+                                )}
+                                {conc.capitalSocial && conc.capitalSocial > 0 && (
+                                  <p className="text-xs text-rose-700 dark:text-rose-500 mt-1 font-medium">
+                                    Capital: R$ {conc.capitalSocial.toLocaleString('pt-BR')}
+                                  </p>
+                                )}
+                                {conc.localizacao && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    📍 {conc.localizacao}
+                                  </p>
+                                )}
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
                       </div>
-                      {icpData.concorrentes.length > 6 && (
-                        <p className="text-sm text-muted-foreground mt-2">
-                          +{icpData.concorrentes.length - 6} concorrente{icpData.concorrentes.length - 6 !== 1 ? 's' : ''} adicional{icpData.concorrentes.length - 6 !== 1 ? 'is' : ''} cadastrado{icpData.concorrentes.length - 6 !== 1 ? 's' : ''}
-                        </p>
-                      )}
                     </div>
                   )}
 
                   {/* Clientes Atuais (Base de Análise) */}
                   {icpData.clientes_atuais && icpData.clientes_atuais.length > 0 && (
                     <div className="pt-4 border-t">
-                      <h3 className="font-semibold mb-3 flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      <h3 className="font-semibold mb-3 flex items-center gap-2 text-emerald-800 dark:text-emerald-100">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-500" />
                         ✅ Clientes Atuais (Base de Análise)
                       </h3>
                       <div className="flex flex-wrap gap-2">
@@ -678,153 +679,166 @@ export default function ICPDetail() {
                   )}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-        <TabsContent value="configuracao">
-          <Card>
-            <CardHeader>
-              <CardTitle>Configuração do ICP</CardTitle>
-              <CardDescription>Dados técnicos e metadados do perfil</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Informações do Perfil */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-primary" />
-                    Identificação
-                  </h3>
-                  <div className="space-y-3 pl-7">
-                    <div>
-                      <p className="text-sm text-muted-foreground">ID do Perfil</p>
-                      <p className="font-mono text-sm">{profile?.id || 'N/A'}</p>
+          {/* Configuração do ICP - Card Collapsible */}
+          <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
+            <Card className="border-l-4 border-l-indigo-600/90 shadow-md transition-all duration-200">
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="bg-gradient-to-r from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 hover:from-indigo-50/60 hover:to-indigo-100/40 dark:hover:from-indigo-900/20 dark:hover:to-indigo-800/20 transition-all duration-200 cursor-pointer">
+                  <CardTitle className="flex items-center justify-between text-indigo-800 dark:text-indigo-100 font-semibold">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-indigo-700 dark:text-indigo-500" />
+                      Configuração do ICP
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Nome</p>
-                      <p className="font-semibold">{profile?.nome || icpData?.nome || 'ICP Principal'}</p>
+                    <ChevronDown className={`h-5 w-5 text-indigo-600 transition-transform duration-200 ${configOpen ? 'rotate-180' : ''}`} />
+                  </CardTitle>
+                  <CardDescription>Dados técnicos e metadados do perfil</CardDescription>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-6 pt-6">
+                  {/* Informações do Perfil */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-lg flex items-center gap-2 text-indigo-800 dark:text-indigo-100">
+                        <Building2 className="w-5 h-5 text-indigo-700 dark:text-indigo-500" />
+                        Identificação
+                      </h3>
+                      <div className="space-y-3 pl-7">
+                        <div>
+                          <p className="text-sm text-muted-foreground">ID do Perfil</p>
+                          <p className="font-mono text-sm">{profile?.id || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Nome</p>
+                          <p className="font-semibold">{profile?.nome || icpData?.nome || 'ICP Principal'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Tipo</p>
+                          <Badge variant={profile?.tipo === 'core' ? 'default' : 'secondary'}>
+                            {profile?.tipo || 'core'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Status</p>
+                          <Badge variant={profile?.ativo ? 'default' : 'destructive'}>
+                            {profile?.ativo ? '✓ Ativo' : '✗ Inativo'}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Tipo</p>
-                      <Badge variant={profile?.tipo === 'core' ? 'default' : 'secondary'}>
-                        {profile?.tipo || 'core'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Status</p>
-                      <Badge variant={profile?.ativo ? 'default' : 'destructive'}>
-                        {profile?.ativo ? '✓ Ativo' : '✗ Inativo'}
-                      </Badge>
+
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-lg flex items-center gap-2 text-indigo-800 dark:text-indigo-100">
+                        <Target className="w-5 h-5 text-indigo-700 dark:text-indigo-500" />
+                        Foco Estratégico
+                      </h3>
+                      <div className="space-y-3 pl-7">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Setor Principal</p>
+                          <p className="font-semibold">{profile?.setor_foco || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Nicho Principal</p>
+                          <p className="font-semibold">{profile?.nicho_foco || 'Não definido'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Prioridade</p>
+                          <Badge variant="outline">Nível {profile?.prioridade || 1}</Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">ICP Principal</p>
+                          <Badge variant={profile?.icp_principal ? 'default' : 'secondary'}>
+                            {profile?.icp_principal ? '★ Sim' : 'Não'}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
-                    <Target className="w-5 h-5 text-primary" />
-                    Foco Estratégico
-                  </h3>
-                  <div className="space-y-3 pl-7">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Setor Principal</p>
-                      <p className="font-semibold">{profile?.setor_foco || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Nicho Principal</p>
-                      <p className="font-semibold">{profile?.nicho_foco || 'Não definido'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Prioridade</p>
-                      <Badge variant="outline">Nível {profile?.prioridade || 1}</Badge>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">ICP Principal</p>
-                      <Badge variant={profile?.icp_principal ? 'default' : 'secondary'}>
-                        {profile?.icp_principal ? '★ Sim' : 'Não'}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* CNAEs Alvo */}
-              {icpData?.cnaes_alvo && icpData.cnaes_alvo.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-primary" />
-                    CNAEs Alvo ({icpData.cnaes_alvo.length})
-                  </h3>
-                  <div className="flex flex-wrap gap-2 pl-7">
-                    {icpData.cnaes_alvo.map((cnae: string, idx: number) => (
-                      <Badge key={idx} variant="outline" className="font-mono">
-                        {cnae}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              {/* Timestamps */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-lg flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  Histórico
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-7">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Criado em</p>
-                    <p className="font-semibold">
-                      {profile?.created_at 
-                        ? new Date(profile.created_at).toLocaleDateString('pt-BR', { 
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          }) 
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Última atualização</p>
-                    <p className="font-semibold">
-                      {profile?.updated_at 
-                        ? new Date(profile.updated_at).toLocaleDateString('pt-BR', { 
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          }) 
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">ICPs gerados</p>
-                    <p className="font-semibold">{profile?.generated_count || 0}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Descrição */}
-              {(profile?.descricao || icpData?.descricao) && (
-                <>
                   <Separator />
+
+                  {/* CNAEs Alvo */}
+                  {icpData?.cnaes_alvo && icpData.cnaes_alvo.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg flex items-center gap-2 text-indigo-800 dark:text-indigo-100">
+                        <FileText className="w-5 h-5 text-indigo-700 dark:text-indigo-500" />
+                        CNAEs Alvo ({icpData.cnaes_alvo.length})
+                      </h3>
+                      <div className="flex flex-wrap gap-2 pl-7">
+                        {icpData.cnaes_alvo.map((cnae: string, idx: number) => (
+                          <Badge key={idx} variant="outline" className="font-mono">
+                            {cnae}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {/* Timestamps */}
                   <div className="space-y-3">
-                    <h3 className="font-semibold text-lg">Descrição</h3>
-                    <p className="text-muted-foreground pl-7">
-                      {profile?.descricao || icpData?.descricao}
-                    </p>
+                    <h3 className="font-semibold text-lg flex items-center gap-2 text-indigo-800 dark:text-indigo-100">
+                      <TrendingUp className="w-5 h-5 text-indigo-700 dark:text-indigo-500" />
+                      Histórico
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-7">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Criado em</p>
+                        <p className="font-semibold">
+                          {profile?.created_at 
+                            ? new Date(profile.created_at).toLocaleDateString('pt-BR', { 
+                                day: '2-digit', 
+                                month: '2-digit', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) 
+                            : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Última atualização</p>
+                        <p className="font-semibold">
+                          {profile?.updated_at 
+                            ? new Date(profile.updated_at).toLocaleDateString('pt-BR', { 
+                                day: '2-digit', 
+                                month: '2-digit', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) 
+                            : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">ICPs gerados</p>
+                        <p className="font-semibold">{profile?.generated_count || 0}</p>
+                      </div>
+                    </div>
                   </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+
+                  {/* Descrição */}
+                  {(profile?.descricao || icpData?.descricao) && (
+                    <>
+                      <Separator />
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-lg text-indigo-800 dark:text-indigo-100">Descrição</h3>
+                        <p className="text-muted-foreground pl-7">
+                          {profile?.descricao || icpData?.descricao}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </TabsContent>
 
         <TabsContent value="analise" className="space-y-6">
