@@ -1206,17 +1206,18 @@ serve(async (req) => {
           continue;
         }
 
-        // 🔥 NOVO: Aplicar filtros universais (funciona para QUALQUER setor)
+        // 🔥 REFEITO: Aplicar filtros universais (funciona para QUALQUER setor)
         const filterContext: FilterContext = {
-          tenantDomain: tenantDomain,
-          tenantName: tenantName
+          tenantDomain: tenantDomain || '',
+          tenantName: tenantName || ''
         };
         
         if (!isValidCompetitor(result, filterContext)) {
           filteredByDomain++;
-          console.log(`[SERPER Search] ❌ Filtrado (filtros universais): ${result.title}`);
           continue;
         }
+        
+        console.log(`[SERPER Search] ✅ Passou nos filtros: ${result.title} (${result.link})`);
         
         const titleLower = (result.title || '').toLowerCase();
         const snippetLower = (result.snippet || '').toLowerCase();
