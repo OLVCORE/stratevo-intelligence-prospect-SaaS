@@ -718,9 +718,13 @@ async function calculateRelevance(
 serve(async (req) => {
   // Handle CORS preflight - CRÍTICO: Retornar 200 OK explicitamente
   if (req.method === 'OPTIONS') {
+    console.log('[SERPER Search] 🔄 OPTIONS preflight recebido');
     return new Response(null, { 
       status: 200,
-      headers: corsHeaders 
+      headers: {
+        ...corsHeaders,
+        'Content-Length': '0'
+      }
     });
   }
 
