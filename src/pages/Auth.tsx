@@ -157,6 +157,7 @@ export default function Auth() {
                       required
                       disabled={isLoading}
                       className="pr-10"
+                      autoComplete="current-password"
                     />
                     <button
                       type="button"
