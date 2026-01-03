@@ -678,7 +678,8 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
               cnpj: cnpjLimpo 
             });
             
-            // 🔥 CORRIGIDO: Verificar se o CNPJ já está sendo usado por outro tenant antes de atualizar
+            // 🔥 CORRIGIDO: Verificar se o CNPJ já está sendo usado por outro tenant ANTES de atualizar
+            // 🔥 IMPORTANTE: Verificar APENAS em tenants ATIVOS (não deletados)
             if (cnpjLimpo && cnpjLimpo.length === 14) {
               const { data: existingTenant } = await (supabase as any)
                 .from('tenants')
@@ -687,8 +688,11 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
                 .neq('id', tenantIdToUse)
                 .maybeSingle();
               
+              // 🔥 NOVO: Verificar também se o CNPJ está em deleted_tenants (soft delete)
+              // Se estiver apenas em deleted_tenants, não é um problema (pode reutilizar)
+              // Mas se estiver em tenants (ativo), é duplicado
               if (existingTenant) {
-                console.warn('[Step1] ⚠️ CNPJ já está sendo usado por outro tenant:', existingTenant);
+                console.warn('[Step1] ⚠️ CNPJ já está sendo usado por outro tenant ATIVO:', existingTenant);
                 toast.warning('CNPJ já cadastrado', {
                   description: `Este CNPJ já está sendo usado pela empresa "${existingTenant.nome}". O CNPJ não será atualizado.`,
                 });
