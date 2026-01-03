@@ -716,15 +716,14 @@ async function calculateRelevance(
 }
 
 serve(async (req) => {
-  // Handle CORS preflight - CRÍTICO: Retornar 200 OK explicitamente
+  // ✅ CRÍTICO: Tratar CORS preflight explicitamente (ANTES DE QUALQUER COISA)
+  // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
+  // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
-    console.log('[SERPER Search] 🔄 OPTIONS preflight recebido');
-    return new Response(null, { 
+    console.log('[SERPER Search] ✅ OPTIONS preflight recebido');
+    return new Response('', { 
       status: 200,
-      headers: {
-        ...corsHeaders,
-        'Content-Length': '0'
-      }
+      headers: corsHeaders 
     });
   }
 
