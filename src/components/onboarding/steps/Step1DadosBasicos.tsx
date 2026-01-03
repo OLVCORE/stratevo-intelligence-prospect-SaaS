@@ -1008,7 +1008,7 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       totalBatches = initialData.total_batches || 1;
 
       // 🔥 CORRIGIDO: Fechar toast inicial e abrir toast de progresso com ID fixo
-      toast.dismiss(loadingToastId);
+      toast.dismiss(loadingToast);
       toast.loading(`🔄 Processando... Lote ${currentBatch}/${totalBatches}`, { id: progressToastId });
 
       // Polling até completar
