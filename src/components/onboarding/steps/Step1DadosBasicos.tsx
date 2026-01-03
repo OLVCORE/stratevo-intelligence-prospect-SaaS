@@ -684,9 +684,22 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             if (cnpjLimpo && cnpjLimpo.length === 14) {
               console.log('[Step1] 🔍 Verificando CNPJ duplicado:', { cnpj: cnpjLimpo, tenantIdToUse });
               
+              // 🔥 NOVO: Buscar TODOS os tenants com este CNPJ (para debug)
+              const { data: allTenantsWithCNPJ, error: listError } = await (supabase as any)
+                .from('tenants')
+                .select('id, nome, cnpj, created_at, updated_at')
+                .eq('cnpj', cnpjLimpo);
+              
+              if (listError) {
+                console.error('[Step1] ❌ Erro ao listar tenants com CNPJ:', listError);
+              } else {
+                console.log('[Step1] 📋 TODOS os tenants encontrados com este CNPJ:', allTenantsWithCNPJ);
+              }
+              
+              // Buscar tenant diferente do atual
               const { data: existingTenant, error: checkError } = await (supabase as any)
                 .from('tenants')
-                .select('id, nome, cnpj')
+                .select('id, nome, cnpj, created_at, updated_at')
                 .eq('cnpj', cnpjLimpo)
                 .neq('id', tenantIdToUse)
                 .maybeSingle();
@@ -699,15 +712,37 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
               console.log('[Step1] 🔍 Resultado da verificação de CNPJ:', { 
                 existingTenant, 
                 found: !!existingTenant,
-                error: checkError 
+                error: checkError,
+                allTenantsWithCNPJ: allTenantsWithCNPJ?.length || 0
               });
               
               // 🔥 CRÍTICO: Se encontrou tenant ativo com este CNPJ, bloquear
               if (existingTenant) {
                 console.warn('[Step1] ⚠️ CNPJ já está sendo usado por outro tenant ATIVO:', existingTenant);
-                toast.warning('CNPJ já cadastrado', {
-                  description: `Este CNPJ já está sendo usado pela empresa "${existingTenant.nome}". O CNPJ não será atualizado.`,
-                });
+                console.warn('[Step1] ⚠️ ID do tenant encontrado:', existingTenant.id);
+                console.warn('[Step1] ⚠️ ID do tenant atual:', tenantIdToUse);
+                
+                // 🔥 NOVO: Verificar se o tenant encontrado realmente existe (não foi deletado)
+                const { data: verifyTenant, error: verifyError } = await (supabase as any)
+                  .from('tenants')
+                  .select('id, nome')
+                  .eq('id', existingTenant.id)
+                  .maybeSingle();
+                
+                if (verifyError) {
+                  console.error('[Step1] ❌ Erro ao verificar existência do tenant:', verifyError);
+                }
+                
+                if (verifyTenant) {
+                  // Tenant realmente existe, bloquear
+                  toast.warning('CNPJ já cadastrado', {
+                    description: `Este CNPJ já está sendo usado pela empresa "${existingTenant.nome}". O CNPJ não será atualizado.`,
+                  });
+                } else {
+                  // Tenant não existe mais (foi deletado), permitir atualização
+                  console.log('[Step1] ✅ Tenant encontrado não existe mais (foi deletado), permitindo atualização do CNPJ');
+                  // Continuar com a atualização normalmente
+                }
                 // Atualizar apenas o nome, sem o CNPJ
                 const { error: updateError } = await (supabase as any)
                   .from('tenants')
