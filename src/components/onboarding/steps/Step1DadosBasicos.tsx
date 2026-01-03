@@ -980,7 +980,10 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     setScanningTenantWebsite(true);
     setExtractionStatus(prev => ({ ...prev, tenant: 'extracting' }));
     
-    const loadingToast = toast.loading(`🌐 Iniciando varredura completa de ${formData.website}...`);
+    // 🔥 CORRIGIDO: Usar ID único para os toasts
+    const loadingToastId = `360-loading-${Date.now()}`;
+    const progressToastId = `360-extract-${Date.now()}`;
+    const loadingToast = toast.loading(`🌐 Iniciando varredura completa de ${formData.website}...`, { id: loadingToastId });
 
     try {
       let jobId: string | null = null;
