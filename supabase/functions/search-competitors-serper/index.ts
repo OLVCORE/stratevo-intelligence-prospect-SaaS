@@ -1106,7 +1106,7 @@ serve(async (req) => {
           'pós-graduação', 'mba', 'projeto de extensão', 'tcc', 'trabalho acadêmico',
           'estudo', 'pesquisa', 'análise de', 'tendências', 'artigo sobre'
         ];
-        const titleLower = (result.title || '').toLowerCase();
+        // Reutilizar titleLower já declarado acima (linha 1008)
         if (articleKeywords.some(keyword => titleLower.includes(keyword))) {
           filteredByBusinessType++;
           console.log(`[SERPER Search] ❌ Filtrado (palavra-chave educacional no título): ${result.title}`);
