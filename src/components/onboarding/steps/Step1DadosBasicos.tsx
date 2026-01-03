@@ -680,17 +680,29 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             
             // 🔥 CORRIGIDO: Verificar se o CNPJ já está sendo usado por outro tenant ANTES de atualizar
             // 🔥 IMPORTANTE: Verificar APENAS em tenants ATIVOS (não deletados)
+            // 🔥 NOTA: Tenants deletados via soft_delete_tenant são removidos de 'tenants' e movidos para 'deleted_tenants'
             if (cnpjLimpo && cnpjLimpo.length === 14) {
-              const { data: existingTenant } = await (supabase as any)
+              console.log('[Step1] 🔍 Verificando CNPJ duplicado:', { cnpj: cnpjLimpo, tenantIdToUse });
+              
+              const { data: existingTenant, error: checkError } = await (supabase as any)
                 .from('tenants')
-                .select('id, nome')
+                .select('id, nome, cnpj')
                 .eq('cnpj', cnpjLimpo)
                 .neq('id', tenantIdToUse)
                 .maybeSingle();
               
-              // 🔥 NOVO: Verificar também se o CNPJ está em deleted_tenants (soft delete)
-              // Se estiver apenas em deleted_tenants, não é um problema (pode reutilizar)
-              // Mas se estiver em tenants (ativo), é duplicado
+              if (checkError) {
+                console.error('[Step1] ❌ Erro ao verificar CNPJ duplicado:', checkError);
+                // Continuar mesmo com erro (pode ser problema de RLS temporário)
+              }
+              
+              console.log('[Step1] 🔍 Resultado da verificação de CNPJ:', { 
+                existingTenant, 
+                found: !!existingTenant,
+                error: checkError 
+              });
+              
+              // 🔥 CRÍTICO: Se encontrou tenant ativo com este CNPJ, bloquear
               if (existingTenant) {
                 console.warn('[Step1] ⚠️ CNPJ já está sendo usado por outro tenant ATIVO:', existingTenant);
                 toast.warning('CNPJ já cadastrado', {
