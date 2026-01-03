@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, ExternalLink, Plus, Sparkles, AlertCircle, Eye, Info, RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface CompetitorCandidate {
   nome: string;
@@ -52,6 +53,67 @@ const EXCLUDED_MARKETPLACES = [
   'casasbahia.com.br',
 ];
 
+// 🔥 NOVO: Função para extrair domínio do website
+function extractDomain(websiteUrl?: string): string {
+  if (!websiteUrl) return '';
+  
+  try {
+    const url = new URL(websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`);
+    return url.hostname.replace('www.', '');
+  } catch {
+    return '';
+  }
+}
+
+// 🔥 NOVO: Função para construir query com operadores Google (universal para qualquer setor)
+function buildSearchQuery(products: string[], customQuery?: string, tenantName?: string): string {
+  // Usar APENAS os produtos fornecidos pelo tenant (até 5 para query)
+  const productsToUse = products.slice(0, 5);
+  const productTerms = productsToUse.map(p => `"${p}"`).join(' OR ');
+  
+  // Query base: produtos com OR para ampliar busca
+  let query = `(${productTerms})`;
+  
+  // Adicionar query customizada se existir
+  if (customQuery && customQuery.trim()) {
+    query = `${customQuery} ${query}`;
+  }
+  
+  // 🔥 OPERADORES DE EXCLUSÃO GENÉRICOS (aplicáveis a qualquer setor)
+  const genericExclusions = [
+    '-"como fazer"',
+    '-"passo a passo"',
+    '-tutorial',
+    '-"o que é"',
+    '-definição',
+    '-significado',
+    '-dicas',
+    '-blog',
+    '-notícia',
+    '-artigo',
+    '-wikipédia',
+    '-youtube',
+    '-facebook',
+    '-instagram',
+    '-linkedin',
+    '-twitter',
+    '-mercadolivre',
+    '-aliexpress',
+    '-amazon',
+    '-olx',
+    '-"compre agora"',
+    '-"frete grátis"'
+  ].join(' ');
+  
+  // Forçar domínios corporativos brasileiros
+  const domainFilter = '(site:.com.br OR site:.com OR site:.net.br OR site:.net OR site:.ind.br)';
+  
+  // Query final
+  const finalQuery = `${query} ${genericExclusions} ${domainFilter} Brasil`;
+  
+  return finalQuery.trim().replace(/\s+/g, ' ');
+}
+
 export default function CompetitorDiscovery({
   industry,
   products,
@@ -59,6 +121,8 @@ export default function CompetitorDiscovery({
   excludeWebsites = [],
   onCompetitorSelected,
 }: Props) {
+  // 🔥 NOVO: Obter informações do tenant para filtrar auto-inclusão
+  const { tenant } = useTenant();
   // 🔥 RADICAL: Estado de reset que força desmontagem completa
   const [resetKey, setResetKey] = useState(0);
   const [searching, setSearching] = useState(false);
@@ -104,28 +168,13 @@ export default function CompetitorDiscovery({
     }
   }, []); // Só roda uma vez na montagem
 
-  // Função para gerar preview da query
+  // 🔥 NOVO: Função para gerar preview da query (usando buildSearchQuery)
   const generateQueryPreview = () => {
-    const queryParts: string[] = [];
-    
-    // Setor/Indústria
-    const industryQuery = customQuery.trim();
-    if (industryQuery) {
-      queryParts.push(industryQuery);
-    }
-    
-    // Produtos com aspas para busca exata (usar até 10 para preview)
-    const productsToUse = products.slice(0, 10);
-    if (productsToUse.length > 0) {
-      const productsQuoted = productsToUse.map(p => `"${p}"`).join(' OR ');
-      queryParts.push(`(${productsQuoted}${products.length > 10 ? ' ...' : ''})`);
-    }
-    
-    // Localização
-    const locationQuery = location.trim() || 'Brasil';
-    queryParts.push(locationQuery);
-    
-    return queryParts.join(' ');
+    return buildSearchQuery(
+      products,
+      customQuery.trim() || undefined,
+      tenant?.nome
+    );
   };
 
   // 🔥 NOVO: Função para limpar completamente e iniciar nova busca
@@ -196,11 +245,25 @@ export default function CompetitorDiscovery({
       console.log('[CompetitorDiscovery] 📦 Produtos sendo usados:', products.length, products.slice(0, 5));
       console.log('[CompetitorDiscovery] 🔑 Query customizada:', queryToUse);
 
+      // 🔥 NOVO: Construir query com operadores Google (universal)
+      const searchQuery = buildSearchQuery(
+        products,
+        queryToUse,
+        tenant?.nome
+      );
+      
+      console.log('[CompetitorDiscovery] 🔍 Query construída com operadores Google:', searchQuery);
+      
+      // 🔥 NOVO: Extrair domínio do tenant para filtrar auto-inclusão
+      const tenantDomain = extractDomain(tenant?.website);
+      console.log('[CompetitorDiscovery] 🏢 Domínio do tenant (para exclusão):', tenantDomain);
+
       // 🔥 MELHORADO: Combinar excludeWebsites com marketplaces padrão
       const allExcludedDomains = [
         ...new Set([
           ...excludeWebsites,
           ...EXCLUDED_MARKETPLACES,
+          ...(tenantDomain ? [tenantDomain] : []), // 🔥 NOVO: Excluir domínio do próprio tenant
         ])
       ];
 
@@ -211,13 +274,15 @@ export default function CompetitorDiscovery({
       console.log('[CompetitorDiscovery] 🔑 ID único da busca:', uniqueSearchId);
       
       const requestBody = {
-        industry: customQuery.trim(), // 🔥 CORRIGIDO: Usar apenas customQuery (não fallback para industry)
+        query: searchQuery, // 🔥 NOVO: Passar query construída com operadores Google
         products: products, // 🔥 MELHORADO: Passar TODOS os produtos do tenant (não apenas 5)
         location: location.trim() || 'Brasil', // Se vazio, busca Brasil sem filtro de cidade/UF
         excludeDomains: allExcludedDomains,
         maxResults,
         forceRefresh: true, // 🔥 NOVO: Forçar busca sem cache
         searchId: uniqueSearchId, // 🔥 NOVO: ID único para rastreamento
+        tenantDomain: tenantDomain, // 🔥 NOVO: Passar domínio do tenant para filtro na Edge Function
+        tenantName: tenant?.nome || '', // 🔥 NOVO: Passar nome do tenant para filtro na Edge Function
       };
       
       console.log('[CompetitorDiscovery] 📤 Enviando requisição para Edge Function:', {

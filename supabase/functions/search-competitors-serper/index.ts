@@ -559,6 +559,252 @@ function calculateDomainAuthority(position: number): number {
 }
 
 /**
+ * 🔥 NOVO: Filtros Universais para Validar Concorrentes (funciona para QUALQUER setor)
+ * Baseado no prompt cirúrgico universal
+ */
+interface FilterContext {
+  tenantDomain: string;
+  tenantName: string;
+}
+
+function isValidCompetitor(result: SerperResult['organic'][0], context: FilterContext): boolean {
+  const url = (result.link || '').toLowerCase();
+  const title = (result.title || '').toLowerCase();
+  const snippet = (result.snippet || '').toLowerCase();
+  const fullText = `${title} ${snippet}`;
+  
+  // ============================================
+  // FILTRO 1: Blacklist Universal de Domínios
+  // ============================================
+  const universalBlacklist = [
+    // Redes sociais
+    'facebook.com', 'instagram.com', 'twitter.com', 'linkedin.com',
+    'youtube.com', 'tiktok.com', 'pinterest.com',
+    
+    // Ferramentas Google
+    'google.com', 'translate.google', 'maps.google',
+    
+    // Enciclopédias e wikis
+    'wikipedia.org', 'wikihow.com',
+    
+    // Marketplaces genéricos
+    'mercadolivre.com', 'mercadolibre.com', 'aliexpress.com',
+    'amazon.com', 'amazon.com.br', 'olx.com', 'olx.com.br',
+    'magazineluiza.com', 'americanas.com', 'casasbahia.com',
+    'shopee.com', 'shein.com',
+    
+    // Plataformas de conteúdo
+    'medium.com', 'wordpress.com', 'blogspot.com', 'wix.com',
+    
+    // Sites governamentais e institucionais genéricos
+    'gov.br', 'planalto.gov.br', 'receita.fazenda.gov.br',
+    
+    // Padrões de URL de blogs/notícias
+    '/blog/', '/noticias/', '/artigos/', '/noticia/', '/artigo/'
+  ];
+  
+  if (universalBlacklist.some(domain => url.includes(domain))) {
+    return false;
+  }
+  
+  // ============================================
+  // FILTRO 2: Excluir o Próprio Tenant
+  // ============================================
+  if (context.tenantDomain && url.includes(context.tenantDomain)) {
+    return false;
+  }
+  
+  if (context.tenantName) {
+    const tenantNameNormalized = context.tenantName.toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[^a-z0-9]/g, '');
+    
+    const urlNormalized = url.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+    
+    if (urlNormalized.includes(tenantNameNormalized)) {
+      return false;
+    }
+  }
+  
+  // ============================================
+  // FILTRO 3: Detectar Conteúdo Editorial
+  // ============================================
+  const editorialPatterns = [
+    // Padrões de tutoriais
+    /como\s+(fazer|usar|funciona|escolher)/i,
+    /passo\s+a\s+passo/i,
+    /guia\s+(completo|definitivo|prático)/i,
+    
+    // Padrões de artigos
+    /\d+\s+(dicas|motivos|razões|formas|maneiras)/i,
+    /(entenda|saiba|descubra|aprenda|conheça)/i,
+    
+    // Padrões de notícias
+    /(publicado|postado|atualizado)\s+(em|por)/i,
+    /por:\s*[A-Z]/,
+    /\d{2}\/\d{2}\/\d{4}/,
+    
+    // Padrões de perguntas
+    /^(o que|qual|quais|quando|onde|por que|como)/i
+  ];
+  
+  if (editorialPatterns.some(pattern => pattern.test(title) || pattern.test(snippet))) {
+    return false;
+  }
+  
+  // ============================================
+  // FILTRO 4: Detectar E-commerce de Revenda
+  // ============================================
+  const ecommerceKeywords = [
+    'comprar', 'compre', 'preço', 'r$', 'reais',
+    'frete grátis', 'entrega', 'parcela', 'desconto',
+    'promoção', 'oferta', 'à vista', 'cartão',
+    'estoque', 'disponível', 'adicionar ao carrinho'
+  ];
+  
+  const ecommerceCount = ecommerceKeywords.filter(kw => 
+    fullText.includes(kw)
+  ).length;
+  
+  // Se tem 4 ou mais indicadores de e-commerce, provavelmente é revenda
+  if (ecommerceCount >= 4) {
+    return false;
+  }
+  
+  // ============================================
+  // FILTRO 5: Validar Domínio Corporativo
+  // ============================================
+  const domainMatch = url.match(/^https?:\/\/(?:www\.)?([^\/]+)/);
+  if (!domainMatch) {
+    return false;
+  }
+  
+  const domain = domainMatch[1];
+  
+  // Verificar TLDs corporativos válidos
+  const validTLDs = [
+    '.com.br', '.com', '.net.br', '.net',
+    '.org.br', '.org', '.ind.br', '.emp.br'
+  ];
+  
+  const hasValidTLD = validTLDs.some(tld => domain.endsWith(tld));
+  if (!hasValidTLD) {
+    return false;
+  }
+  
+  // Rejeitar subdomínios suspeitos
+  const suspiciousSubdomains = ['blog.', 'noticias.', 'news.', 'artigos.'];
+  if (suspiciousSubdomains.some(sub => domain.startsWith(sub))) {
+    return false;
+  }
+  
+  // ============================================
+  // FILTRO 6: Verificar Indicadores Corporativos
+  // ============================================
+  const corporateIndicators = [
+    // Indicadores genéricos de empresa
+    'empresa', 'companhia', 'indústria', 'fabricante',
+    'fornecedor', 'distribuidor', 'atacado',
+    
+    // Indicadores de site institucional
+    'sobre', 'quem somos', 'nossa história', 'missão',
+    'contato', 'fale conosco', 'trabalhe conosco',
+    
+    // Indicadores legais
+    'cnpj', 'razão social', 'inscrição estadual',
+    
+    // Indicadores de serviços B2B
+    'soluções', 'serviços', 'produtos', 'portfólio',
+    'clientes', 'parceiros', 'cases'
+  ];
+  
+  const corporateCount = corporateIndicators.filter(indicator => 
+    fullText.includes(indicator)
+  ).length;
+  
+  // Precisa ter pelo menos 1 indicador corporativo
+  if (corporateCount < 1) {
+    return false;
+  }
+  
+  return true; // Passou em todos os filtros
+}
+
+/**
+ * 🔥 NOVO: Sistema de Pontuação Universal para Sites Corporativos
+ * Funciona para QUALQUER setor (automotivo, cosméticos, metalurgia, software, etc.)
+ */
+function calculateUniversalCorporateScore(result: SerperResult['organic'][0]): number {
+  let score = 0;
+  const url = (result.link || '').toLowerCase();
+  const title = (result.title || '').toLowerCase();
+  const snippet = (result.snippet || '').toLowerCase();
+  const fullText = `${title} ${snippet}`;
+  
+  // ============================================
+  // PONTUAÇÃO POSITIVA (Indicadores Corporativos)
+  // ============================================
+  
+  // +30: Domínio brasileiro corporativo
+  if (url.includes('.com.br') || url.includes('.ind.br')) {
+    score += 30;
+  }
+  
+  // +25: Página institucional no URL
+  const institutionalPages = ['/sobre', '/empresa', '/quem-somos', '/institucional', '/about'];
+  if (institutionalPages.some(page => url.includes(page))) {
+    score += 25;
+  }
+  
+  // +20: Palavras corporativas no TÍTULO
+  const titleCorporateWords = ['empresa', 'indústria', 'fabricante', 'soluções', 'serviços'];
+  const titleCorporateCount = titleCorporateWords.filter(word => title.includes(word)).length;
+  score += titleCorporateCount * 20;
+  
+  // +15: Menção a CNPJ ou dados legais
+  if (fullText.includes('cnpj') || fullText.includes('razão social')) {
+    score += 15;
+  }
+  
+  // +10: Estrutura de site profissional (HTTPS)
+  if (url.startsWith('https://')) {
+    score += 10;
+  }
+  
+  // +10: Menção a clientes ou portfólio
+  if (fullText.includes('clientes') || fullText.includes('portfólio') || fullText.includes('cases')) {
+    score += 10;
+  }
+  
+  // ============================================
+  // PONTUAÇÃO NEGATIVA (Indicadores Não-Corporativos)
+  // ============================================
+  
+  // -50: Forte indicador de e-commerce de revenda
+  const strongEcommerceIndicators = ['compre agora', 'adicionar ao carrinho', 'frete grátis'];
+  if (strongEcommerceIndicators.some(indicator => fullText.includes(indicator))) {
+    score -= 50;
+  }
+  
+  // -40: Indicadores de conteúdo editorial
+  if (title.includes('como fazer') || title.includes('passo a passo')) {
+    score -= 40;
+  }
+  
+  // -30: Menção a preços de forma destacada
+  if (snippet.includes('r$') || snippet.includes('preço:')) {
+    score -= 30;
+  }
+  
+  // -20: Padrões de blog
+  if (url.includes('/blog/') || url.includes('/artigo/')) {
+    score -= 20;
+  }
+  
+  return score;
+}
+
+/**
  * 🔥 MELHORADO: Calcula relevância completa com múltiplos critérios (SEMrush/SimilarWeb style)
  * Agora usa: produtos (40%), embeddings (30%), indústria (15%), geografia (10%), autoridade (5%)
  */
@@ -757,19 +1003,27 @@ serve(async (req) => {
     
     try {
       const body = await req.json();
+      // 🔥 NOVO: Suportar query direta (com operadores Google) OU industry (legado)
+      const query = body.query || '';
       industry = body.industry || '';
       products = Array.isArray(body.products) ? body.products : [];
       location = body.location;
       excludeDomains = Array.isArray(body.excludeDomains) ? body.excludeDomains : [];
       maxResults = typeof body.maxResults === 'number' ? body.maxResults : 10;
       page = typeof body.page === 'number' ? body.page : 1;
+      // 🔥 NOVO: Receber informações do tenant para filtros
+      const tenantDomain = body.tenantDomain || '';
+      const tenantName = body.tenantName || '';
       
       console.log('[SERPER Search] ✅ Body parseado:', { 
+        query: query || 'N/A',
         industry, 
         productsCount: products.length, 
         location, 
         maxResults,
-        page 
+        page,
+        tenantDomain,
+        tenantName
       });
     } catch (parseError) {
       console.error('[SERPER Search] ❌ Erro ao parsear body:', parseError);
@@ -816,84 +1070,29 @@ serve(async (req) => {
     // }
     console.warn('[SERPER Search] ⚠️ Embeddings temporariamente desabilitados para debug');
 
-    // 🔥 MELHORADO: Múltiplas queries usando TODOS os produtos do tenant dinamicamente
-    // Usar mais produtos (até 15) para melhor cobertura
-    const productsToUse = products.slice(0, 15);
-    
-    // 🔥 NOVO: Extrair palavras-chave principais dos produtos para queries mais específicas
-    const extractKeywords = (productList: string[]): string[] => {
-      const keywords = new Set<string>();
-      for (const product of productList) {
-        const words = product.toLowerCase()
-          .split(/\s+/)
-          .filter(w => w.length > 3)
-          .filter(w => !['para', 'com', 'sem', 'sobre', 'sobre', 'através'].includes(w));
-        words.forEach(w => keywords.add(w));
-      }
-      return Array.from(keywords).slice(0, 10);
-    };
-    
-    const productKeywords = extractKeywords(productsToUse);
-    
-    // 🔥 MELHORADO: Queries 100% DINÂMICAS baseadas APENAS nos produtos do tenant
-    // SEM hardcoding - funciona para QUALQUER tenant (OLV, Metal Life, Uniluvas, Barclays, etc.)
+    // 🔥 NOVO: Se recebeu query direta (com operadores Google), usar ela
+    // Caso contrário, gerar queries dinâmicas (compatibilidade com versão antiga)
     const queries: string[] = [];
     
-    // Filtrar produtos muito genéricos
-    const specificProducts = productsToUse.filter(p => {
-      const words = p.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      return words.length >= 1;
-    });
-    const productsForQueries = specificProducts.length >= 2 ? specificProducts : productsToUse;
-    
-    // 🔥 QUERIES DINÂMICAS: Usar APENAS os produtos do campo "Produtos usados na busca"
-    // Query 1: "empresas similares que oferecem [produto1] [produto2]"
-    if (productsForQueries.length >= 2) {
-      queries.push(`empresas similares que oferecem ${productsForQueries.slice(0, 2).join(' e ')}`);
-    }
-    
-    // Query 2: "empresas que trabalham com [produto1] [produto2] [produto3]"
-    if (productsForQueries.length >= 3) {
-      queries.push(`empresas que trabalham com ${productsForQueries.slice(0, 3).join(' ')}`);
-    }
-    
-    // Query 3: "concorrentes [produto1] [produto2]"
-    if (productsForQueries.length >= 2) {
-      queries.push(`concorrentes ${productsForQueries.slice(0, 2).join(' ')}`);
-    }
-    
-    // Query 4: "empresas [produto1] [produto2] [localização]" (se tiver localização)
-    if (productsForQueries.length >= 2 && location) {
-      queries.push(`empresas ${productsForQueries.slice(0, 2).join(' ')} ${location}`);
-    }
-    
-    // Query 5: "fornecedores [produto1] [produto2]"
-    if (productsForQueries.length >= 2) {
-      queries.push(`fornecedores ${productsForQueries.slice(0, 2).join(' ')}`);
-    }
-    
-    // Query 6: "empresas [indústria] [produto1]" (se tiver indústria)
-    if (productsForQueries.length >= 1 && industry) {
-      queries.push(`empresas ${industry} ${productsForQueries[0]}`);
-    }
-    
-    // Query 7: Fallback com primeiro produto
-    if (productsForQueries.length >= 1) {
-      queries.push(`empresas que oferecem ${productsForQueries[0]}`);
-    }
-    
-    // Query 8: Primeiros 5 produtos com OR (fallback amplo)
-    if (productsForQueries.length >= 5) {
-      queries.push(`${productsForQueries.slice(0, 5).map(p => `"${p}"`).join(' OR ')} Brasil`);
-    }
-    
-    // Query 9: Fallback - Primeiros 3 produtos (se não houver queries específicas)
-    if (queries.length === 0 && productsForQueries.length > 0) {
-      queries.push(`${productsForQueries.slice(0, 3).map(p => `"${p}"`).join(' OR ')} Brasil`);
-    }
-
-    if (location && location !== 'Brasil') {
-      queries.push(`${productsToUse.slice(0, 3).map(p => `"${p}"`).join(' OR ')} ${location}`);
+    if (query && query.trim()) {
+      // Usar query direta do frontend (já vem com operadores Google)
+      queries.push(query);
+      console.log('[SERPER Search] 🔍 Usando query direta do frontend:', query);
+    } else {
+      // 🔥 LEGADO: Gerar queries dinâmicas (compatibilidade)
+      const productsToUse = products.slice(0, 15);
+      const specificProducts = productsToUse.filter(p => {
+        const words = p.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        return words.length >= 1;
+      });
+      const productsForQueries = specificProducts.length >= 2 ? specificProducts : productsToUse;
+      
+      if (productsForQueries.length >= 2) {
+        queries.push(`empresas similares que oferecem ${productsForQueries.slice(0, 2).join(' e ')}`);
+      }
+      if (productsForQueries.length >= 1) {
+        queries.push(`empresas que oferecem ${productsForQueries[0]}`);
+      }
     }
     
     console.log('[SERPER Search] 📦 Produtos usados na busca:', productsToUse.length, 'produtos');
@@ -991,61 +1190,22 @@ serve(async (req) => {
           continue;
         }
 
-        // Filtrar domínios genéricos
-        if (GENERIC_DOMAINS.some(generic => domain.includes(generic))) {
+        // 🔥 NOVO: Aplicar filtros universais (funciona para QUALQUER setor)
+        const filterContext: FilterContext = {
+          tenantDomain: tenantDomain,
+          tenantName: tenantName
+        };
+        
+        if (!isValidCompetitor(result, filterContext)) {
           filteredByDomain++;
-          continue;
-        }
-
-        // 🔥 MELHORADO: Filtrar marketplaces e lojas/e-commerce
-        const isMarketplace = [
-          'mercadolivre', 'amazon', 'alibaba', 'aliexpress',
-          'americanas', 'magazineluiza', 'casasbahia', 'pontofrio',
-          'netshoes', 'centauro', 'kanui', 'dafiti', 'zattini',
-          'submarino', 'shoptime', 'walmart', 'carrefour',
-          'extra', 'ponto', 'fastshop', 'riachuelo', 'renner',
-          'c&a', 'marisa', 'lupo', 'havaianas', 'tiktok',
-          'loja.', 'shop.', 'store.', 'ecommerce', 'e-commerce'
-        ].some(m => domain.includes(m));
-
-        if (isMarketplace) {
-          filteredByMarketplace++;
+          console.log(`[SERPER Search] ❌ Filtrado (filtros universais): ${result.title}`);
           continue;
         }
         
-        // 🔥 NOVO: Filtrar lojas genéricas (quando buscar produtos)
-        // Se o tenant tem produtos físicos, filtrar lojas que não são fábricas/distribuidores
         const titleLower = (result.title || '').toLowerCase();
         const snippetLower = (result.snippet || '').toLowerCase();
-        const candidateText = `${titleLower} ${snippetLower}`;
-        
-        // 🔥 REMOVIDO: Lógica hardcoded de comex removida
-        // Agora usa APENAS os produtos do tenant dinamicamente
-        
-        const isGenericStore = [
-          'loja', 'shop', 'store', 'comprar', 'vender',
-          'preço', 'melhor preço', 'promoção', 'desconto',
-          'ofertas', 'liquidação'
-        ].some(keyword => titleLower.includes(keyword) || snippetLower.includes(keyword));
-        
-        // Se for loja genérica E não mencionar "fabricante" ou "distribuidor", filtrar
-        if (isGenericStore && products.length > 0) {
-          const mentionsManufacturer = titleLower.includes('fabricante') ||
-                                      snippetLower.includes('fabricante') ||
-                                      titleLower.includes('distribuidor') ||
-                                      snippetLower.includes('distribuidor') ||
-                                      titleLower.includes('indústria') ||
-                                      snippetLower.includes('indústria') ||
-                                      titleLower.includes('industrial') ||
-                                      snippetLower.includes('industrial');
-          if (!mentionsManufacturer) {
-            filteredByMarketplace++;
-            continue;
-          }
-        }
 
-        // 🔥 TEMPORÁRIO: Usar calculateSemanticSimilarity simples ao invés de calculateRelevance completo
-        // Para evitar erro 500, vamos usar apenas a função síncrona
+        // 🔥 NOVO: Calcular similaridade de produtos e pontuação universal
         let businessType: CompetitorCandidate['businessType'] = 'empresa';
         let similarityScore = 0;
         let productMatches = 0;
@@ -1055,7 +1215,7 @@ serve(async (req) => {
         try {
           businessType = detectBusinessType(result.title || '', result.snippet || '', result.link || '');
           
-          // Calcular similaridade simples (sem embeddings/classificação)
+          // Calcular similaridade de produtos (sem embeddings/classificação)
           const similarityResult = calculateSemanticSimilarity(
             industry || '',
             products || [],
@@ -1067,8 +1227,12 @@ serve(async (req) => {
           productMatches = similarityResult.productMatches || 0;
           exactMatches = similarityResult.exactMatches || 0;
           
-          // Calcular relevância com base em múltiplos fatores
-          relevancia = similarityScore; // Base: similaridade
+          // 🔥 NOVO: Calcular pontuação universal corporativa
+          const corporateScore = calculateUniversalCorporateScore(result);
+          
+          // Calcular relevância combinando similaridade de produtos + pontuação corporativa
+          relevancia = similarityScore; // Base: similaridade de produtos (0-100)
+          relevancia += Math.max(0, corporateScore); // Adicionar pontuação corporativa (pode ser negativa)
           
           // Bonus por posição no Google (1º = +30, 2º = +27, etc.)
           const positionBonus = Math.max(0, 30 - ((result.position || 100) * 0.3));
