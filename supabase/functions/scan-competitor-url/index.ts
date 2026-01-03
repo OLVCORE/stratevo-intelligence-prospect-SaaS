@@ -808,7 +808,7 @@ Conteúdo das páginas:\n\n${content.substring(0, 25000)}`
     // 3. Inserir produtos no banco
     let productsInserted = 0;
     let productsSkipped = 0;
-    let productsError = 0;
+    let productsErrorCount = 0;
     
     console.log(`[ScanCompetitor] 🔄 Tentando inserir ${extractedProducts.length} produtos...`);
     
@@ -874,7 +874,7 @@ Conteúdo das páginas:\n\n${content.substring(0, 25000)}`
           productsInserted++;
           console.log(`[ScanCompetitor] ✅ Produto inserido com sucesso: ${product.nome} (ID: ${insertData[0].id})`);
         } else {
-          productsError++;
+          productsErrorCount++;
           console.error(`[ScanCompetitor] ❌ Erro ao inserir produto (${product.nome}):`, insertError);
           console.error(`[ScanCompetitor] 📋 Dados do produto que falhou:`, {
             nome: product.nome,
@@ -890,17 +890,17 @@ Conteúdo das páginas:\n\n${content.substring(0, 25000)}`
           if (insertError?.code === '23505' || insertError?.message?.includes('duplicate')) {
             console.log(`[ScanCompetitor] 🔄 Produto duplicado detectado: ${product.nome}`);
             productsSkipped++;
-            productsError--; // Não contar como erro se for duplicata
+            productsErrorCount--; // Não contar como erro se for duplicata
           }
         }
       } catch (insertException: any) {
-        productsError++;
+        productsErrorCount++;
         console.error(`[ScanCompetitor] ❌ Exceção ao inserir produto (${product.nome}):`, insertException);
         console.error(`[ScanCompetitor] 📋 Stack trace:`, insertException.stack);
       }
     }
     
-    console.log(`[ScanCompetitor] 📊 Resumo da inserção: ${productsInserted} inseridos, ${productsSkipped} já existiam, ${productsError} com erro`);
+    console.log(`[ScanCompetitor] 📊 Resumo da inserção: ${productsInserted} inseridos, ${productsSkipped} já existiam, ${productsErrorCount} com erro`);
 
     console.log(`[ScanCompetitor] ✅ Concluído: ${productsInserted} produtos inseridos de ${extractedProducts.length} encontrados`);
 
