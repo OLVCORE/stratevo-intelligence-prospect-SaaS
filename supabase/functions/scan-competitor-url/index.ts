@@ -648,7 +648,7 @@ Responda APENAS com JSON válido:
 
 IMPORTANTE: Se encontrar um produto com referência (ex: "Ref.: 50T18"), inclua a referência no nome do produto para garantir unicidade.
 
-Conteúdo das páginas:\n\n${pagesContent.join('\n\n---\n\n').substring(0, 25000)}`
+Conteúdo das páginas:\n\n${content.substring(0, 25000)}`
           }
         ],
         temperature: 0.1, // 🔥 REDUZIDO para máxima precisão (era 0.2)
