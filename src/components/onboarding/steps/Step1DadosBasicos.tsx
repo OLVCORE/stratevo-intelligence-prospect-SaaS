@@ -1004,8 +1004,9 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       currentBatch = initialData.current_batch || 0;
       totalBatches = initialData.total_batches || 1;
 
-      toast.dismiss(loadingToast);
-      const progressToast = toast.loading(`🔄 Processando... Lote ${currentBatch}/${totalBatches}`);
+      // 🔥 CORRIGIDO: Fechar toast inicial e abrir toast de progresso com ID fixo
+      toast.dismiss(loadingToastId);
+      toast.loading(`🔄 Processando... Lote ${currentBatch}/${totalBatches}`, { id: progressToastId });
 
       // Polling até completar
       while (hasMore && jobId) {
@@ -1028,13 +1029,14 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
         currentBatch = pollData?.current_batch || currentBatch;
         totalBatches = pollData?.total_batches || totalBatches;
 
-        toast.dismiss(progressToast);
+        // 🔥 CORRIGIDO: Atualizar toast existente com mesmo ID
         if (hasMore) {
-          toast.loading(`🔄 Processando... Lote ${currentBatch}/${totalBatches} (${pollData?.pages_scanned || 0}/${pollData?.pages_total || 0} páginas)`);
+          toast.loading(`🔄 Processando... Lote ${currentBatch}/${totalBatches} (${pollData?.pages_scanned || 0}/${pollData?.pages_total || 0} páginas)`, { id: progressToastId });
         }
       }
 
-      toast.dismiss(progressToast);
+      // 🔥 CORRIGIDO: Fechar toast de progresso ao finalizar
+      toast.dismiss(progressToastId);
 
       // Resultado final
       const { data: finalData } = await supabase.functions.invoke('scan-website-products-360', {
@@ -1057,6 +1059,9 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       const productsFound = finalData?.products_found || 0;
       const totalProdutos = tenantProductsCount;
 
+      // 🔥 CORRIGIDO: Garantir que toast de progresso foi fechado antes de mostrar resultado
+      toast.dismiss(progressToastId);
+      
       setExtractionStatus(prev => ({ ...prev, tenant: 'success' }));
       setTimeout(() => {
         setExtractionStatus(prev => {
@@ -1081,9 +1086,15 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       }
     } catch (err: any) {
       console.error('[Step1] Erro no scan 360:', err);
+      // 🔥 CORRIGIDO: Fechar todos os toasts em caso de erro
+      toast.dismiss(loadingToastId);
+      toast.dismiss(progressToastId);
       setExtractionStatus(prev => ({ ...prev, tenant: 'error' }));
       toast.error('Erro ao escanear website', { description: err.message });
     } finally {
+      // 🔥 CORRIGIDO: Garantir que todos os toasts sejam fechados no finally
+      toast.dismiss(loadingToastId);
+      toast.dismiss(progressToastId);
       setScanningTenantWebsite(false);
     }
   };
