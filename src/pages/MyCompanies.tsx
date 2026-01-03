@@ -388,16 +388,16 @@ export default function MyCompanies() {
             if (err?.code === '42P10' || err?.message?.includes('ON CONFLICT')) {
               console.log('[MyCompanies] Tentando com constraint simples auth_user_id...');
               const { error: error2 } = await (supabase as any)
-                .from('users')
-                .upsert({
-                  email: authUser.email,
-                  nome: authUser.email?.split('@')[0] || 'Usuário',
-                  tenant_id: newTenant.id,
-                  auth_user_id: authUser.id,
-                  role: 'OWNER',
-                }, {
-                  onConflict: 'auth_user_id'
-                });
+            .from('users')
+            .upsert({
+              email: authUser.email,
+              nome: authUser.email?.split('@')[0] || 'Usuário',
+              tenant_id: newTenant.id,
+              auth_user_id: authUser.id,
+              role: 'OWNER',
+            }, {
+              onConflict: 'auth_user_id'
+            });
               userError = error2;
             } else {
               throw err;
@@ -786,9 +786,18 @@ export default function MyCompanies() {
     } catch (error: any) {
       console.error('Erro ao deletar tenant:', error);
       
-      // Se a função não existir, mostrar mensagem para aplicar migration
+      // 🔥 MELHORADO: Tratamento de erros mais específico
       if (error.message?.includes('does not exist')) {
         toast.error('Função de lixeira não encontrada. Execute a migration no Supabase.');
+      } else if (error.code === '409' || error.status === 409) {
+        // 🔥 NOVO: Erro 409 (Conflict) - violação de foreign key
+        toast.error('Erro ao deletar empresa', {
+          description: 'Há dados relacionados que impedem a deleção. Execute a migration 20250225000008_fix_soft_delete_tenant_complete.sql no Supabase.',
+        });
+      } else if (error.message) {
+        toast.error('Erro ao deletar empresa', {
+          description: error.message,
+        });
       } else {
         toast.error('Erro ao deletar empresa. Tente novamente.');
       }
