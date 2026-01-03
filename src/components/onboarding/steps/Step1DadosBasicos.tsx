@@ -738,32 +738,33 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
                   toast.warning('CNPJ já cadastrado', {
                     description: `Este CNPJ já está sendo usado pela empresa "${existingTenant.nome}". O CNPJ não será atualizado.`,
                   });
+                  
+                  // Atualizar apenas o nome, sem o CNPJ
+                  const { error: updateError } = await (supabase as any)
+                    .from('tenants')
+                    .update({ 
+                      nome: data.nome
+                    })
+                    .eq('id', tenantIdToUse);
+                  
+                  if (updateError) {
+                    console.warn('[Step1] ⚠️ Erro ao atualizar nome do tenant:', updateError);
+                  } else {
+                    console.log('[Step1] ✅ Nome do tenant atualizado (CNPJ não alterado - duplicado)');
+                    window.dispatchEvent(new CustomEvent('tenant-updated', { 
+                      detail: { 
+                        tenantId: tenantIdToUse, 
+                        nome: data.nome,
+                        cnpj: null // Não atualizar CNPJ
+                      } 
+                    }));
+                  }
+                  return; // Não continuar com a atualização do CNPJ
                 } else {
                   // Tenant não existe mais (foi deletado), permitir atualização
                   console.log('[Step1] ✅ Tenant encontrado não existe mais (foi deletado), permitindo atualização do CNPJ');
-                  // Continuar com a atualização normalmente
+                  // Continuar com a atualização normalmente (não retornar aqui)
                 }
-                // Atualizar apenas o nome, sem o CNPJ
-                const { error: updateError } = await (supabase as any)
-                  .from('tenants')
-                  .update({ 
-                    nome: data.nome
-                  })
-                  .eq('id', tenantIdToUse);
-                
-                if (updateError) {
-                  console.warn('[Step1] ⚠️ Erro ao atualizar nome do tenant:', updateError);
-                } else {
-                  console.log('[Step1] ✅ Nome do tenant atualizado (CNPJ não alterado - duplicado)');
-                  window.dispatchEvent(new CustomEvent('tenant-updated', { 
-                    detail: { 
-                      tenantId: tenantIdToUse, 
-                      nome: data.nome,
-                      cnpj: null // Não atualizar CNPJ
-                    } 
-                  }));
-                }
-                return; // Não continuar com a atualização do CNPJ
               }
             }
             
