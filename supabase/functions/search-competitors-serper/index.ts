@@ -716,14 +716,19 @@ async function calculateRelevance(
 }
 
 serve(async (req) => {
-  // ✅ CRÍTICO: Tratar CORS preflight explicitamente (ANTES DE QUALQUER COISA)
+  // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA - SEM TRY/CATCH)
   // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
   // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
     console.log('[SERPER Search] ✅ OPTIONS preflight recebido');
-    return new Response('', { 
+    return new Response('ok', { 
       status: 200,
-      headers: corsHeaders 
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Max-Age': '86400',
+      }
     });
   }
 
