@@ -262,12 +262,30 @@ export default function CompetitorDiscovery({
         setCandidates([]); // Limpar novamente
         await new Promise(resolve => setTimeout(resolve, 50));
         
+        // 🔥 CRÍTICO: Ordenar por relevância (maior primeiro) antes de atualizar estado
+        const sortedCandidates = [...data.candidates].sort((a, b) => {
+          // Primeiro: relevância (maior primeiro)
+          if (b.relevancia !== a.relevancia) {
+            return b.relevancia - a.relevancia;
+          }
+          // Segundo: similaridade (maior primeiro)
+          const aSim = a.similarityScore || 0;
+          const bSim = b.similarityScore || 0;
+          if (bSim !== aSim) {
+            return bSim - aSim;
+          }
+          // Terceiro: produtos encontrados (maior primeiro)
+          const aProducts = (a as any).exactMatches || 0;
+          const bProducts = (b as any).exactMatches || 0;
+          return bProducts - aProducts;
+        });
+        
         // 🔥 RADICAL: Forçar atualização com nova referência de array (criar array completamente novo)
-        const newCandidates = data.candidates.map((c, idx) => ({ 
+        const newCandidates = sortedCandidates.map((c, idx) => ({ 
           ...c,
           _id: `${uniqueSearchId}-${idx}-${Date.now()}` // 🔥 NOVO: ID único para cada candidato
         }));
-        console.log('[CompetitorDiscovery] ✅ Atualizando com', newCandidates.length, 'novos candidatos');
+        console.log('[CompetitorDiscovery] ✅ Atualizando com', newCandidates.length, 'novos candidatos (ordenados por relevância)');
         setCandidates(newCandidates);
         
         // 🔥 MELHORADO: Calcular relevância média
