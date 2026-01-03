@@ -559,8 +559,8 @@ function calculateDomainAuthority(position: number): number {
 }
 
 /**
- * 🔥 NOVO: Filtros Universais para Validar Concorrentes (funciona para QUALQUER setor)
- * Baseado no prompt cirúrgico universal
+ * 🔥 REFEITO: Filtros Universais para Validar Concorrentes (funciona para QUALQUER setor)
+ * Baseado no prompt cirúrgico universal - VERSÃO CORRIGIDA
  */
 interface FilterContext {
   tenantDomain: string;
@@ -574,12 +574,12 @@ function isValidCompetitor(result: SerperResult['organic'][0], context: FilterCo
   const fullText = `${title} ${snippet}`;
   
   // ============================================
-  // FILTRO 1: Blacklist Universal de Domínios
+  // FILTRO 1: Blacklist Universal de Domínios (EXPANDIDO)
   // ============================================
   const universalBlacklist = [
     // Redes sociais
     'facebook.com', 'instagram.com', 'twitter.com', 'linkedin.com',
-    'youtube.com', 'tiktok.com', 'pinterest.com',
+    'youtube.com', 'tiktok.com', 'pinterest.com', 'reddit.com',
     
     // Ferramentas Google
     'google.com', 'translate.google', 'maps.google',
@@ -591,88 +591,113 @@ function isValidCompetitor(result: SerperResult['organic'][0], context: FilterCo
     'mercadolivre.com', 'mercadolibre.com', 'aliexpress.com',
     'amazon.com', 'amazon.com.br', 'olx.com', 'olx.com.br',
     'magazineluiza.com', 'americanas.com', 'casasbahia.com',
-    'shopee.com', 'shein.com',
+    'shopee.com', 'shein.com', 'netepi.com', 'copabo.com',
     
     // Plataformas de conteúdo
     'medium.com', 'wordpress.com', 'blogspot.com', 'wix.com',
     
-    // Sites governamentais e institucionais genéricos
+    // 🔥 NOVO: Sites governamentais e institucionais (EXPANDIDO)
     'gov.br', 'planalto.gov.br', 'receita.fazenda.gov.br',
+    'sebrae.com', 'sebrae.br', 'sebraetec', 'senai.br', 'sesi.org',
+    'fiesp.com', 'fiesp.org', 'apexbrasil.com', 'mdic.gov.br',
+    'inteligencia-dados.fiesp.com', 'congressousp.fipecafi.org',
+    'imagem.camara.leg.br', 'basis.trt2.jus.br', 'neic.iesp.uerj.br',
+    'ceaf.mpac.mp.br', 'fentect.org.br', 'andes.org.br',
+    
+    // 🔥 NOVO: Plataformas educacionais e acadêmicas
+    'passeidireto', 'aprovadotcc', 'educamaisbrasil', 'anhanguera',
+    'cruzeirodosul', 'uninter', 'ens.edu', 'teses.usp',
+    
+    // 🔥 NOVO: E-commerces e distribuidores genéricos
+    'netepi', 'copabo', 'astrodistribuidora', 'tradeinn',
+    'industrialstarter', 'maxxdistribuidora',
     
     // Padrões de URL de blogs/notícias
-    '/blog/', '/noticias/', '/artigos/', '/noticia/', '/artigo/'
+    '/blog/', '/noticias/', '/artigos/', '/noticia/', '/artigo/',
+    'blog.', 'noticias.', 'news.'
   ];
   
-  if (universalBlacklist.some(domain => url.includes(domain))) {
+  if (universalBlacklist.some(blocked => url.includes(blocked))) {
     return false;
   }
   
   // ============================================
-  // FILTRO 2: Excluir o Próprio Tenant
+  // FILTRO 2: Excluir o Próprio Tenant (MELHORADO)
   // ============================================
-  if (context.tenantDomain && url.includes(context.tenantDomain)) {
-    return false;
+  if (context.tenantDomain) {
+    const tenantDomainClean = context.tenantDomain.toLowerCase().replace('www.', '');
+    const urlClean = url.replace('www.', '');
+    
+    // Extrair domínio do resultado
+    const domainMatch = urlClean.match(/^https?:\/\/([^\/]+)/);
+    if (domainMatch) {
+      const resultDomain = domainMatch[1];
+      if (resultDomain === tenantDomainClean || resultDomain.includes(tenantDomainClean) || tenantDomainClean.includes(resultDomain)) {
+        console.log(`[FILTRO] ❌ Excluído: próprio tenant (${resultDomain} === ${tenantDomainClean})`);
+        return false;
+      }
+    }
   }
   
   if (context.tenantName) {
     const tenantNameNormalized = context.tenantName.toLowerCase()
       .replace(/\s+/g, '')
-      .replace(/[^a-z0-9]/g, '');
+      .replace(/[^a-z0-9]/g, '')
+      .substring(0, 10); // Primeiros 10 caracteres para evitar matches falsos
     
     const urlNormalized = url.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
     
-    if (urlNormalized.includes(tenantNameNormalized)) {
+    if (tenantNameNormalized.length >= 5 && urlNormalized.includes(tenantNameNormalized)) {
+      console.log(`[FILTRO] ❌ Excluído: nome do tenant encontrado na URL`);
       return false;
     }
   }
   
   // ============================================
-  // FILTRO 3: Detectar Conteúdo Editorial
+  // FILTRO 3: Detectar Conteúdo Editorial (MELHORADO)
   // ============================================
-  const editorialPatterns = [
-    // Padrões de tutoriais
-    /como\s+(fazer|usar|funciona|escolher)/i,
-    /passo\s+a\s+passo/i,
-    /guia\s+(completo|definitivo|prático)/i,
-    
-    // Padrões de artigos
-    /\d+\s+(dicas|motivos|razões|formas|maneiras)/i,
-    /(entenda|saiba|descubra|aprenda|conheça)/i,
-    
-    // Padrões de notícias
-    /(publicado|postado|atualizado)\s+(em|por)/i,
-    /por:\s*[A-Z]/,
-    /\d{2}\/\d{2}\/\d{4}/,
-    
-    // Padrões de perguntas
-    /^(o que|qual|quais|quando|onde|por que|como)/i
+  const editorialSignals = [
+    'como fazer', 'passo a passo', 'tutorial', 'guia completo',
+    'dicas', 'aprenda', 'entenda', 'saiba mais', 'descubra',
+    'o que é', 'por que', 'quando usar', 'publicado em',
+    'por:', 'autor:', 'leia mais', 'continue lendo',
+    'artigo sobre', 'estudo de', 'pesquisa sobre', 'análise de mercado',
+    'tendências', 'reportagem', 'notícia', 'matéria'
   ];
   
-  if (editorialPatterns.some(pattern => pattern.test(title) || pattern.test(snippet))) {
+  const editorialCount = editorialSignals.filter(signal =>
+    title.includes(signal) || snippet.includes(signal)
+  ).length;
+  
+  // Se tem 2+ sinais editoriais, é conteúdo, não empresa
+  if (editorialCount >= 2) {
+    console.log(`[FILTRO] ❌ Excluído: conteúdo editorial (${editorialCount} sinais)`);
     return false;
   }
   
   // ============================================
-  // FILTRO 4: Detectar E-commerce de Revenda
+  // FILTRO 4: Detectar E-commerce de Revenda (MELHORADO)
   // ============================================
-  const ecommerceKeywords = [
+  const ecommerceSignals = [
     'comprar', 'compre', 'preço', 'r$', 'reais',
     'frete grátis', 'entrega', 'parcela', 'desconto',
     'promoção', 'oferta', 'à vista', 'cartão',
-    'estoque', 'disponível', 'adicionar ao carrinho'
+    'estoque', 'disponível', 'adicionar ao carrinho',
+    'compre agora', 'melhor preço', 'loja online'
   ];
   
-  const ecommerceCount = ecommerceKeywords.filter(kw => 
-    fullText.includes(kw)
+  const ecommerceCount = ecommerceSignals.filter(signal =>
+    title.includes(signal) || snippet.includes(signal)
   ).length;
   
-  // Se tem 4 ou mais indicadores de e-commerce, provavelmente é revenda
+  // Se tem 4+ sinais de e-commerce, provavelmente é revendedor
   if (ecommerceCount >= 4) {
+    console.log(`[FILTRO] ❌ Excluído: e-commerce revendedor (${ecommerceCount} sinais)`);
     return false;
   }
   
   // ============================================
-  // FILTRO 5: Validar Domínio Corporativo
+  // FILTRO 5: Validar Domínio Corporativo (MELHORADO)
   // ============================================
   const domainMatch = url.match(/^https?:\/\/(?:www\.)?([^\/]+)/);
   if (!domainMatch) {
@@ -682,48 +707,39 @@ function isValidCompetitor(result: SerperResult['organic'][0], context: FilterCo
   const domain = domainMatch[1];
   
   // Verificar TLDs corporativos válidos
-  const validTLDs = [
-    '.com.br', '.com', '.net.br', '.net',
-    '.org.br', '.org', '.ind.br', '.emp.br'
-  ];
-  
+  const validTLDs = ['.com.br', '.com', '.net.br', '.net', '.org.br', '.ind.br'];
   const hasValidTLD = validTLDs.some(tld => domain.endsWith(tld));
+  
   if (!hasValidTLD) {
+    console.log(`[FILTRO] ❌ Excluído: TLD inválido (${domain})`);
     return false;
   }
   
   // Rejeitar subdomínios suspeitos
-  const suspiciousSubdomains = ['blog.', 'noticias.', 'news.', 'artigos.'];
+  const suspiciousSubdomains = ['blog.', 'noticias.', 'news.', 'artigos.', 'inteligencia-dados.'];
   if (suspiciousSubdomains.some(sub => domain.startsWith(sub))) {
+    console.log(`[FILTRO] ❌ Excluído: subdomínio suspeito (${domain})`);
     return false;
   }
   
   // ============================================
-  // FILTRO 6: Verificar Indicadores Corporativos
+  // FILTRO 6: Verificar Sinais Corporativos (MELHORADO)
   // ============================================
-  const corporateIndicators = [
-    // Indicadores genéricos de empresa
-    'empresa', 'companhia', 'indústria', 'fabricante',
-    'fornecedor', 'distribuidor', 'atacado',
-    
-    // Indicadores de site institucional
-    'sobre', 'quem somos', 'nossa história', 'missão',
-    'contato', 'fale conosco', 'trabalhe conosco',
-    
-    // Indicadores legais
-    'cnpj', 'razão social', 'inscrição estadual',
-    
-    // Indicadores de serviços B2B
-    'soluções', 'serviços', 'produtos', 'portfólio',
-    'clientes', 'parceiros', 'cases'
+  const corporateSignals = [
+    'empresa', 'fabricante', 'indústria', 'fornecedor',
+    'sobre', 'quem somos', 'nossa história', 'nossos produtos',
+    'soluções', 'serviços', 'clientes', 'portfólio',
+    'cnpj', 'contato', 'orçamento', 'consultoria',
+    'companhia', 'ltda', 'distribuidor'
   ];
   
-  const corporateCount = corporateIndicators.filter(indicator => 
-    fullText.includes(indicator)
+  const corporateCount = corporateSignals.filter(signal =>
+    title.includes(signal) || snippet.includes(signal) || url.includes(signal)
   ).length;
   
-  // Precisa ter pelo menos 1 indicador corporativo
+  // Precisa ter pelo menos 1 sinal corporativo
   if (corporateCount < 1) {
+    console.log(`[FILTRO] ❌ Excluído: sem sinais corporativos`);
     return false;
   }
   
