@@ -721,14 +721,9 @@ serve(async (req) => {
   // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
     console.log('[SERPER Search] ✅ OPTIONS preflight recebido');
-    return new Response('ok', { 
+    return new Response('', { 
       status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        'Access-Control-Max-Age': '86400',
-      }
+      headers: corsHeaders
     });
   }
 
