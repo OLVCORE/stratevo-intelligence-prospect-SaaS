@@ -49,6 +49,79 @@ serve(async (req) => {
       throw new Error('OPENAI_API_KEY não configurada');
     }
 
+    // 🔥 NOVO: Buscar produtos do tenant para extrair palavras-chave dinâmicas
+    console.log(`[ScanCompetitor] 🔍 Buscando produtos do tenant ${tenant_id}...`);
+    const { data: tenantProducts, error: productsError } = await supabase
+      .from('tenant_products')
+      .select('nome, descricao, categoria, subcategoria')
+      .eq('tenant_id', tenant_id)
+      .eq('ativo', true);
+
+    if (productsError) {
+      console.error('[ScanCompetitor] ⚠️ Erro ao buscar produtos do tenant:', productsError);
+    }
+
+    // 🔥 NOVO: Função para extrair palavras-chave dinâmicas dos produtos do tenant
+    const extractKeywords = (products: any[]): string[] => {
+      const keywords = new Set<string>();
+      
+      if (!products || products.length === 0) {
+        console.log('[ScanCompetitor] ⚠️ Nenhum produto do tenant encontrado, usando palavras-chave genéricas');
+        return [];
+      }
+      
+      products.forEach(product => {
+        // Extrair palavras do nome
+        if (product.nome) {
+          const nameWords = product.nome.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+          nameWords.forEach((word: string) => {
+            // Remover caracteres especiais e normalizar
+            const cleanWord = word.replace(/[^a-z0-9]/g, '');
+            if (cleanWord.length > 3) {
+              keywords.add(cleanWord);
+            }
+          });
+        }
+        
+        // Extrair palavras da descrição
+        if (product.descricao) {
+          const descWords = product.descricao.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+          descWords.forEach((word: string) => {
+            const cleanWord = word.replace(/[^a-z0-9]/g, '');
+            if (cleanWord.length > 3) {
+              keywords.add(cleanWord);
+            }
+          });
+        }
+        
+        // Adicionar categoria e subcategoria
+        if (product.categoria) {
+          const catWords = product.categoria.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+          catWords.forEach((word: string) => {
+            const cleanWord = word.replace(/[^a-z0-9]/g, '');
+            if (cleanWord.length > 2) {
+              keywords.add(cleanWord);
+            }
+          });
+        }
+        if (product.subcategoria) {
+          const subcatWords = product.subcategoria.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+          subcatWords.forEach((word: string) => {
+            const cleanWord = word.replace(/[^a-z0-9]/g, '');
+            if (cleanWord.length > 2) {
+              keywords.add(cleanWord);
+            }
+          });
+        }
+      });
+      
+      const keywordsArray = Array.from(keywords);
+      console.log(`[ScanCompetitor] 🔑 ${keywordsArray.length} palavras-chave extraídas do tenant:`, keywordsArray.slice(0, 20));
+      return keywordsArray;
+    };
+
+    const tenantKeywords = extractKeywords(tenantProducts || []);
+
     // Detectar tipo de URL se não informado
     let detectedType = source_type || 'website';
     if (source_url.includes('instagram.com')) detectedType = 'instagram';
@@ -102,20 +175,22 @@ serve(async (req) => {
                 if (urlMatches) {
                   for (const match of urlMatches) {
                     const url = match.replace(/<\/?loc>/gi, '').trim();
-                    // Filtrar URLs de produtos de forma mais abrangente
-                    if (url && (
-                      url.toLowerCase().includes('produto') ||
-                      url.toLowerCase().includes('categoria') ||
-                      url.toLowerCase().includes('catalogo') ||
-                      url.toLowerCase().includes('product') ||
-                      url.toLowerCase().includes('category') ||
-                      url.toLowerCase().includes('shop') ||
-                      url.toLowerCase().includes('loja') ||
-                      url.toLowerCase().includes('/p/') ||
-                      url.toLowerCase().includes('/produto/') ||
-                      url.toLowerCase().includes('/item/') ||
-                      url.toLowerCase().includes('/product/')
-                    )) {
+                    // 🔥 MELHORADO: Filtrar URLs usando palavras-chave genéricas + dinâmicas do tenant
+                    const urlLower = url.toLowerCase();
+                    const genericKeywords = [
+                      'produto', 'categoria', 'catalogo', 'product', 'category', 'shop', 'loja',
+                      'servico', 'serviço', 'service', 'solucao', 'solução',
+                      '/p/', '/produto/', '/item/', '/product/'
+                    ];
+                    
+                    // Verificar palavras-chave genéricas
+                    const hasGenericKeyword = genericKeywords.some(kw => urlLower.includes(kw));
+                    
+                    // Verificar palavras-chave do tenant
+                    const hasTenantKeyword = tenantKeywords.length > 0 && 
+                      tenantKeywords.some(kw => urlLower.includes(kw));
+                    
+                    if (url && (hasGenericKeyword || hasTenantKeyword)) {
                       if (!discoveredUrls.has(url)) {
                         sitemapUrls.push(url);
                         discoveredUrls.add(url);
@@ -180,16 +255,21 @@ serve(async (req) => {
                   if (linkMatches) {
                     for (const linkMatch of linkMatches) {
                       const href = linkMatch.replace(/href=["']/, '').replace(/["']/, '');
-                      // Filtrar links relevantes (produtos, categorias, catálogo)
-                      if (href && (
-                        href.toLowerCase().includes('produto') ||
-                        href.toLowerCase().includes('categoria') ||
-                        href.toLowerCase().includes('catalogo') ||
-                        href.toLowerCase().includes('linha') ||
-                        href.toLowerCase().includes('product') ||
-                        href.toLowerCase().includes('category') ||
-                        href.toLowerCase().includes('shop')
-                      )) {
+                      // 🔥 MELHORADO: Filtrar links usando palavras-chave genéricas + dinâmicas do tenant
+                      const hrefLower = href.toLowerCase();
+                      const genericKeywords = [
+                        'produto', 'categoria', 'catalogo', 'linha', 'product', 'category', 'shop',
+                        'servico', 'serviço', 'service', 'solucao', 'solução'
+                      ];
+                      
+                      // Verificar palavras-chave genéricas
+                      const hasGenericKeyword = genericKeywords.some(kw => hrefLower.includes(kw));
+                      
+                      // Verificar palavras-chave do tenant
+                      const hasTenantKeyword = tenantKeywords.length > 0 && 
+                        tenantKeywords.some(kw => hrefLower.includes(kw));
+                      
+                      if (href && (hasGenericKeyword || hasTenantKeyword)) {
                         const fullUrl = href.startsWith('http') ? href : 
                                        href.startsWith('/') ? `https://${domain}${href}` : 
                                        `https://${domain}/${href}`;
@@ -593,7 +673,17 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Você é um especialista em identificar produtos e serviços em websites corporativos e redes sociais, especialmente produtos industriais, EPIs, equipamentos de proteção, luvas, e produtos físicos.
+            content: `Você é um especialista em identificar produtos e serviços em websites corporativos e redes sociais.
+
+🔥 CONTEXTO DO TENANT (empresa que está buscando concorrentes):
+${tenantProducts && tenantProducts.length > 0 
+  ? `Os seguintes produtos/serviços são oferecidos pelo tenant:\n${tenantProducts.map((p: any) => `- ${p.nome}${p.descricao ? `: ${p.descricao.substring(0, 100)}` : ''}${p.categoria ? ` (${p.categoria})` : ''}`).join('\n')}`
+  : 'Nenhum produto do tenant disponível para referência.'}
+
+🔥 OBJETIVO:
+Identificar produtos/serviços SIMILARES ou RELACIONADOS aos produtos do tenant acima.
+Se o tenant oferece serviços, procure por serviços similares.
+Se o tenant oferece produtos físicos, procure por produtos físicos similares.
 
 🔥 CRÍTICO - EXTRAÇÃO DE PRIMEIRO MUNDO:
 - Procure por NOMES DE PRODUTOS específicos mencionados no site (ex: "Grip Defender", "Total Power", "Max Defender", etc.)
