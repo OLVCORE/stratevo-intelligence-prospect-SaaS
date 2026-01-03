@@ -4,7 +4,7 @@
  * Edge Function para descobrir concorrentes automaticamente
  */
 
-// Usar Deno.serve ao invés de serve para garantir compatibilidade com Supabase
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -715,12 +715,12 @@ async function calculateRelevance(
   };
 }
 
-Deno.serve(async (req) => {
-  // Preflight CORS - DEVE retornar status 200 com headers CORS
+serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
+    return new Response('ok', { 
       status: 200,
-      headers: corsHeaders
+      headers: corsHeaders 
     });
   }
 
