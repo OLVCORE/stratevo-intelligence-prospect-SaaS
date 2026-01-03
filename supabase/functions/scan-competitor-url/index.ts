@@ -23,10 +23,14 @@ interface ScanRequest {
 }
 
 serve(async (req) => {
+  // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA - SEM TRY/CATCH)
+  // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
+  // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
-    return new Response(null, { 
+    console.log('[ScanCompetitor] ✅ OPTIONS preflight recebido');
+    return new Response('', { 
       status: 200,
-      headers: corsHeaders 
+      headers: corsHeaders
     });
   }
 
