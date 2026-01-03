@@ -1095,25 +1095,38 @@ serve(async (req) => {
       queries.push(query);
       console.log('[SERPER Search] 🔍 Usando query direta do frontend:', query);
     } else {
-      // 🔥 LEGADO: Gerar queries dinâmicas (compatibilidade)
-      const productsToUse = products.slice(0, 15);
-      const specificProducts = productsToUse.filter(p => {
-        const words = p.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-        return words.length >= 1;
-      });
-      const productsForQueries = specificProducts.length >= 2 ? specificProducts : productsToUse;
+      // 🔥 REFEITO: Gerar queries dinâmicas com operadores Google (universal)
+      const productsToUse = products.slice(0, 5); // Limitar a 5 para query não ficar muito longa
       
-      if (productsForQueries.length >= 2) {
-        queries.push(`empresas similares que oferecem ${productsForQueries.slice(0, 2).join(' e ')}`);
-      }
-      if (productsForQueries.length >= 1) {
-        queries.push(`empresas que oferecem ${productsForQueries[0]}`);
+      if (productsToUse.length > 0) {
+        // Query: Produtos com OR + forçar sites corporativos
+        const productsQuery = productsToUse.map(p => `"${p}"`).join(' OR ');
+        const baseQuery = `(${productsQuery}) (empresa OR fabricante OR fornecedor OR indústria OR consultoria)`;
+        
+        // Exclusões genéricas (aplicáveis a QUALQUER setor)
+        const exclusions = [
+          '-blog', '-notícia', '-artigo', '-"como fazer"', '-tutorial', '-dicas', '-guia',
+          '-mercadolivre', '-aliexpress', '-amazon', '-olx', '-shopee', '-magalu',
+          '-youtube', '-facebook', '-instagram', '-linkedin', '-twitter',
+          '-gov.br', '-sebrae', '-senai', '-sesi', '-fiesp', '-apexbrasil'
+        ].join(' ');
+        
+        // Forçar domínios corporativos brasileiros
+        const domainFilter = '(site:.com.br OR site:.com OR site:.net.br OR site:.net)';
+        
+        // Localização
+        const locationFilter = location && location !== 'Brasil' ? location : 'Brasil';
+        
+        // Query final
+        const finalQuery = `${baseQuery} ${exclusions} ${domainFilter} ${locationFilter}`.trim().replace(/\s+/g, ' ');
+        queries.push(finalQuery);
+        
+        console.log('[SERPER Search] 🔍 Query dinâmica gerada:', finalQuery);
       }
     }
     
-    console.log('[SERPER Search] 📦 Produtos usados na busca:', productsToUse.length, 'produtos');
-    console.log('[SERPER Search] 📋 Primeiros produtos:', productsToUse.slice(0, 5));
-    console.log('[SERPER Search] 🔑 Palavras-chave extraídas:', productKeywords.slice(0, 5));
+    console.log('[SERPER Search] 📦 Produtos usados na busca:', products.length, 'produtos');
+    console.log('[SERPER Search] 📋 Primeiros produtos:', products.slice(0, 5));
     console.log('[SERPER Search] 🏭 Indústria recebida:', industry);
     console.log('[SERPER Search] 📍 Localização recebida:', location);
     console.log('[SERPER Search] 🔢 Total de queries geradas:', queries.length);
