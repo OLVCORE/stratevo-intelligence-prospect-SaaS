@@ -716,9 +716,12 @@ async function calculateRelevance(
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
+  // Handle CORS preflight - CRÍTICO: Retornar 200 OK explicitamente
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   try {
