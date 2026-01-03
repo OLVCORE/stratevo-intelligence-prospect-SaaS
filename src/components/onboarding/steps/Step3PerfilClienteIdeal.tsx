@@ -36,6 +36,7 @@ interface Props {
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
+  isNewTenant?: boolean; // 🔥 NOVO: Flag para indicar se é novo tenant (não carregar dados)
 }
 
 // Mapeamento Região → Estados
@@ -76,9 +77,36 @@ const CARACTERISTICAS_ESPECIAIS = [
   { code: 'MULTINACIONAL', label: 'Multinacional', description: 'Empresa multinacional' },
 ];
 
-export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false, isNewTenant = false }: Props) {
   // 🔥 FORÇAR ATUALIZAÇÃO: Sempre usar dados do Step2 diretamente, SEM fallback para dados antigos
+  // 🔥 CORRIGIDO: Se for novo tenant, SEMPRE começar vazio
   const [formData, setFormData] = useState(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, SEMPRE começar vazio
+    if (isNewTenant) {
+      console.log('[Step3] 🆕 Novo tenant - inicializando com dados vazios');
+      return {
+        setoresAlvo: [],
+        nichosAlvo: [],
+        cnaesAlvo: [],
+        ncmsAlvo: [],
+        porteAlvo: [],
+        localizacaoAlvo: {
+          estados: [],
+          regioes: [],
+          municipios: [],
+        },
+        faturamentoAlvo: {
+          minimo: null,
+          maximo: null,
+        },
+        funcionariosAlvo: {
+          minimo: null,
+          maximo: null,
+        },
+        caracteristicasEspeciais: [],
+      };
+    }
+    
     // Inicializar SEMPRE com dados do Step2 (sem fallback para dados antigos)
     const step2Setores = initialData?.setoresAlvo || [];
     const step2Nichos = initialData?.nichosAlvo || [];
@@ -116,7 +144,14 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
   });
 
   // 🔥 ATUALIZAR AUTOMATICAMENTE quando initialData mudar (voltar do Step 2) - MERGE não-destrutivo
+  // 🔥 CORRIGIDO: Se for novo tenant, NÃO atualizar com initialData
   useEffect(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, NÃO atualizar com initialData
+    if (isNewTenant) {
+      console.log('[Step3] 🆕 Novo tenant - não atualizando com initialData');
+      return;
+    }
+    
     console.log('[Step3] 🔄 initialData mudou:', {
       setoresAlvo: initialData?.setoresAlvo,
       nichosAlvo: initialData?.nichosAlvo,
@@ -183,7 +218,8 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
     initialData?.localizacaoAlvo,
     initialData?.faturamentoAlvo,
     initialData?.funcionariosAlvo,
-    initialData?.caracteristicasEspeciais
+    initialData?.caracteristicasEspeciais,
+    isNewTenant // 🔥 NOVO: Adicionar isNewTenant nas dependências
   ]);
 
   // Estados para inputs

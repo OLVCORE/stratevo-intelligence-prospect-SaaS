@@ -22,6 +22,7 @@ interface Props {
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
+  isNewTenant?: boolean; // 🔥 NOVO: Flag para indicar se é novo tenant (não carregar dados)
 }
 
 // 🔥 REMOVIDO: Interface ConcorrenteDireto movida para Step1
@@ -36,21 +37,42 @@ interface TicketECiclo {
   criterio: string; // Critério/Enquadramento (ex: "Spot", "Projetos", "Contratos", "Licitações", etc.)
 }
 
-export function Step4SituacaoAtual({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
-  const [formData, setFormData] = useState({
-    categoriaSolucao: initialData?.categoriaSolucao || '',
-    diferenciais: initialData?.diferenciais || [],
-    casosDeUso: initialData?.casosDeUso || [],
-    ticketsECiclos: initialData?.ticketsECiclos || (initialData?.ticketMedio || initialData?.cicloVendaMedia ? [{
-      ticketMedio: initialData.ticketMedio || 0,
-      cicloVenda: initialData.cicloVendaMedia || 0,
-      criterio: initialData.criterioTicketMedio || initialData.criterioCicloVenda || 'Geral'
-    }] : []), // 🔥 NOVO: Array de tickets e ciclos na mesma linha
-    // 🔥 REMOVIDO: concorrentesDiretos movidos para Step 1
+export function Step4SituacaoAtual({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false, isNewTenant = false }: Props) {
+  // 🔥 CORRIGIDO: Se for novo tenant, SEMPRE começar vazio
+  const [formData, setFormData] = useState(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, SEMPRE começar vazio
+    if (isNewTenant) {
+      console.log('[Step4] 🆕 Novo tenant - inicializando com dados vazios');
+      return {
+        categoriaSolucao: '',
+        diferenciais: [],
+        casosDeUso: [],
+        ticketsECiclos: [],
+      };
+    }
+    
+    return {
+      categoriaSolucao: initialData?.categoriaSolucao || '',
+      diferenciais: initialData?.diferenciais || [],
+      casosDeUso: initialData?.casosDeUso || [],
+      ticketsECiclos: initialData?.ticketsECiclos || (initialData?.ticketMedio || initialData?.cicloVendaMedia ? [{
+        ticketMedio: initialData.ticketMedio || 0,
+        cicloVenda: initialData.cicloVendaMedia || 0,
+        criterio: initialData.criterioTicketMedio || initialData.criterioCicloVenda || 'Geral'
+      }] : []), // 🔥 NOVO: Array de tickets e ciclos na mesma linha
+      // 🔥 REMOVIDO: concorrentesDiretos movidos para Step 1
+    };
   });
 
   // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa) - MERGE não-destrutivo
+  // 🔥 CORRIGIDO: Se for novo tenant, NÃO atualizar com initialData
   useEffect(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, NÃO atualizar com initialData
+    if (isNewTenant) {
+      console.log('[Step4] 🆕 Novo tenant - não atualizando com initialData');
+      return;
+    }
+    
     if (initialData) {
       console.log('[Step4] 🔄 Atualizando dados do initialData:', initialData);
       // MERGE: preservar dados existentes, complementar com initialData
@@ -74,7 +96,7 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, onSaveExplicit, ini
               }] : [])),
       }));
     }
-  }, [initialData]);
+  }, [initialData, isNewTenant]);
 
   // 🔥 BUG 4 FIX: Auto-save quando formData mudar - verificar se onSave está conectado
   useEffect(() => {

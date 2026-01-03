@@ -311,7 +311,13 @@ export function OnboardingWizard() {
   
   // 🔥 CRÍTICO: Carregar dados do localStorage imediatamente no estado inicial
   // Usar tenantId da URL ou do contexto para isolar dados por empresa
+  // 🔥 CORRIGIDO: Se for novo tenant, SEMPRE retornar objeto vazio
   const savedDataInitial = (() => {
+    // 🔥 CRÍTICO: Se for novo tenant, SEMPRE retornar objeto vazio
+    if (isNewTenant) {
+      console.log('[OnboardingWizard] 🆕 Novo tenant - savedDataInitial retornando objeto vazio');
+      return {};
+    }
     try {
       const storageKey = getStorageKey(tenantId);
       const saved = localStorage.getItem(storageKey);
@@ -330,7 +336,13 @@ export function OnboardingWizard() {
     return {};
   })();
   
+  // 🔥 CORRIGIDO: Se for novo tenant, SEMPRE começar no step 1
   const savedStepInitial = (() => {
+    // 🔥 CRÍTICO: Se for novo tenant, SEMPRE começar no step 1
+    if (isNewTenant) {
+      console.log('[OnboardingWizard] 🆕 Novo tenant - savedStepInitial retornando step 1');
+      return 1;
+    }
     try {
       const stepKey = getStepKey(tenantId);
       const saved = localStorage.getItem(stepKey);
@@ -458,7 +470,13 @@ export function OnboardingWizard() {
   // Helper para carregar dados do localStorage
   // 🔥 CRÍTICO: Função para carregar dados salvos baseada em tenant_id
   // Isso garante isolamento de dados por empresa
+  // 🔥 CORRIGIDO: Se for novo tenant, SEMPRE retornar dados vazios
   const loadSavedData = (targetTenantId?: string | null): { step: number; data: Partial<OnboardingData> } => {
+    // 🔥 CRÍTICO: Se for novo tenant, SEMPRE retornar dados vazios
+    if (isNewTenant) {
+      console.log('[OnboardingWizard] 🆕 Novo tenant - loadSavedData retornando dados vazios');
+      return { step: 1, data: {} };
+    }
     try {
       // Usar tenantId fornecido ou o atual do componente
       const effectiveTenantId = targetTenantId ?? tenantId;
@@ -795,7 +813,9 @@ export function OnboardingWizard() {
         }
 
         // 2) Em paralelo, tenta buscar do banco (best effort) - apenas se não estiver em SAFE MODE
-        if (!ONBOARDING_DB_SAFE_MODE && effectiveUserId) {
+        // 🔥 CRÍTICO: NUNCA buscar banco se for novo tenant ou se tenantId for local
+        const isLocalTenantId = tenantId && tenantId.startsWith('local-tenant-');
+        if (!ONBOARDING_DB_SAFE_MODE && effectiveUserId && !isNewTenant && !isLocalTenantId) {
           const dbSession = await loadSessionFromDatabase(tenantId, effectiveUserId);
           
           if (dbSession) {

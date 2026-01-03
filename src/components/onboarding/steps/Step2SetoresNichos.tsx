@@ -43,6 +43,7 @@ interface Props {
   initialData: any;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
+  isNewTenant?: boolean; // 🔥 NOVO: Flag para indicar se é novo tenant (não carregar dados)
 }
 
 interface Sector {
@@ -60,14 +61,20 @@ interface Niche {
   isCustom?: boolean; // Para nichos adicionados manualmente
 }
 
-export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false }: Props) {
+export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, initialData, isSaving = false, hasUnsavedChanges = false, isNewTenant = false }: Props) {
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [niches, setNiches] = useState<Niche[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Estado do formulário - MÚLTIPLAS SELEÇÕES PARA AMBOS
   // 🔥 CRÍTICO: Usar CÓDIGOS (setoresAlvoCodes) preferencialmente, não NOMES (setoresAlvo)
+  // 🔥 CORRIGIDO: Se for novo tenant, SEMPRE começar vazio
   const [selectedSectors, setSelectedSectors] = useState<string[]>(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, SEMPRE começar vazio
+    if (isNewTenant) {
+      console.log('[Step2] 🆕 Novo tenant - inicializando com setores vazios');
+      return [];
+    }
     if (initialData?.setoresAlvoCodes && initialData.setoresAlvoCodes.length > 0) {
       console.log('[Step2] 🎯 Inicializando com setoresAlvoCodes:', initialData.setoresAlvoCodes);
       return initialData.setoresAlvoCodes;
@@ -92,7 +99,14 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, ini
   const [newCustomSector, setNewCustomSector] = useState('');
 
   // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa) - MERGE não-destrutivo
+  // 🔥 CORRIGIDO: Se for novo tenant, NÃO atualizar com initialData
   useEffect(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, NÃO atualizar com initialData
+    if (isNewTenant) {
+      console.log('[Step2] 🆕 Novo tenant - não atualizando com initialData');
+      return;
+    }
+    
     if (initialData) {
       console.log('[Step2] 🔄 Atualizando dados do initialData:', initialData);
       
@@ -140,7 +154,7 @@ export function Step2SetoresNichos({ onNext, onBack, onSave, onSaveExplicit, ini
         });
       }
     }
-  }, [initialData]);
+  }, [initialData, isNewTenant]);
 
   // 🆕 SEPARADO: Garantir que setores customizados estejam na lista para exibição
   // Executar SEMPRE que sectors mudar (especialmente após carregar do banco)

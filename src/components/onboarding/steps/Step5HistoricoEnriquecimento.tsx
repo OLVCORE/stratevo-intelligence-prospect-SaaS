@@ -298,6 +298,7 @@ interface Props {
   isSubmitting?: boolean;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
+  isNewTenant?: boolean; // 🔥 NOVO: Flag para indicar se é novo tenant (não carregar dados)
 }
 
 interface ClienteAtual {
@@ -336,14 +337,33 @@ interface EmpresaBenchmarking {
   alinhamentoICP?: 'Alto' | 'Médio' | 'Baixo';
 }
 
-export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, onSaveExplicit, initialData, isSubmitting, isSaving = false, hasUnsavedChanges = false }: Props) {
-  const [formData, setFormData] = useState({
-    clientesAtuais: initialData?.clientesAtuais || [],
-    empresasBenchmarking: initialData?.empresasBenchmarking || [], // 🔥 UNIFICADO: Empresas para ICP Benchmarking
+export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, onSaveExplicit, initialData, isSubmitting, isSaving = false, hasUnsavedChanges = false, isNewTenant = false }: Props) {
+  // 🔥 CORRIGIDO: Se for novo tenant, SEMPRE começar vazio
+  const [formData, setFormData] = useState(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, SEMPRE começar vazio
+    if (isNewTenant) {
+      console.log('[Step5] 🆕 Novo tenant - inicializando com dados vazios');
+      return {
+        clientesAtuais: [],
+        empresasBenchmarking: [],
+      };
+    }
+    
+    return {
+      clientesAtuais: initialData?.clientesAtuais || [],
+      empresasBenchmarking: initialData?.empresasBenchmarking || [], // 🔥 UNIFICADO: Empresas para ICP Benchmarking
+    };
   });
 
   // 🔥 CRÍTICO: Sincronizar estado quando initialData mudar (ao voltar para etapa) - MERGE não-destrutivo
+  // 🔥 CORRIGIDO: Se for novo tenant, NÃO atualizar com initialData
   useEffect(() => {
+    // 🔥 CRÍTICO: Se for novo tenant, NÃO atualizar com initialData
+    if (isNewTenant) {
+      console.log('[Step5] 🆕 Novo tenant - não atualizando com initialData');
+      return;
+    }
+    
     console.log('[Step5] 🔄 Verificando initialData:', initialData);
     const clientesAtuais = initialData?.clientesAtuais || [];
     const empresasBenchmarking = initialData?.empresasBenchmarking || [];
@@ -367,7 +387,7 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, onSaveExp
           : (Array.isArray(prev.empresasBenchmarking) && prev.empresasBenchmarking.length > 0 ? prev.empresasBenchmarking : []),
       }));
     }
-  }, [initialData]);
+  }, [initialData, isNewTenant]);
 
   // 🔥 BUG 4 FIX: Auto-save quando formData mudar - verificar se onSave está conectado
   useEffect(() => {
