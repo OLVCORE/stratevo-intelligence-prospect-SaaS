@@ -83,6 +83,159 @@ interface ResponseBusca {
 }
 
 /**
+ * 🧠 FASE 1: Carregar ICP do Tenant
+ * Busca dados do ICP ativo do tenant (setores, nichos, CNAEs, critérios)
+ */
+interface TenantICPData {
+  setores: string[];
+  nichos: string[];
+  cnaes: string[];
+  porte: string[];
+  regioes: string[];
+  faturamento_min: number | null;
+  faturamento_max: number | null;
+  funcionarios_min: number | null;
+  funcionarios_max: number | null;
+}
+
+async function loadTenantICP(supabaseClient: any, tenantId: string): Promise<TenantICPData | null> {
+  try {
+    console.log('[ProspeccaoAvancada] 🧠 FASE 1: Carregando ICP do tenant:', tenantId);
+    
+    // 1. Buscar ICP principal/ativo
+    const { data: icpProfile, error: icpError } = await supabaseClient
+      .from('icp_profiles_metadata')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .or('icp_principal.eq.true,ativo.eq.true')
+      .order('icp_principal', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (icpError) {
+      console.warn('[ProspeccaoAvancada] ⚠️ Erro ao buscar ICP:', icpError);
+    }
+
+    if (!icpProfile) {
+      console.log('[ProspeccaoAvancada] ℹ️ Nenhum ICP encontrado para o tenant');
+      return null;
+    }
+
+    console.log('[ProspeccaoAvancada] ✅ ICP encontrado:', icpProfile.id, icpProfile.nome);
+
+    // 2. Buscar dados do onboarding (step2 e step3 contêm setores, nichos, CNAEs, critérios)
+    const { data: onboardingData, error: onboardingError } = await supabaseClient
+      .from('onboarding_sessions')
+      .select('step2_data, step3_data')
+      .eq('tenant_id', tenantId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (onboardingError) {
+      console.warn('[ProspeccaoAvancada] ⚠️ Erro ao buscar onboarding:', onboardingError);
+    }
+
+    const step2 = onboardingData?.step2_data || {};
+    const step3 = onboardingData?.step3_data || {};
+
+    // 3. Montar dados do ICP
+    const icpData: TenantICPData = {
+      setores: step3.setoresAlvo || step2.setoresAlvo || [],
+      nichos: step3.nichosAlvo || step2.nichosAlvo || [],
+      cnaes: step3.cnaesAlvo || step2.cnaesAlvo || [],
+      porte: step3.porteAlvo || [],
+      regioes: step3.localizacaoAlvo?.regioes || step3.localizacaoAlvo?.estados || [],
+      faturamento_min: step3.faturamentoAlvo?.minimo || null,
+      faturamento_max: step3.faturamentoAlvo?.maximo || null,
+      funcionarios_min: step3.funcionariosAlvo?.minimo || null,
+      funcionarios_max: step3.funcionariosAlvo?.maximo || null,
+    };
+
+    console.log('[ProspeccaoAvancada] 📊 ICP Data:', {
+      setores: icpData.setores.length,
+      nichos: icpData.nichos.length,
+      cnaes: icpData.cnaes.length,
+      porte: icpData.porte.length,
+      regioes: icpData.regioes.length,
+    });
+
+    return icpData;
+  } catch (error) {
+    console.error('[ProspeccaoAvancada] ❌ Erro ao carregar ICP:', error);
+    return null;
+  }
+}
+
+/**
+ * 🧠 FASE 2: Combinar Filtros (ICP + Formulário)
+ * Prioriza filtros do formulário, usa ICP como fallback
+ */
+function combineFilters(formFilters: FiltrosBusca, icpData: TenantICPData | null): FiltrosBusca {
+  if (!icpData) {
+    console.log('[ProspeccaoAvancada] 🔀 FASE 2: Sem ICP, usando apenas filtros do formulário');
+    return formFilters;
+  }
+
+  console.log('[ProspeccaoAvancada] 🔀 FASE 2: Combinando filtros (ICP + Formulário)');
+
+  const combined: FiltrosBusca = {
+    ...formFilters,
+  };
+
+  // Segmento: usar do formulário, se vazio usar setores do ICP
+  if (!combined.segmento && icpData.setores.length > 0) {
+    // Pegar primeiro setor do ICP (pode melhorar depois para múltiplos)
+    combined.segmento = icpData.setores[0];
+    console.log('[ProspeccaoAvancada] 📝 Segmento do ICP:', combined.segmento);
+  }
+
+  // Porte: usar do formulário, se vazio usar do ICP
+  if (!combined.porte && icpData.porte.length > 0) {
+    // Mapear porte do ICP para formato do formulário
+    const porteMap: Record<string, 'micro' | 'pequena' | 'media' | 'grande'> = {
+      'ME': 'micro',
+      'EPP': 'pequena',
+      'MEDIA': 'media',
+      'GRANDE': 'grande',
+    };
+    const icpPorte = icpData.porte[0];
+    combined.porte = porteMap[icpPorte] || icpPorte as any;
+    console.log('[ProspeccaoAvancada] 📝 Porte do ICP:', combined.porte);
+  }
+
+  // Faturamento: usar do formulário, se vazio usar do ICP
+  if (!combined.faturamentoMin && icpData.faturamento_min) {
+    combined.faturamentoMin = icpData.faturamento_min;
+    console.log('[ProspeccaoAvancada] 📝 Faturamento min do ICP:', combined.faturamentoMin);
+  }
+  if (!combined.faturamentoMax && icpData.faturamento_max) {
+    combined.faturamentoMax = icpData.faturamento_max;
+    console.log('[ProspeccaoAvancada] 📝 Faturamento max do ICP:', combined.faturamentoMax);
+  }
+
+  // Funcionários: usar do formulário, se vazio usar do ICP
+  if (!combined.funcionariosMin && icpData.funcionarios_min) {
+    combined.funcionariosMin = icpData.funcionarios_min;
+    console.log('[ProspeccaoAvancada] 📝 Funcionários min do ICP:', combined.funcionariosMin);
+  }
+  if (!combined.funcionariosMax && icpData.funcionarios_max) {
+    combined.funcionariosMax = icpData.funcionarios_max;
+    console.log('[ProspeccaoAvancada] 📝 Funcionários max do ICP:', combined.funcionariosMax);
+  }
+
+  // Localização: usar do formulário, se vazio usar do ICP
+  if (!combined.localizacao && icpData.regioes.length > 0) {
+    // Pegar primeira região do ICP
+    combined.localizacao = icpData.regioes[0];
+    console.log('[ProspeccaoAvancada] 📝 Localização do ICP:', combined.localizacao);
+  }
+
+  return combined;
+}
+
+/**
  * Buscar produtos do tenant
  */
 async function buscarProdutosTenant(supabaseClient: any, tenantId: string): Promise<string[]> {
@@ -424,9 +577,14 @@ function mapearSegmentoParaCNAEs(segmento: string): string[] {
 }
 
 /**
- * Buscar empresas via EmpresaQui - APENAS empresas reais com CNPJ!
+ * 🧠 FASE 3: Buscar empresas via EmpresaQui usando ICP
+ * Busca otimizada usando CNAEs do ICP quando disponível
  */
-async function buscarViaEmpresaQui(filtros: FiltrosBusca, metaCandidates: number): Promise<any[]> {
+async function buscarViaEmpresaQui(
+  filtros: FiltrosBusca, 
+  metaCandidates: number,
+  icpData: TenantICPData | null = null
+): Promise<any[]> {
   // Nota: O secret no Supabase está como EMPRESASAQUI_API_KEY (com "S")
   const empresaQuiKey = Deno.env.get('EMPRESASAQUI_API_KEY') || Deno.env.get('EMPRESAQUI_API_KEY');
   if (!empresaQuiKey) {
@@ -438,8 +596,19 @@ async function buscarViaEmpresaQui(filtros: FiltrosBusca, metaCandidates: number
     const resultados: any[] = [];
     const seenCNPJs = new Set<string>();
 
-    // 🔥 ESTRATÉGIA CORRETA: Buscar por CNAE (se tiver segmento) + Localização
-    const cnaes = filtros.segmento ? mapearSegmentoParaCNAEs(filtros.segmento) : [];
+    // 🧠 ESTRATÉGIA INTELIGENTE: Priorizar CNAEs do ICP, depois segmento, depois localização
+    let cnaes: string[] = [];
+    
+    // Prioridade 1: CNAEs do ICP (mais preciso)
+    if (icpData && icpData.cnaes.length > 0) {
+      cnaes = icpData.cnaes;
+      console.log('[ProspeccaoAvancada] 🎯 Usando CNAEs do ICP:', cnaes.length, 'CNAEs');
+    } 
+    // Prioridade 2: Mapear segmento para CNAEs
+    else if (filtros.segmento) {
+      cnaes = mapearSegmentoParaCNAEs(filtros.segmento);
+      console.log('[ProspeccaoAvancada] 📝 Mapeando segmento para CNAEs:', cnaes.length, 'CNAEs');
+    }
     const [cidade, uf] = filtros.localizacao && filtros.localizacao !== 'Brasil' 
       ? filtros.localizacao.split(',').map(s => s.trim())
       : [null, null];
@@ -783,6 +952,116 @@ function validarCNPJ(cnpj: string): boolean {
   return clean.length === 14;
 }
 
+/**
+ * 🧠 FASE 4: Calcular ICP Match Score (0-100)
+ * Baseado em setores, nichos, CNAEs do ICP
+ */
+function calculateICPMatchScore(empresa: EmpresaEnriquecida, icpData: TenantICPData | null): number {
+  if (!icpData) {
+    return 0; // Sem ICP, sem score
+  }
+
+  let score = 0;
+  const reasons: string[] = [];
+
+  // TODO: Extrair setor/nicho da empresa (precisa classificar por CNAE)
+  // Por enquanto, vamos usar uma lógica simplificada baseada em segmento
+  
+  // 1. Match de Segmento (+30 pontos)
+  if (empresa.segmento && icpData.setores.length > 0) {
+    // Verificar se segmento da empresa está nos setores do ICP
+    const segmentoMatch = icpData.setores.some(s => 
+      s.toLowerCase().includes(empresa.segmento!.toLowerCase()) ||
+      empresa.segmento!.toLowerCase().includes(s.toLowerCase())
+    );
+    if (segmentoMatch) {
+      score += 30;
+      reasons.push('Setor match (+30)');
+    }
+  }
+
+  // 2. Match de CNAE (+20 pontos) - se tivermos CNAE da empresa
+  // TODO: Extrair CNAE da empresa e comparar com icpData.cnaes
+
+  // 3. Match de Porte (+10 pontos)
+  if (empresa.porte && icpData.porte.length > 0) {
+    const porteMatch = icpData.porte.some(p => 
+      p.toLowerCase() === empresa.porte!.toLowerCase()
+    );
+    if (porteMatch) {
+      score += 10;
+      reasons.push('Porte match (+10)');
+    }
+  }
+
+  // 4. Match de Localização (+10 pontos)
+  if (empresa.localizacao && icpData.regioes.length > 0) {
+    const localizacaoMatch = icpData.regioes.some(r => 
+      empresa.localizacao!.toLowerCase().includes(r.toLowerCase()) ||
+      r.toLowerCase().includes(empresa.localizacao!.toLowerCase())
+    );
+    if (localizacaoMatch) {
+      score += 10;
+      reasons.push('Localização match (+10)');
+    }
+  }
+
+  // 5. Match de Faturamento (+10 pontos)
+  if (empresa.faturamento_estimado && icpData.faturamento_min && icpData.faturamento_max) {
+    if (empresa.faturamento_estimado >= icpData.faturamento_min && 
+        empresa.faturamento_estimado <= icpData.faturamento_max) {
+      score += 10;
+      reasons.push('Faturamento match (+10)');
+    }
+  }
+
+  // 6. Match de Funcionários (+10 pontos)
+  if (empresa.funcionarios_estimados && icpData.funcionarios_min && icpData.funcionarios_max) {
+    if (empresa.funcionarios_estimados >= icpData.funcionarios_min && 
+        empresa.funcionarios_estimados <= icpData.funcionarios_max) {
+      score += 10;
+      reasons.push('Funcionários match (+10)');
+    }
+  }
+
+  return Math.min(100, score);
+}
+
+/**
+ * 🧠 FASE 4: Calcular Relevância Score (0-65)
+ * Baseado em completude de dados
+ */
+function calculateRelevanciaScore(empresa: EmpresaEnriquecida): number {
+  let score = 0;
+
+  // Dados completos: +20
+  if (empresa.cnpj && empresa.razao_social && empresa.endereco && empresa.cidade && empresa.uf) {
+    score += 20;
+  }
+
+  // Tem site: +10
+  if (empresa.site) {
+    score += 10;
+  }
+
+  // Tem LinkedIn: +10
+  if (empresa.linkedin) {
+    score += 10;
+  }
+
+  // Tem decisores: +15
+  if (empresa.decisores && empresa.decisores.length > 0) {
+    score += 15;
+  }
+
+  // Tem e-mails: +10
+  if (empresa.emails && empresa.emails.length > 0) {
+    score += 10;
+  }
+
+  return Math.min(65, score);
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -854,11 +1133,30 @@ serve(async (req) => {
       );
     }
 
+    // Criar cliente Supabase
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // 🧠 FASE 1: Carregar ICP do Tenant
+    const icpData = await loadTenantICP(supabaseClient, tenant_id);
+    
     // Normalizar filtros
-    const filtros = normalizarFiltros(filtrosRaw || {});
+    const filtrosRawNormalized = normalizarFiltros(filtrosRaw || {});
+    
+    // 🧠 FASE 2: Combinar Filtros (ICP + Formulário)
+    const filtros = combineFilters(filtrosRawNormalized, icpData);
+    
     const { cidade, uf } = parseLocalizacao(filtros.localizacao);
     
-    console.log('[ProspeccaoAvancada] 📥 Request recebido:', { filtros, tenant_id, cidade, uf });
+    console.log('[ProspeccaoAvancada] 📥 Request recebido:', { 
+      filtrosOriginais: filtrosRawNormalized,
+      filtrosCombinados: filtros,
+      icpData: icpData ? 'disponível' : 'não disponível',
+      tenant_id, 
+      cidade, 
+      uf 
+    });
 
     console.log('[ProspeccaoAvancada] 🚀 Iniciando busca:', {
       quantidadeDesejada: filtros.quantidadeDesejada,
@@ -867,11 +1165,6 @@ serve(async (req) => {
       segmento: filtros.segmento,
       localizacao: filtros.localizacao,
     });
-
-    // Criar cliente Supabase
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Inicializar diagnostics
     const diagnostics: DiagnosticsBusca = {
@@ -886,14 +1179,15 @@ serve(async (req) => {
     const metaCandidates = Math.max(filtros.quantidadeDesejada * 3, 60);
     console.log('[ProspeccaoAvancada] 🎯 Meta candidatas:', metaCandidates, '(quantidade desejada:', filtros.quantidadeDesejada, ')');
 
-    // 🔥 PASSO B: Buscar candidatas no EmpresaQui
+    // 🧠 FASE 3: Buscar candidatas no EmpresaQui (usando ICP)
     console.log('[ProspeccaoAvancada] 🔍 Buscando candidatas no EmpresaQui...');
     const empresaQuiCompanies = await buscarViaEmpresaQui(
       {
         ...filtros,
         localizacao: cidade && uf ? `${cidade}, ${uf}` : filtros.localizacao,
       },
-      metaCandidates
+      metaCandidates,
+      icpData // Passar dados do ICP para busca otimizada
     );
     
     diagnostics.candidates_collected = empresaQuiCompanies.length;
@@ -1063,13 +1357,56 @@ serve(async (req) => {
       });
     }
 
-    // 🔥 PASSO F: Garantir quantidade_desejada (cortar para N)
-    empresasFiltradas = empresasFiltradas.slice(0, filtros.quantidadeDesejada);
+    // 🧠 FASE 4: Classificar e Scorear empresas (ICP Match + Relevância)
+    console.log('[ProspeccaoAvancada] 📊 Calculando scores ICP...');
+    const empresasComScore = empresasFiltradas.map((emp) => {
+      const icpScore = calculateICPMatchScore(emp, icpData);
+      const relevanciaScore = calculateRelevanciaScore(emp);
+      const scoreTotal = icpScore + relevanciaScore;
+      
+      return {
+        ...emp,
+        _icp_score: icpScore,
+        _relevancia_score: relevanciaScore,
+        _score_total: scoreTotal,
+      };
+    });
+
+    // 🧠 FASE 5: Ordenar por Score Total (DESC)
+    empresasComScore.sort((a, b) => {
+      // Ordenar por: Score Total → ICP Score → Relevância
+      if (b._score_total !== a._score_total) {
+        return b._score_total - a._score_total;
+      }
+      if (b._icp_score !== a._icp_score) {
+        return b._icp_score - a._icp_score;
+      }
+      return b._relevancia_score - a._relevancia_score;
+    });
+
+    // Remover campos internos de score antes de retornar
+    const empresasOrdenadas = empresasComScore.map(({ _icp_score, _relevancia_score, _score_total, ...emp }) => emp);
+
+    console.log('[ProspeccaoAvancada] ✅ Empresas ordenadas por score:', empresasOrdenadas.length);
+    if (empresasOrdenadas.length > 0) {
+      console.log('[ProspeccaoAvancada] 📊 Top 3 scores:', empresasComScore.slice(0, 3).map((e, i) => ({
+        rank: i + 1,
+        empresa: e.razao_social,
+        icp_score: e._icp_score,
+        relevancia_score: e._relevancia_score,
+        total: e._score_total,
+      })));
+    }
+
+    // 🧠 FASE 6: Paginação
+    const startIndex = (filtros.page - 1) * filtros.pageSize;
+    const endIndex = startIndex + filtros.pageSize;
+    const empresasPaginadas = empresasOrdenadas.slice(startIndex, endIndex);
     
-    console.log('[ProspeccaoAvancada] ✅ Total final:', empresasFiltradas.length);
+    console.log('[ProspeccaoAvancada] ✅ Total final:', empresasOrdenadas.length, '| Página:', filtros.page, '| Mostrando:', empresasPaginadas.length);
 
     // 🔥 PASSO G: Calcular has_more (se há mais candidatas disponíveis)
-    const has_more = candidatasValidadas.length > empresasFiltradas.length;
+    const has_more = empresasOrdenadas.length > endIndex;
 
     // 🔥 PASSO H: Persistência (opcional - será feito no frontend)
     // Nota: Frontend salvará em prospects_raw após receber resposta
@@ -1077,8 +1414,8 @@ serve(async (req) => {
     // Montar resposta final
     const resposta: ResponseBusca = {
       sucesso: true,
-      empresas: empresasFiltradas,
-      total: empresasFiltradas.length,
+      empresas: empresasPaginadas,
+      total: empresasOrdenadas.length,
       page: filtros.page,
       pageSize: filtros.pageSize,
       has_more,
