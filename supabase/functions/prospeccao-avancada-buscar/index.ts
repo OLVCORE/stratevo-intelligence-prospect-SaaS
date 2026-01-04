@@ -1114,6 +1114,20 @@ serve(async (req) => {
     // 🔥 VALIDAÇÃO 1: EMPRESASAQUI_API_KEY (OBRIGATÓRIA)
     // Nota: O secret no Supabase está como EMPRESASAQUI_API_KEY (com "S")
     const empresaQuiKey = Deno.env.get('EMPRESASAQUI_API_KEY') || Deno.env.get('EMPRESAQUI_API_KEY');
+    
+    // Log parcial da API key para verificação (primeiros 10 caracteres)
+    if (empresaQuiKey) {
+      const keyPreview = empresaQuiKey.substring(0, 10) + '...';
+      console.log('[ProspeccaoAvancada] 🔑 API Key detectada (preview):', keyPreview, '| Tamanho:', empresaQuiKey.length);
+      
+      // Verificar se começa com a8725d0dbe (chave fornecida pelo usuário)
+      if (empresaQuiKey.startsWith('a8725d0dbe')) {
+        console.log('[ProspeccaoAvancada] ✅ API Key confirmada: começa com a8725d0dbe');
+      } else {
+        console.warn('[ProspeccaoAvancada] ⚠️ API Key diferente da esperada. Esperado: a8725d0dbe..., Recebido:', keyPreview);
+      }
+    }
+    
     if (!empresaQuiKey) {
       console.error('[ProspeccaoAvancada] ❌ EMPRESASAQUI_API_KEY não configurada');
       return new Response(
