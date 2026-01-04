@@ -564,12 +564,52 @@ async function buscarViaEmpresaQui(
           console.log('[ProspeccaoAvancada] 🔗 URL completa:', url);
           console.log('[ProspeccaoAvancada] 🔑 API Key (preview):', empresaQuiKey.substring(0, 10) + '...');
           
-          const response = await fetch(url, {
-            headers: {
-              'Authorization': `Bearer ${empresaQuiKey}`,
-              'Content-Type': 'application/json',
-            },
-          });
+          // Retry com backoff para resolver problemas de DNS/conectividade
+          let response: Response | null = null;
+          let lastError: Error | null = null;
+          
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              if (attempt > 0) {
+                const delay = attempt * 1000; // 1s, 2s
+                console.log(`[ProspeccaoAvancada] 🔄 Retry ${attempt + 1}/3 após ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+              
+              response = await fetch(url, {
+                headers: {
+                  'Authorization': `Bearer ${empresaQuiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                // Timeout de 10 segundos
+                signal: AbortSignal.timeout(10000),
+              });
+              
+              if (response.ok) {
+                break; // Sucesso, sair do loop
+              }
+            } catch (error: any) {
+              lastError = error;
+              const errorMsg = error?.message || String(error);
+              
+              // Se for erro DNS, tentar novamente
+              if (errorMsg.includes('dns error') || errorMsg.includes('failed to lookup')) {
+                console.warn(`[ProspeccaoAvancada] ⚠️ Erro DNS na tentativa ${attempt + 1}/3:`, errorMsg);
+                if (attempt === 2) {
+                  // Última tentativa falhou
+                  console.error('[ProspeccaoAvancada] ❌ Erro DNS persistente após 3 tentativas');
+                }
+                continue; // Tentar novamente
+              } else {
+                // Outro tipo de erro, não tentar novamente
+                throw error;
+              }
+            }
+          }
+          
+          if (!response) {
+            throw lastError || new Error('Falha ao conectar com API EmpresaQui após 3 tentativas');
+          }
 
           if (response.ok) {
             const data = await response.json();
@@ -603,8 +643,14 @@ async function buscarViaEmpresaQui(
               authLength: empresaQuiKey?.length || 0
             });
           }
-        } catch (error) {
-          console.error('[ProspeccaoAvancada] ❌ Erro busca CNAE:', error);
+        } catch (error: any) {
+          const errorMsg = error?.message || String(error);
+          if (errorMsg.includes('dns error') || errorMsg.includes('failed to lookup')) {
+            console.error('[ProspeccaoAvancada] ❌ Erro DNS ao buscar CNAE:', errorMsg);
+            console.error('[ProspeccaoAvancada] ⚠️ Problema de conectividade com api.empresaqui.com.br');
+          } else {
+            console.error('[ProspeccaoAvancada] ❌ Erro busca CNAE:', error);
+          }
         }
       }
     }
@@ -621,12 +667,47 @@ async function buscarViaEmpresaQui(
         const url = `https://api.empresaqui.com.br/v1/empresas/busca?${params}`;
         console.log('[ProspeccaoAvancada] 🔍 EmpresaQui busca por localização:', cidade, uf);
         
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${empresaQuiKey}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        // Retry com backoff para resolver problemas de DNS/conectividade
+        let response: Response | null = null;
+        let lastError: Error | null = null;
+        
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            if (attempt > 0) {
+              const delay = attempt * 1000;
+              console.log(`[ProspeccaoAvancada] 🔄 Retry localização ${attempt + 1}/3 após ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+            
+            response = await fetch(url, {
+              headers: {
+                'Authorization': `Bearer ${empresaQuiKey}`,
+                'Content-Type': 'application/json',
+              },
+              signal: AbortSignal.timeout(10000),
+            });
+            
+            if (response.ok) {
+              break;
+            }
+          } catch (error: any) {
+            lastError = error;
+            const errorMsg = error?.message || String(error);
+            if (errorMsg.includes('dns error') || errorMsg.includes('failed to lookup')) {
+              console.warn(`[ProspeccaoAvancada] ⚠️ Erro DNS localização tentativa ${attempt + 1}/3`);
+              if (attempt === 2) {
+                console.error('[ProspeccaoAvancada] ❌ Erro DNS persistente após 3 tentativas');
+              }
+              continue;
+            } else {
+              throw error;
+            }
+          }
+        }
+        
+        if (!response) {
+          throw lastError || new Error('Falha ao conectar com API EmpresaQui após 3 tentativas');
+        }
 
         if (response.ok) {
           const data = await response.json();
@@ -721,8 +802,15 @@ async function buscarViaEmpresaQui(
     }
     
     return resultados;
-  } catch (error) {
-    console.error('[ProspeccaoAvancada] ❌ Erro EmpresaQui:', error);
+  } catch (error: any) {
+    const errorMsg = error?.message || String(error);
+    if (errorMsg.includes('dns error') || errorMsg.includes('failed to lookup')) {
+      console.error('[ProspeccaoAvancada] ❌ Erro DNS crítico no EmpresaQui:', errorMsg);
+      console.error('[ProspeccaoAvancada] ⚠️ Não foi possível resolver DNS de api.empresaqui.com.br');
+      console.error('[ProspeccaoAvancada] 💡 Verifique: 1) URL da API está correta? 2) API está online? 3) Problema temporário de rede?');
+    } else {
+      console.error('[ProspeccaoAvancada] ❌ Erro EmpresaQui:', error);
+    }
     return [];
   }
 }
