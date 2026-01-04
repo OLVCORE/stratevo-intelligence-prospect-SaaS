@@ -630,13 +630,29 @@ async function buscarViaEmpresaQui(
           const data = await response.json();
           const empresas = data.empresas || data.data || [];
           console.log('[ProspeccaoAvancada] ✅ Busca por localização retornou:', empresas.length);
+          console.log('[ProspeccaoAvancada] 📋 Estrutura resposta localização:', {
+            hasEmpresas: !!data.empresas,
+            hasData: !!data.data,
+            empresasLength: empresas.length,
+            primeiraEmpresa: empresas[0] ? {
+              cnpj: empresas[0].cnpj,
+              razao_social: empresas[0].razao_social || empresas[0].nome,
+              temCNPJ: !!empresas[0].cnpj
+            } : null
+          });
           
           for (const emp of empresas) {
             if (emp.cnpj && emp.cnpj.length >= 14 && !seenCNPJs.has(emp.cnpj) && resultados.length < metaCandidates) {
               seenCNPJs.add(emp.cnpj);
               resultados.push(emp);
+            } else if (!emp.cnpj) {
+              console.warn('[ProspeccaoAvancada] ⚠️ Empresa sem CNPJ válido (localização):', emp.razao_social || emp.nome);
             }
           }
+        } else {
+          const errorText = await response.text();
+          console.error('[ProspeccaoAvancada] ❌ Erro busca localização:', response.status, errorText.substring(0, 500));
+          console.error('[ProspeccaoAvancada] ❌ URL chamada:', url);
         }
       } catch (error) {
         console.error('[ProspeccaoAvancada] ❌ Erro busca localização:', error);
