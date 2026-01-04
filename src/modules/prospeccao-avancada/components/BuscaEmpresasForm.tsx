@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import { type FiltrosBusca } from '../types';
 import { searchCNAE, getCNAEByCode, type CNAEInfo, searchNCM, getNCMByCode, type NCMInfo } from '@/services/brasilApiComplete';
 import { getCNAEClassification, type CNAEClassification } from '@/services/cnaeClassificationService';
+import { Badge } from '@/components/ui/badge';
 
 // Características especiais (igual Step3)
 const CARACTERISTICAS_ESPECIAIS = [
@@ -584,24 +585,18 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
                                   )}
                                 />
                                 <div className="flex flex-col flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-foreground">{cnaeCode || 'Sem código'}</span>
-                                    {classification && (
-                                      <>
-                                        <span className="text-xs text-muted-foreground">•</span>
-                                        <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                                          {classification.setor_industria}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">•</span>
-                                        <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
-                                          {classification.categoria}
-                                        </span>
-                                      </>
-                                    )}
-                                  </div>
-                                  <span className="text-xs text-muted-foreground mt-0.5">
-                                    {cnae.descricao || 'Sem descrição'}
-                                  </span>
+                                  <span className="font-semibold text-foreground">{cnaeCode || 'Sem código'}</span>
+                                  <span className="text-xs text-muted-foreground">{cnae.descricao || 'Sem descrição'}</span>
+                                  {classification && (
+                                    <div className="flex gap-1 mt-0.5">
+                                      <Badge variant="secondary" className="text-[10px] px-1 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                        {classification.setor_industria}
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-[10px] px-1 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                        {classification.categoria}
+                                      </Badge>
+                                    </div>
+                                  )}
                                 </div>
                               </CommandItem>
                             );
@@ -647,22 +642,20 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
                             <span className="font-semibold text-xs text-foreground whitespace-nowrap">
                               {codigoExibir}
                             </span>
-                            {classification && (
-                              <>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs font-medium text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30">
-                                  {classification.setor_industria}
-                                </span>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs font-medium text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/30">
-                                  {classification.categoria}
-                                </span>
-                              </>
-                            )}
                           </div>
                           <span className="text-xs text-muted-foreground leading-tight break-words">
                             {descricaoExibir}
                           </span>
+                          {classification && (
+                            <div className="flex gap-1 mt-0.5">
+                              <Badge variant="secondary" className="text-[10px] px-1 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                {classification.setor_industria}
+                              </Badge>
+                              <Badge variant="secondary" className="text-[10px] px-1 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                {classification.categoria}
+                              </Badge>
+                            </div>
+                          )}
                         </div>
                         <X className="h-3 w-3 text-muted-foreground hover:text-destructive flex-shrink-0 mt-0.5 opacity-50 group-hover:opacity-100 transition-opacity" />
                       </div>
