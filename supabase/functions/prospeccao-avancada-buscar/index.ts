@@ -439,13 +439,56 @@ function mapearSegmentoParaCNAEs(segmento: string): string[] {
 }
 
 /**
+ * Buscar CNAEs por Setor/Categoria via Supabase
+ * FASE 1: Filtragem inteligente usando tabela cnae_classifications
+ */
+async function buscarCNAEsPorSetorCategoria(
+  supabaseClient: any,
+  setor?: string,
+  categoria?: string
+): Promise<string[]> {
+  if (!setor && !categoria) {
+    return [];
+  }
+
+  try {
+    let query = supabaseClient
+      .from('cnae_classifications')
+      .select('cnae_code');
+
+    if (setor) {
+      query = query.eq('setor_industria', setor);
+    }
+    if (categoria) {
+      query = query.eq('categoria', categoria);
+    }
+
+    const { data, error } = await query.limit(50);
+
+    if (error) {
+      console.warn('[ProspeccaoAvancada] ⚠️ Erro ao buscar CNAEs por Setor/Categoria:', error);
+      return [];
+    }
+
+    const cnaes = (data || []).map((row: any) => row.cnae_code).filter(Boolean);
+    console.log('[ProspeccaoAvancada] 🔍 CNAEs encontrados por Setor/Categoria:', cnaes.length);
+    return cnaes;
+  } catch (error) {
+    console.error('[ProspeccaoAvancada] ❌ Erro ao buscar CNAEs:', error);
+    return [];
+  }
+}
+
+/**
  * Buscar empresas via EmpresaQui
  * Usa APENAS os filtros do formulário (incluindo CNAEs/NCMs do formulário)
  * ⚠️ NÃO usa CNAEs do ICP do tenant!
+ * FASE 1: Adicionada filtragem inteligente por Setor/Categoria
  */
 async function buscarViaEmpresaQui(
   filtros: FiltrosBusca, 
-  metaCandidates: number
+  metaCandidates: number,
+  supabaseClient?: any
 ): Promise<any[]> {
   // Nota: O secret no Supabase está como EMPRESASAQUI_API_KEY (com "S")
   const empresaQuiKey = Deno.env.get('EMPRESASAQUI_API_KEY') || Deno.env.get('EMPRESAQUI_API_KEY');
@@ -458,7 +501,7 @@ async function buscarViaEmpresaQui(
     const resultados: any[] = [];
     const seenCNPJs = new Set<string>();
 
-    // 🎯 ESTRATÉGIA: Priorizar CNAEs do FORMULÁRIO, depois segmento, depois localização
+    // 🎯 ESTRATÉGIA: Priorizar CNAEs do FORMULÁRIO, depois Setor/Categoria, depois segmento, depois localização
     let cnaes: string[] = [];
     
     // Prioridade 1: CNAEs do FORMULÁRIO (mais preciso - o usuário escolheu!)
@@ -466,10 +509,37 @@ async function buscarViaEmpresaQui(
       cnaes = filtros.cnaesAlvo;
       console.log('[ProspeccaoAvancada] 🎯 Usando CNAEs do FORMULÁRIO:', cnaes.length, 'CNAEs');
     } 
-    // Prioridade 2: Mapear segmento para CNAEs (fallback)
-    else if (filtros.segmento) {
-      cnaes = mapearSegmentoParaCNAEs(filtros.segmento);
-      console.log('[ProspeccaoAvancada] 📝 Mapeando segmento para CNAEs:', cnaes.length, 'CNAEs');
+    // Prioridade 2: 🔥 FASE 1 - Buscar CNAEs por Setor/Categoria (se especificado no segmento)
+    else if (filtros.segmento && supabaseClient) {
+      // Tentar mapear segmento para Setor/Categoria e buscar CNAEs relacionados
+      // Ex: "Tecnologia" → Setor "Tecnologia da Informação" → CNAEs relacionados
+      const segmentoLower = filtros.segmento.toLowerCase();
+      
+      // Mapear segmentos comuns para Setores
+      let setorMapeado: string | undefined;
+      if (segmentoLower.includes('tecnologia') || segmentoLower.includes('ti') || segmentoLower.includes('software')) {
+        setorMapeado = 'Tecnologia da Informação';
+      } else if (segmentoLower.includes('manufatura') || segmentoLower.includes('indústria') || segmentoLower.includes('industria')) {
+        setorMapeado = 'Indústria';
+      } else if (segmentoLower.includes('comércio') || segmentoLower.includes('comercio') || segmentoLower.includes('varejo')) {
+        setorMapeado = 'Comércio';
+      } else if (segmentoLower.includes('serviços') || segmentoLower.includes('servicos')) {
+        setorMapeado = 'Serviços';
+      }
+      
+      if (setorMapeado) {
+        const cnaesPorSetor = await buscarCNAEsPorSetorCategoria(supabaseClient, setorMapeado);
+        if (cnaesPorSetor.length > 0) {
+          cnaes = cnaesPorSetor.slice(0, 10); // Limitar a 10 CNAEs principais
+          console.log('[ProspeccaoAvancada] 🔍 CNAEs encontrados por Setor:', cnaes.length, 'Setor:', setorMapeado);
+        }
+      }
+      
+      // Se não encontrou por Setor, usar mapeamento tradicional
+      if (cnaes.length === 0) {
+        cnaes = mapearSegmentoParaCNAEs(filtros.segmento);
+        console.log('[ProspeccaoAvancada] 📝 Mapeando segmento para CNAEs (fallback):', cnaes.length, 'CNAEs');
+      }
     }
     const [cidade, uf] = filtros.localizacao && filtros.localizacao !== 'Brasil' 
       ? filtros.localizacao.split(',').map(s => s.trim())
@@ -623,24 +693,39 @@ async function buscarViaEmpresaQui(
 }
 
 /**
- * Buscar dados cadastrais (ReceitaWS/BrasilAPI)
+ * Buscar dados cadastrais (BrasilAPI V2 → V1 → ReceitaWS)
+ * FASE 1: Atualizado para usar BrasilAPI V2 (mais completo e rápido)
  */
 async function buscarDadosCadastrais(cnpj: string): Promise<any> {
   const cleanCNPJ = cnpj.replace(/\D/g, '');
   
-  // Tentar BrasilAPI primeiro (gratuita, oficial)
+  // 🔥 FASE 1: Tentar BrasilAPI V2 primeiro (mais completo, mais rápido)
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v2/${cleanCNPJ}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      console.log('[ProspeccaoAvancada] ✅ BrasilAPI V2:', data.razao_social || data.nome);
+      return data;
+    }
+  } catch (error) {
+    console.warn('[ProspeccaoAvancada] ⚠️ BrasilAPI V2 falhou, tentando V1...');
+  }
+
+  // Fallback 1: BrasilAPI V1
   try {
     const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCNPJ}`);
     if (response.ok) {
       const data = await response.json();
-      console.log('[ProspeccaoAvancada] ✅ BrasilAPI:', data.razao_social);
+      console.log('[ProspeccaoAvancada] ✅ BrasilAPI V1:', data.razao_social);
       return data;
     }
   } catch (error) {
-    console.warn('[ProspeccaoAvancada] ⚠️ BrasilAPI falhou, tentando ReceitaWS...');
+    console.warn('[ProspeccaoAvancada] ⚠️ BrasilAPI V1 falhou, tentando ReceitaWS...');
   }
 
-  // Fallback: ReceitaWS
+  // Fallback 2: ReceitaWS
   try {
     const response = await fetch(`https://www.receitaws.com.br/v1/cnpj/${cleanCNPJ}`);
     if (response.ok) {
@@ -652,6 +737,58 @@ async function buscarDadosCadastrais(cnpj: string): Promise<any> {
     }
   } catch (error) {
     console.warn('[ProspeccaoAvancada] ⚠️ ReceitaWS falhou');
+  }
+
+  return null;
+}
+
+/**
+ * Buscar CEP via BrasilAPI V2
+ * FASE 1: Adicionado para enriquecer endereços
+ */
+async function buscarCEP(cep: string): Promise<any> {
+  const cleanCEP = cep.replace(/\D/g, '');
+  if (cleanCEP.length !== 8) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanCEP}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      console.log('[ProspeccaoAvancada] ✅ CEP V2 encontrado:', data.city);
+      return data;
+    }
+  } catch (error) {
+    console.warn('[ProspeccaoAvancada] ⚠️ CEP V2 falhou');
+  }
+
+  return null;
+}
+
+/**
+ * Buscar NCM via BrasilAPI
+ * FASE 1: Adicionado para validação de NCMs do formulário
+ */
+async function buscarNCM(ncmCode: string): Promise<any> {
+  const cleanNCM = ncmCode.replace(/\D/g, '').substring(0, 8);
+  if (cleanNCM.length < 4) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/ncm/v1/${cleanNCM}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      console.log('[ProspeccaoAvancada] ✅ NCM encontrado:', data.descricao);
+      return data;
+    }
+  } catch (error) {
+    console.warn('[ProspeccaoAvancada] ⚠️ NCM falhou');
   }
 
   return null;
@@ -779,6 +916,10 @@ function normalizarFiltros(filtros: any): FiltrosBusca {
     quantidadeDesejada,
     page,
     pageSize,
+    // Novos campos (CNAEs, NCMs, Características)
+    cnaesAlvo: Array.isArray(filtros.cnaesAlvo) ? filtros.cnaesAlvo.filter((c: any) => typeof c === 'string' && c.trim().length > 0).slice(0, 10) : undefined,
+    ncmsAlvo: Array.isArray(filtros.ncmsAlvo) ? filtros.ncmsAlvo.filter((n: any) => typeof n === 'string' && n.trim().length > 0).slice(0, 10) : undefined,
+    caracteristicasEspeciais: Array.isArray(filtros.caracteristicasEspeciais) ? filtros.caracteristicasEspeciais.filter((c: any) => typeof c === 'string' && c.trim().length > 0) : undefined,
   };
 }
 
@@ -815,39 +956,87 @@ function validarCNPJ(cnpj: string): boolean {
 }
 
 /**
- * Calcular Relevância Score (0-65)
- * Baseado em completude de dados
+ * Calcular Relevância Score (0-100)
+ * FASE 1: Melhorado para incluir qualidade e completude
+ * Baseado em completude de dados + qualidade dos dados
  * ⚠️ NÃO usa ICP do tenant - estamos buscando empresas distintas!
  */
 function calculateRelevanciaScore(empresa: EmpresaEnriquecida): number {
   let score = 0;
 
-  // Dados completos: +20
-  if (empresa.cnpj && empresa.razao_social && empresa.endereco && empresa.cidade && empresa.uf) {
-    score += 20;
-  }
-
-  // Tem site: +10
-  if (empresa.site) {
-    score += 10;
-  }
-
-  // Tem LinkedIn: +10
-  if (empresa.linkedin) {
-    score += 10;
-  }
-
-  // Tem decisores: +15
-  if (empresa.decisores && empresa.decisores.length > 0) {
+  // ==========================================
+  // COMPLETUDE DE DADOS (0-50 pontos)
+  // ==========================================
+  
+  // Dados cadastrais básicos completos: +15
+  if (empresa.cnpj && empresa.razao_social && empresa.cidade && empresa.uf) {
     score += 15;
+  } else if (empresa.cnpj && empresa.razao_social) {
+    score += 10; // Parcial
   }
 
-  // Tem e-mails: +10
+  // Endereço completo: +10
+  if (empresa.endereco && empresa.cep) {
+    score += 10;
+  } else if (empresa.endereco || empresa.cep) {
+    score += 5; // Parcial
+  }
+
+  // Contato completo: +10
+  if (empresa.telefones && empresa.telefones.length > 0) {
+    score += 5;
+  }
   if (empresa.emails && empresa.emails.length > 0) {
+    score += 5;
+  }
+
+  // Dados financeiros: +10
+  if (empresa.faturamento_estimado || empresa.capital_social) {
     score += 10;
   }
 
-  return Math.min(65, score);
+  // ==========================================
+  // QUALIDADE DOS DADOS (0-30 pontos)
+  // ==========================================
+  
+  // Presença digital (site + LinkedIn): +15
+  if (empresa.site && empresa.linkedin) {
+    score += 15;
+  } else if (empresa.site || empresa.linkedin) {
+    score += 8; // Parcial
+  }
+
+  // Decisores encontrados: +15
+  if (empresa.decisores && empresa.decisores.length > 0) {
+    const decisoresComEmail = empresa.decisores.filter(d => d.email).length;
+    const decisoresComLinkedIn = empresa.decisores.filter(d => d.linkedin).length;
+    
+    // Bonus por decisores com contato completo
+    if (decisoresComEmail > 0 && decisoresComLinkedIn > 0) {
+      score += 15;
+    } else if (decisoresComEmail > 0 || decisoresComLinkedIn > 0) {
+      score += 10; // Parcial
+    } else {
+      score += 5; // Apenas nome/cargo
+    }
+  }
+
+  // ==========================================
+  // VALIDAÇÃO E CONFIABILIDADE (0-20 pontos)
+  // ==========================================
+  
+  // CNPJ válido e situação ATIVA: +20
+  if (empresa.cnpj && empresa.cnpj.length === 14) {
+    score += 10; // CNPJ válido
+    // Situação cadastral será validada no filtro, mas aqui damos bonus se tiver
+  }
+
+  // Dados consistentes (nome + endereço + cidade/UF): +10
+  if (empresa.razao_social && empresa.cidade && empresa.uf) {
+    score += 10;
+  }
+
+  return Math.min(100, score);
 }
 
 serve(async (req) => {
@@ -967,13 +1156,15 @@ serve(async (req) => {
     console.log('[ProspeccaoAvancada] 🎯 Meta candidatas:', metaCandidates, '(quantidade desejada:', filtros.quantidadeDesejada, ')');
 
     // Buscar candidatas no EmpresaQui (usando APENAS filtros do formulário)
+    // FASE 1: Passar supabaseClient para filtragem inteligente por Setor/Categoria
     console.log('[ProspeccaoAvancada] 🔍 Buscando candidatas no EmpresaQui...');
     const empresaQuiCompanies = await buscarViaEmpresaQui(
       {
         ...filtros,
         localizacao: cidade && uf ? `${cidade}, ${uf}` : filtros.localizacao,
       },
-      metaCandidates
+      metaCandidates,
+      supabaseClient // Passar cliente para busca inteligente por Setor/Categoria
     );
     
     diagnostics.candidates_collected = empresaQuiCompanies.length;
@@ -996,6 +1187,7 @@ serve(async (req) => {
     }
 
     // 🔥 PASSO C: Validar e filtrar candidatas (ANTES de enriquecer)
+    // FASE 1: Validação rigorosa de situação cadastral
     console.log('[ProspeccaoAvancada] 🔍 Validando candidatas...');
     const candidatasValidadas = empresaQuiCompanies.filter((empresa) => {
       // Validar CNPJ (14 dígitos após limpeza)
@@ -1014,8 +1206,27 @@ serve(async (req) => {
         return false;
       }
       
-      // Filtrar por situação (se disponível)
-      if (empresa.situacao_cadastral && empresa.situacao_cadastral !== 'ATIVA') {
+      // 🔥 FASE 1: Validação rigorosa de situação cadastral
+      // Aceitar apenas: ATIVA, ATIVO, ou vazio (será validado no enriquecimento)
+      const situacao = empresa.situacao_cadastral || empresa.situacao || empresa.descricao_situacao_cadastral || '';
+      const situacaoUpper = situacao.toUpperCase().trim();
+      
+      // Rejeitar explicitamente: BAIXADA, CANCELADA, INAPTA, SUSPENSA, etc.
+      const situacoesInvalidas = [
+        'BAIXADA', 'CANCELADA', 'INAPTA', 'SUSPENSA', 'INAPTA POR OMISSÃO',
+        'CANCELADA POR OMISSÃO', 'EXTINTA', 'INEXISTENTE', 'NULA'
+      ];
+      
+      if (situacaoUpper && situacoesInvalidas.some(inv => situacaoUpper.includes(inv))) {
+        console.log('[ProspeccaoAvancada] ⚠️ Empresa rejeitada por situação:', situacaoUpper, empresa.razao_social);
+        diagnostics.dropped++;
+        return false;
+      }
+      
+      // Aceitar apenas ATIVA/ATIVO ou vazio (será validado depois)
+      if (situacaoUpper && !situacaoUpper.includes('ATIVA') && !situacaoUpper.includes('ATIVO')) {
+        // Se tiver situação mas não for ATIVA, rejeitar
+        console.log('[ProspeccaoAvancada] ⚠️ Empresa rejeitada por situação não-ATIVA:', situacaoUpper, empresa.razao_social);
         diagnostics.dropped++;
         return false;
       }
@@ -1054,8 +1265,29 @@ serve(async (req) => {
               }
               if (empresa.cnpj) seenCNPJs.add(empresa.cnpj);
               
-              // Buscar dados cadastrais
+              // Buscar dados cadastrais (BrasilAPI V2)
               const receitaData = empresa.cnpj ? await buscarDadosCadastrais(empresa.cnpj) : null;
+              
+              // 🔥 FASE 1: Validar situação cadastral APÓS buscar dados cadastrais
+              if (receitaData) {
+                const situacao = receitaData.situacao_cadastral || receitaData.descricao_situacao_cadastral || receitaData.codigo_situacao_cadastral || '';
+                const situacaoUpper = situacao.toUpperCase().trim();
+                
+                // Rejeitar se não for ATIVA
+                if (situacaoUpper && !situacaoUpper.includes('ATIVA') && !situacaoUpper.includes('ATIVO') && situacaoUpper !== '2') {
+                  // Código 2 = ATIVA na Receita Federal
+                  console.log('[ProspeccaoAvancada] ⚠️ Empresa rejeitada após enriquecimento (situação):', situacaoUpper, empresa.razao_social);
+                  diagnostics.dropped++;
+                  return null;
+                }
+              }
+              
+              // 🔥 FASE 1: Enriquecer CEP via BrasilAPI V2 (se tiver CEP)
+              let cepData = null;
+              if (receitaData?.cep || empresa.cep) {
+                const cepToSearch = receitaData?.cep || empresa.cep;
+                cepData = await buscarCEP(cepToSearch);
+              }
               
               // Extrair domínio
               const domain = extractDomain(empresa.website || receitaData?.website || '');
@@ -1078,9 +1310,9 @@ serve(async (req) => {
                 endereco: receitaData?.logradouro 
                   ? `${receitaData.logradouro}, ${receitaData.numero || ''} ${receitaData.complemento || ''}`.trim()
                   : (empresa.logradouro ? `${empresa.logradouro}, ${empresa.numero || ''}`.trim() : undefined),
-                cidade: receitaData?.municipio || receitaData?.cidade || empresa.municipio || empresa.cidade,
-                uf: receitaData?.uf || receitaData?.estado || empresa.uf,
-                cep: receitaData?.cep || empresa.cep,
+                cidade: cepData?.city || receitaData?.municipio || receitaData?.cidade || empresa.municipio || empresa.cidade,
+                uf: cepData?.state || receitaData?.uf || receitaData?.estado || empresa.uf,
+                cep: receitaData?.cep || empresa.cep || cepData?.cep,
                 site: empresa.website || receitaData?.website,
                 linkedin: undefined,
                 decisores: decisores.length > 0 ? decisores : undefined,
