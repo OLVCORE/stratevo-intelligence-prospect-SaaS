@@ -573,16 +573,33 @@ async function buscarViaEmpresaQui(
             const data = await response.json();
             const empresas = data.empresas || data.data || [];
             console.log('[ProspeccaoAvancada] ✅ CNAE', cnae, 'retornou:', empresas.length, 'empresas');
+            console.log('[ProspeccaoAvancada] 📋 Estrutura resposta EmpresaQui:', {
+              hasEmpresas: !!data.empresas,
+              hasData: !!data.data,
+              empresasLength: empresas.length,
+              primeiraEmpresa: empresas[0] ? {
+                cnpj: empresas[0].cnpj,
+                razao_social: empresas[0].razao_social || empresas[0].nome,
+                temCNPJ: !!empresas[0].cnpj
+              } : null
+            });
             
             for (const emp of empresas) {
               if (emp.cnpj && emp.cnpj.length >= 14 && !seenCNPJs.has(emp.cnpj)) {
                 seenCNPJs.add(emp.cnpj);
                 resultados.push(emp);
+              } else if (!emp.cnpj) {
+                console.warn('[ProspeccaoAvancada] ⚠️ Empresa sem CNPJ válido:', emp.razao_social || emp.nome);
               }
             }
           } else {
             const errorText = await response.text();
-            console.warn('[ProspeccaoAvancada] ⚠️ Erro busca CNAE:', response.status, errorText.substring(0, 200));
+            console.error('[ProspeccaoAvancada] ❌ Erro busca CNAE:', response.status, errorText.substring(0, 500));
+            console.error('[ProspeccaoAvancada] ❌ URL chamada:', url);
+            console.error('[ProspeccaoAvancada] ❌ Headers:', {
+              hasAuth: !!empresaQuiKey,
+              authLength: empresaQuiKey?.length || 0
+            });
           }
         } catch (error) {
           console.error('[ProspeccaoAvancada] ❌ Erro busca CNAE:', error);
