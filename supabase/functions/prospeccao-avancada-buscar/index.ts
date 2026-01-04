@@ -561,6 +561,8 @@ async function buscarViaEmpresaQui(
         try {
           const url = `https://api.empresaqui.com.br/v1/empresas/busca?${params}`;
           console.log('[ProspeccaoAvancada] 🔍 EmpresaQui busca por CNAE:', cnae, cidade || 'Brasil');
+          console.log('[ProspeccaoAvancada] 🔗 URL completa:', url);
+          console.log('[ProspeccaoAvancada] 🔑 API Key (preview):', empresaQuiKey.substring(0, 10) + '...');
           
           const response = await fetch(url, {
             headers: {
