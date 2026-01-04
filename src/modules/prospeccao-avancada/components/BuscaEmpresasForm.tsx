@@ -147,16 +147,23 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
           const cnaeCodes = resultadosValidos.map(c => c.codigo).filter(Boolean);
           if (cnaeCodes.length > 0) {
             // Buscar classificações em paralelo (limitado a 30 para performance)
+            // ✅ Tratar erros individualmente para não bloquear a busca
             const classificationPromises = cnaeCodes.slice(0, 30).map(async (code) => {
-              const classification = await getCNAEClassification(code);
-              return { code, classification };
+              try {
+                const classification = await getCNAEClassification(code);
+                return { code, classification };
+              } catch (error) {
+                // ✅ Erro ao buscar classificação não deve bloquear a funcionalidade
+                console.warn('[BuscaEmpresasForm] ⚠️ Erro ao buscar classificação CNAE:', code, error);
+                return { code, classification: null };
+              }
             });
             
-            const classificationResults = await Promise.all(classificationPromises);
+            const classificationResults = await Promise.allSettled(classificationPromises);
             const newClassifications = new Map<string, CNAEClassification>();
-            classificationResults.forEach(({ code, classification }) => {
-              if (classification) {
-                newClassifications.set(code, classification);
+            classificationResults.forEach((result) => {
+              if (result.status === 'fulfilled' && result.value.classification) {
+                newClassifications.set(result.value.code, result.value.classification);
               }
             });
             
@@ -239,10 +246,16 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
         };
         
         // Buscar classificação se ainda não tiver
+        // ✅ Tratar erros para não bloquear a adição do CNAE
         if (!cnaeClassifications.has(cnaeCode)) {
-          const classification = await getCNAEClassification(cnaeCode);
-          if (classification) {
-            setCnaeClassifications(prev => new Map(prev).set(cnaeCode, classification));
+          try {
+            const classification = await getCNAEClassification(cnaeCode);
+            if (classification) {
+              setCnaeClassifications(prev => new Map(prev).set(cnaeCode, classification));
+            }
+          } catch (error) {
+            // ✅ Erro ao buscar classificação não deve bloquear a funcionalidade
+            console.warn('[BuscaEmpresasForm] ⚠️ Erro ao buscar classificação CNAE ao adicionar:', cnaeCode, error);
           }
         }
         

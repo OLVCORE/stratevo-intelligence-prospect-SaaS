@@ -58,20 +58,28 @@ export async function getCNAEClassification(cnaeCode: string): Promise<CNAEClass
     // Gerar todas as variações possíveis do código
     const variations = generateCNAEVariations(cnaeCode);
     
-    // Tentar buscar com cada variação
+    // Tentar buscar com cada variação usando maybeSingle() para evitar erro 406
     for (const variation of variations) {
       try {
         const { data, error } = await supabase
           .from('cnae_classifications')
           .select('cnae_code, setor_industria, categoria')
           .eq('cnae_code', variation)
-          .single();
+          .maybeSingle(); // ✅ Usar maybeSingle() em vez de single() para evitar erro 406
         
         if (!error && data) {
           return data;
         }
+        
+        // Se erro 406 (Not Acceptable), pode ser problema de RLS ou tabela não existe
+        if (error && (error.code === 'PGRST116' || error.status === 406)) {
+          console.warn('[CNAE Classification] ⚠️ Erro 406 ou PGRST116 ao buscar CNAE:', variation, error.message);
+          // Continuar tentando outras variações
+          continue;
+        }
       } catch (e) {
         // Continuar tentando outras variações
+        console.warn('[CNAE Classification] ⚠️ Exceção ao buscar variação:', variation, e);
         continue;
       }
     }
@@ -79,26 +87,32 @@ export async function getCNAEClassification(cnaeCode: string): Promise<CNAEClass
     // Se não encontrou com busca exata, tentar busca parcial (apenas números)
     const numbersOnly = cnaeCode.replace(/[^\d]/g, '');
     if (numbersOnly.length >= 4) {
-      // Buscar códigos que contêm esses números (formato: XXXX-X/XX)
-      // Ex: "3329599" -> buscar "3329-5/99" ou "3329-5/01"
-      const pattern = numbersOnly.substring(0, 4) + '-' + numbersOnly.substring(4, 5) + '/' + numbersOnly.substring(5);
-      
-      const { data, error } = await supabase
-        .from('cnae_classifications')
-        .select('cnae_code, setor_industria, categoria')
-        .ilike('cnae_code', `${pattern}%`)
-        .limit(1)
-        .maybeSingle();
-      
-      if (!error && data) {
-        return data;
+      try {
+        // Buscar códigos que contêm esses números (formato: XXXX-X/XX)
+        // Ex: "3329599" -> buscar "3329-5/99" ou "3329-5/01"
+        const pattern = numbersOnly.substring(0, 4) + '-' + numbersOnly.substring(4, 5) + '/' + numbersOnly.substring(5);
+        
+        const { data, error } = await supabase
+          .from('cnae_classifications')
+          .select('cnae_code, setor_industria, categoria')
+          .ilike('cnae_code', `${pattern}%`)
+          .limit(1)
+          .maybeSingle();
+        
+        if (!error && data) {
+          return data;
+        }
+      } catch (e) {
+        // Ignorar erro de busca parcial
+        console.warn('[CNAE Classification] ⚠️ Erro na busca parcial:', e);
       }
     }
     
-    console.warn('[CNAE Classification] CNAE não encontrado:', cnaeCode, 'Variações tentadas:', variations);
+    // Log apenas se nenhuma variação funcionou
+    console.warn('[CNAE Classification] CNAE não encontrado após todas as tentativas:', cnaeCode, 'Variações tentadas:', variations);
     return null;
   } catch (error) {
-    console.error('[CNAE Classification] Erro ao buscar classificação:', error);
+    console.error('[CNAE Classification] ❌ Erro crítico ao buscar classificação:', error);
     return null;
   }
 }
