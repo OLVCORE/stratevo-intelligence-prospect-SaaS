@@ -737,8 +737,14 @@ async function buscarViaEmpresaQui(
           console.error('[ProspeccaoAvancada] ❌ Erro busca localização:', response.status, errorText.substring(0, 500));
           console.error('[ProspeccaoAvancada] ❌ URL chamada:', url);
         }
-      } catch (error) {
-        console.error('[ProspeccaoAvancada] ❌ Erro busca localização:', error);
+      } catch (error: any) {
+        const errorMsg = error?.message || String(error);
+        if (errorMsg.includes('dns error') || errorMsg.includes('failed to lookup')) {
+          console.error('[ProspeccaoAvancada] ❌ Erro DNS ao buscar localização:', errorMsg);
+          console.error('[ProspeccaoAvancada] ⚠️ Problema de conectividade com api.empresaqui.com.br');
+        } else {
+          console.error('[ProspeccaoAvancada] ❌ Erro busca localização:', error);
+        }
       }
     }
 
@@ -784,8 +790,14 @@ async function buscarViaEmpresaQui(
               }
             }
           }
-        } catch (error) {
-          console.error('[ProspeccaoAvancada] ❌ Erro busca porte:', error);
+        } catch (error: any) {
+          const errorMsg = error?.message || String(error);
+          if (errorMsg.includes('dns error') || errorMsg.includes('failed to lookup')) {
+            console.error('[ProspeccaoAvancada] ❌ Erro DNS ao buscar porte:', errorMsg);
+            console.error('[ProspeccaoAvancada] ⚠️ Problema de conectividade com api.empresaqui.com.br');
+          } else {
+            console.error('[ProspeccaoAvancada] ❌ Erro busca porte:', error);
+          }
         }
       }
     }
