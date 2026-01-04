@@ -23,6 +23,30 @@ function normalizeCNAECodeForDB(cnaeCode: string): string {
 }
 
 /**
+ * Gera todas as variações possíveis de um código CNAE para busca
+ */
+function generateCNAEVariations(cnaeCode: string): string[] {
+  const variations: string[] = [];
+  
+  // 1. Código original
+  variations.push(cnaeCode.trim());
+  
+  // 2. Remover apenas pontos (formato do banco: "6203-1/00")
+  const withoutDots = cnaeCode.replace(/\./g, '').trim();
+  if (withoutDots !== cnaeCode.trim()) {
+    variations.push(withoutDots);
+  }
+  
+  // 3. Apenas números (para busca parcial)
+  const numbersOnly = cnaeCode.replace(/[^\d]/g, '');
+  if (numbersOnly.length >= 4 && numbersOnly !== cnaeCode.replace(/[^\d]/g, '')) {
+    variations.push(numbersOnly);
+  }
+  
+  return [...new Set(variations)]; // Remover duplicatas
+}
+
+/**
  * Busca classificação de um CNAE específico
  */
 export async function getCNAEClassification(cnaeCode: string): Promise<CNAEClassification | null> {
@@ -31,52 +55,47 @@ export async function getCNAEClassification(cnaeCode: string): Promise<CNAEClass
       return null;
     }
     
-    // Normalizar código para formato do banco (remover pontos)
-    const normalizedForDB = normalizeCNAECodeForDB(cnaeCode);
+    // Gerar todas as variações possíveis do código
+    const variations = generateCNAEVariations(cnaeCode);
     
-    // Tentar 1: Buscar com código exato (formato do banco)
-    let { data, error } = await supabase
-      .from('cnae_classifications')
-      .select('cnae_code, setor_industria, categoria')
-      .eq('cnae_code', normalizedForDB)
-      .single();
-    
-    if (!error && data) {
-      return data;
+    // Tentar buscar com cada variação
+    for (const variation of variations) {
+      try {
+        const { data, error } = await supabase
+          .from('cnae_classifications')
+          .select('cnae_code, setor_industria, categoria')
+          .eq('cnae_code', variation)
+          .single();
+        
+        if (!error && data) {
+          return data;
+        }
+      } catch (e) {
+        // Continuar tentando outras variações
+        continue;
+      }
     }
     
-    // Tentar 2: Buscar com código original (caso esteja no formato do banco)
-    if (error?.code === 'PGRST116') {
-      ({ data, error } = await supabase
+    // Se não encontrou com busca exata, tentar busca parcial (apenas números)
+    const numbersOnly = cnaeCode.replace(/[^\d]/g, '');
+    if (numbersOnly.length >= 4) {
+      // Buscar códigos que contêm esses números (formato: XXXX-X/XX)
+      // Ex: "3329599" -> buscar "3329-5/99" ou "3329-5/01"
+      const pattern = numbersOnly.substring(0, 4) + '-' + numbersOnly.substring(4, 5) + '/' + numbersOnly.substring(5);
+      
+      const { data, error } = await supabase
         .from('cnae_classifications')
         .select('cnae_code, setor_industria, categoria')
-        .eq('cnae_code', cnaeCode)
-        .single());
+        .ilike('cnae_code', `${pattern}%`)
+        .limit(1)
+        .maybeSingle();
       
       if (!error && data) {
         return data;
       }
     }
     
-    // Tentar 3: Buscar por código sem formatação (remover tudo exceto números)
-    if (error?.code === 'PGRST116') {
-      const numbersOnly = cnaeCode.replace(/[^\d]/g, '');
-      if (numbersOnly.length >= 4) {
-        // Buscar códigos que começam com esses números
-        ({ data, error } = await supabase
-          .from('cnae_classifications')
-          .select('cnae_code, setor_industria, categoria')
-          .or(`cnae_code.ilike.%${numbersOnly}%,cnae_code.ilike.${normalizedForDB}%`)
-          .limit(1)
-          .single());
-        
-        if (!error && data) {
-          return data;
-        }
-      }
-    }
-    
-    console.warn('[CNAE Classification] CNAE não encontrado:', cnaeCode, 'Normalizado:', normalizedForDB, error);
+    console.warn('[CNAE Classification] CNAE não encontrado:', cnaeCode, 'Variações tentadas:', variations);
     return null;
   } catch (error) {
     console.error('[CNAE Classification] Erro ao buscar classificação:', error);

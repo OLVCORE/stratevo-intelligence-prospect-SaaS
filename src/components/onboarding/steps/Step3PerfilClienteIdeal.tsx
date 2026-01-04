@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Plus, X, Check, AlertCircle, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { searchNCM, getNCMByCode, type NCMInfo, searchCNAE, getCNAEByCode, type CNAEInfo, getIBGECities, type IBGECity } from '@/services/brasilApiComplete';
+import { getCNAEClassification, type CNAEClassification } from '@/services/cnaeClassificationService';
 import {
   Popover,
   PopoverContent,
@@ -229,6 +230,8 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
   const [cnaeSearchLoading, setCnaeSearchLoading] = useState(false);
   // Armazenar CNAEs completos (com descrição) para exibição
   const [cnaesCompletos, setCnaesCompletos] = useState<Map<string, CNAEInfo>>(new Map());
+  // Armazenar classificações CNAE (Setor/Indústria e Categoria)
+  const [cnaeClassifications, setCnaeClassifications] = useState<Map<string, CNAEClassification>>(new Map());
   
   const [ncmSearchQuery, setNcmSearchQuery] = useState('');
   const [ncmSearchResults, setNcmSearchResults] = useState<NCMInfo[]>([]);
@@ -334,6 +337,30 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
           
           console.log('[Step3] ✅ Resultados válidos (com código e descrição):', resultadosValidos.length);
           
+          // Buscar classificações para os resultados encontrados
+          const cnaeCodes = resultadosValidos.map(c => c.codigo).filter(Boolean);
+          if (cnaeCodes.length > 0) {
+            // Buscar classificações em paralelo (limitado a 30 para performance)
+            const classificationPromises = cnaeCodes.slice(0, 30).map(async (code) => {
+              const classification = await getCNAEClassification(code);
+              return { code, classification };
+            });
+            
+            const classificationResults = await Promise.all(classificationPromises);
+            const newClassifications = new Map<string, CNAEClassification>();
+            classificationResults.forEach(({ code, classification }) => {
+              if (classification) {
+                newClassifications.set(code, classification);
+              }
+            });
+            
+            setCnaeClassifications(prev => {
+              const merged = new Map(prev);
+              newClassifications.forEach((value, key) => merged.set(key, value));
+              return merged;
+            });
+          }
+          
           setCnaeSearchResults(resultadosValidos.slice(0, 30)); // Limitar a 30 resultados
         } catch (error) {
           console.error('[Step3] Erro ao buscar CNAEs:', error);
@@ -393,7 +420,7 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
     }
   }, [ncmSearchQuery]);
 
-  const handleAddCNAE = (cnae?: CNAEInfo) => {
+  const handleAddCNAE = async (cnae?: CNAEInfo) => {
     if (cnae) {
       // Usar o código completo formatado do IBGE (ex: "01.34-2/00")
       const cnaeCode = cnae.codigo || '';
@@ -422,6 +449,14 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
         
         console.log('[Step3] 💾 Armazenando CNAE completo:', cnaeCompletoParaArmazenar);
         setCnaesCompletos(prev => new Map(prev).set(cnaeCode, cnaeCompletoParaArmazenar));
+        
+        // Buscar classificação se ainda não tiver
+        if (!cnaeClassifications.has(cnaeCode)) {
+          const classification = await getCNAEClassification(cnaeCode);
+          if (classification) {
+            setCnaeClassifications(prev => new Map(prev).set(cnaeCode, classification));
+          }
+        }
         
         setFormData({
           ...formData,
@@ -1244,29 +1279,42 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
                     </CommandEmpty>
                   ) : (
                     <CommandGroup>
-                      {cnaeSearchResults.map((cnae) => (
-                        <CommandItem
-                          key={cnae.id || cnae.codigo}
-                          value={`${cnae.codigo} ${cnae.descricao}`}
-                          onSelect={() => {
-                            handleAddCNAE(cnae);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              formData.cnaesAlvo.includes(cnae.codigo) ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          <div className="flex flex-col flex-1">
-                            <span className="font-semibold text-foreground">{cnae.codigo || 'Sem código'}</span>
-                            <span className="text-xs text-muted-foreground">{cnae.descricao || 'Sem descrição'}</span>
-                            {cnae.classe && (
-                              <span className="text-xs text-muted-foreground mt-1">Classe: {cnae.classe.descricao}</span>
-                            )}
-                          </div>
-                        </CommandItem>
-                      ))}
+                      {cnaeSearchResults.map((cnae) => {
+                        const classification = cnaeClassifications.get(cnae.codigo || '');
+                        return (
+                          <CommandItem
+                            key={cnae.id || cnae.codigo}
+                            value={`${cnae.codigo} ${cnae.descricao}`}
+                            onSelect={() => {
+                              handleAddCNAE(cnae);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.cnaesAlvo.includes(cnae.codigo) ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col flex-1">
+                              <span className="font-semibold text-foreground">{cnae.codigo || 'Sem código'}</span>
+                              <span className="text-xs text-muted-foreground">{cnae.descricao || 'Sem descrição'}</span>
+                              {classification && (
+                                <div className="flex gap-1 mt-0.5">
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                    {classification.setor_industria}
+                                  </Badge>
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                    {classification.categoria}
+                                  </Badge>
+                                </div>
+                              )}
+                              {cnae.classe && (
+                                <span className="text-xs text-muted-foreground mt-1">Classe: {cnae.classe.descricao}</span>
+                              )}
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
                     </CommandGroup>
                   )}
                 </CommandList>
@@ -1291,6 +1339,7 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
                 // Garantir que temos código e descrição
                 const codigoExibir = cnaeCompleto?.codigo || cnaeCode;
                 const descricaoExibir = cnaeCompleto?.descricao || 'CNAE sem descrição';
+                const classification = cnaeClassifications.get(cnaeCode);
                 
                 return (
                   <div
@@ -1307,14 +1356,33 @@ export function Step3PerfilClienteIdeal({ onNext, onBack, onSave, onSaveExplicit
                         novo.delete(cnaeCode);
                         return novo;
                       });
+                      // Remover classificação
+                      setCnaeClassifications(prev => {
+                        const novo = new Map(prev);
+                        novo.delete(cnaeCode);
+                        return novo;
+                      });
                     }}
                   >
-                    <div className="flex items-start gap-2 flex-1 min-w-0">
-                      <span className="font-semibold text-xs text-foreground whitespace-nowrap flex-shrink-0">
-                        {codigoExibir}
-                      </span>
-                      <span className="text-xs text-muted-foreground">-</span>
-                      <span className="text-xs text-muted-foreground leading-tight break-words flex-1">
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-xs text-foreground whitespace-nowrap">
+                          {codigoExibir}
+                        </span>
+                        {classification && (
+                          <>
+                            <span className="text-xs text-muted-foreground">•</span>
+                            <span className="text-xs font-medium text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30">
+                              {classification.setor_industria}
+                            </span>
+                            <span className="text-xs text-muted-foreground">•</span>
+                            <span className="text-xs font-medium text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/30">
+                              {classification.categoria}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground leading-tight break-words">
                         {descricaoExibir}
                       </span>
                     </div>
