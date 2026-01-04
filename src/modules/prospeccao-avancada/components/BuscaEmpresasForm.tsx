@@ -44,6 +44,7 @@ import { Search, Loader2, X, Check, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type FiltrosBusca } from '../types';
 import { searchCNAE, getCNAEByCode, type CNAEInfo, searchNCM, getNCMByCode, type NCMInfo } from '@/services/brasilApiComplete';
+import { getCNAEClassification, type CNAEClassification } from '@/services/cnaeClassificationService';
 
 // Características especiais (igual Step3)
 const CARACTERISTICAS_ESPECIAIS = [
@@ -100,6 +101,7 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
   const [cnaeSearchOpen, setCnaeSearchOpen] = useState(false);
   const [cnaeSearchLoading, setCnaeSearchLoading] = useState(false);
   const [cnaesCompletos, setCnaesCompletos] = useState<Map<string, CNAEInfo>>(new Map());
+  const [cnaeClassifications, setCnaeClassifications] = useState<Map<string, CNAEClassification>>(new Map());
 
   // Estados para busca NCM
   const [ncmSearchQuery, setNcmSearchQuery] = useState('');
@@ -140,6 +142,30 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
             c && c.codigo && c.descricao && 
             c.codigo.trim() !== '' && c.descricao.trim() !== ''
           );
+          
+          // Buscar classificações para os resultados encontrados
+          const cnaeCodes = resultadosValidos.map(c => c.codigo).filter(Boolean);
+          if (cnaeCodes.length > 0) {
+            // Buscar classificações em paralelo (limitado a 30 para performance)
+            const classificationPromises = cnaeCodes.slice(0, 30).map(async (code) => {
+              const classification = await getCNAEClassification(code);
+              return { code, classification };
+            });
+            
+            const classificationResults = await Promise.all(classificationPromises);
+            const newClassifications = new Map<string, CNAEClassification>();
+            classificationResults.forEach(({ code, classification }) => {
+              if (classification) {
+                newClassifications.set(code, classification);
+              }
+            });
+            
+            setCnaeClassifications(prev => {
+              const merged = new Map(prev);
+              newClassifications.forEach((value, key) => merged.set(key, value));
+              return merged;
+            });
+          }
           
           setCnaeSearchResults(resultadosValidos.slice(0, 30));
         } catch (error) {
@@ -195,7 +221,7 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
     }
   }, [ncmSearchQuery]);
 
-  const handleAddCNAE = (cnae?: CNAEInfo) => {
+  const handleAddCNAE = async (cnae?: CNAEInfo) => {
     if (cnae) {
       const cnaeCode = cnae.codigo || '';
       
@@ -211,6 +237,14 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
           codigo: cnaeCode,
           descricao: cnae.descricao || 'CNAE sem descrição'
         };
+        
+        // Buscar classificação se ainda não tiver
+        if (!cnaeClassifications.has(cnaeCode)) {
+          const classification = await getCNAEClassification(cnaeCode);
+          if (classification) {
+            setCnaeClassifications(prev => new Map(prev).set(cnaeCode, classification));
+          }
+        }
         
         setCnaesCompletos(prev => new Map(prev).set(cnaeCode, cnaeCompleto));
         setFiltros({
@@ -520,24 +554,45 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
                         </CommandEmpty>
                       ) : (
                         <CommandGroup>
-                          {cnaeSearchResults.map((cnae) => (
-                            <CommandItem
-                              key={cnae.id || cnae.codigo}
-                              value={`${cnae.codigo} ${cnae.descricao}`}
-                              onSelect={() => handleAddCNAE(cnae)}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  filtros.cnaesAlvo?.includes(cnae.codigo || '') ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col flex-1">
-                                <span className="font-semibold text-foreground">{cnae.codigo || 'Sem código'}</span>
-                                <span className="text-xs text-muted-foreground">{cnae.descricao || 'Sem descrição'}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
+                          {cnaeSearchResults.map((cnae) => {
+                            const cnaeCode = cnae.codigo || '';
+                            const classification = cnaeClassifications.get(cnaeCode);
+                            
+                            return (
+                              <CommandItem
+                                key={cnae.id || cnaeCode}
+                                value={`${cnaeCode} ${cnae.descricao}`}
+                                onSelect={() => handleAddCNAE(cnae)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    filtros.cnaesAlvo?.includes(cnaeCode) ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="flex flex-col flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-foreground">{cnaeCode || 'Sem código'}</span>
+                                    {classification && (
+                                      <>
+                                        <span className="text-xs text-muted-foreground">•</span>
+                                        <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                                          {classification.setor_industria}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">•</span>
+                                        <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
+                                          {classification.categoria}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <span className="text-xs text-muted-foreground mt-0.5">
+                                    {cnae.descricao || 'Sem descrição'}
+                                  </span>
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
                         </CommandGroup>
                       )}
                     </CommandList>
@@ -549,6 +604,7 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
                 <div className="flex flex-col gap-1.5 mt-3 w-full">
                   {filtros.cnaesAlvo.map((cnaeCode, index) => {
                     const cnaeCompleto = cnaesCompletos.get(cnaeCode);
+                    const classification = cnaeClassifications.get(cnaeCode);
                     const codigoExibir = cnaeCompleto?.codigo || cnaeCode;
                     const descricaoExibir = cnaeCompleto?.descricao || 'CNAE sem descrição';
                     
@@ -566,14 +622,32 @@ export function BuscaEmpresasForm({ onBuscar, isLoading = false }: BuscaEmpresas
                             novo.delete(cnaeCode);
                             return novo;
                           });
+                          setCnaeClassifications(prev => {
+                            const novo = new Map(prev);
+                            novo.delete(cnaeCode);
+                            return novo;
+                          });
                         }}
                       >
-                        <div className="flex items-start gap-2 flex-1 min-w-0">
-                          <span className="font-semibold text-xs text-foreground whitespace-nowrap flex-shrink-0">
-                            {codigoExibir}
-                          </span>
-                          <span className="text-xs text-muted-foreground">-</span>
-                          <span className="text-xs text-muted-foreground leading-tight break-words flex-1">
+                        <div className="flex flex-col gap-1 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-xs text-foreground whitespace-nowrap">
+                              {codigoExibir}
+                            </span>
+                            {classification && (
+                              <>
+                                <span className="text-xs text-muted-foreground">•</span>
+                                <span className="text-xs font-medium text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30">
+                                  {classification.setor_industria}
+                                </span>
+                                <span className="text-xs text-muted-foreground">•</span>
+                                <span className="text-xs font-medium text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/30">
+                                  {classification.categoria}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground leading-tight break-words">
                             {descricaoExibir}
                           </span>
                         </div>
