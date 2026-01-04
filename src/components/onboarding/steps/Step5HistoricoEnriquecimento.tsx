@@ -350,8 +350,8 @@ export function Step5HistoricoEnriquecimento({ onNext, onBack, onSave, onSaveExp
     }
     
     return {
-      clientesAtuais: initialData?.clientesAtuais || [],
-      empresasBenchmarking: initialData?.empresasBenchmarking || [], // 🔥 UNIFICADO: Empresas para ICP Benchmarking
+    clientesAtuais: initialData?.clientesAtuais || [],
+    empresasBenchmarking: initialData?.empresasBenchmarking || [], // 🔥 UNIFICADO: Empresas para ICP Benchmarking
     };
   });
 

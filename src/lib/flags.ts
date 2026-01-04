@@ -52,6 +52,14 @@ export const BLOCK_WRITES = truthy(flag('VITE_BLOCK_WRITES'));
 export const DEBUG_SAVEBAR = truthy(flag('VITE_DEBUG_SAVEBAR'));
 
 /**
+ * ENABLE_PROSPECCAO: Ativa módulo de Prospecção Avançada
+ * - Habilita rota /prospeccao-avancada
+ * - Mostra menu no sidebar
+ * - Permite busca avançada de empresas
+ */
+export const ENABLE_PROSPECCAO = truthy(flag('VITE_ENABLE_PROSPECCAO'));
+
+/**
  * Log centralizado das flags no boot (dev only)
  * Chamado pelo main.tsx para mostrar flags ativas
  */
@@ -69,6 +77,7 @@ export function logFlagsOnBoot() {
       VITE_DISABLE_AUTO_DISCOVERY: env?.VITE_DISABLE_AUTO_DISCOVERY ?? '',
       VITE_BLOCK_WRITES: env?.VITE_BLOCK_WRITES ?? '',
       VITE_DEBUG_SAVEBAR: env?.VITE_DEBUG_SAVEBAR ?? '',
+      VITE_ENABLE_PROSPECCAO: env?.VITE_ENABLE_PROSPECCAO ?? '',
     });
     
     // Log consolidado (tabela)
@@ -78,6 +87,7 @@ export function logFlagsOnBoot() {
     console.log('DISABLE_AUTO_DISCOVERY:', DISABLE_AUTO_DISCOVERY);
     console.log('BLOCK_WRITES:', BLOCK_WRITES);
     console.log('DEBUG_SAVEBAR:', DEBUG_SAVEBAR);
+    console.log('ENABLE_PROSPECCAO:', ENABLE_PROSPECCAO, `(valor raw: "${env?.VITE_ENABLE_PROSPECCAO ?? 'não definido'}")`);
     console.groupEnd();
   } catch {
     // noop

@@ -18,6 +18,7 @@ import { AuthTokenGuard } from "./components/auth/AuthTokenGuard";
 import { Sentry } from "@/lib/sentry";
 import { ProductTour } from "@/components/onboarding/ProductTour";
 import { PageViewTracker } from "@/components/common/PageViewTracker";
+import { ENABLE_PROSPECCAO } from "@/lib/flags";
 import "@/lib/analytics"; // Initialize analytics
 
 // Eager load only critical pages
@@ -98,6 +99,8 @@ const GeographicAnalysisPage = lazy(() => import("./pages/GeographicAnalysisPage
 // CRM Module
 const CRMModule = lazy(() => import("./modules/crm"));
 const OnboardingTenant = lazy(() => import("./pages/crm/OnboardingTenant"));
+// Prospecção Avançada Module
+const ProspeccaoAvancadaModule = lazy(() => import("./modules/prospeccao-avancada"));
 // Sales Academy Module
 const SalesAcademyModule = lazy(() => import("./modules/sales-academy"));
 const GoalsPage = lazy(() => import("./pages/GoalsPage"));
@@ -983,6 +986,20 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            {ENABLE_PROSPECCAO && (
+              <Route
+                path="/prospeccao-avancada"
+                element={
+                  <ProtectedRoute>
+                    <TenantGuard>
+                      <AppLayout>
+                        <ProspeccaoAvancadaModule />
+                      </AppLayout>
+                    </TenantGuard>
+                  </ProtectedRoute>
+                }
+              />
+            )}
             <Route
               path="/sequences"
               element={

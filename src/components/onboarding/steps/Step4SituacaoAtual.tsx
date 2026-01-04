@@ -52,15 +52,15 @@ export function Step4SituacaoAtual({ onNext, onBack, onSave, onSaveExplicit, ini
     }
     
     return {
-      categoriaSolucao: initialData?.categoriaSolucao || '',
-      diferenciais: initialData?.diferenciais || [],
-      casosDeUso: initialData?.casosDeUso || [],
-      ticketsECiclos: initialData?.ticketsECiclos || (initialData?.ticketMedio || initialData?.cicloVendaMedia ? [{
-        ticketMedio: initialData.ticketMedio || 0,
-        cicloVenda: initialData.cicloVendaMedia || 0,
-        criterio: initialData.criterioTicketMedio || initialData.criterioCicloVenda || 'Geral'
-      }] : []), // 🔥 NOVO: Array de tickets e ciclos na mesma linha
-      // 🔥 REMOVIDO: concorrentesDiretos movidos para Step 1
+    categoriaSolucao: initialData?.categoriaSolucao || '',
+    diferenciais: initialData?.diferenciais || [],
+    casosDeUso: initialData?.casosDeUso || [],
+    ticketsECiclos: initialData?.ticketsECiclos || (initialData?.ticketMedio || initialData?.cicloVendaMedia ? [{
+      ticketMedio: initialData.ticketMedio || 0,
+      cicloVenda: initialData.cicloVendaMedia || 0,
+      criterio: initialData.criterioTicketMedio || initialData.criterioCicloVenda || 'Geral'
+    }] : []), // 🔥 NOVO: Array de tickets e ciclos na mesma linha
+    // 🔥 REMOVIDO: concorrentesDiretos movidos para Step 1
     };
   });
 

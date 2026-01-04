@@ -6,6 +6,10 @@
 
 /**
  * Filtros de busca de empresas
+ * 
+ * ⚠️ IMPORTANTE: Não usar CNAEs do ICP do tenant!
+ * O tenant pode buscar empresas de setores diferentes do seu próprio CNAE.
+ * Ex: Consultoria busca empresas de logística, manufatura, etc.
  */
 export interface FiltrosBusca {
   segmento?: string;
@@ -18,6 +22,10 @@ export interface FiltrosBusca {
   quantidadeDesejada?: number; // default 20, max 100
   page?: number; // default 1
   pageSize?: number; // default 20, max 50
+  // Novos campos (igual Aba 3 do onboarding)
+  cnaesAlvo?: string[]; // CNAEs que o usuário quer buscar (não do tenant!)
+  ncmsAlvo?: string[]; // NCMs que o usuário quer buscar
+  caracteristicasEspeciais?: string[]; // Características especiais desejadas
 }
 
 /**

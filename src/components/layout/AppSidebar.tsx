@@ -79,6 +79,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ENABLE_PROSPECCAO } from "@/lib/flags";
 import {
   Tooltip,
   TooltipContent,
@@ -132,6 +133,13 @@ const menuGroups: MenuGroup[] = [
     label: "Prospecção",
     icon: Filter,
     items: [
+      ...(ENABLE_PROSPECCAO ? [{
+        title: "1.0 Motor de Busca Avançada",
+        icon: Search,
+        url: "/prospeccao-avancada",
+        highlighted: true,
+        description: "Busca avançada de empresas com filtros específicos e enriquecimento automático",
+      }] : []),
       {
         title: "2.1 Motor de Qualificação",
         icon: Zap,
