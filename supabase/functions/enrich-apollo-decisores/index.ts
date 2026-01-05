@@ -714,7 +714,7 @@ serve(async (req) => {
               }
             } else if (cleanedData[key] === null && !importantFields.includes(key)) {
               // Remover apenas campos null que não são importantes
-              delete cleanedData[key];
+                delete cleanedData[key];
             }
           });
           
@@ -752,10 +752,10 @@ serve(async (req) => {
             console.warn(`[ENRICH-APOLLO] ⚠️ Upsert em massa falhou, tentando em lotes menores...`, upsertError.message);
             
             // ✅ TENTATIVA 2: Inserir em lotes menores
-            for (let i = 0; i < decisoresToInsert.length; i += batchSize) {
-              const batch = decisoresToInsert.slice(i, i + batchSize);
-              console.log(`[ENRICH-APOLLO] Inserindo lote ${Math.floor(i / batchSize) + 1} (${batch.length} decisores)...`);
-              
+        for (let i = 0; i < decisoresToInsert.length; i += batchSize) {
+          const batch = decisoresToInsert.slice(i, i + batchSize);
+          console.log(`[ENRICH-APOLLO] Inserindo lote ${Math.floor(i / batchSize) + 1} (${batch.length} decisores)...`);
+          
               try {
                 const { data: batchData, error: batchError } = await supabaseClient
                   .from('decision_makers')
@@ -779,17 +779,17 @@ serve(async (req) => {
                 } else {
                   totalInserted += batchData?.length || batch.length;
                   console.log(`[ENRICH-APOLLO] ✅ Lote ${Math.floor(i / batchSize) + 1} salvo: ${batchData?.length || batch.length} decisores`);
-                }
+              }
               } catch (error: any) {
                 console.error(`[ENRICH-APOLLO] ❌ Erro ao inserir lote ${Math.floor(i / batchSize) + 1}:`, error.message);
                 // Continuar com próximo lote
               }
             }
-          } else {
+            } else {
             totalInserted = upsertedData?.length || decisoresToInsert.length;
             console.log(`[ENRICH-APOLLO] ✅ TODOS os ${totalInserted} decisores salvos de uma vez!`);
-          }
-        } catch (error: any) {
+            }
+          } catch (error: any) {
           console.error(`[ENRICH-APOLLO] ❌ Erro geral ao inserir:`, error.message);
           // Mesmo com erro, retornar os dados para o frontend
           totalInserted = Math.floor(decisoresToInsert.length * 0.5); // Estimativa
