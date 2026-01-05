@@ -286,6 +286,15 @@ export function QuarantineReportModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
         className={`${modalSize} p-0 flex flex-col`}
+        style={{ 
+          position: 'fixed',
+          top: '4rem', // Alinhado com o header (h-16 = 64px = 4rem)
+          left: '50%',
+          transform: 'translateX(-50%)',
+          maxHeight: 'calc(100vh - 4rem)', // 100vh - altura do header
+          marginTop: 0,
+          marginBottom: '1rem'
+        }}
       >
         <div className="w-full h-full flex flex-col overflow-hidden">
           {/* Header com controles */}
