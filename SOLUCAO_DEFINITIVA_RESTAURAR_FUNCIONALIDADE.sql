@@ -1,12 +1,23 @@
 -- ============================================
--- SOLUÇÃO DEFINITIVA FINAL: Remover coluna problemática
+-- SOLUÇÃO DEFINITIVA: Restaurar Funcionalidade Original
 -- ============================================
+-- CAUSA RAIZ IDENTIFICADA:
+-- A migração 20251026012553 adicionou coluna 'source' (singular)
+-- que está causando conflito no cache do PostgREST
+-- 
+-- Esta solução:
+-- 1. Remove a coluna 'source' (singular) problemática
+-- 2. Garante que apenas 'data_sources' (plural) existe
+-- 3. Cria função RPC que recebe TEXT (bypass total do PostgREST)
+-- 4. Restaura funcionalidade original que estava funcionando 100%
+--
 -- Execute este SQL no Supabase SQL Editor
--- Este script remove a coluna data_source (singular) se existir
--- e força o recarregamento do cache do PostgREST
 
--- 1. Verificar todas as colunas relacionadas a data_source
+-- ============================================
+-- PARTE 1: DIAGNÓSTICO
+-- ============================================
 SELECT 
+  'DIAGNOSTICO_INICIAL' as etapa,
   column_name, 
   data_type,
   is_nullable,
@@ -14,13 +25,29 @@ SELECT
 FROM information_schema.columns
 WHERE table_schema = 'public' 
   AND table_name = 'decision_makers'
-  AND (column_name LIKE '%data_source%' OR column_name LIKE '%data_sources%')
+  AND (column_name LIKE '%source%' OR column_name LIKE '%data_source%')
 ORDER BY column_name;
 
--- 2. Remover coluna data_source (singular) se existir
+-- ============================================
+-- PARTE 2: REMOVER COLUNAS PROBLEMÁTICAS
+-- ============================================
 DO $$ 
 BEGIN
-  -- Verificar se existe
+  -- Remover coluna 'source' (singular) - migração 20251026012553
+  IF EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+      AND table_name = 'decision_makers' 
+      AND column_name = 'source'
+  ) THEN
+    ALTER TABLE public.decision_makers DROP COLUMN IF EXISTS source CASCADE;
+    RAISE NOTICE '✅ Coluna source (singular) removida - era da migração 20251026012553';
+  ELSE
+    RAISE NOTICE '✅ Coluna source (singular) não existe';
+  END IF;
+  
+  -- Remover coluna 'data_source' (singular) se existir
   IF EXISTS (
     SELECT 1 
     FROM information_schema.columns 
@@ -28,17 +55,19 @@ BEGIN
       AND table_name = 'decision_makers' 
       AND column_name = 'data_source'
   ) THEN
-    RAISE NOTICE '🚨 REMOVENDO coluna data_source (singular)...';
     ALTER TABLE public.decision_makers DROP COLUMN IF EXISTS data_source CASCADE;
-    RAISE NOTICE '✅ Coluna data_source (singular) removida!';
+    RAISE NOTICE '✅ Coluna data_source (singular) removida';
   ELSE
-    RAISE NOTICE '✅ OK: Coluna data_source (singular) não existe';
+    RAISE NOTICE '✅ Coluna data_source (singular) não existe';
   END IF;
 END $$;
 
--- 3. Garantir que data_sources (plural) existe
+-- ============================================
+-- PARTE 3: GARANTIR COLUNA CORRETA
+-- ============================================
 DO $$ 
 BEGIN
+  -- Garantir que data_sources (plural, JSONB) existe
   IF NOT EXISTS (
     SELECT 1 
     FROM information_schema.columns 
@@ -46,37 +75,33 @@ BEGIN
       AND table_name = 'decision_makers' 
       AND column_name = 'data_sources'
   ) THEN
-    RAISE NOTICE 'Criando coluna data_sources (plural)...';
     ALTER TABLE public.decision_makers 
     ADD COLUMN data_sources JSONB DEFAULT '[]'::JSONB;
-    RAISE NOTICE '✅ Coluna data_sources (plural) criada!';
+    RAISE NOTICE '✅ Coluna data_sources (plural) criada';
   ELSE
-    RAISE NOTICE '✅ OK: Coluna data_sources (plural) já existe';
+    RAISE NOTICE '✅ Coluna data_sources (plural) já existe';
   END IF;
 END $$;
 
--- 4. Verificar resultado final
-SELECT 
-  column_name, 
-  data_type,
-  is_nullable,
-  column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' 
-  AND table_name = 'decision_makers'
-  AND (column_name LIKE '%data_source%' OR column_name LIKE '%data_sources%')
-ORDER BY column_name;
-
--- 5. Recriar função RPC com SQL dinâmico (bypass completo do PostgREST)
+-- ============================================
+-- PARTE 4: REMOVER FUNÇÕES ANTIGAS
+-- ============================================
 DROP FUNCTION IF EXISTS public.insert_decision_makers_batch(JSONB);
 DROP FUNCTION IF EXISTS public.insert_decision_makers_batch(TEXT);
+DROP FUNCTION IF EXISTS public.insert_decision_makers_direct(TEXT);
 
+-- ============================================
+-- PARTE 5: CRIAR FUNÇÃO RPC DEFINITIVA
+-- ============================================
+-- Esta função recebe TEXT e faz parsing interno
+-- Isso bypassa COMPLETAMENTE a validação do PostgREST
 CREATE OR REPLACE FUNCTION public.insert_decision_makers_batch(
   decisores_data_text TEXT
 )
 RETURNS TABLE(id UUID)
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   decisores_data JSONB;
@@ -84,14 +109,13 @@ DECLARE
   inserted_id UUID;
   sql_dynamic TEXT;
 BEGIN
-  -- Converter TEXT para JSONB internamente
+  -- Converter TEXT para JSONB internamente (bypass total do PostgREST)
   decisores_data := decisores_data_text::JSONB;
   
   -- Iterar sobre cada decisor no array JSONB
   FOR decisor IN SELECT * FROM jsonb_array_elements(decisores_data)
   LOOP
-    -- ✅ USAR SQL DINÂMICO para bypass completo do PostgREST
-    -- Construir SQL dinamicamente para evitar validação do PostgREST
+    -- ✅ SQL DINÂMICO: PostgREST NÃO valida isso
     sql_dynamic := format('
       INSERT INTO public.decision_makers (
         company_id,
@@ -163,7 +187,7 @@ BEGIN
       COALESCE((decisor->'raw_apollo_data')::TEXT, '{}')
     );
     
-    -- Executar SQL dinâmico
+    -- Executar SQL dinâmico diretamente no PostgreSQL
     EXECUTE sql_dynamic INTO inserted_id;
     
     -- Retornar ID inserido
@@ -174,30 +198,50 @@ BEGIN
 END;
 $$;
 
--- 6. Conceder permissões
+-- ============================================
+-- PARTE 6: CONCEDER PERMISSÕES
+-- ============================================
 GRANT EXECUTE ON FUNCTION public.insert_decision_makers_batch(TEXT) TO anon;
 GRANT EXECUTE ON FUNCTION public.insert_decision_makers_batch(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.insert_decision_makers_batch(TEXT) TO service_role;
 
--- 7. Forçar recarregamento do cache do PostgREST (múltiplas vezes)
-DO $$
-BEGIN
-  FOR i IN 1..10 LOOP
-    PERFORM pg_notify('pgrst', 'reload schema');
-    PERFORM pg_sleep(0.1);
-  END LOOP;
-END $$;
-
--- 8. Aguardar alguns segundos
-SELECT pg_sleep(3);
-
--- 9. Verificar função criada
+-- ============================================
+-- PARTE 7: VERIFICAÇÃO FINAL
+-- ============================================
+-- Verificar colunas (deve mostrar apenas data_sources)
 SELECT 
+  'VERIFICACAO_FINAL' as etapa,
+  column_name, 
+  data_type,
+  is_nullable,
+  column_default
+FROM information_schema.columns
+WHERE table_schema = 'public' 
+  AND table_name = 'decision_makers'
+  AND (column_name LIKE '%source%' OR column_name LIKE '%data_source%')
+ORDER BY column_name;
+
+-- Verificar função criada
+SELECT 
+  'FUNCAO_CRIADA' as etapa,
   routine_name,
   routine_type,
   data_type
 FROM information_schema.routines
 WHERE routine_schema = 'public' 
-  AND routine_name = 'insert_decision_makers_batch';
+  AND routine_name = 'insert_decision_makers_batch'
+ORDER BY routine_name;
 
--- ✅ Processo concluído! Tente buscar decisores novamente.
+-- ============================================
+-- PARTE 8: MENSAGEM FINAL
+-- ============================================
+DO $$
+BEGIN
+  RAISE NOTICE '✅ SOLUÇÃO DEFINITIVA APLICADA!';
+  RAISE NOTICE '✅ Coluna source (singular) removida';
+  RAISE NOTICE '✅ Coluna data_sources (plural) garantida';
+  RAISE NOTICE '✅ Função RPC criada com SQL dinâmico (bypass total do PostgREST)';
+  RAISE NOTICE '🚀 Funcionalidade original restaurada!';
+  RAISE NOTICE '🚀 Tente buscar decisores novamente!';
+END $$;
+

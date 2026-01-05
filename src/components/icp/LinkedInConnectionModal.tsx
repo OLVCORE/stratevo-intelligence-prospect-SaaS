@@ -63,6 +63,10 @@ export function LinkedInConnectionModal({
   const [isSending, setIsSending] = useState(false);
   const [connectionsToday, setConnectionsToday] = useState(0);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [customTemplates, setCustomTemplates] = useState<any[]>([]);
+  const [showAddTemplate, setShowAddTemplate] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateMessage, setNewTemplateMessage] = useState('');
 
   // Carregar perfil do usuário e contador de conexões
   useEffect(() => {
@@ -111,22 +115,50 @@ export function LinkedInConnectionModal({
   };
 
   const handleTemplateSelect = (templateId: string) => {
-    const template = MESSAGE_TEMPLATES.find(t => t.id === templateId);
+    const allTemplates = [...MESSAGE_TEMPLATES, ...customTemplates];
+    const template = allTemplates.find(t => t.id === templateId);
     if (template && decisor) {
       let message = template.message;
       
-      // Substituir placeholders
-      message = message.replace(/{firstName}/g, decisor.first_name || decisor.name?.split(' ')[0] || '');
-      message = message.replace(/{cargoDecisor}/g, decisor.title || '');
-      message = message.replace(/{empresaDecisor}/g, decisor.company_name || '');
-      message = message.replace(/{seuNome}/g, userProfile?.full_name || userProfile?.name || 'Você');
-      message = message.replace(/{seuCargo}/g, userProfile?.title || '');
-      message = message.replace(/{suaEmpresa}/g, userProfile?.company || '');
+      // ✅ CORRIGIDO: Substituir placeholders corretamente
+      const firstName = decisor.first_name || decisor.name?.split(' ')[0] || '';
+      const seuNome = userProfile?.full_name || userProfile?.name || 'Marcos Oliveira'; // Default se não tiver
+      const seuCargo = userProfile?.title || 'Executivo de Vendas';
+      const suaEmpresa = userProfile?.company || 'STRATEVO Intelligence';
+      const cargoDecisor = decisor.title || 'Profissional';
+      const empresaDecisor = decisor.company_name || 'sua empresa';
+      
+      message = message.replace(/{firstName}/g, firstName);
+      message = message.replace(/{cargoDecisor}/g, cargoDecisor);
+      message = message.replace(/{empresaDecisor}/g, empresaDecisor);
+      message = message.replace(/{seuNome}/g, seuNome);
+      message = message.replace(/{seuCargo}/g, seuCargo);
+      message = message.replace(/{suaEmpresa}/g, suaEmpresa);
       message = message.replace(/{setor}/g, 'tecnologia'); // Pode ser dinâmico
       
       setCustomMessage(message);
       setSelectedTemplate(templateId);
     }
+  };
+
+  const handleAddTemplate = () => {
+    if (!newTemplateName.trim() || !newTemplateMessage.trim()) {
+      toast.error('Nome e mensagem são obrigatórios');
+      return;
+    }
+
+    const newTemplate = {
+      id: `custom-${Date.now()}`,
+      name: newTemplateName,
+      message: newTemplateMessage
+    };
+
+    setCustomTemplates(prev => [...prev, newTemplate]);
+    setNewTemplateName('');
+    setNewTemplateMessage('');
+    setShowAddTemplate(false);
+    
+    toast.success('Template adicionado com sucesso!');
   };
 
   const handleInsertFirstName = () => {
@@ -282,9 +314,77 @@ export function LinkedInConnectionModal({
                       {template.name}
                     </SelectItem>
                   ))}
+                  {customTemplates.map(template => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name} (Personalizado)
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddTemplate(!showAddTemplate)}
+                title="Adicionar novo template"
+              >
+                <span className="text-lg font-bold">+</span>
+              </Button>
             </div>
+            
+            {/* ✅ NOVO: Formulário para adicionar template */}
+            {showAddTemplate && (
+              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="font-semibold">Criar Novo Template</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowAddTemplate(false);
+                      setNewTemplateName('');
+                      setNewTemplateMessage('');
+                    }}
+                  >
+                    ✕
+                  </Button>
+                </div>
+                <Input
+                  placeholder="Nome do template (ex: Template Vendas B2B)"
+                  value={newTemplateName}
+                  onChange={(e) => setNewTemplateName(e.target.value)}
+                />
+                <Textarea
+                  placeholder="Escreva sua mensagem de conexão... Use {firstName}, {seuNome}, {cargoDecisor}, {empresaDecisor}, {seuCargo}, {suaEmpresa}, {setor}"
+                  value={newTemplateMessage}
+                  onChange={(e) => setNewTemplateMessage(e.target.value)}
+                  className="min-h-[100px]"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddTemplate}
+                    disabled={!newTemplateName.trim() || !newTemplateMessage.trim()}
+                  >
+                    Salvar Template
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowAddTemplate(false);
+                      setNewTemplateName('');
+                      setNewTemplateMessage('');
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
             <Textarea
               placeholder="Escreva sua mensagem de conexão personalizada aqui..."
               value={customMessage}

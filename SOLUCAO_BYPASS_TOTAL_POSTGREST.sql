@@ -1,82 +1,23 @@
 -- ============================================
--- SOLUÇÃO DEFINITIVA FINAL: Remover coluna problemática
+-- SOLUÇÃO: Bypass TOTAL do PostgREST
 -- ============================================
+-- Esta função executa SQL direto SEM validação do PostgREST
 -- Execute este SQL no Supabase SQL Editor
--- Este script remove a coluna data_source (singular) se existir
--- e força o recarregamento do cache do PostgREST
 
--- 1. Verificar todas as colunas relacionadas a data_source
-SELECT 
-  column_name, 
-  data_type,
-  is_nullable,
-  column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' 
-  AND table_name = 'decision_makers'
-  AND (column_name LIKE '%data_source%' OR column_name LIKE '%data_sources%')
-ORDER BY column_name;
-
--- 2. Remover coluna data_source (singular) se existir
-DO $$ 
-BEGIN
-  -- Verificar se existe
-  IF EXISTS (
-    SELECT 1 
-    FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-      AND table_name = 'decision_makers' 
-      AND column_name = 'data_source'
-  ) THEN
-    RAISE NOTICE '🚨 REMOVENDO coluna data_source (singular)...';
-    ALTER TABLE public.decision_makers DROP COLUMN IF EXISTS data_source CASCADE;
-    RAISE NOTICE '✅ Coluna data_source (singular) removida!';
-  ELSE
-    RAISE NOTICE '✅ OK: Coluna data_source (singular) não existe';
-  END IF;
-END $$;
-
--- 3. Garantir que data_sources (plural) existe
-DO $$ 
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 
-    FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-      AND table_name = 'decision_makers' 
-      AND column_name = 'data_sources'
-  ) THEN
-    RAISE NOTICE 'Criando coluna data_sources (plural)...';
-    ALTER TABLE public.decision_makers 
-    ADD COLUMN data_sources JSONB DEFAULT '[]'::JSONB;
-    RAISE NOTICE '✅ Coluna data_sources (plural) criada!';
-  ELSE
-    RAISE NOTICE '✅ OK: Coluna data_sources (plural) já existe';
-  END IF;
-END $$;
-
--- 4. Verificar resultado final
-SELECT 
-  column_name, 
-  data_type,
-  is_nullable,
-  column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' 
-  AND table_name = 'decision_makers'
-  AND (column_name LIKE '%data_source%' OR column_name LIKE '%data_sources%')
-ORDER BY column_name;
-
--- 5. Recriar função RPC com SQL dinâmico (bypass completo do PostgREST)
+-- Remover função antiga se existir
 DROP FUNCTION IF EXISTS public.insert_decision_makers_batch(JSONB);
 DROP FUNCTION IF EXISTS public.insert_decision_makers_batch(TEXT);
+DROP FUNCTION IF EXISTS public.insert_decision_makers_direct(TEXT);
 
-CREATE OR REPLACE FUNCTION public.insert_decision_makers_batch(
+-- Criar função que executa SQL direto (bypass TOTAL do PostgREST)
+-- Esta função NÃO passa pelo PostgREST, executa SQL diretamente no PostgreSQL
+CREATE OR REPLACE FUNCTION public.insert_decision_makers_direct(
   decisores_data_text TEXT
 )
 RETURNS TABLE(id UUID)
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   decisores_data JSONB;
@@ -90,8 +31,8 @@ BEGIN
   -- Iterar sobre cada decisor no array JSONB
   FOR decisor IN SELECT * FROM jsonb_array_elements(decisores_data)
   LOOP
-    -- ✅ USAR SQL DINÂMICO para bypass completo do PostgREST
-    -- Construir SQL dinamicamente para evitar validação do PostgREST
+    -- ✅ USAR SQL DINÂMICO para bypass TOTAL do PostgREST
+    -- Construir SQL dinamicamente - PostgREST NÃO valida isso
     sql_dynamic := format('
       INSERT INTO public.decision_makers (
         company_id,
@@ -163,7 +104,7 @@ BEGIN
       COALESCE((decisor->'raw_apollo_data')::TEXT, '{}')
     );
     
-    -- Executar SQL dinâmico
+    -- Executar SQL dinâmico diretamente no PostgreSQL
     EXECUTE sql_dynamic INTO inserted_id;
     
     -- Retornar ID inserido
@@ -174,30 +115,45 @@ BEGIN
 END;
 $$;
 
--- 6. Conceder permissões
+-- Criar função alias para compatibilidade
+CREATE OR REPLACE FUNCTION public.insert_decision_makers_batch(
+  decisores_data_text TEXT
+)
+RETURNS TABLE(id UUID)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Simplesmente chamar a função direta
+  RETURN QUERY
+  SELECT * FROM public.insert_decision_makers_direct(decisores_data_text);
+END;
+$$;
+
+-- Conceder permissões
+GRANT EXECUTE ON FUNCTION public.insert_decision_makers_direct(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.insert_decision_makers_direct(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.insert_decision_makers_direct(TEXT) TO service_role;
+
 GRANT EXECUTE ON FUNCTION public.insert_decision_makers_batch(TEXT) TO anon;
 GRANT EXECUTE ON FUNCTION public.insert_decision_makers_batch(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.insert_decision_makers_batch(TEXT) TO service_role;
 
--- 7. Forçar recarregamento do cache do PostgREST (múltiplas vezes)
-DO $$
-BEGIN
-  FOR i IN 1..10 LOOP
-    PERFORM pg_notify('pgrst', 'reload schema');
-    PERFORM pg_sleep(0.1);
-  END LOOP;
-END $$;
+-- Comentários
+COMMENT ON FUNCTION public.insert_decision_makers_direct IS 
+'Insere decisores usando SQL dinâmico - bypass TOTAL do PostgREST. Usa apenas data_sources (plural, JSONB).';
 
--- 8. Aguardar alguns segundos
-SELECT pg_sleep(3);
+COMMENT ON FUNCTION public.insert_decision_makers_batch IS 
+'Alias para insert_decision_makers_direct - compatibilidade com código existente.';
 
--- 9. Verificar função criada
+-- Verificar se as funções foram criadas
 SELECT 
   routine_name,
   routine_type,
   data_type
 FROM information_schema.routines
 WHERE routine_schema = 'public' 
-  AND routine_name = 'insert_decision_makers_batch';
+  AND routine_name IN ('insert_decision_makers_batch', 'insert_decision_makers_direct')
+ORDER BY routine_name;
 
--- ✅ Processo concluído! Tente buscar decisores novamente.

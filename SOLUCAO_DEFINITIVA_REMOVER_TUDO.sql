@@ -1,12 +1,12 @@
 -- ============================================
--- SOLUÇÃO DEFINITIVA FINAL: Remover coluna problemática
+-- SOLUÇÃO DEFINITIVA: Remover TODAS as referências a data_source
 -- ============================================
 -- Execute este SQL no Supabase SQL Editor
--- Este script remove a coluna data_source (singular) se existir
--- e força o recarregamento do cache do PostgREST
+-- Este script remove TODAS as colunas problemáticas e recria tudo
 
--- 1. Verificar todas as colunas relacionadas a data_source
+-- 1. Verificar TODAS as colunas relacionadas a source/data_source
 SELECT 
+  'ANTES' as etapa,
   column_name, 
   data_type,
   is_nullable,
@@ -14,13 +14,13 @@ SELECT
 FROM information_schema.columns
 WHERE table_schema = 'public' 
   AND table_name = 'decision_makers'
-  AND (column_name LIKE '%data_source%' OR column_name LIKE '%data_sources%')
+  AND (column_name LIKE '%source%' OR column_name LIKE '%data_source%')
 ORDER BY column_name;
 
--- 2. Remover coluna data_source (singular) se existir
+-- 2. Remover TODAS as colunas relacionadas a source (singular)
 DO $$ 
 BEGIN
-  -- Verificar se existe
+  -- Remover data_source (singular) se existir
   IF EXISTS (
     SELECT 1 
     FROM information_schema.columns 
@@ -28,15 +28,24 @@ BEGIN
       AND table_name = 'decision_makers' 
       AND column_name = 'data_source'
   ) THEN
-    RAISE NOTICE '🚨 REMOVENDO coluna data_source (singular)...';
     ALTER TABLE public.decision_makers DROP COLUMN IF EXISTS data_source CASCADE;
-    RAISE NOTICE '✅ Coluna data_source (singular) removida!';
-  ELSE
-    RAISE NOTICE '✅ OK: Coluna data_source (singular) não existe';
+    RAISE NOTICE '✅ Coluna data_source (singular) removida';
+  END IF;
+  
+  -- Remover source (singular) se existir (pode causar confusão)
+  IF EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+      AND table_name = 'decision_makers' 
+      AND column_name = 'source'
+  ) THEN
+    ALTER TABLE public.decision_makers DROP COLUMN IF EXISTS source CASCADE;
+    RAISE NOTICE '✅ Coluna source (singular) removida';
   END IF;
 END $$;
 
--- 3. Garantir que data_sources (plural) existe
+-- 3. Garantir que data_sources (plural, JSONB) existe
 DO $$ 
 BEGIN
   IF NOT EXISTS (
@@ -46,17 +55,17 @@ BEGIN
       AND table_name = 'decision_makers' 
       AND column_name = 'data_sources'
   ) THEN
-    RAISE NOTICE 'Criando coluna data_sources (plural)...';
     ALTER TABLE public.decision_makers 
     ADD COLUMN data_sources JSONB DEFAULT '[]'::JSONB;
-    RAISE NOTICE '✅ Coluna data_sources (plural) criada!';
+    RAISE NOTICE '✅ Coluna data_sources (plural) criada';
   ELSE
-    RAISE NOTICE '✅ OK: Coluna data_sources (plural) já existe';
+    RAISE NOTICE '✅ Coluna data_sources (plural) já existe';
   END IF;
 END $$;
 
--- 4. Verificar resultado final
+-- 4. Verificar resultado
 SELECT 
+  'DEPOIS' as etapa,
   column_name, 
   data_type,
   is_nullable,
@@ -64,7 +73,7 @@ SELECT
 FROM information_schema.columns
 WHERE table_schema = 'public' 
   AND table_name = 'decision_makers'
-  AND (column_name LIKE '%data_source%' OR column_name LIKE '%data_sources%')
+  AND (column_name LIKE '%source%' OR column_name LIKE '%data_source%')
 ORDER BY column_name;
 
 -- 5. Recriar função RPC com SQL dinâmico (bypass completo do PostgREST)
@@ -182,22 +191,21 @@ GRANT EXECUTE ON FUNCTION public.insert_decision_makers_batch(TEXT) TO service_r
 -- 7. Forçar recarregamento do cache do PostgREST (múltiplas vezes)
 DO $$
 BEGIN
-  FOR i IN 1..10 LOOP
+  FOR i IN 1..30 LOOP
     PERFORM pg_notify('pgrst', 'reload schema');
     PERFORM pg_sleep(0.1);
   END LOOP;
+  RAISE NOTICE '✅ 30 notificações de reload enviadas ao PostgREST';
 END $$;
 
 -- 8. Aguardar alguns segundos
-SELECT pg_sleep(3);
+SELECT pg_sleep(5);
 
--- 9. Verificar função criada
-SELECT 
-  routine_name,
-  routine_type,
-  data_type
-FROM information_schema.routines
-WHERE routine_schema = 'public' 
-  AND routine_name = 'insert_decision_makers_batch';
+-- 9. Mensagem final
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Processo concluído!';
+  RAISE NOTICE '⚠️ IMPORTANTE: Se o erro persistir após reiniciar o projeto,';
+  RAISE NOTICE '   execute DIAGNOSTICO_COMPLETO.sql para encontrar outras referências.';
+END $$;
 
--- ✅ Processo concluído! Tente buscar decisores novamente.

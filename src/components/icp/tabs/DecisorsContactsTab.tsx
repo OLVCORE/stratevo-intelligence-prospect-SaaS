@@ -21,6 +21,7 @@ import { ApolloOrgIdDialog } from '@/components/companies/ApolloOrgIdDialog';
 import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
 import { LinkedInConnectionModal } from '@/components/icp/LinkedInConnectionModal';
 import { LinkedInLeadCollector } from '@/components/icp/LinkedInLeadCollector';
+import { LinkedInAuthDialog } from '@/components/icp/LinkedInAuthDialog';
 
 interface DecisorsContactsTabProps {
   companyId?: string;
@@ -70,6 +71,9 @@ export function DecisorsContactsTab({
   
   // 📥 COLETOR DE LEADS LINKEDIN
   const [linkedInLeadCollectorOpen, setLinkedInLeadCollectorOpen] = useState(false);
+  
+  // 🔐 AUTENTICAÇÃO LINKEDIN
+  const [linkedInAuthOpen, setLinkedInAuthOpen] = useState(false);
   
   // 🔥 BUSCAR DECISORES JÁ SALVOS (de enrichment em massa) - USA FUNÇÃO AUXILIAR
   useEffect(() => {
@@ -852,6 +856,17 @@ export function DecisorsContactsTab({
             />
             
             <Button
+              onClick={() => setLinkedInAuthOpen(true)}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              title="Autenticar conta do LinkedIn"
+            >
+              <Linkedin className="h-4 w-4" />
+              Conectar LinkedIn
+            </Button>
+            
+            <Button
               onClick={() => setLinkedInLeadCollectorOpen(true)}
               variant="outline"
               size="sm"
@@ -1558,6 +1573,15 @@ export function DecisorsContactsTab({
           setTimeout(() => {
             handleRefreshData();
           }, 1000);
+        }}
+      />
+
+      {/* 🔐 AUTENTICAÇÃO LINKEDIN */}
+      <LinkedInAuthDialog
+        open={linkedInAuthOpen}
+        onOpenChange={setLinkedInAuthOpen}
+        onAuthSuccess={() => {
+          toast.success('LinkedIn conectado com sucesso!');
         }}
       />
     </div>

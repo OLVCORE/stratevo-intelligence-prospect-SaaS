@@ -67,53 +67,132 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Verificar se há PhantomBuster configurado
+    // ✅ INTEGRAÇÃO COM PHANTOMBUSTER
     const phantomBusterKey = Deno.env.get('PHANTOMBUSTER_API_KEY');
+    const phantomSessionCookie = Deno.env.get('PHANTOMBUSTER_SESSION_COOKIE');
+    const phantomSearchAgentId = Deno.env.get('PHANTOM_LINKEDIN_SEARCH_AGENT_ID') || Deno.env.get('PHANTOMBUSTER_LINKEDIN_SEARCH_AGENT_ID');
     
-    if (!phantomBusterKey) {
-      console.warn('[COLLECT-LINKEDIN-LEADS] ⚠️ PhantomBuster API Key não configurada');
+    if (!phantomBusterKey || !phantomSessionCookie || !phantomSearchAgentId) {
+      console.warn('[COLLECT-LINKEDIN-LEADS] ⚠️ PhantomBuster não configurado completamente');
       
       return new Response(
         JSON.stringify({
           error: 'PhantomBuster não configurado',
-          message: 'Configure PHANTOMBUSTER_API_KEY nas variáveis de ambiente',
+          message: 'Configure as variáveis de ambiente do PhantomBuster',
           leads: [],
-          instructions: [
-            '1. Configure PHANTOMBUSTER_API_KEY no Supabase',
-            '2. Crie um Phantom no PhantomBuster para "LinkedIn Search Export"',
-            '3. Configure o Phantom para coletar até 50 leads por execução',
-            '4. Use a URL de busca do LinkedIn como input'
+          required_vars: [
+            'PHANTOMBUSTER_API_KEY',
+            'PHANTOMBUSTER_SESSION_COOKIE',
+            'PHANTOM_LINKEDIN_SEARCH_AGENT_ID'
           ]
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Se PhantomBuster estiver configurado, fazer chamada
-    // Por enquanto, retornamos estrutura de exemplo
-    const exampleLeads = Array.from({ length: Math.min(leadsToCollect, 10) }, (_, i) => ({
-      name: `Lead ${i + 1}`,
-      first_name: `First${i + 1}`,
-      last_name: `Last${i + 1}`,
-      title: `Job Title ${i + 1}`,
-      headline: `Professional Headline ${i + 1}`,
-      linkedin_url: `https://www.linkedin.com/in/lead-${i + 1}`,
-      location: 'São Paulo, SP, Brasil',
-      company: company_id ? 'Company Name' : undefined
-    }));
+    console.log('[COLLECT-LINKEDIN-LEADS] 🚀 Iniciando coleta via PhantomBuster...');
 
-    console.log('[COLLECT-LINKEDIN-LEADS] ✅ Coleta simulada:', exampleLeads.length, 'leads');
+    try {
+      // Lançar PhantomBuster Agent para coletar leads da URL
+      const launchResponse = await fetch('https://api.phantombuster.com/api/v2/agents/launch', {
+        method: 'POST',
+        headers: {
+          'X-Phantombuster-Key': phantomBusterKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: phantomSearchAgentId,
+          argument: {
+            sessionCookie: phantomSessionCookie,
+            searchUrl: linkedin_search_url,
+            numberOfProfiles: leadsToCollect,
+            csvName: `linkedin_leads_${Date.now()}`
+          }
+        })
+      });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        leads: exampleLeads,
-        total: exampleLeads.length,
-        max_leads: leadsToCollect,
-        message: '⚠️ Esta é uma coleta simulada. Configure PhantomBuster para coleta real.'
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+      if (!launchResponse.ok) {
+        const errorText = await launchResponse.text();
+        throw new Error(`PhantomBuster launch error (${launchResponse.status}): ${errorText}`);
+      }
+
+      const launchData = await launchResponse.json();
+      const containerId = launchData.containerId;
+
+      console.log('[COLLECT-LINKEDIN-LEADS] ⏳ Agent iniciado:', containerId);
+
+      // Aguardar conclusão (polling com timeout de 3 minutos)
+      let resultData: any = null;
+      let attempts = 0;
+      const maxAttempts = 36; // 36 × 5s = 180s (3 minutos)
+
+      while (attempts < maxAttempts && !resultData) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        attempts++;
+
+        const fetchResponse = await fetch(
+          `https://api.phantombuster.com/api/v2/containers/fetch-result?id=${containerId}`,
+          {
+            headers: {
+              'X-Phantombuster-Key': phantomBusterKey
+            }
+          }
+        );
+
+        if (fetchResponse.ok) {
+          const fetchData = await fetchResponse.json();
+          if (fetchData && fetchData.output && fetchData.output.length > 0) {
+            resultData = fetchData.output;
+            console.log('[COLLECT-LINKEDIN-LEADS] ✅ Resultados obtidos:', resultData.length, 'leads');
+            break;
+          }
+        }
+
+        console.log(`[COLLECT-LINKEDIN-LEADS] ⏳ Aguardando... (${attempts}/${maxAttempts})`);
+      }
+
+      if (!resultData || resultData.length === 0) {
+        throw new Error('Timeout ou nenhum lead coletado');
+      }
+
+      // Converter resultados do PhantomBuster para formato padrão
+      const leads = resultData.slice(0, leadsToCollect).map((lead: any) => ({
+        name: lead.fullName || lead.name || `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),
+        first_name: lead.firstName || lead.fullName?.split(' ')[0] || '',
+        last_name: lead.lastName || lead.fullName?.split(' ').slice(1).join(' ') || '',
+        title: lead.headline || lead.title || lead.position || '',
+        headline: lead.headline || lead.title || '',
+        linkedin_url: lead.profileUrl || lead.linkedinUrl || lead.url || '',
+        location: lead.location || lead.city || '',
+        company: lead.company || lead.currentCompany || '',
+        email: lead.email || null,
+        phone: lead.phone || null
+      }));
+
+      console.log('[COLLECT-LINKEDIN-LEADS] ✅ Coleta concluída:', leads.length, 'leads');
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          leads: leads,
+          total: leads.length,
+          max_leads: leadsToCollect,
+          message: `${leads.length} leads coletados com sucesso via PhantomBuster!`
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } catch (error: any) {
+      console.error('[COLLECT-LINKEDIN-LEADS] ❌ Erro PhantomBuster:', error);
+      return new Response(
+        JSON.stringify({
+          error: 'Erro ao coletar leads via PhantomBuster',
+          message: error.message || 'Tente novamente mais tarde',
+          leads: []
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
   } catch (error: any) {
     console.error('[COLLECT-LINKEDIN-LEADS] ❌ Erro:', error);
