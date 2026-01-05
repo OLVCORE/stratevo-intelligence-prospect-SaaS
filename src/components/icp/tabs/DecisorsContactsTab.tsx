@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FloatingNavigation } from '@/components/common/FloatingNavigation';
-import { Users, Mail, Phone, Linkedin, Sparkles, Loader2, ExternalLink, Target, TrendingUp, MapPin, AlertCircle, CheckCircle2, XCircle, Building2, Filter, RefreshCw } from 'lucide-react';
+import { Users, Mail, Phone, Linkedin, Sparkles, Loader2, ExternalLink, Target, TrendingUp, MapPin, AlertCircle, CheckCircle2, XCircle, Building2, Filter, RefreshCw, Download, User } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
@@ -19,6 +19,8 @@ import type { LinkedInProfileData } from '@/services/phantomBusterEnhanced';
 import { registerTab, unregisterTab } from './tabsRegistry';
 import { ApolloOrgIdDialog } from '@/components/companies/ApolloOrgIdDialog';
 import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
+import { LinkedInConnectionModal } from '@/components/icp/LinkedInConnectionModal';
+import { LinkedInLeadCollector } from '@/components/icp/LinkedInLeadCollector';
 
 interface DecisorsContactsTabProps {
   companyId?: string;
@@ -61,6 +63,13 @@ export function DecisorsContactsTab({
   const [currentPhase, setCurrentPhase] = useState<string | null>(null);
   const [currentDecisorIndex, setCurrentDecisorIndex] = useState<number>(0);
   const [totalDecisors, setTotalDecisors] = useState<number>(0);
+  
+  // 🔗 MODAL DE CONEXÃO LINKEDIN
+  const [linkedInConnectionModalOpen, setLinkedInConnectionModalOpen] = useState(false);
+  const [selectedDecisorForConnection, setSelectedDecisorForConnection] = useState<any>(null);
+  
+  // 📥 COLETOR DE LEADS LINKEDIN
+  const [linkedInLeadCollectorOpen, setLinkedInLeadCollectorOpen] = useState(false);
   
   // 🔥 BUSCAR DECISORES JÁ SALVOS (de enrichment em massa) - USA FUNÇÃO AUXILIAR
   useEffect(() => {
@@ -843,6 +852,16 @@ export function DecisorsContactsTab({
             />
             
             <Button
+              onClick={() => setLinkedInLeadCollectorOpen(true)}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Coletar Leads (URL)
+            </Button>
+            
+            <Button
               onClick={() => linkedinMutation.mutate()}
               disabled={linkedinMutation.isPending}
               variant="default"
@@ -914,7 +933,19 @@ export function DecisorsContactsTab({
       {analysisData && (
         <>
           {/* 📊 Estatísticas - TEMA ESCURO PREMIUM - RESPONSIVO EM LINHA */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+            {/* ✅ NOVO: Card Total de Leads Encontrados */}
+            <Card className="p-3 md:p-4 bg-gradient-to-br from-indigo-800 to-indigo-900 border-indigo-700 hover:border-indigo-600 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                <Users className="w-4 h-4 text-indigo-300 flex-shrink-0" />
+                <span className="text-xs font-medium text-slate-300 uppercase truncate">Total Leads</span>
+              </div>
+              <div className="text-xl md:text-2xl font-bold text-white">
+                {analysisData?.decisorsWithEmails?.length || analysisData?.decisors?.length || 0}
+              </div>
+              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-indigo-600 text-indigo-300">encontrados</Badge>
+            </Card>
+
             <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
               <div className="flex items-center gap-2 mb-1.5 md:mb-2">
                 <Users className="w-4 h-4 text-blue-400 flex-shrink-0" />
@@ -922,6 +953,29 @@ export function DecisorsContactsTab({
               </div>
               <div className="text-xl md:text-2xl font-bold text-white">{analysisData?.decisors?.length || 0}</div>
               <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">identificados</Badge>
+            </Card>
+
+            {/* ✅ CONTADORES REAIS DE BADGES */}
+            <Card className="p-3 md:p-4 bg-gradient-to-br from-emerald-800 to-emerald-900 border-emerald-700 hover:border-emerald-600 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                <Target className="w-4 h-4 text-emerald-300 flex-shrink-0" />
+                <span className="text-xs font-medium text-slate-300 uppercase truncate">Decision Makers</span>
+              </div>
+              <div className="text-xl md:text-2xl font-bold text-white">
+                {(analysisData?.decisorsWithEmails || analysisData?.decisors || []).filter((d: any) => d.buying_power === 'decision-maker').length || 0}
+              </div>
+              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-emerald-600 text-emerald-300">DM</Badge>
+            </Card>
+
+            <Card className="p-3 md:p-4 bg-gradient-to-br from-blue-800 to-blue-900 border-blue-700 hover:border-blue-600 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                <TrendingUp className="w-4 h-4 text-blue-300 flex-shrink-0" />
+                <span className="text-xs font-medium text-slate-300 uppercase truncate">Influencers</span>
+              </div>
+              <div className="text-xl md:text-2xl font-bold text-white">
+                {(analysisData?.decisorsWithEmails || analysisData?.decisors || []).filter((d: any) => d.buying_power === 'influencer').length || 0}
+              </div>
+              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-blue-600 text-blue-300">Inf</Badge>
             </Card>
 
             <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
@@ -933,28 +987,6 @@ export function DecisorsContactsTab({
                 {analysisData?.decisorsWithEmails?.filter((d: any) => d.email).length || 0}
               </div>
               <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">encontrados</Badge>
-            </Card>
-
-            <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
-              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
-                <TrendingUp className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                <span className="text-xs font-medium text-slate-300 uppercase truncate">Taxa Sucesso</span>
-              </div>
-              <div className="text-xl md:text-2xl font-bold text-white">
-                {(analysisData?.decisors?.length || 0) > 0
-                  ? Math.round(((analysisData?.decisorsWithEmails?.filter((d: any) => d.email).length || 0) / (analysisData?.decisors?.length || 1)) * 100)
-                  : 0}%
-              </div>
-              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">emails/decisores</Badge>
-            </Card>
-
-            <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
-              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
-                <Target className="w-4 h-4 text-orange-400 flex-shrink-0" />
-                <span className="text-xs font-medium text-slate-300 uppercase truncate">Insights</span>
-              </div>
-              <div className="text-xl md:text-2xl font-bold text-white">{analysisData?.insights?.length || 0}</div>
-              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">gerados</Badge>
             </Card>
           </div>
 
@@ -1253,17 +1285,35 @@ export function DecisorsContactsTab({
 
                       {/* 3. LINKS (LinkedIn) */}
                       <td className="p-3 text-center">
-                        {decisor.linkedin_url && (
-                          <a 
-                            href={decisor.linkedin_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="inline-flex p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 transition-colors"
-                            title="Ver LinkedIn"
-                          >
-                            <Linkedin className="w-4 h-4 text-blue-400" />
-                          </a>
-                        )}
+                        <div className="flex items-center justify-center gap-2">
+                          {decisor.linkedin_url && (
+                            <>
+                              <a 
+                                href={decisor.linkedin_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 transition-colors"
+                                title="Ver LinkedIn"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Linkedin className="w-4 h-4 text-blue-400" />
+                              </a>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 p-0 rounded-full bg-green-600/20 hover:bg-green-600/30 border-green-600/50"
+                                title="Solicitar Conexão no LinkedIn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedDecisorForConnection(decisor);
+                                  setLinkedInConnectionModalOpen(true);
+                                }}
+                              >
+                                <User className="w-3.5 h-3.5 text-green-400" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </td>
 
                       {/* 4. COMPANY */}
@@ -1483,6 +1533,33 @@ export function DecisorsContactsTab({
           )}
         </Card>
       )}
+
+      {/* 🔗 MODAL DE CONEXÃO LINKEDIN */}
+      <LinkedInConnectionModal
+        open={linkedInConnectionModalOpen}
+        onOpenChange={setLinkedInConnectionModalOpen}
+        decisor={selectedDecisorForConnection}
+        onConnectionSent={() => {
+          // Recarregar dados após conexão enviada
+          handleRefreshData();
+        }}
+      />
+
+      {/* 📥 COLETOR DE LEADS LINKEDIN */}
+      <LinkedInLeadCollector
+        open={linkedInLeadCollectorOpen}
+        onOpenChange={setLinkedInLeadCollectorOpen}
+        companyId={companyId}
+        onLeadsCollected={(count) => {
+          toast.success(`${count} leads coletados!`, {
+            description: 'Recarregando lista de decisores...'
+          });
+          // Recarregar dados após coleta
+          setTimeout(() => {
+            handleRefreshData();
+          }, 1000);
+        }}
+      />
     </div>
   );
 }
