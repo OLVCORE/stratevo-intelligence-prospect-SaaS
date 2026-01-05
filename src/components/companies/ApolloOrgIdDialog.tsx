@@ -33,23 +33,42 @@ export function ApolloOrgIdDialog({ onEnrich, disabled }: ApolloOrgIdDialogProps
         }
       }
       
+      // ✅ Aguardar enriquecimento completar ANTES de fechar o modal
       await onEnrich(cleanId);
+      
+      // ✅ Fechar modal apenas após sucesso (dados já foram recarregados)
       setOpen(false);
       setApolloOrgId("");
+    } catch (error) {
+      console.error('[ApolloOrgIdDialog] ❌ Erro no enriquecimento:', error);
+      // ✅ NÃO fechar modal em caso de erro - usuário pode tentar novamente
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(newOpen) => {
+      // ✅ Não permitir fechar durante o enriquecimento
+      if (!isLoading) {
+        setOpen(newOpen);
+        if (!newOpen) {
+          setApolloOrgId(""); // Limpar apenas quando fechar manualmente
+        }
+      }
+    }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" disabled={disabled} className="gap-2">
           <img src={apolloLogo} alt="Apollo" className="h-4 w-4" />
           Apollo ID Manual
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px]" onInteractOutside={(e) => {
+        // ✅ Não permitir fechar clicando fora durante o enriquecimento
+        if (isLoading) {
+          e.preventDefault();
+        }
+      }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <img src={apolloLogo} alt="Apollo" className="h-5 w-5" />

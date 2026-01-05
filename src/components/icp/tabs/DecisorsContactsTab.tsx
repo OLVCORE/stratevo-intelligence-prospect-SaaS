@@ -62,362 +62,23 @@ export function DecisorsContactsTab({
   const [currentDecisorIndex, setCurrentDecisorIndex] = useState<number>(0);
   const [totalDecisors, setTotalDecisors] = useState<number>(0);
   
-  // 🔥 BUSCAR DECISORES JÁ SALVOS (de enrichment em massa)
+  // 🔥 BUSCAR DECISORES JÁ SALVOS (de enrichment em massa) - USA FUNÇÃO AUXILIAR
   useEffect(() => {
     const loadExistingDecisors = async () => {
-      if (!companyId) {
-        console.log('[DECISORES-TAB] ⚠️ companyId está vazio, não vai carregar dados');
-        return;
-      }
-      
-      console.log('[DECISORES-TAB] 🔄 Carregando dados para companyId:', companyId);
-      
-      // 1️⃣ Buscar dados da empresa (Apollo Organization - FONTE DOS CAMPOS!)
-      const { data: companyData, error: companyError } = await supabase
-        .from('companies')
-        .select('raw_data, industry, name')
-        .eq('id', companyId)
-        .single();
-      
-      if (companyError) {
-        console.error('[DECISORES-TAB] ❌ Erro ao buscar empresa:', companyError);
-        return;
-      }
-      
-      if (!companyData) {
-        console.error('[DECISORES-TAB] ❌ Company data está null/undefined');
-        return;
-      }
-      
-      console.log('[DECISORES-TAB] 🏢 Company raw_data:', companyData?.raw_data);
-      console.log('[DECISORES-TAB] 🏢 Apollo Organization:', companyData?.raw_data?.apollo_organization);
-      console.log('[DECISORES-TAB] 🏢 Enriched Apollo:', companyData?.raw_data?.enriched_apollo);
-      
-      // 🔍 TESTAR TODOS OS CAMINHOS POSSÍVEIS
-      const possiblePaths = [
-        companyData?.raw_data?.apollo_organization,
-        companyData?.raw_data?.enriched_apollo,
-        companyData?.raw_data?.apollo,
-        companyData?.raw_data?.organization,
-        companyData?.raw_data
-      ];
-      
-      console.log('[DECISORES-TAB] 🔍 Testando caminhos possíveis:');
-      possiblePaths.forEach((path, idx) => {
-        if (path) {
-          console.log(`  Caminho ${idx}:`, {
-            name: path?.name,
-            description: path?.short_description || path?.description,
-            employees: path?.estimated_num_employees || path?.num_employees,
-            industry: path?.industry,
-            keywords: path?.keywords,
-            founded_year: path?.founded_year
-          });
+      const data = await loadDecisorsData();
+      if (data) {
+        setAnalysisData(data);
+        if (data.decisors && data.decisors.length > 0) {
+          sonnerToast.success(`✅ ${data.decisors.length} decisores carregados!`);
         }
-      });
-      
-      // Normalizar dados da empresa (Apollo Organization)
-      const companyApolloData = companyData?.raw_data?.apollo_organization || 
-                                companyData?.raw_data?.enriched_apollo || 
-                                companyData?.raw_data?.apollo ||
-                                companyData?.raw_data?.organization ||
-                                {};
-      
-      console.log('[DECISORES-TAB] 🏢 Company Apollo Data FINAL:', {
-        name: companyApolloData?.name || companyData?.name,
-        description: companyApolloData?.short_description || companyApolloData?.description,
-        employees: companyApolloData?.estimated_num_employees,
-        industry: companyApolloData?.industry,
-        keywords: companyApolloData?.keywords,
-        founded_year: companyApolloData?.founded_year
-      });
-      
-      // 2️⃣ Buscar decisores salvos na tabela decision_makers
-      const { data: existingDecisors } = await supabase
-        .from('decision_makers')
-        .select('*')
-        .eq('company_id', companyId);
-      
-      console.log('[DECISORES-TAB] 📊 Decisores encontrados:', existingDecisors?.length || 0);
-      
-      // 🏢 SEMPRE SETAR companyApolloOrg (MESMO SEM DECISORES!)
-      const apolloOrg = companyApolloData || {};
-      const baseAnalysisData = {
-        companyApolloOrg: {
-          name: apolloOrg.name || companyData?.name,
-          description: apolloOrg.short_description || apolloOrg.description,
-          employees: apolloOrg.estimated_num_employees,
-          industry: apolloOrg.industry || companyData?.industry,
-          keywords: apolloOrg.keywords || [],
-          founded_year: apolloOrg.founded_year,
-          city: existingDecisors?.[0]?.city,
-          country: existingDecisors?.[0]?.country
-        },
-        companyData: { 
-          source: 'database',
-          followers: 0,
-          employees: 0,
-          recentPosts: []
-        }
-      };
-      
-      console.log('[DECISORES-TAB] 🏢 companyApolloOrg preparado:', baseAnalysisData.companyApolloOrg);
-      console.log('[DECISORES-TAB] 🔍 Dados RAW do Apollo:', {
-        name: apolloOrg.name,
-        description: apolloOrg.short_description || apolloOrg.description,
-        employees: apolloOrg.estimated_num_employees,
-        industry: apolloOrg.industry,
-        keywords: apolloOrg.keywords,
-        founded_year: apolloOrg.founded_year,
-        website_url: apolloOrg.website_url,
-        linkedin_url: apolloOrg.linkedin_url
-      });
-      
-      if (existingDecisors && existingDecisors.length > 0) {
-        console.log('[DECISORES-TAB] ✅ Encontrados', existingDecisors.length, 'decisores já salvos');
-        
-        // 🎯 CLASSIFICAÇÃO DEFINITIVA: C-Level + Diretor + Gerente + Supervisor = DECISION MAKER
-        const classifyBuyingPower = (title: string, seniority: string, headline: string = '') => {
-          const titleLower = (title || '').toLowerCase();
-          const seniorityLower = (seniority || '').toLowerCase();
-          const headlineLower = (headline || '').toLowerCase();
-          
-          // 🔴 DECISION MAKERS: C-Level, Diretor, Gerente, Supervisor
-          if (
-            // Seniority Apollo
-            seniorityLower.includes('c_suite') || 
-            seniorityLower.includes('c-suite') ||
-            seniorityLower.includes('vp') || 
-            seniorityLower.includes('founder') ||
-            seniorityLower.includes('owner') ||
-            seniorityLower.includes('partner') ||
-            seniorityLower.includes('director') ||
-            seniorityLower.includes('manager') ||
-            // C-Level
-            titleLower.includes('ceo') || 
-            titleLower.includes('cfo') || 
-            titleLower.includes('cto') || 
-            titleLower.includes('cio') || 
-            titleLower.includes('cmo') ||
-            titleLower.includes('presidente') ||
-            titleLower.includes('vice-presidente') ||
-            titleLower.includes('vice presidente') ||
-            titleLower.includes('sócio') ||
-            titleLower.includes('fundador') ||
-            titleLower.includes('proprietário') ||
-            // DIRETOR (qualquer tipo) - BUSCAR EM TITLE E HEADLINE!
-            titleLower.includes('diretor') ||
-            titleLower.includes('director') ||
-            headlineLower.includes('diretor') ||
-            headlineLower.includes('director') ||
-            // GERENTE (qualquer tipo)
-            titleLower.includes('gerente') || 
-            titleLower.includes('manager') ||
-            headlineLower.includes('gerente') ||
-            // SUPERVISOR (qualquer tipo)
-            titleLower.includes('supervisor') ||
-            headlineLower.includes('supervisor')
-          ) {
-            return 'decision-maker';
-          }
-          
-          // 🟡 INFLUENCERS: Coordenadores, Líderes, Heads
-          if (
-            titleLower.includes('coordenador') || 
-            titleLower.includes('coordinator') ||
-            titleLower.includes('head of') ||
-            titleLower.includes('líder') ||
-            titleLower.includes('leader') ||
-            seniorityLower.includes('senior')
-          ) {
-            return 'influencer';
-          }
-          
-          // 🔵 USUÁRIOS: Analistas, Assistentes, Técnicos, etc.
-          return 'user';
-        };
-        
-        // 🔥 NORMALIZADOR UNIVERSAL APOLLO - Extrai de qualquer estrutura
-        const normalizeApolloData = (rawData: any) => {
-          if (!rawData) return {};
-          
-          // Tentar múltiplos caminhos possíveis para cada campo
-          const paths = {
-            organization_name: [
-              'organization.name',
-              'organization_name',
-              'organization_data.name',
-              'company.name',
-              'company_name'
-            ],
-            organization_description: [
-              'organization.short_description',
-              'organization.description',
-              'organization_data.short_description',
-              'organization_description',
-              'company.description',
-              'description'
-            ],
-            organization_employees: [
-              'organization.estimated_num_employees',
-              'organization_data.estimated_num_employees',
-              'organization_employees',
-              'company.estimated_num_employees',
-              'organization.num_employees',
-              'num_employees'
-            ],
-            organization_industry: [
-              'organization.industry',
-              'organization_data.industry',
-              'organization_industry',
-              'company.industry',
-              'industry'
-            ],
-            organization_keywords: [
-              'organization.keywords',
-              'organization_data.keywords',
-              'organization_keywords',
-              'company.keywords',
-              'keywords'
-            ],
-            organization_founded_year: [
-              'organization.founded_year',
-              'organization_data.founded_year',
-              'organization_founded_year',
-              'company.founded_year',
-              'founded_year'
-            ],
-            apollo_score: [
-              'person_score',
-              'apollo_score',
-              'score'
-            ],
-            phone_numbers: [
-              'phone_numbers',
-              'phoneNumbers',
-              'phones'
-            ]
-          };
-          
-          const getValue = (obj: any, pathArray: string[]) => {
-            for (const path of pathArray) {
-              const keys = path.split('.');
-              let value = obj;
-              let found = true;
-              
-              for (const key of keys) {
-                if (value && typeof value === 'object' && key in value) {
-                  value = value[key];
-                } else {
-                  found = false;
-                  break;
-                }
-              }
-              
-              if (found && value !== null && value !== undefined) {
-                return value;
-              }
-            }
-            return null;
-          };
-          
-          return {
-            organization_name: getValue(rawData, paths.organization_name),
-            organization_description: getValue(rawData, paths.organization_description),
-            organization_employees: getValue(rawData, paths.organization_employees),
-            organization_industry: getValue(rawData, paths.organization_industry),
-            organization_keywords: getValue(rawData, paths.organization_keywords) || [],
-            organization_founded_year: getValue(rawData, paths.organization_founded_year),
-            apollo_score: getValue(rawData, paths.apollo_score),
-            phone_numbers: getValue(rawData, paths.phone_numbers) || []
-          };
-        };
-        
-        // Formatar decisores para match com estrutura esperada (TODOS CAMPOS APOLLO)
-        const formattedDecisors = existingDecisors.map(d => {
-          const name = d.full_name || d.name;
-          console.log('[DECISORES-TAB] 🔍 raw_data para', name, ':', d.raw_data);
-          
-          // 📸 LOG ESPECIAL para foto
-          if (name?.toLowerCase().includes('rogerio') || name?.toLowerCase().includes('souza')) {
-            console.log('[DECISORES-TAB] 📸 DIRETOR ROGERIO - photo_url:', d.photo_url);
-            console.log('[DECISORES-TAB] 📸 DIRETOR ROGERIO - raw_data.photo_url:', d.raw_data?.photo_url);
-            console.log('[DECISORES-TAB] 📸 DIRETOR ROGERIO - raw_data completo:', d.raw_data);
-          }
-          
-          // Normalizar dados Apollo do DECISOR
-          const apolloNormalized = normalizeApolloData(d.raw_data);
-          console.log('[DECISORES-TAB] 📦 Apollo normalizado (decisor):', apolloNormalized);
-          
-          return {
-            name: d.full_name || d.name,
-            title: d.position || d.title,
-            position: d.position,
-            email: d.email,
-            email_status: d.email_status,
-            phone: d.phone,
-            linkedin_url: d.linkedin_url,
-            department: d.department,
-            seniority_level: d.seniority_level,
-            buying_power: classifyBuyingPower(d.position || '', d.seniority_level || '', d.headline || ''),
-            city: d.city,
-            state: d.state,
-            country: d.country || 'Brazil',
-            photo_url: d.photo_url,
-            headline: d.headline,
-            // 🔥 CAMPOS APOLLO: PRIORIDADE 1 = Company, PRIORIDADE 2 = Decisor raw_data
-            apollo_score: apolloNormalized.apollo_score || d.apollo_score,
-            organization_name: companyApolloData?.name || 
-                              apolloNormalized.organization_name || 
-                              d.organization_name ||
-                              companyData?.name,
-            organization_employees: companyApolloData?.estimated_num_employees || 
-                                   apolloNormalized.organization_employees || 
-                                   d.organization_employees,
-            organization_industry: companyApolloData?.industry || 
-                                  apolloNormalized.organization_industry || 
-                                  d.organization_industry ||
-                                  companyData?.industry,
-            organization_keywords: (companyApolloData?.keywords && companyApolloData.keywords.length > 0)
-              ? companyApolloData.keywords
-              : (Array.isArray(apolloNormalized.organization_keywords) && apolloNormalized.organization_keywords.length > 0)
-                ? apolloNormalized.organization_keywords 
-                : (d.organization_keywords || []),
-            phone_numbers: Array.isArray(apolloNormalized.phone_numbers) && apolloNormalized.phone_numbers.length > 0
-              ? apolloNormalized.phone_numbers 
-              : (d.phone_numbers || []),
-            departments: d.raw_data?.departments || d.departments || [],
-            employment_history: d.raw_data?.employment_history || [],
-            enriched_with: 'database'
-          };
-        });
-        
-        const newAnalysisData = {
-          ...baseAnalysisData, // 🏢 Incluir companyApolloOrg e companyData
-          decisors: formattedDecisors,
-          decisorsWithEmails: formattedDecisors, // 🔥 SEMPRE mostrar todos (mesmo sem email)
-          insights: [`${existingDecisors.length} decisores já identificados por enrichment anterior`],
-        };
-        
-        console.log('[DECISORES-TAB] 🔥 SETANDO analysisData com decisores:', existingDecisors.length);
-        console.log('[DECISORES-TAB] 🔥 companyApolloOrg:', newAnalysisData.companyApolloOrg);
-        setAnalysisData(newAnalysisData);
-        
-        sonnerToast.success(`✅ ${existingDecisors.length} decisores carregados!`);
-      } else {
-        // 🏢 SEM decisores, mas SEMPRE setar companyApolloOrg
-        console.log('[DECISORES-TAB] ⚠️ Nenhum decisor encontrado, mas carregando companyApolloOrg');
-        setAnalysisData({
-          ...baseAnalysisData,
-          decisors: [],
-          decisorsWithEmails: [],
-          insights: ['Nenhum decisor identificado ainda. Clique em "Extrair Decisores" para começar.']
-        });
       }
     };
     
     loadExistingDecisors();
   }, [companyId]);
+  
+  // ✅ FUNÇÃO AUXILIAR SIMPLIFICADA (para handleRefreshData e handleEnrichApollo)
+  // NOTA: A função completa loadDecisorsData está acima (linha 66)
   
   // 🔄 Função para forçar reload manual (SEM sair do relatório!)
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -515,6 +176,181 @@ export function DecisorsContactsTab({
     }
   };
   
+  // ✅ FUNÇÃO AUXILIAR: Carregar dados (reutilizável)
+  const loadDecisorsData = async () => {
+    if (!companyId) return null;
+    
+    console.log('[DECISORES-TAB] 🔄 Carregando dados para companyId:', companyId);
+    
+    // 1️⃣ Buscar dados da empresa (Apollo Organization)
+    const { data: companyData, error: companyError } = await supabase
+      .from('companies')
+      .select('raw_data, industry, name')
+      .eq('id', companyId)
+      .single();
+    
+    if (companyError || !companyData) {
+      console.error('[DECISORES-TAB] ❌ Erro ao buscar empresa:', companyError);
+      return null;
+    }
+    
+    // Normalizar dados da empresa (Apollo Organization)
+    const companyApolloData = companyData?.raw_data?.apollo_organization || 
+                              companyData?.raw_data?.enriched_apollo || 
+                              companyData?.raw_data?.apollo ||
+                              companyData?.raw_data?.organization ||
+                              {};
+    
+    // 2️⃣ Buscar decisores salvos na tabela decision_makers
+    const { data: existingDecisors } = await supabase
+      .from('decision_makers')
+      .select('*')
+      .eq('company_id', companyId);
+    
+    console.log('[DECISORES-TAB] 📊 Decisores encontrados:', existingDecisors?.length || 0);
+    
+    // 🏢 SEMPRE SETAR companyApolloOrg
+    const apolloOrg = companyApolloData || {};
+    const baseAnalysisData = {
+      companyApolloOrg: {
+        name: apolloOrg.name || companyData?.name,
+        description: apolloOrg.short_description || apolloOrg.description,
+        employees: apolloOrg.estimated_num_employees,
+        industry: apolloOrg.industry || companyData?.industry,
+        keywords: apolloOrg.keywords || [],
+        founded_year: apolloOrg.founded_year,
+        city: existingDecisors?.[0]?.city,
+        country: existingDecisors?.[0]?.country
+      },
+      companyData: { 
+        source: 'database',
+        followers: 0,
+        employees: 0,
+        recentPosts: []
+      }
+    };
+    
+    if (existingDecisors && existingDecisors.length > 0) {
+      // Reutilizar a mesma lógica de formatação do useEffect
+      const classifyBuyingPower = (title: string, seniority: string, headline: string = '') => {
+        const titleLower = (title || '').toLowerCase();
+        const seniorityLower = (seniority || '').toLowerCase();
+        const headlineLower = (headline || '').toLowerCase();
+        
+        if (
+          seniorityLower.includes('c_suite') || seniorityLower.includes('c-suite') ||
+          seniorityLower.includes('vp') || seniorityLower.includes('founder') ||
+          seniorityLower.includes('owner') || seniorityLower.includes('partner') ||
+          seniorityLower.includes('director') || seniorityLower.includes('manager') ||
+          titleLower.includes('ceo') || titleLower.includes('cfo') || titleLower.includes('cto') ||
+          titleLower.includes('cio') || titleLower.includes('cmo') ||
+          titleLower.includes('presidente') || titleLower.includes('vice-presidente') ||
+          titleLower.includes('sócio') || titleLower.includes('fundador') ||
+          titleLower.includes('diretor') || titleLower.includes('director') ||
+          headlineLower.includes('diretor') || headlineLower.includes('director') ||
+          titleLower.includes('gerente') || titleLower.includes('manager') ||
+          headlineLower.includes('gerente') || titleLower.includes('supervisor') ||
+          headlineLower.includes('supervisor')
+        ) {
+          return 'decision-maker';
+        }
+        
+        if (
+          titleLower.includes('coordenador') || titleLower.includes('coordinator') ||
+          titleLower.includes('head of') || titleLower.includes('líder') ||
+          titleLower.includes('leader') || seniorityLower.includes('senior')
+        ) {
+          return 'influencer';
+        }
+        
+        return 'user';
+      };
+      
+      const normalizeApolloData = (rawData: any) => {
+        if (!rawData) return {};
+        const paths = {
+          organization_name: ['organization.name', 'organization_name', 'organization_data.name', 'company.name', 'company_name'],
+          organization_employees: ['organization.estimated_num_employees', 'organization_data.estimated_num_employees', 'organization_employees', 'company.estimated_num_employees', 'organization.num_employees', 'num_employees'],
+          organization_industry: ['organization.industry', 'organization_data.industry', 'organization_industry', 'company.industry', 'industry'],
+          organization_keywords: ['organization.keywords', 'organization_data.keywords', 'organization_keywords', 'company.keywords', 'keywords'],
+          apollo_score: ['person_score', 'apollo_score', 'score'],
+          phone_numbers: ['phone_numbers', 'phoneNumbers', 'phones']
+        };
+        
+        const getValue = (obj: any, pathArray: string[]) => {
+          for (const path of pathArray) {
+            const keys = path.split('.');
+            let value = obj;
+            let found = true;
+            for (const key of keys) {
+              if (value && typeof value === 'object' && key in value) {
+                value = value[key];
+              } else {
+                found = false;
+                break;
+              }
+            }
+            if (found && value !== null && value !== undefined) return value;
+          }
+          return null;
+        };
+        
+        return {
+          organization_name: getValue(rawData, paths.organization_name),
+          organization_employees: getValue(rawData, paths.organization_employees),
+          organization_industry: getValue(rawData, paths.organization_industry),
+          organization_keywords: getValue(rawData, paths.organization_keywords) || [],
+          apollo_score: getValue(rawData, paths.apollo_score),
+          phone_numbers: getValue(rawData, paths.phone_numbers) || []
+        };
+      };
+      
+      const formattedDecisors = existingDecisors.map(d => {
+        const apolloNormalized = normalizeApolloData(d.raw_data);
+        return {
+          name: d.full_name || d.name,
+          title: d.position || d.title,
+          position: d.position,
+          email: d.email,
+          email_status: d.email_status,
+          phone: d.phone,
+          linkedin_url: d.linkedin_url,
+          department: d.department,
+          seniority_level: d.seniority_level,
+          buying_power: classifyBuyingPower(d.position || '', d.seniority_level || '', d.headline || ''),
+          city: d.city,
+          state: d.state,
+          country: d.country || 'Brazil',
+          photo_url: d.photo_url,
+          headline: d.headline,
+          apollo_score: d.people_auto_score_value || apolloNormalized.apollo_score || d.apollo_score || d.raw_apollo_data?.auto_score || d.raw_apollo_data?.person_score,
+          organization_name: d.company_name || companyApolloData?.name || apolloNormalized.organization_name || d.organization_name || companyData?.name,
+          organization_employees: d.company_employees || companyApolloData?.estimated_num_employees || apolloNormalized.organization_employees || d.organization_employees,
+          organization_industry: (Array.isArray(d.company_industries) && d.company_industries.length > 0) ? d.company_industries[0] : (companyApolloData?.industry || apolloNormalized.organization_industry || d.organization_industry || companyData?.industry),
+          organization_keywords: (Array.isArray(d.company_keywords) && d.company_keywords.length > 0) ? d.company_keywords : ((companyApolloData?.keywords && companyApolloData.keywords.length > 0) ? companyApolloData.keywords : (Array.isArray(apolloNormalized.organization_keywords) && apolloNormalized.organization_keywords.length > 0) ? apolloNormalized.organization_keywords : (d.organization_keywords || [])),
+          phone_numbers: Array.isArray(apolloNormalized.phone_numbers) && apolloNormalized.phone_numbers.length > 0 ? apolloNormalized.phone_numbers : (d.phone_numbers || []),
+          departments: d.raw_data?.departments || d.departments || [],
+          employment_history: d.raw_data?.employment_history || [],
+          enriched_with: 'database'
+        };
+      });
+      
+      return {
+        ...baseAnalysisData,
+        decisors: formattedDecisors,
+        decisorsWithEmails: formattedDecisors,
+        insights: [`${existingDecisors.length} decisores identificados`],
+      };
+    } else {
+      return {
+        ...baseAnalysisData,
+        decisors: [],
+        decisorsWithEmails: [],
+        insights: ['Nenhum decisor identificado ainda. Clique em "Extrair Decisores" para começar.']
+      };
+    }
+  };
+
   const handleRefreshData = async () => {
     console.log('[DECISORES-TAB] 🔄 REFRESH MANUAL acionado');
     
@@ -525,47 +361,14 @@ export function DecisorsContactsTab({
     try {
       sonnerToast.info('🔄 Recarregando dados...');
       
-      // Re-executar TODA a lógica do useEffect
-      const { data: companyData } = await supabase
-        .from('companies')
-        .select('raw_data, industry, name')
-        .eq('id', companyId)
-        .single();
-
-      console.log('[DECISORES-TAB] 🔄 Company data recarregado:', companyData?.raw_data?.apollo_organization);
-
-      const { data: existingDecisors } = await supabase
-        .from('decision_makers')
-        .select('*')
-        .eq('company_id', companyId);
-
-      console.log('[DECISORES-TAB] 🔄 Decisores recarregados:', existingDecisors?.length);
-
-      if (existingDecisors && existingDecisors.length > 0) {
-        // Aplicar MESMA LÓGICA do useEffect (copiar código)
-        const companyApolloData = companyData?.raw_data?.apollo_organization || 
-                                  companyData?.raw_data?.enriched_apollo || 
-                                  companyData?.raw_data?.apollo ||
-                                  companyData?.raw_data?.organization ||
-                                  {};
-        
-        // Processar decisores (mesmo código do useEffect)
-        // ... (vou simplificar para força reload da aba)
-        
-        sonnerToast.success(`✅ ${existingDecisors.length} decisores atualizados!`);
-        
-        // Forçar re-render completo da aba fechando e abrindo
-        if (onDataChange) {
-          onDataChange({ forceRefresh: true });
-        }
-        
-        // Trigger useEffect novamente mudando uma dependência
-        setAnalysisData(null);
-        setTimeout(() => {
-          // useEffect vai re-executar
-        }, 100);
+      // ✅ USAR FUNÇÃO AUXILIAR (mesma lógica do useEffect)
+      const newData = await loadDecisorsData();
+      
+      if (newData) {
+        setAnalysisData(newData);
+        sonnerToast.success(`✅ ${newData.decisors?.length || 0} decisores recarregados!`);
       } else {
-        sonnerToast.warning('Nenhum decisor encontrado. Execute Apollo em Lote primeiro.');
+        sonnerToast.warning('Nenhum decisor encontrado.');
       }
     } catch (error) {
       console.error('[DECISORES-TAB] Erro ao recarregar:', error);
@@ -693,8 +496,39 @@ export function DecisorsContactsTab({
       setTimeout(() => setCurrentPhase('enrichment'), 10000);
       setTimeout(() => setCurrentPhase('classification'), 25000);
       
-      // Recarregar dados após enrichment
-      await handleRefreshData();
+      // ✅ Recarregar dados após enrichment (aguardar um pouco para garantir que salvou no banco)
+      console.log('[DECISORES-TAB] ⏳ Aguardando 1.5s para garantir que dados foram salvos...');
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Aguardar 1.5s para garantir que salvou
+      
+      console.log('[DECISORES-TAB] 🔄 Recarregando dados após enriquecimento...');
+      const refreshedData = await loadDecisorsData();
+      
+      if (refreshedData) {
+        console.log('[DECISORES-TAB] ✅ Dados recarregados:', {
+          decisores: refreshedData.decisors?.length || 0,
+          companyApolloOrg: refreshedData.companyApolloOrg?.name || 'N/A',
+          employees: refreshedData.companyApolloOrg?.employees || 'N/A',
+          industry: refreshedData.companyApolloOrg?.industry || 'N/A',
+          keywords: refreshedData.companyApolloOrg?.keywords?.length || 0
+        });
+        
+        // ✅ PRESERVAR dados existentes e mesclar com novos
+        setAnalysisData(prev => {
+          const merged = {
+            ...refreshedData,
+            // Preservar dados que não devem ser sobrescritos
+            decisors: refreshedData.decisors || prev?.decisors || [],
+            decisorsWithEmails: refreshedData.decisorsWithEmails || prev?.decisorsWithEmails || [],
+            companyApolloOrg: refreshedData.companyApolloOrg || prev?.companyApolloOrg || null,
+            companyData: refreshedData.companyData || prev?.companyData || null
+          };
+          console.log('[DECISORES-TAB] ✅ Dados mesclados e atualizados:', merged.decisors?.length || 0);
+          return merged;
+        });
+      } else {
+        console.warn('[DECISORES-TAB] ⚠️ Nenhum dado retornado após enriquecimento - mantendo dados existentes');
+        // ✅ NÃO resetar para null - manter dados existentes
+      }
       
       // 🎯 FINALIZAR PROGRESSO
       setTimeout(() => {
@@ -1079,48 +913,48 @@ export function DecisorsContactsTab({
       {/* Resultados */}
       {analysisData && (
         <>
-          {/* 📊 Estatísticas - TEMA ESCURO PREMIUM */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700">
-              <div className="flex items-center gap-2 mb-2">
-                <Users className="w-4 h-4 text-blue-400" />
-                <span className="text-xs font-medium text-slate-300 uppercase">Decisores</span>
+          {/* 📊 Estatísticas - TEMA ESCURO PREMIUM - RESPONSIVO EM LINHA */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                <Users className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                <span className="text-xs font-medium text-slate-300 uppercase truncate">Decisores</span>
               </div>
-              <div className="text-2xl font-bold text-white">{analysisData?.decisors?.length || 0}</div>
-              <Badge variant="outline" className="text-xs mt-1 border-slate-600 text-slate-400">identificados</Badge>
+              <div className="text-xl md:text-2xl font-bold text-white">{analysisData?.decisors?.length || 0}</div>
+              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">identificados</Badge>
             </Card>
 
-            <Card className="p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700">
-              <div className="flex items-center gap-2 mb-2">
-                <Mail className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-medium text-slate-300 uppercase">Emails</span>
+            <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                <Mail className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span className="text-xs font-medium text-slate-300 uppercase truncate">Emails</span>
               </div>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-xl md:text-2xl font-bold text-white">
                 {analysisData?.decisorsWithEmails?.filter((d: any) => d.email).length || 0}
               </div>
-              <Badge variant="outline" className="text-xs mt-1 border-slate-600 text-slate-400">encontrados</Badge>
+              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">encontrados</Badge>
             </Card>
 
-            <Card className="p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="w-4 h-4 text-purple-400" />
-                <span className="text-xs font-medium text-slate-300 uppercase">Taxa Sucesso</span>
+            <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                <TrendingUp className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                <span className="text-xs font-medium text-slate-300 uppercase truncate">Taxa Sucesso</span>
               </div>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-xl md:text-2xl font-bold text-white">
                 {(analysisData?.decisors?.length || 0) > 0
                   ? Math.round(((analysisData?.decisorsWithEmails?.filter((d: any) => d.email).length || 0) / (analysisData?.decisors?.length || 1)) * 100)
                   : 0}%
               </div>
-              <Badge variant="outline" className="text-xs mt-1 border-slate-600 text-slate-400">emails/decisores</Badge>
+              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">emails/decisores</Badge>
             </Card>
 
-            <Card className="p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700">
-              <div className="flex items-center gap-2 mb-2">
-                <Target className="w-4 h-4 text-orange-400" />
-                <span className="text-xs font-medium text-slate-300 uppercase">Insights</span>
+            <Card className="p-3 md:p-4 bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                <Target className="w-4 h-4 text-orange-400 flex-shrink-0" />
+                <span className="text-xs font-medium text-slate-300 uppercase truncate">Insights</span>
               </div>
-              <div className="text-2xl font-bold text-white">{analysisData?.insights?.length || 0}</div>
-              <Badge variant="outline" className="text-xs mt-1 border-slate-600 text-slate-400">gerados</Badge>
+              <div className="text-xl md:text-2xl font-bold text-white">{analysisData?.insights?.length || 0}</div>
+              <Badge variant="outline" className="text-[10px] md:text-xs mt-1 border-slate-600 text-slate-400">gerados</Badge>
             </Card>
           </div>
 
@@ -1315,10 +1149,9 @@ export function DecisorsContactsTab({
               </div>
             </Card>
           ) : (
-            <Card className="p-6 bg-red-900/40 border-2 border-red-500/30">
-              <p className="text-red-400">⚠️ Card Apollo Organization: analysisData.companyApolloOrg está undefined/null</p>
-              <pre className="text-xs text-slate-300 mt-2">{JSON.stringify(analysisData, null, 2).substring(0, 500)}</pre>
-            </Card>
+            // ✅ Card removido - não é necessário mostrar erro quando não há dados Apollo
+            // Os decisores ainda podem ser exibidos mesmo sem dados da organização
+            null
           )}
 
           {/* 🗑️ REMOVIDO: Card LinkedIn inútil (sempre 0, 0, 0) */}

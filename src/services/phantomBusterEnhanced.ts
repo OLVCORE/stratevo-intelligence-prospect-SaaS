@@ -280,6 +280,7 @@ export async function performFullLinkedInAnalysis(
     company_name: companyName,
     companyName, // backward compatibility
     domain: companyDomain,
+    linkedin_url: linkedinCompanyUrl, // ✅ NOVO: Passar LinkedIn URL para busca precisa
     modes: ['people', 'company'],
     positions: ['CEO','CFO','CIO','CTO','COO','Diretor','Gerente','VP','Head','Presidente','Sócio','Coordenador'],
     city, // 🎯 FILTRO INTELIGENTE

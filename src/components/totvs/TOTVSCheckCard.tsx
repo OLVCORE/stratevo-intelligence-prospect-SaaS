@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useUsageVerification } from '@/hooks/useUsageVerification';
+import { useProductFit } from '@/hooks/useProductFit';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -32,6 +32,7 @@ import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
 import DigitalIntelligenceTab from '@/components/intelligence/DigitalIntelligenceTab';
 import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
 import { OpportunitiesTab } from '@/components/icp/tabs/OpportunitiesTab';
+import { IntentSignalsCardV3 } from '@/components/competitive/IntentSignalsCardV3';
 import { TabSaveWrapper } from './TabSaveWrapper';
 import { TabIndicator } from '@/components/icp/tabs/TabIndicator';
 import { UniversalTabWrapper } from './UniversalTabWrapper';
@@ -43,14 +44,8 @@ import SaveBar from './SaveBar';
 import { saveTabToDatabase, saveTabWithDebounce, saveAllTabsToDatabase } from '@/services/tabSaveService';
 import { toast } from 'sonner';
 import { isDiagEnabled, dlog, dgroup, dgroupEnd, dtable } from '@/lib/diag';
-import { HeroStatusCard } from './HeroStatusCard';
-import { VerificationProgressBar } from './VerificationProgressBar';
-import { EvidencesVirtualList } from './EvidencesVirtualList';
-import { MetricsDashboard } from './MetricsDashboard';
-import { ReportComparison } from './ReportComparison';
-import { IntentDashboard } from './IntentDashboard';
-import { AdvancedFilters } from './AdvancedFilters';
-import { exportEvidencesToCSV, exportEvidencesToExcel, exportEvidencesToJSON } from '@/services/exportService';
+import { ProductFitScoreCard } from './ProductFitScoreCard';
+import { ProductRecommendationsList } from './ProductRecommendationsList';
 import {
   RefreshCw,
   CheckCircle,
@@ -74,7 +69,8 @@ import {
   Globe,
   UserCircle,
   Save,
-  Loader2
+  Loader2,
+  TrendingUp
 } from 'lucide-react';
 
 interface UsageVerificationCardProps {
@@ -148,7 +144,8 @@ export default function UsageVerificationCard({
     similar: false,     // 7. Empresas Similares (manual)
     analysis: false,    // 8. Analysis 360 (manual)
     opportunities: false, // 9. Oportunidades (manual)
-    executive: false,   // 10. Sumário Executivo (manual)
+    intent: false,      // 10. Sinais de Intenção (manual)
+    executive: false,   // 11. Sumário Executivo (manual)
   });
   
   // Track de dados por aba (para salvar)
@@ -188,6 +185,7 @@ export default function UsageVerificationCard({
     analysis: 'idle',
     products: 'idle',
     opportunities: 'idle',
+    intent: 'idle',
     executive: 'idle',
   });
 
@@ -378,76 +376,56 @@ export default function UsageVerificationCard({
     return highlighted;
   };
 
-  // 🔥 CRITICAL: Desabilitar consulta se já tem relatório salvo (evita consumo de créditos)
-  // ⚠️ MAS: Se enabled=true (usuário clicou em verificar), forçar busca mesmo com relatório salvo
-  const shouldFetchLive = enabled; // 🔥 SEMPRE respeitar enabled quando usuário clica
-
-  const { data: liveData, isLoading: isLoadingLive, refetch, isFetching } = useUsageVerification({
+  // 🔥 NOVO: Hook para análise de fit de produtos
+  const { data: fitData, isLoading: isLoadingFit, refetch, isFetching } = useProductFit({
     companyId,
-    companyName,
-    cnpj,
-    domain,
-    tenantId: tenant?.id, // 🔥 NOVO: Passar tenant_id
-    enabled: shouldFetchLive && (!!companyName || !!cnpj) && !!tenant?.id, // 🔥 Garantir que tem tenant
+    tenantId: tenant?.id,
+    enabled: enabled && !!companyId && !!tenant?.id,
+  });
+
+  // ✅ BUSCAR DADOS DA EMPRESA (incluindo linkedin_url) do banco
+  const { data: companyData } = useQuery({
+    queryKey: ['company-data', companyId],
+    queryFn: async () => {
+      if (!companyId) return null;
+      const { data, error } = await supabase
+        .from('companies')
+        .select('linkedin_url, domain, website, raw_data')
+        .eq('id', companyId)
+        .single();
+      
+      if (error) {
+        console.error('[TOTVS] ❌ Erro ao buscar dados da empresa:', error);
+        return null;
+      }
+      
+      return data;
+    },
+    enabled: !!companyId,
+    staleTime: 5 * 60 * 1000 // Cache por 5 minutos
   });
 
   // Usar relatório salvo como fonte principal se existir
-  // 🔥 CRÍTICO: liveData vem como { data: {...} } do Supabase Edge Function
-  // 💾 SALVAMENTO: Dados salvos ficam em full_report.detection_report
-  const savedDetectionReport = (latestReport?.full_report as any)?.detection_report;
-  const freshData = liveData?.data || liveData;
+  // 💾 SALVAMENTO: Dados salvos ficam em full_report.product_fit_report
+  const savedProductFitReport = (latestReport?.full_report as any)?.product_fit_report;
+  const freshFitData = fitData;
   
-  // 🔥 FALLBACK: Se full_report existe mas detection_report está vazio,
-  // pode ser que os dados estejam diretamente em full_report
-  const fallbackData = latestReport?.full_report && !savedDetectionReport 
-    ? latestReport.full_report 
-    : null;
+  // Priorização de dados: Se enabled=true E tem freshFitData, usar freshFitData (dados novos)
+  // Se enabled=false OU não tem freshFitData, usar dados salvos
+  const data = (enabled && freshFitData) ? freshFitData : (savedProductFitReport || freshFitData);
+  const isLoading = (isLoadingFit || isFetching) && enabled;
   
-  // 🔥 CRÍTICO: Priorização de dados (CORRIGIDO - não esconder dados válidos)
-  // Se enabled=true E tem freshData, usar freshData (dados novos)
-  // Se enabled=false OU não tem freshData, usar dados salvos
-  // ⚠️ IMPORTANTE: Não esconder dados durante loading se já existirem
-  const data = (enabled && freshData) ? freshData : (savedDetectionReport || fallbackData || freshData);
-  const isLoading = (isLoadingLive || isFetching) && enabled; // 🔥 Mostrar loading apenas quando enabled=true
-  
-      console.log('[VERIFICATION] 🔍 Data source resolution:', {
-    hasSavedDetection: !!savedDetectionReport,
-    hasFallback: !!fallbackData,
-    hasFresh: !!freshData,
-    finalData: !!data,
-    source: savedDetectionReport ? 'savedDetection' : (fallbackData ? 'fallback' : (freshData ? 'fresh' : 'NONE')),
-  });
-  
-  // 🐛 DEBUG: Log para diagnóstico (EXPANDIDO)
+  // 🐛 DEBUG: Log para diagnóstico
   useEffect(() => {
-    const savedEvidencesCount = savedDetectionReport?.evidences?.length || 0;
-    const freshEvidencesCount = freshData?.evidences?.length || 0;
-    
-        console.log('[VERIFICATION-CARD] 🔍 Data sources:', {
-      hasDetectionReport: !!savedDetectionReport,
-      hasLiveData: !!liveData,
-      savedEvidences: savedEvidencesCount,
-      freshEvidences: freshEvidencesCount,
-      usingSource: savedDetectionReport ? 'SAVED (detection_report)' : (freshData ? 'FRESH (liveData)' : 'NONE'),
-      evidencesCount: data?.evidences?.length || 0,
+    console.log('[PRODUCT-FIT-CARD] 🔍 Data sources:', {
+      hasProductFitReport: !!savedProductFitReport,
+      hasFreshData: !!freshFitData,
+      usingSource: savedProductFitReport ? 'SAVED (product_fit_report)' : (freshFitData ? 'FRESH (fitData)' : 'NONE'),
+      fitScore: data?.fit_score,
+      fitLevel: data?.fit_level,
+      productsCount: data?.products_recommendation?.length || 0,
     });
-    
-    // 🔍 EXPANDIR data completo (com proteção)
-    if (data) {
-      try {
-        console.log('[TOTVS-CARD] 📦 data sendo usado:', JSON.stringify(data, null, 2).substring(0, 2000));
-      } catch (e) {
-        console.log('[TOTVS-CARD] 📦 data sendo usado (raw):', data);
-      }
-    }
-    
-    // 💰 LOG ECONOMIA DE CRÉDITOS
-    if (savedDetectionReport) {
-      console.log('[TOTVS-CARD] 💰 ECONOMIA: Usando dados salvos (0 créditos consumidos)');
-    } else if (freshData) {
-      console.log('[TOTVS-CARD] 💸 CONSUMO: Busca nova executada (~150 créditos)');
-    }
-  }, [latestReport, liveData, data, savedDetectionReport, freshData]);
+  }, [latestReport, fitData, data, savedProductFitReport, freshFitData]);
 
   // Flags de abas salvas
   const hasSaved = !!latestReport?.full_report;
@@ -495,12 +473,10 @@ export default function UsageVerificationCard({
         console.log('[VERIFICATION] 🌐 Website descoberto pelos decisores:', report.decisors_report.companyData.website);
       }
       
-      // 🔥 CRITICAL: Se tem detection_report, marcar Verificação como salva
-      if (report.detection_report) {
+      // 🔥 CRITICAL: Se tem product_fit_report, marcar Verificação como salva
+      if (report.product_fit_report || report.detection_report) {
         setVerificationSaved(true);
-        // ⚠️ NÃO ativar enabled automaticamente - só mostrar dados salvos
-        // setEnabled(true); // REMOVIDO: estava ativando verificação automaticamente
-        console.log('[VERIFICATION] ✅ Verificação marcada como salva (dados do histórico)');
+        console.log('[VERIFICATION] ✅ Fit de Produtos marcado como salvo (dados do histórico)');
       }
       
       // 🔥 CRITICAL: Marcar outras abas como salvas se tiverem dados (atualizar unsavedChanges)
@@ -533,8 +509,8 @@ export default function UsageVerificationCard({
       }
       
       console.log('[VERIFICATION] ✅ Dados salvos carregados em tabDataRef');
-      console.log('[VERIFICATION] 📊 Status das abas após carregar:', {
-        detection: !!report.detection_report,
+        console.log('[VERIFICATION] 📊 Status das abas após carregar:', {
+        detection: !!(report.product_fit_report || report.detection_report),
         decisors: !!report.decisors_report,
         digital: !!report.digital_report,
         competitors: !!report.competitors_report,
@@ -710,7 +686,25 @@ export default function UsageVerificationCard({
       getStatus: () => tabDataRef.current.opportunities ? 'completed' : 'draft',
     });
     
-    // 🔟 ABA EXECUTIVE (executive)
+    // 🔟 ABA INTENT (intent - Sinais de Intenção v3.0)
+    registerTabInGlobal('intent', {
+      flushSave: async () => {
+        // IntentSignalsCardV3 não precisa de salvamento manual - dados são salvos automaticamente
+        if (tabDataRef.current.intent && companyId) {
+          await saveTabToDatabase({
+            companyId,
+            companyName,
+            stcHistoryId,
+            tabId: 'intent',
+            tabData: tabDataRef.current.intent,
+          });
+          setUnsavedChanges(prev => ({ ...prev, intent: false }));
+        }
+      },
+      getStatus: () => tabDataRef.current.intent ? 'completed' : 'draft',
+    });
+    
+    // 1️⃣1️⃣ ABA EXECUTIVE (executive)
     registerTabInGlobal('executive', {
       flushSave: async () => {
         if (tabDataRef.current.executive && companyId) {
@@ -727,7 +721,7 @@ export default function UsageVerificationCard({
       getStatus: () => tabDataRef.current.executive ? 'completed' : 'draft',
     });
     
-    console.log('[VERIFICATION-REG] ✅ Todas as 10 abas registradas no tabsRegistry!');
+    console.log('[VERIFICATION-REG] ✅ Todas as 11 abas registradas no tabsRegistry!');
     
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry mesmo quando não visíveis
     // Os componentes filhos vão SOBRESCREVER estes registros quando montarem,
@@ -854,12 +848,13 @@ export default function UsageVerificationCard({
       }
       
       // 🔥 REMOVER COMPLETAMENTE O CACHE DO REACT QUERY (não só invalidar)
-      queryClient.removeQueries({ queryKey: ['usage-verification', companyId, companyName, cnpj] });
+      // 🔥 CRÍTICO: Usar a query key CORRETA (product-fit, não usage-verification)
+      queryClient.removeQueries({ queryKey: ['product-fit', companyId, tenant?.id] });
       queryClient.removeQueries({ queryKey: ['latest-stc-report', companyId] });
       console.log('[TOTVS] 🗑️ Cache do React Query REMOVIDO completamente');
       
       // 🔥 INVALIDAR QUERIES ANTES de habilitar (garante que refetch não use cache)
-      queryClient.invalidateQueries({ queryKey: ['usage-verification', companyId, companyName, cnpj] });
+      queryClient.invalidateQueries({ queryKey: ['product-fit', companyId, tenant?.id] });
       queryClient.invalidateQueries({ queryKey: ['latest-stc-report', companyId] });
       console.log('[TOTVS] 🔄 Queries INVALIDADAS');
       
@@ -883,7 +878,8 @@ export default function UsageVerificationCard({
       console.log('[TOTVS] 🔍 Estado atual: enabled=', true, 'companyName=', companyName, 'cnpj=', cnpj);
       
       // 🔥 CRÍTICO: Remover query novamente antes de refetch para garantir
-      queryClient.removeQueries({ queryKey: ['usage-verification', companyId, companyName, cnpj] });
+      // 🔥 CRÍTICO: Usar a query key CORRETA (product-fit)
+      queryClient.removeQueries({ queryKey: ['product-fit', companyId, tenant?.id] });
       
       const result = await refetch({ cancelRefetch: true }); // cancelRefetch força nova busca
       console.log('[TOTVS] ✅ Refetch executado:', result);
@@ -1039,7 +1035,8 @@ export default function UsageVerificationCard({
         try {
           // Montar full_report com dados de todas as abas
           const fullReport = {
-            detection_report: data, // Dados da Verificação de Uso (auto)
+            product_fit_report: data, // 🔥 NOVO: Dados do Fit de Produtos (auto)
+            detection_report: data, // 🔥 FALLBACK: Manter compatibilidade com dados antigos
             decisors_report: tabDataRef.current.decisors,
             digital_report: tabDataRef.current.digital, // 🔥 Digital Intelligence (substitui keywords)
             competitors_report: tabDataRef.current.competitors,
@@ -1402,7 +1399,7 @@ export default function UsageVerificationCard({
       </AlertDialog>
 
       {/* 🏢 CABEÇALHO COM NOME DA EMPRESA + CNPJ (TODAS AS ABAS) */}
-      <div className="mb-4 pb-4 border-b border-border">
+      <div className="mb-4 pb-4 border-b border-border" id="company-header">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h2 className="text-2xl font-bold tracking-tight">{companyName || 'Empresa Sem Nome'}</h2>
@@ -1471,11 +1468,13 @@ export default function UsageVerificationCard({
       />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full flex flex-col h-[calc(100vh-300px)]">
-        <TabsList className="sticky top-0 z-50 grid w-full grid-cols-10 mb-6 h-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-1 rounded-lg shadow-lg border-b-2 border-primary/20">
+        {/* ✅ BARRA DE TABS FIXA: Fica abaixo do header da empresa + SaveBar */}
+        <TabsList className="sticky top-[120px] md:top-[140px] z-40 flex w-full flex-wrap md:grid md:grid-cols-11 mb-6 h-auto bg-background/98 backdrop-blur-md supports-[backdrop-filter]:bg-background/90 p-1.5 rounded-lg shadow-xl border-b-2 border-primary/30 transition-all duration-200 gap-1">
           {/* 🔄 NOVA ORDEM: Verificação → Decisores → Digital → ... → Executive */}
-          <TabsTrigger value="detection" className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-primary/10 font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg">
-            <Search className="w-4 h-4" />
-            <span>Fit Produtos</span>
+          <TabsTrigger value="detection" className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 bg-primary/10 font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg whitespace-nowrap">
+            <Search className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Fit Produtos</span>
+            <span className="sm:hidden">Fit</span>
             <TabIndicator status={latestReport?.full_report?.__status?.detection?.status || 'draft'} />
             {getStatuses().detection === 'completed' && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-lg animate-pulse" />
@@ -1484,11 +1483,12 @@ export default function UsageVerificationCard({
           <TabsTrigger 
             value="decisors" 
             disabled={!verificationSaved} 
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <UserCircle className="w-4 h-4" />
-            <span>Decisores</span>
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <UserCircle className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Decisores</span>
+            <span className="sm:hidden">Dec.</span>
             {getStatuses().decisors === 'completed' && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-lg animate-pulse" />
             )}
@@ -1496,10 +1496,10 @@ export default function UsageVerificationCard({
           <TabsTrigger 
             value="digital" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:shadow-lg whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <Globe className="w-4 h-4" />
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <Globe className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
             <span>Digital</span>
             {getStatuses().digital === 'completed' && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-lg animate-pulse" />
@@ -1508,68 +1508,81 @@ export default function UsageVerificationCard({
           <TabsTrigger 
             value="competitors" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <Target className="w-4 h-4" />
-            <span>Competitors</span>
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <Target className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden lg:inline">Competitors</span>
+            <span className="lg:hidden">Comp.</span>
           </TabsTrigger>
           <TabsTrigger 
             value="similar" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <Building2 className="w-4 h-4" />
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <Building2 className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
             <span>Similar</span>
           </TabsTrigger>
           <TabsTrigger 
             value="clients" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <Users className="w-4 h-4" />
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <Users className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
             <span>Clients</span>
           </TabsTrigger>
           <TabsTrigger 
             value="analysis" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <BarChart3 className="w-4 h-4" />
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <BarChart3 className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
             <span>360°</span>
           </TabsTrigger>
           <TabsTrigger 
             value="products" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <Package className="w-4 h-4" />
-            <span>Products</span>
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <Package className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden lg:inline">Products</span>
+            <span className="lg:hidden">Prod.</span>
           </TabsTrigger>
           <TabsTrigger 
             value="opportunities" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold bg-orange-500/10 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-900"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 disabled:opacity-40 disabled:cursor-not-allowed font-semibold bg-orange-500/10 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-900 whitespace-nowrap relative"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <Target className="w-4 h-4" />
-            <span>Oportunidades</span>
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <Target className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden lg:inline">Oportunidades</span>
+            <span className="lg:hidden">Oport.</span>
             {getStatuses().opportunities === 'completed' && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-lg animate-pulse" />
             )}
           </TabsTrigger>
           <TabsTrigger 
+            value="intent" 
+            disabled={!verificationSaved}
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 bg-purple-500/10 disabled:opacity-40 disabled:cursor-not-allowed font-semibold relative data-[state=active]:bg-purple-100 data-[state=active]:text-purple-900 data-[state=active]:shadow-lg whitespace-nowrap"
+          >
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <TrendingUp className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span>Intenção</span>
+          </TabsTrigger>
+          <TabsTrigger 
             value="executive" 
             disabled={!verificationSaved}
-            className="flex items-center justify-center gap-2 text-sm py-3 px-4 bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed font-bold"
+            className="flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm py-2 md:py-3 px-2 md:px-4 bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed font-bold whitespace-nowrap"
           >
-            {!verificationSaved && <span className="text-sm">🔒</span>}
-            <LayoutDashboard className="w-4 h-4" />
-            <span>Executive</span>
+            {!verificationSaved && <span className="text-xs md:text-sm">🔒</span>}
+            <LayoutDashboard className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden lg:inline">Executive</span>
+            <span className="lg:hidden">Exec.</span>
           </TabsTrigger>
         </TabsList>
         
@@ -1616,244 +1629,38 @@ export default function UsageVerificationCard({
                   </>
                 )}
               </Button>
-              {/* 🔥 BARRA DE PROGRESSO: Sempre mostrar quando isLoading=true */}
+              {/* 🔥 LOADING STATE */}
               {isLoading && (
-                <VerificationProgressBar 
-                  currentPhase={currentPhase || 'job_portals'}
-                  elapsedTime={verificationStartTime ? Math.floor((Date.now() - verificationStartTime) / 1000) : 0}
-                  evidences={evidences.map((e: any) => ({
-                    url: e.url || '',
-                    title: e.title || '',
-                    snippet: e.snippet || e.content || '',
-                    match_type: e.match_type || 'single',
-                    source: e.source || '',
-                    validation_method: e.validation_method
-                  }))}
-                />
+                <div className="mt-6 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+                  <p className="text-sm text-muted-foreground">Analisando fit de produtos...</p>
+                </div>
               )}
             </div>
           ) : (
-            <>
-              {/* 🎨 HERO STATUS CARD - VISUAL IMPACTANTE */}
-              <div className="mb-6">
-                <HeroStatusCard
-                  status={data.status}
-                  confidence={data.confidence}
-                  tripleMatches={data.triple_matches || data.data?.tripleMatches || 0}
-                  doubleMatches={data.double_matches || data.data?.doubleMatches || 0}
-                  singleMatches={data.single_matches || data.data?.singleMatches || 0}
-                  totalScore={data.total_weight || data.total_score || data.data?.totalScore || 0}
-                  sources={data.methodology?.searched_sources || data.sources_consulted || data.data?.sourcesConsulted || 0}
-                />
-              </div>
+            <div className="space-y-6">
+              {/* 🎨 PRODUCT FIT SCORE CARD */}
+              <ProductFitScoreCard
+                fitScore={data?.fit_score || 0}
+                fitLevel={data?.fit_level || 'low'}
+                confidence={data?.metadata?.confidence || 'medium'}
+                overallJustification={data?.analysis?.overall_justification}
+                cnaeMatch={data?.analysis?.cnae_match}
+                sectorMatch={data?.analysis?.sector_match}
+              />
 
-              {/* 📊 DASHBOARD DE MÉTRICAS EXPANDIDO - SEMPRE VISÍVEL */}
-              <div className="mb-6">
-                <MetricsDashboard
-                  evidences={evidences || []}
-                  tripleMatches={tripleMatches.length}
-                  doubleMatches={doubleMatches.length}
-                  singleMatches={evidences.length - tripleMatches.length - doubleMatches.length}
-                  totalScore={data?.total_weight || data?.total_score || data?.data?.totalScore || 0}
-                  sources={data?.methodology?.searched_sources || data?.sources_consulted || data?.data?.sourcesConsulted || 0}
-                  confidence={data?.confidence || 'medium'}
-                />
-              </div>
-
-              {/* 🔥 DASHBOARD DE INTENÇÃO DE COMPRA */}
-              {evidences.filter((e: any) => e.has_intent || (e.intent_keywords && e.intent_keywords.length > 0)).length > 0 && (
-                <div className="mb-6">
-                  <IntentDashboard
-                    evidences={evidences}
-                    companyName={companyName}
-                  />
-                </div>
-              )}
-
-              {/* 📊 COMPARAÇÃO COM RELATÓRIOS ANTERIORES */}
-              {companyId && stcHistoryId && (
-                <div className="mb-6">
-                  <ReportComparison
-                    companyId={companyId}
-                    currentReportId={stcHistoryId}
-                    currentData={data}
-                  />
-                </div>
-              )}
-
-              {/* 📥 BOTÕES DE EXPORTAÇÃO */}
-              {evidences.length > 0 && (
-                <div className="mb-4 flex gap-2 flex-wrap">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportEvidencesToCSV(evidences, `${companyName || 'empresa'}-evidencias`)}
-                  >
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Exportar CSV
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportEvidencesToExcel(evidences, `${companyName || 'empresa'}-evidencias`)}
-                  >
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Exportar Excel
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportEvidencesToJSON(evidences, `${companyName || 'empresa'}-evidencias`)}
-                  >
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Exportar JSON
-                  </Button>
-                </div>
-              )}
-
-          {/* FILTROS */}
-          {evidences.length > 0 && (
-            <div className="mb-4 space-y-3">
-              {/* FILTROS BÁSICOS */}
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant={filterMode === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilterMode('all')}
-                >
-                  <Filter className="w-4 h-4 mr-2" />
-                  Triple + Double
-                </Button>
-                <Button
-                  variant={filterMode === 'triple' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilterMode('triple')}
-                >
-                  <Target className="w-3 h-3 mr-2" />
-                  Apenas Triple
-                </Button>
-                <Button
-                  variant={showAdvancedFilters ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                >
-                  <Search className="w-4 h-4 mr-2" />
-                  Filtros Avançados
-                  {(selectedSources.length > 0 || selectedProducts.length > 0 || searchText) && (
-                    <Badge variant="secondary" className="ml-2">
-                      {selectedSources.length + selectedProducts.length + (searchText ? 1 : 0)}
-                    </Badge>
-                  )}
-                </Button>
-                {(selectedSources.length > 0 || selectedProducts.length > 0 || searchText) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedSources([]);
-                      setSelectedProducts([]);
-                      setSearchText('');
-                    }}
-                  >
-                    Limpar Filtros
-                  </Button>
-                )}
-              </div>
-              
-              {/* FILTROS AVANÇADOS */}
-              {showAdvancedFilters && (
-                <AdvancedFilters
-                  evidences={evidences}
-                  selectedSources={selectedSources}
+              {/* 📊 PRODUCT RECOMMENDATIONS LIST */}
+              {data?.products_recommendation && data.products_recommendation.length > 0 && (
+                <ProductRecommendationsList
+                  recommendations={data.products_recommendation}
+                  onProductSelect={(productId) => {
+                    // Selecionar produto (pode ser usado para filtros futuros)
+                    console.log('[PRODUCT-FIT] Produto selecionado:', productId);
+                  }}
                   selectedProducts={selectedProducts}
-                  searchText={searchText}
-                  onSourcesChange={setSelectedSources}
-                  onProductsChange={setSelectedProducts}
-                  onSearchChange={setSearchText}
-                  onDateRangeChange={(from, to) => {
-                    setDateFrom(from);
-                    setDateTo(to);
-                  }}
-                  onSortChange={(by, order) => {
-                    setSortBy(by as any);
-                    setSortOrder(order);
-                  }}
-                  currentSortBy={sortBy}
-                  currentSortOrder={sortOrder}
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  userId={undefined} // TODO: Obter userId do contexto de autenticação
                 />
               )}
-              
-              {/* CONTADORES */}
-              <div className="text-sm text-muted-foreground flex items-center gap-3 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <Circle className="w-3 h-3 fill-green-600 text-green-600" />
-                  {tripleMatches.length} Triple
-                </span>
-                <span className="flex items-center gap-1">
-                  <Circle className="w-3 h-3 fill-blue-600 text-blue-600" />
-                  {doubleMatches.length} Double
-                </span>
-                <span className="flex items-center gap-1">
-                  <Filter className="w-3 h-3" />
-                  {filteredEvidences.length} de {evidences.length} evidências
-                </span>
-              </div>
             </div>
-          )}
-
-          {/* EVIDÊNCIAS - LISTA VIRTUALIZADA PARA PERFORMANCE */}
-          {filteredEvidences.length > 0 ? (
-            <EvidencesVirtualList
-              evidences={filteredEvidences}
-              companyName={companyName}
-              onCopyUrl={(url, id) => copyToClipboard(url, id, 'url')}
-              onCopyTerms={(terms, id) => copyToClipboard(terms, id, 'terms')}
-              copiedUrl={copiedUrl}
-              copiedTerms={copiedTerms}
-            />
-          ) : filteredEvidences.length === 0 && evidences.length > 0 ? (
-            <div className="text-center py-6">
-              <Filter className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Nenhuma evidência corresponde aos filtros aplicados
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => {
-                  setSelectedSources([]);
-                  setSelectedProducts([]);
-                  setSearchText('');
-                  setFilterMode('all');
-                }}
-              >
-                Limpar Filtros
-              </Button>
-            </div>
-          ) : (
-            <div className="text-center py-6">
-              <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Nenhuma evidência de uso encontrada
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {data.methodology?.searched_sources} fontes consultadas
-              </p>
-            </div>
-          )}
-
-              {/* METODOLOGIA */}
-              <div className="mt-4 pt-4 border-t">
-                <p className="text-xs text-muted-foreground">
-                  Fontes consultadas: {data.methodology?.searched_sources} | 
-                  Queries executadas: {data.methodology?.total_queries}
-                </p>
-              </div>
-            </>
           )}
           </UniversalTabWrapper>
         </TabsContent>
@@ -1864,8 +1671,8 @@ export default function UsageVerificationCard({
           <DecisorsContactsTab
             companyId={companyId}
             companyName={companyName}
-            linkedinUrl={data?.linkedin_url}
-            domain={domain}
+            linkedinUrl={companyData?.linkedin_url || companyData?.raw_data?.linkedin_url || companyData?.raw_data?.apollo_organization?.linkedin_url}
+            domain={domain || companyData?.domain || companyData?.website}
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
             savedData={latestReport?.full_report?.decisors_report}
@@ -2156,7 +1963,30 @@ export default function UsageVerificationCard({
           </UniversalTabWrapper>
         </TabsContent>
 
-        {/* ABA 10: EXECUTIVE SUMMARY (ÚLTIMA) */}
+        {/* ABA 10: SINAIS DE INTENÇÃO V3.0 */}
+        <TabsContent value="intent" className="mt-0 flex-1 overflow-hidden">
+          <UniversalTabWrapper tabName="Sinais de Intenção v3.0">
+            {companyId && companyName ? (
+              <IntentSignalsCardV3 company={{
+                id: companyId,
+                name: companyName,
+                cnpj: cnpj,
+                domain: domain,
+                region: tenant?.state || undefined,
+                sector: tenant?.sector_code || undefined,
+                niche: undefined,
+              }} />
+            ) : (
+              <Card className="p-6">
+                <p className="text-center text-muted-foreground">
+                  Informações da empresa necessárias para análise de intenção
+                </p>
+              </Card>
+            )}
+          </UniversalTabWrapper>
+        </TabsContent>
+
+        {/* ABA 11: EXECUTIVE SUMMARY (ÚLTIMA) */}
         <TabsContent value="executive" className="mt-0 flex-1 overflow-hidden">
           <UniversalTabWrapper tabName="Executive Summary">
           <ExecutiveSummaryTab
