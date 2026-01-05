@@ -45,9 +45,6 @@ export const useProductFit = ({
 }: ProductFitParams) => {
   return useQuery({
     queryKey: ['product-fit', companyId, tenantId],
-    enabled: enabled && !!companyId && !!tenantId, // 🔥 CRÍTICO: Habilitar apenas quando necessário
-    staleTime: 0, // 🔥 SEMPRE considerar dados stale (forçar refetch)
-    cacheTime: 0, // 🔥 NÃO cachear (forçar nova busca sempre)
     refetchOnMount: true, // 🔥 Refetch ao montar
     refetchOnWindowFocus: false, // Não refetch ao focar janela
     refetchOnReconnect: true, // Refetch ao reconectar

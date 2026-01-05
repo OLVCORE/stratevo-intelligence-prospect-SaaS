@@ -3109,6 +3109,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                           intentType={(prospect as any).purchase_intent_type || 'potencial'}
                           size="sm"
                         />
+                        </div>
                       </TableCell>
                       {/* ✅ NOVA COLUNA: Website */}
                       <TableCell className="text-center">
