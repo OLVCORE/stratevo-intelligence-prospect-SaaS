@@ -228,12 +228,12 @@ export class ICPQualificationEngine {
   
   private async loadICPProfiles(): Promise<void> {
     try {
-      // Buscar ICPs ativos do tenant
+      // Buscar ICPs ativos do tenant (usar coluna 'ativo', não 'status')
       const { data: icpData, error: icpError } = await (supabase as any)
         .from('icp_profiles_metadata')
         .select('*')
         .eq('tenant_id', this.tenantId)
-        .eq('status', 'active');
+        .eq('ativo', true);
       
       if (icpError) throw icpError;
       

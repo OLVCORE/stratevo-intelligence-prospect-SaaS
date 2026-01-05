@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, Rocket, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, Rocket, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize, ChevronLeft, ChevronRight, Target, Linkedin } from 'lucide-react';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -44,6 +45,7 @@ import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton'
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
 import { useTenant } from '@/contexts/TenantContext';
+import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -159,6 +161,7 @@ export default function ApprovedLeads() {
       // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao criar deals
       const dealsToCreate = validCompanies.map(q => {
         const rawData: any = {
+          ...(q.raw_data || {}),
           ...(q.raw_analysis || {}),
           // Preservar dados de enriquecimento de website
           website_enrichment: q.website_encontrado ? {
@@ -168,28 +171,31 @@ export default function ApprovedLeads() {
             linkedin_url: q.linkedin_url,
           } : undefined,
           // Preservar fit_score e grade se existirem
-          fit_score: (q.raw_analysis as any)?.fit_score,
-          grade: (q.raw_analysis as any)?.grade,
-          icp_id: (q.raw_analysis as any)?.icp_id,
+          fit_score: (q.raw_data as any)?.fit_score || (q.raw_analysis as any)?.fit_score,
+          grade: (q.raw_data as any)?.grade || (q.raw_analysis as any)?.grade,
+          icp_id: (q.raw_data as any)?.icp_id || (q.raw_analysis as any)?.icp_id,
           // Preservar dados de enriquecimento da Receita Federal
-          receita_federal: (q.raw_analysis as any)?.receita_federal,
+          receita_federal: (q.raw_data as any)?.receita_federal || (q.raw_analysis as any)?.receita_federal,
           // Preservar dados de enriquecimento do Apollo
-          apollo: (q.raw_analysis as any)?.apollo,
+          apollo: (q.raw_data as any)?.apollo || (q.raw_analysis as any)?.apollo,
+          // Metadados adicionais
+          icp_score: q.icp_score || 0,
+          temperatura: q.temperatura || 'cold',
         };
 
+        // ✅ CORRIGIDO: Usar campos corretos do schema sdr_deals
         return {
-          deal_title: `Prospecção - ${q.razao_social}`,
-          description: `Empresa aprovada com ICP Score: ${q.icp_score || 0}`,
+          title: `Prospecção - ${q.razao_social}`, // ✅ title (não deal_title)
+          description: `Empresa aprovada com ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
           company_id: q.company_id,
-          deal_value: 0,
+          value: 0, // ✅ value (não deal_value)
           probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50),
           priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
-          deal_stage: 'discovery',
-          assigned_sdr: user?.email || 'auto',
+          stage: 'discovery', // ✅ stage (não deal_stage)
+          assigned_to: user?.id || null, // ✅ assigned_to (UUID, não email)
           source: 'approved_to_pipeline',
-          lead_score: q.icp_score || 0,
-          notes: `Enviado de Aprovadas. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
-          raw_data: rawData,
+          bitrix24_data: rawData, // ✅ bitrix24_data (não raw_data)
+          status: 'open', // ✅ status obrigatório
         };
       });
 
@@ -682,8 +688,16 @@ export default function ApprovedLeads() {
       // 🔍 FILTROS INTELIGENTES POR COLUNA
       
       // Filtro por Origem (normalizado)
-      if (filterOrigin.length > 0 && !filterOrigin.includes(normalizeSourceName(c.source_name))) {
-        return false;
+      if (filterOrigin.length > 0) {
+        // ✅ BUSCAR source_name em múltiplos lugares (igual renderização)
+        const sourceName = c.source_name || 
+                         (c as any).raw_analysis?.source_name ||
+                         (c as any).raw_analysis?.origem_original ||
+                         (c as any).raw_analysis?.source_file_name ||
+                         (c as any).raw_data?.source_name;
+        if (!filterOrigin.includes(normalizeSourceName(sourceName))) {
+          return false;
+        }
       }
       
       // Filtro por Status CNPJ
@@ -1070,26 +1084,24 @@ export default function ApprovedLeads() {
       }
 
       // 2. Escanear website e calcular fit score
-      const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // ✅ CORRIGIDO: Usar supabase.functions.invoke() em vez de fetch() para evitar CORS
+      const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-prospect-website', {
+        body: {
           tenant_id: tenantId,
           company_id: company.company_id,
           cnpj: company.cnpj,
           website_url: websiteData.website,
           razao_social: company.razao_social,
-        }),
+        }
       });
 
-      if (!scanWebsiteResponse.ok) {
-        throw new Error('Erro ao escanear website');
+      if (scanError) {
+        throw new Error(scanError.message || 'Erro ao escanear website');
       }
 
-      const scanData = await scanWebsiteResponse.json();
+      if (!scanData || !scanData.success) {
+        throw new Error(scanData?.error || 'Erro ao escanear website');
+      }
       
       // 3. Atualizar icp_analysis_results
       if (scanData.success) {
@@ -1727,22 +1739,23 @@ export default function ApprovedLeads() {
   };
 
   return (
-    <div className="p-6 space-y-6">{/* ✅ SEM container - deixa scroll livre */}
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/central-icp')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <CheckCircle className="h-8 w-8 text-green-600" />
-            Leads Aprovados
-          </h1>
-          <p className="text-muted-foreground">
-            Empresas 100% enriquecidas, prontas para enviar ao Pipeline de Vendas
-          </p>
+    <AppLayout>
+      <div className="p-6 space-y-6">{/* ✅ COM AppLayout para menu lateral */}
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/central-icp')}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <CheckCircle className="h-8 w-8 text-green-600" />
+              Leads Aprovados
+            </h1>
+            <p className="text-muted-foreground">
+              Empresas 100% enriquecidas, prontas para enviar ao Pipeline de Vendas
+            </p>
+          </div>
         </div>
-      </div>
 
       {/* Stats Cards - CLICÁVEIS PARA FILTRAR */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2029,53 +2042,69 @@ export default function ApprovedLeads() {
 
       {/* Table */}
       <Card>
-        <CardContent className="p-0">{/* ✅ EXATAMENTE COMO GERENCIAR EMPRESAS */}
-            <Table className="table-fixed w-full text-[10px]">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead className="w-[44px]">
-                    <Checkbox
-                      checked={selectedIds.length === filteredCompanies.length && filteredCompanies.length > 0}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[26rem]">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('empresa')}
-                      className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
-                    >
-                      <span className="font-semibold">Empresa</span>
-                      <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'empresa' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[9rem]">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('cnpj')}
-                      className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
-                    >
-                      <span className="font-semibold">CNPJ</span>
-                      <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'cnpj' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[7rem]">
-                    <ColumnFilter
-                      column="source_name"
-                      title="Origem"
-                      values={companies.map(c => normalizeSourceName(c.source_name))}
-                      selectedValues={filterOrigin}
-                      onFilterChange={setFilterOrigin}
-                      onSort={() => handleSort('source_name')}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[8rem]">
-                    <ColumnFilter
-                      column="cnpj_status"
-                      title="Status CNPJ"
+        <CardContent className="p-0">
+            <Table className="w-full min-w-[1400px] table-auto">
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="w-10 min-w-[40px] text-center"></TableHead>
+                    <TableHead className="w-12 min-w-[48px] text-center">
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={selectedIds.length === filteredCompanies.length && filteredCompanies.length > 0}
+                          onCheckedChange={handleSelectAll}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="min-w-[200px] flex-1 text-center">
+                      <div className="flex justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSort('empresa')}
+                          className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
+                        >
+                          <span className="font-semibold">Empresa</span>
+                          <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'empresa' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
+                        </Button>
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px] text-center">
+                      <div className="flex justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSort('cnpj')}
+                          className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
+                        >
+                          <span className="font-semibold">CNPJ</span>
+                          <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'cnpj' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
+                        </Button>
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px] text-center">
+                      <div className="flex justify-center">
+                        <ColumnFilter
+                          column="source_name"
+                          title="Origem"
+                          values={companies.map(c => {
+                            // ✅ BUSCAR source_name em múltiplos lugares (igual renderização)
+                            const sourceName = c.source_name || 
+                                             (c as any).raw_analysis?.source_name ||
+                                             (c as any).raw_analysis?.origem_original ||
+                                             (c as any).raw_analysis?.source_file_name ||
+                                             (c as any).raw_data?.source_name;
+                            return normalizeSourceName(sourceName);
+                          })}
+                          selectedValues={filterOrigin}
+                          onFilterChange={setFilterOrigin}
+                          onSort={() => handleSort('source_name')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">
+                      <ColumnFilter
+                        column="cnpj_status"
+                        title="Status CNPJ"
                       values={companies.map(c => {
                         const rawData = (c as any).raw_data?.receita_federal || (c as any).raw_data || {};
                         
@@ -2106,41 +2135,41 @@ export default function ApprovedLeads() {
                       onSort={() => handleSort('cnpj_status')}
                     />
                   </TableHead>
-                  <TableHead className="w-[10rem]">
-                    <ColumnFilter
-                      column="setor"
-                      title="Setor"
+                      <TableHead className="min-w-[180px] flex-[1.5]">
+                        <ColumnFilter
+                          column="setor"
+                          title="Setor"
                       values={companies.map(c => c.segmento || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A')}
                       selectedValues={filterSector}
                       onFilterChange={setFilterSector}
                       onSort={() => handleSort('setor')}
                     />
                   </TableHead>
-                  <TableHead className="w-[5rem]">
-                    <ColumnFilter
-                      column="uf"
-                      title="UF"
+                          <TableHead className="w-[60px] min-w-[50px]">
+                            <ColumnFilter
+                              column="uf"
+                              title="UF"
                       values={companies.map(c => c.uf || (c as any).raw_data?.uf || '')}
                       selectedValues={filterUF}
                       onFilterChange={setFilterUF}
                       onSort={() => handleSort('uf')}
                     />
                   </TableHead>
-                  <TableHead className="w-[7rem] text-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('score')}
-                      className="h-8 flex items-center gap-1 px-1 hover:bg-primary/10 transition-colors group"
-                    >
-                      <span className="font-semibold text-[10px]">Score</span>
-                      <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'score' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[9rem]">
-                    <ColumnFilter
-                      column="analysis_status"
-                      title="Status Análise"
+                              <TableHead className="w-[100px] min-w-[90px] text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleSort('score')}
+                                  className="h-8 flex items-center gap-1 px-1 hover:bg-primary/10 transition-colors group"
+                                >
+                                  <span className="font-semibold text-sm">Score</span>
+                                  <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'score' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
+                                </Button>
+                              </TableHead>
+                              <TableHead className="w-[120px] min-w-[100px]">
+                                <ColumnFilter
+                                  column="analysis_status"
+                                  title="Status Análise"
                       values={companies.map(c => {
                         const rawData = (c as any).raw_data || {};
                         const hasReceitaWS = !!(rawData.receita_federal || rawData.cnpj);
@@ -2160,10 +2189,10 @@ export default function ApprovedLeads() {
                       onFilterChange={setFilterAnalysisStatus}
                     />
                   </TableHead>
-                  <TableHead className="w-[7rem]">
-                    <ColumnFilter
-                      column="icp"
-                      title="ICP"
+                                  <TableHead className="w-[120px] min-w-[100px]">
+                                    <ColumnFilter
+                                      column="icp"
+                                      title="ICP"
                       values={[...new Set(companies.map(c => {
                         const rawData = (c as any).raw_data || {};
                         return rawData.best_icp_name || rawData.icp_name || 'Sem ICP';
@@ -2172,32 +2201,31 @@ export default function ApprovedLeads() {
                       onFilterChange={setFilterICP}
                     />
                   </TableHead>
-                  <TableHead className="w-[7rem]">
-                    <ColumnFilter
-                      column="fit_score"
-                      title="Fit Score"
+                                      <TableHead className="w-[100px] min-w-[90px]">
+                                        <ColumnFilter
+                                          column="fit_score"
+                                          title="Fit Score"
                       values={['90-100', '75-89', '60-74', '40-59', '0-39']}
                       selectedValues={filterFitScore}
                       onFilterChange={setFilterFitScore}
                     />
                   </TableHead>
-                  <TableHead className="w-[6rem]">
-                    <ColumnFilter
-                      column="grade"
-                      title="Grade"
+                                          <TableHead className="w-[60px] min-w-[50px]">
+                                            <ColumnFilter
+                                              column="grade"
+                                              title="Grade"
                       values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
                       selectedValues={filterGrade}
                       onFilterChange={setFilterGrade}
                     />
                   </TableHead>
-                  <TableHead className="w-[10rem]">Intenção de Compra</TableHead>
-                  <TableHead className="w-[10rem]">Intenção de Compra</TableHead>
-                  <TableHead className="w-[10rem]">Website</TableHead>
-                  <TableHead className="w-[8rem]">Website Fit</TableHead>
-                  <TableHead className="w-[8rem]">LinkedIn</TableHead>
-                  <TableHead className="w-[10rem] text-right"><span className="font-semibold text-[10px]">Ações</span></TableHead>
-                </TableRow>
-              </TableHeader>
+                                              <TableHead className="w-[160px] min-w-[140px]">Intenção de Compra</TableHead>
+                                              <TableHead className="min-w-[180px] flex-1">Website</TableHead>
+                                              <TableHead className="w-[100px] min-w-[90px]">Website Fit</TableHead>
+                                              <TableHead className="w-[100px] min-w-[90px]">LinkedIn</TableHead>
+                                              <TableHead className="w-20 min-w-[80px] text-right">Ações</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
@@ -2220,36 +2248,40 @@ export default function ApprovedLeads() {
                   
                   return (
                     <>
-                  <TableRow key={company.id} className={`h-[3.25rem] align-middle ${expandedRow === company.id ? 'bg-muted/30' : ''}`}>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedRow(expandedRow === company.id ? null : company.id);
-                        }}
-                      >
-                        {expandedRow === company.id ? (
-                          <ChevronUp className="h-4 w-4 text-primary" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
+                  <TableRow key={company.id} className={expandedRow === company.id ? 'bg-muted/30' : ''}>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedRow(expandedRow === company.id ? null : company.id);
+                          }}
+                        >
+                          {expandedRow === company.id ? (
+                            <ChevronUp className="h-4 w-4 text-primary" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.includes(company.id)}
-                        onCheckedChange={(checked) => 
-                          handleSelectOne(company.id, checked as boolean)
-                        }
-                        disabled={company.status !== 'pendente'}
-                      />
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={selectedIds.includes(company.id)}
+                          onCheckedChange={(checked) => 
+                            handleSelectOne(company.id, checked as boolean)
+                          }
+                          disabled={company.status !== 'pendente'}
+                        />
+                      </div>
                     </TableCell>
-                    <TableCell className="w-[26rem] max-w-[26rem] truncate">
+                    <TableCell className="text-center truncate">
                       <div 
-                        className="flex flex-col cursor-pointer hover:text-primary transition-colors"
+                        className="flex flex-col items-center cursor-pointer hover:text-primary transition-colors"
                         onClick={() => {
                           // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
                           if (company.company_id) {
@@ -2269,78 +2301,100 @@ export default function ApprovedLeads() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="w-[9rem]">
-                      {company.cnpj ? (
-                        <Badge 
-                          variant="outline" 
-                          className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
-                          onClick={() => {
-                            if (company.company_id) {
-                              setExecutiveReportCompanyId(company.company_id);
-                              setExecutiveReportOpen(true);
-                            } else {
-                              toast.info('Empresa ainda não possui relatório completo', {
-                                description: 'Aprove a empresa primeiro para gerar o relatório executivo'
-                              });
-                            }
-                          }}
-                        >
-                          {company.cnpj}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">N/A</span>
-                      )}
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        {company.cnpj ? (
+                          <Badge 
+                            variant="outline" 
+                            className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
+                            onClick={() => {
+                              if (company.company_id) {
+                                setExecutiveReportCompanyId(company.company_id);
+                                setExecutiveReportOpen(true);
+                              } else {
+                                toast.info('Empresa ainda não possui relatório completo', {
+                                  description: 'Aprove a empresa primeiro para gerar o relatório executivo'
+                                });
+                              }
+                            }}
+                          >
+                            {company.cnpj}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">N/A</span>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="w-[7rem] max-w-[7rem] truncate">
-                      {company.source_name ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
+                    <TableCell className="text-center truncate">
+                      <div className="flex justify-center">
+                        {(() => {
+                          // ✅ MESMA LÓGICA DA TABELA ESTOQUE DE EMPRESAS QUALIFICADAS E BASE DE EMPRESAS
+                          // Buscar source_name em múltiplos lugares, priorizando qualified_prospects
+                          let origem = company.source_name || '';
+                          
+                          // Se source_name é um batch ID ou vazio, buscar de outros lugares (prioridade)
+                          if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+                            // Prioridade: raw_analysis > raw_data > outros campos (EXATAMENTE IGUAL BASE DE EMPRESAS)
+                            origem = (company as any).raw_analysis?.source_name ||
+                                    (company as any).raw_analysis?.origem_original ||
+                                    (company as any).raw_analysis?.source_file_name ||
+                                    (company as any).raw_data?.source_name ||
+                                    (company as any).raw_data?.origem ||
+                                    (company as any).raw_data?.origem_original ||
+                                    (company as any).raw_data?.source_file_name ||
+                                    (company as any).raw_data?.source ||
+                                    '';
+                          }
+                          
+                          // Se ainda for batch ID, tentar buscar de outros lugares (igual Base de Empresas)
+                          if ((!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-'))))) {
+                            origem = (company as any).raw_data?.import_batch_name ||
+                                    (company as any).raw_data?.batch_name ||
+                                    '';
+                          }
+                          
+                          // Se encontrou um nome válido (não batch ID), mostrar
+                          if (origem && typeof origem === 'string' && !origem.startsWith('batch-') && !origem.includes('batch-') && origem.trim() !== '') {
+                            return (
                               <Badge 
                                 variant="secondary" 
-                                className="bg-blue-600/10 text-blue-600 border-blue-600/30 hover:bg-blue-600/20 transition-colors cursor-help truncate"
+                                className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
                               >
-                                {normalizeSourceName(company.source_name)}
+                                {origem.trim()}
                               </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <div className="text-xs space-y-1">
-                                <p><strong>Origem:</strong> {normalizeSourceName(company.source_name)}</p>
-                                {company.source_metadata?.campaign && (
-                                  <p><strong>Campanha:</strong> {company.source_metadata.campaign}</p>
-                                )}
-                                {company.import_date && (
-                                  <p><strong>Importado:</strong> {new Date(company.import_date).toLocaleDateString('pt-BR')}</p>
-                                )}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
-                          Sem origem
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="w-[8rem]">
-                      <QuarantineCNPJStatusBadge 
-                        cnpj={company.cnpj} 
-                        cnpjStatus={(() => {
-                          const receitaData = rawData?.receita_federal || rawData || {};
-                          let status = receitaData.situacao || receitaData.status || company.cnpj_status || '';
+                            );
+                          }
                           
-                          // Normalizar para lowercase
-                          if (status.toUpperCase().includes('ATIVA') || status === '02') return 'ativa';
-                          if (status.toUpperCase().includes('SUSPENSA') || status === '03') return 'inativo';
-                          if (status.toUpperCase().includes('INAPTA') || status === '04') return 'inativo';
-                          if (status.toUpperCase().includes('BAIXADA') || status === '08') return 'inexistente';
-                          if (status.toUpperCase().includes('NULA') || status === '01') return 'inexistente';
-                          
-                          return status.toLowerCase();
+                          // Se não encontrou, mostrar Legacy
+                          return (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              Legacy
+                            </Badge>
+                          );
                         })()}
-                      />
+                      </div>
                     </TableCell>
-                    <TableCell className="w-[10rem] max-w-[10rem] truncate">
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <QuarantineCNPJStatusBadge 
+                          cnpj={company.cnpj} 
+                          cnpjStatus={(() => {
+                            const receitaData = rawData?.receita_federal || rawData || {};
+                            let status = receitaData.situacao || receitaData.status || company.cnpj_status || '';
+                            
+                            // Normalizar para lowercase
+                            if (status.toUpperCase().includes('ATIVA') || status === '02') return 'ativa';
+                            if (status.toUpperCase().includes('SUSPENSA') || status === '03') return 'inativo';
+                            if (status.toUpperCase().includes('INAPTA') || status === '04') return 'inativo';
+                            if (status.toUpperCase().includes('BAIXADA') || status === '08') return 'inexistente';
+                            if (status.toUpperCase().includes('NULA') || status === '01') return 'inexistente';
+                            
+                            return status.toLowerCase();
+                          })()}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center truncate">
                       {(() => {
                         const sector = company.segmento || company.setor || rawData?.setor_amigavel || rawData?.atividade_economica;
                         return sector ? (
@@ -2352,8 +2406,8 @@ export default function ApprovedLeads() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="w-[5rem]">
-                      <div className="flex flex-col gap-1">
+                    <TableCell className="text-center">
+                      <div className="flex flex-col items-center gap-1">
                         {company.uf ? (
                           <>
                             <Badge variant="secondary" className="w-fit">
@@ -2370,97 +2424,106 @@ export default function ApprovedLeads() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="w-[7rem] text-center">
-                      <ICPScoreTooltip
-                        score={company.icp_score || 0}
-                        porte={company.porte}
-                        setor={company.setor}
-                        uf={company.uf}
-                        is_cliente_totvs={company.is_cliente_totvs}
-                        hasReceitaData={!!rawData?.receita_federal}
-                        hasApolloData={!!rawData?.apollo || !!rawData?.enrichment_360}
-                        hasWebsite={!!company.website}
-                        hasContact={!!company.email || !!company.telefone}
-                      />
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <ICPScoreTooltip
+                          score={company.icp_score || 0}
+                          porte={company.porte}
+                          setor={company.setor}
+                          uf={company.uf}
+                          is_cliente_totvs={company.is_cliente_totvs}
+                          hasReceitaData={!!rawData?.receita_federal}
+                          hasApolloData={!!rawData?.apollo || !!rawData?.enrichment_360}
+                          hasWebsite={!!company.website}
+                          hasContact={!!company.email || !!company.telefone}
+                        />
+                      </div>
                     </TableCell>
-                    <TableCell className="w-[9rem]">
-                      <QuarantineEnrichmentStatusBadge 
-                        rawAnalysis={rawData}
-                        totvsStatus={company.totvs_status}
-                        showProgress
-                      />
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <QuarantineEnrichmentStatusBadge 
+                          rawAnalysis={rawData}
+                          totvsStatus={company.totvs_status}
+                          showProgress
+                        />
+                      </div>
                     </TableCell>
                     {/* ✅ COLUNA ICP */}
-                    <TableCell className="w-[7rem]">
-                      {(() => {
-                        const companyRawData = (company as any).raw_data || {};
-                        // ✅ LER icp_id de raw_data (onde foi salvo durante a migração)
-                        const icpId = companyRawData?.icp_id || rawData?.icp_id || (company as any).icp_id;
-                        const icpName = companyRawData?.best_icp_name || companyRawData?.icp_name || rawData?.best_icp_name || rawData?.icp_name;
-                        
-                        // Se tiver icp_id mas não tiver nome, usar fallback
-                        if (icpId && !icpName) {
-                          return (
-                            <Badge variant="outline" className="text-xs">
-                              ICP Principal
-                            </Badge>
-                          );
-                        }
-                        
-                        if (icpName) {
-                          return (
-                            <Badge variant="outline" className="text-xs">
-                              {icpName}
-                            </Badge>
-                          );
-                        }
-                        return <span className="text-xs text-muted-foreground">-</span>;
-                      })()}
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        {(() => {
+                          const companyRawData = (company as any).raw_data || {};
+                          // ✅ LER icp_id de raw_data (onde foi salvo durante a migração)
+                          const icpId = companyRawData?.icp_id || rawData?.icp_id || (company as any).icp_id;
+                          const icpName = companyRawData?.best_icp_name || companyRawData?.icp_name || rawData?.best_icp_name || rawData?.icp_name;
+                          
+                          // Se tiver icp_id mas não tiver nome, usar fallback
+                          if (icpId && !icpName) {
+                            return (
+                              <Badge variant="outline" className="text-xs">
+                                ICP Principal
+                              </Badge>
+                            );
+                          }
+                          
+                          if (icpName) {
+                            return (
+                              <Badge variant="outline" className="text-xs">
+                                {icpName}
+                              </Badge>
+                            );
+                          }
+                          return <span className="text-xs text-muted-foreground">-</span>;
+                        })()}
+                      </div>
                     </TableCell>
                     {/* ✅ COLUNA FIT SCORE */}
-                    <TableCell className="w-[7rem]">
-                      {(() => {
-                        const companyRawData = (company as any).raw_data || {};
-                        // ✅ LER fit_score de raw_data (onde foi salvo durante a migração)
-                        const fitScore = companyRawData?.fit_score ?? rawData?.fit_score ?? (company as any).fit_score ?? company.icp_score;
-                        
-                        if (fitScore != null && fitScore > 0) {
-                          return (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex items-center gap-2 cursor-help group">
-                                    <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                    <span className="font-medium">{fitScore.toFixed(1)}%</span>
-                                    <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="left" className="max-w-sm p-4">
-                                  <div className="space-y-2">
-                                    <p className="font-semibold text-sm border-b pb-2">
-                                      Fit Score: {fitScore.toFixed(1)}%
-                                    </p>
-                                    <div className="text-xs space-y-1.5">
-                                      <p>Cálculo baseado em:</p>
-                                      <ul className="list-disc list-inside space-y-1">
-                                        <li>Setor (40%): Match com ICP</li>
-                                        <li>Localização (30%): UF/Cidade</li>
-                                        <li>Dados completos (20%): Qualidade dos dados</li>
-                                        <li>Website (5%): Presença digital</li>
-                                        <li>Contato (5%): Email/Telefone</li>
-                                      </ul>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        {(() => {
+                          const companyRawData = (company as any).raw_data || {};
+                          // ✅ LER fit_score de raw_data (onde foi salvo durante a migração)
+                          const fitScore = companyRawData?.fit_score ?? rawData?.fit_score ?? (company as any).fit_score ?? company.icp_score;
+                          
+                          if (fitScore != null && fitScore > 0) {
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center justify-center gap-2 cursor-help group">
+                                      <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                      <span className="font-medium">{fitScore.toFixed(1)}%</span>
+                                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          );
-                        }
-                        return <span className="text-xs text-muted-foreground">N/A</span>;
-                      })()}
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-sm p-4">
+                                    <div className="space-y-2">
+                                      <p className="font-semibold text-sm border-b pb-2">
+                                        Fit Score: {fitScore.toFixed(1)}%
+                                      </p>
+                                      <div className="text-xs space-y-1.5">
+                                        <p>Cálculo baseado em:</p>
+                                        <ul className="list-disc list-inside space-y-1">
+                                          <li>Setor (40%): Match com ICP</li>
+                                          <li>Localização (30%): UF/Cidade</li>
+                                          <li>Dados completos (20%): Qualidade dos dados</li>
+                                          <li>Website (5%): Presença digital</li>
+                                          <li>Contato (5%): Email/Telefone</li>
+                                        </ul>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          }
+                          return <span className="text-xs text-muted-foreground">N/A</span>;
+                        })()}
+                      </div>
                     </TableCell>
                     {/* ✅ COLUNA GRADE */}
-                    <TableCell className="w-[6rem]">
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
                       {(() => {
                         const companyRawData = (company as any).raw_data || {};
                         // ✅ LER grade de raw_data (onde foi salvo durante a migração)
@@ -2484,40 +2547,56 @@ export default function ApprovedLeads() {
                           </Badge>
                         );
                       })()}
+                      </div>
                     </TableCell>
                     {/* ✅ NOVA COLUNA: Purchase Intent Score */}
-                    <TableCell className="w-[10rem]">
-                      <PurchaseIntentBadge 
-                        score={(company as any).purchase_intent_score || 0}
-                        intentType={(company as any).purchase_intent_type || 'potencial'}
-                        size="sm"
-                      />
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <PurchaseIntentBadge 
+                          score={(company as any).purchase_intent_score || 0}
+                          intentType={(company as any).purchase_intent_type || 'potencial'}
+                          size="sm"
+                        />
+                      </div>
                     </TableCell>
                     {/* ✅ NOVA COLUNA: Website */}
-                    <TableCell className="w-[10rem]">
-                      {company.website_encontrado || company.website ? (
-                        <a
-                          href={company.website_encontrado || company.website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1 text-xs"
-                        >
-                          <Globe className="h-3.5 w-3.5" />
-                          <span className="truncate max-w-[120px]">{company.website_encontrado || company.website}</span>
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
+                    <TableCell className="text-center">
+                      {(() => {
+                        const websiteUrl = formatWebsiteUrl(company.website_encontrado || company.website);
+                        if (!websiteUrl) {
+                          return <span className="text-muted-foreground text-xs">-</span>;
+                        }
+                        return (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <a
+                                  href={websiteUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center mx-auto text-primary hover:text-primary/80 transition-colors"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Globe className="h-4 w-4" />
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-sm">{websiteUrl}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })()}
                     </TableCell>
                     {/* ✅ NOVA COLUNA: Website Fit Score */}
-                    <TableCell className="w-[8rem]">
+                    <TableCell className="text-center">
                       {company.website_fit_score != null && company.website_fit_score > 0 ? (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30 text-xs">
-                                +{company.website_fit_score}pts
-                              </Badge>
+                              <div className="inline-flex items-center justify-center mx-auto text-green-600 cursor-help">
+                                <Target className="h-4 w-4" />
+                              </div>
                             </TooltipTrigger>
                             <TooltipContent>
                               <div className="space-y-1">
@@ -2546,22 +2625,36 @@ export default function ApprovedLeads() {
                       )}
                     </TableCell>
                     {/* ✅ NOVA COLUNA: LinkedIn */}
-                    <TableCell className="w-[8rem]">
-                      {company.linkedin_url ? (
-                        <a
-                          href={company.linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1 text-xs"
-                        >
-                          <span className="truncate max-w-[100px]">LinkedIn</span>
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
+                    <TableCell className="text-center">
+                      {(() => {
+                        const linkedinUrl = formatWebsiteUrl(company.linkedin_url);
+                        if (!linkedinUrl) {
+                          return <span className="text-muted-foreground text-xs">-</span>;
+                        }
+                        return (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <a
+                                  href={linkedinUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center mx-auto text-[#0077B5] hover:text-[#0077B5]/80 transition-colors"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Linkedin className="h-4 w-4" />
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-sm">{linkedinUrl}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })()}
                     </TableCell>
-                    <TableCell className="w-[10rem]">
-                      <div className="flex items-center justify-end gap-2">
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-2">
                         {/* STC */}
                         <TooltipProvider>
                           <Tooltip>
@@ -2668,7 +2761,7 @@ export default function ApprovedLeads() {
                 })
               )}
             </TableBody>
-          </Table>
+              </Table>
         </CardContent>
       </Card>
 
@@ -3169,6 +3262,7 @@ export default function ApprovedLeads() {
         isCancelling={cancelEnrichment}
       />
       
-    </div>
+      </div>
+    </AppLayout>
   );
 }

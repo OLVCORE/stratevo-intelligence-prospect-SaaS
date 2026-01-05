@@ -74,7 +74,7 @@ export function TrevoAssistant({ context }: TrevoAssistantProps) {
 
   if (!isOpen) {
     return (
-      <div className="fixed top-2 right-4 z-[60] group">
+      <div className="fixed bottom-4 right-28 sm:right-32 z-[60] group">
         {/* Botão principal com TREVO VERDE mais visível */}
         <Button
           onClick={() => setIsOpen(true)}
@@ -115,11 +115,15 @@ export function TrevoAssistant({ context }: TrevoAssistantProps) {
     );
   }
 
-  // TREVO sempre na DIREITA (top-right), respeitando sidebar
+  // TREVO sempre na DIREITA (bottom-right), respeitando sidebar, ScrollToTop e ScrollToBottom
   // Sidebar: expandido = 16rem (256px), colapsado = 4rem (64px)
+  // ScrollToTop: bottom-4 right-4 (z-55) - 48px de largura
+  // ScrollToBottom: bottom-4 right-20 (z-55) - 48px de largura
+  // TREVO: precisa estar acima (z-60) mas não sobrepor - right-28 para não sobrepor ScrollToBottom
   // Modos: minimized (pequeno), normal (médio), expanded (até o meio da página)
   const getContainerClasses = () => {
-    const baseClasses = 'fixed top-16 right-4 z-[60]';
+    // ✅ CORRIGIDO: bottom-right mas com espaço para ScrollToTop e ScrollToBottom (right-28 para não sobrepor)
+    const baseClasses = 'fixed bottom-4 right-28 sm:right-32 z-[60]';
     
     if (viewMode === 'minimized') {
       // Minimizado: pequeno (barra de título)

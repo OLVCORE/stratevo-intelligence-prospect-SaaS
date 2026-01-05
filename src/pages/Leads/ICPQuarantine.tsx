@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize, Eye } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize, Eye, Target, Linkedin } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ import { useDeleteQuarantineBatch } from '@/hooks/useDeleteQuarantineBatch';
 import { useRefreshQuarantineBatch } from '@/hooks/useRefreshQuarantineBatch';
 import { useReverifyAllCompanies } from '@/hooks/useReverifyAllCompanies';
 import { useRestoreAllBatchDiscarded } from '@/hooks/useRestoreDiscarded';
-import { QuarantineActionsMenu } from '@/components/icp/QuarantineActionsMenu';
+import { UnifiedActionsMenu } from '@/components/common/UnifiedActionsMenu';
 import { QuarantineRowActions } from '@/components/icp/QuarantineRowActions';
 import { DiscardedCompaniesModal } from '@/components/icp/DiscardedCompaniesModal';
 import UsageVerificationCard from '@/components/totvs/TOTVSCheckCard';
@@ -47,6 +47,7 @@ import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton'
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
 import { normalizeFromICPResults } from '@/lib/utils/companyDataNormalizer';
+import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -682,8 +683,16 @@ export default function ICPQuarantine() {
       // 🔍 FILTROS INTELIGENTES POR COLUNA
       
       // Filtro por Origem (normalizado)
-      if (filterOrigin.length > 0 && !filterOrigin.includes(normalizeSourceName(c.source_name))) {
-        return false;
+      if (filterOrigin.length > 0) {
+        // ✅ BUSCAR source_name em múltiplos lugares (igual renderização)
+        const sourceName = c.source_name || 
+                         (c as any).raw_analysis?.source_name ||
+                         (c as any).raw_analysis?.origem_original ||
+                         (c as any).raw_analysis?.source_file_name ||
+                         (c as any).raw_data?.source_name;
+        if (!filterOrigin.includes(normalizeSourceName(sourceName))) {
+          return false;
+        }
       }
       
       // Filtro por Status CNPJ
@@ -1073,34 +1082,23 @@ export default function ICPQuarantine() {
       }
 
       // 2. Escanear website e calcular fit score
-      const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // ✅ CORRIGIDO: Usar supabase.functions.invoke() em vez de fetch() para evitar CORS
+      const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-prospect-website', {
+        body: {
           tenant_id: tenantId,
           company_id: company.company_id,
           cnpj: company.cnpj,
           website_url: websiteData.website,
           razao_social: company.razao_social,
-        }),
+        }
       });
 
-      if (!scanWebsiteResponse.ok) {
-        const errorText = await scanWebsiteResponse.text();
-        let errorMessage = 'Erro ao escanear website';
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error || errorJson.message || errorMessage;
-        } catch {
-          errorMessage = errorText || errorMessage;
-        }
-        throw new Error(`${errorMessage} (Status: ${scanWebsiteResponse.status})`);
+      if (scanError) {
+        const errorMessage = scanError.message || 'Erro ao escanear website';
+        throw new Error(errorMessage);
       }
 
-      const scanData = await scanWebsiteResponse.json();
+      // scanData já foi definido acima pelo invoke
       
       // 3. Atualizar icp_analysis_results
       if (scanData.success) {
@@ -1904,31 +1902,23 @@ export default function ICPQuarantine() {
                   </Button>
                   
                   {/* Menu de Ações em Massa (dropdown) - SÓ APARECE COM SELEÇÃO */}
-                  <QuarantineActionsMenu
-                selectedCount={selectedIds.length}
-                onDeleteSelected={handleDeleteSelected}
-                onExportSelected={handleExportSelected}
-                onPreviewSelected={handlePreviewSelected}
-                onRefreshSelected={handleRefreshSelected}
-                onBulkEnrichReceita={handleBulkEnrichReceita}
-                onBulkEnrichApollo={handleBulkEnrichApollo}
-                onBulkEnrich360={handleBulkEnrich360}
-                onBulkEnrichWebsite={handleBulkEnrichWebsite}
-                onBulkVerification={handleBulkVerification}
-                onBulkDiscoverCNPJ={handleBulkDiscoverCNPJ}
-                onBulkApprove={handleBulkApprove}
-                onRestoreDiscarded={() => restoreAllDiscarded()}
-                onReverifyAllV2={() => reverifyAll(filteredCompanies.map(c => ({
-                  id: c.company_id || c.id,
-                  razao_social: c.razao_social,
-                  cnpj: c.cnpj,
-                  website: c.website
-                })))}
-                isProcessing={isApproving || isDeleting || isRefreshing}
-                isReverifying={isReverifying}
-                selectedItems={companies.filter(c => selectedIds.includes(c.id))}
-                totalCompanies={filteredCompanies}
-              />
+                  <UnifiedActionsMenu
+                    context="quarantine"
+                    selectedCount={selectedIds.length}
+                    totalCount={filteredCompanies.length}
+                    onApprove={handleBulkApprove}
+                    onEnrichReceita={handleBulkEnrichReceita}
+                    onEnrichApollo={handleBulkEnrichApollo}
+                    onEnrich360={handleBulkEnrich360}
+                    onEnrichWebsite={handleBulkEnrichWebsite}
+                    onDiscoverCNPJ={handleBulkDiscoverCNPJ}
+                    onVerification={handleBulkVerification}
+                    onPreview={handlePreviewSelected}
+                    onExportCSV={handleExportSelected}
+                    onExportPDF={handleExportSelected}
+                    onDelete={handleDeleteSelected}
+                    isProcessing={isApproving || isDeleting || isRefreshing}
+                  />
                 </>
               )}
               
@@ -2052,53 +2042,69 @@ export default function ICPQuarantine() {
 
       {/* Table */}
       <Card>
-        <CardContent className="p-0">{/* ✅ EXATAMENTE COMO GERENCIAR EMPRESAS */}
-            <Table className="table-fixed w-full text-[10px]">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead className="w-[44px]">
-                    <Checkbox
-                      checked={selectedIds.length === filteredCompanies.length && filteredCompanies.length > 0}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[26rem]">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('empresa')}
-                      className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
-                    >
-                      <span className="font-semibold">Empresa</span>
-                      <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'empresa' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[9rem]">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('cnpj')}
-                      className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
-                    >
-                      <span className="font-semibold">CNPJ</span>
-                      <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'cnpj' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[7rem]">
-                    <ColumnFilter
-                      column="source_name"
-                      title="Origem"
-                      values={companies.map(c => normalizeSourceName(c.source_name))}
-                      selectedValues={filterOrigin}
-                      onFilterChange={setFilterOrigin}
-                      onSort={() => handleSort('source_name')}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[8rem]">
-                    <ColumnFilter
-                      column="cnpj_status"
-                      title="Status CNPJ"
+        <CardContent className="p-0">
+            <Table className="w-full min-w-[1400px] table-auto">
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="w-10 min-w-[40px] text-center"></TableHead>
+                    <TableHead className="w-12 min-w-[48px] text-center">
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={selectedIds.length === filteredCompanies.length && filteredCompanies.length > 0}
+                          onCheckedChange={handleSelectAll}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="min-w-[200px] flex-1 text-center">
+                      <div className="flex justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSort('empresa')}
+                          className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
+                        >
+                          <span className="font-semibold">Empresa</span>
+                          <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'empresa' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
+                        </Button>
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px] text-center">
+                      <div className="flex justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSort('cnpj')}
+                          className="h-8 flex items-center gap-1 px-2 hover:bg-primary/10 transition-colors group"
+                        >
+                          <span className="font-semibold">CNPJ</span>
+                          <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'cnpj' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
+                        </Button>
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px] text-center">
+                      <div className="flex justify-center">
+                        <ColumnFilter
+                          column="source_name"
+                          title="Origem"
+                          values={companies.map(c => {
+                            // ✅ BUSCAR source_name em múltiplos lugares (igual renderização)
+                            const sourceName = c.source_name || 
+                                             (c as any).raw_analysis?.source_name ||
+                                             (c as any).raw_analysis?.origem_original ||
+                                             (c as any).raw_analysis?.source_file_name ||
+                                             (c as any).raw_data?.source_name;
+                            return normalizeSourceName(sourceName);
+                          })}
+                          selectedValues={filterOrigin}
+                          onFilterChange={setFilterOrigin}
+                          onSort={() => handleSort('source_name')}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">
+                      <ColumnFilter
+                        column="cnpj_status"
+                        title="Status CNPJ"
                       values={companies.map(c => {
                         const rawData = (c as any).raw_data?.receita_federal || (c as any).raw_data || {};
                         
@@ -2129,41 +2135,41 @@ export default function ICPQuarantine() {
                       onSort={() => handleSort('cnpj_status')}
                     />
                   </TableHead>
-                  <TableHead className="w-[10rem]">
-                    <ColumnFilter
-                      column="setor"
-                      title="Setor"
+                      <TableHead className="min-w-[180px] flex-[1.5]">
+                        <ColumnFilter
+                          column="setor"
+                          title="Setor"
                       values={companies.map(c => c.segmento || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A')}
                       selectedValues={filterSector}
                       onFilterChange={setFilterSector}
                       onSort={() => handleSort('setor')}
                     />
                   </TableHead>
-                  <TableHead className="w-[5rem]">
-                    <ColumnFilter
-                      column="uf"
-                      title="UF"
+                        <TableHead className="w-[60px] min-w-[50px]">
+                          <ColumnFilter
+                            column="uf"
+                            title="UF"
                       values={companies.map(c => c.uf || (c as any).raw_data?.uf || '')}
                       selectedValues={filterUF}
                       onFilterChange={setFilterUF}
                       onSort={() => handleSort('uf')}
                     />
                   </TableHead>
-                  <TableHead className="w-[7rem] text-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('score')}
-                      className="h-8 flex items-center gap-1 px-1 hover:bg-primary/10 transition-colors group"
-                    >
-                      <span className="font-semibold text-[10px]">Score ICP</span>
-                      <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'score' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[9rem]">
-                    <ColumnFilter
-                      column="analysis_status"
-                      title="Status Análise"
+                          <TableHead className="w-[100px] min-w-[90px]">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSort('score')}
+                              className="h-8 flex items-center gap-1"
+                            >
+                              Score ICP
+                              <ArrowUpDown className="h-3 w-3" />
+                            </Button>
+                          </TableHead>
+                          <TableHead className="w-[120px] min-w-[100px]">
+                            <ColumnFilter
+                              column="analysis_status"
+                              title="Status Análise"
                       values={companies.map(c => {
                         const rawData = (c as any).raw_data || {};
                         const hasReceitaWS = !!(rawData.receita_federal || rawData.cnpj);
@@ -2183,10 +2189,10 @@ export default function ICPQuarantine() {
                       onFilterChange={setFilterAnalysisStatus}
                     />
                   </TableHead>
-                  <TableHead className="w-[9rem]">
-                    <ColumnFilter
-                      column="totvs_status"
-                      title="Status Verificação"
+                            <TableHead className="w-[120px] min-w-[100px]">
+                              <ColumnFilter
+                                column="totvs_status"
+                                title="Status Verificação"
                       values={companies.map(c => {
                         const status = c.totvs_status || 'nao-verificado';
                         // Mapear para labels legíveis
@@ -2198,10 +2204,10 @@ export default function ICPQuarantine() {
                       onFilterChange={setFilterVerificationStatus}
                     />
                   </TableHead>
-                  <TableHead className="w-[7rem]">
-                    <ColumnFilter
-                      column="icp"
-                      title="ICP"
+                                <TableHead className="w-[120px] min-w-[100px]">
+                                  <ColumnFilter
+                                    column="icp"
+                                    title="ICP"
                       values={[...new Set(companies.map(c => {
                         const rawData = (c as any).raw_data || {};
                         return rawData.best_icp_name || rawData.icp_name || 'Sem ICP';
@@ -2210,31 +2216,31 @@ export default function ICPQuarantine() {
                       onFilterChange={setFilterICP}
                     />
                   </TableHead>
-                  <TableHead className="w-[7rem]">
-                    <ColumnFilter
-                      column="fit_score"
-                      title="Fit Score"
+                                    <TableHead className="w-[100px] min-w-[90px]">
+                                      <ColumnFilter
+                                        column="fit_score"
+                                        title="Fit Score"
                       values={['90-100', '75-89', '60-74', '40-59', '0-39']}
                       selectedValues={filterFitScore}
                       onFilterChange={setFilterFitScore}
                     />
                   </TableHead>
-                  <TableHead className="w-[6rem]">
-                    <ColumnFilter
-                      column="grade"
-                      title="Grade"
+                                        <TableHead className="w-[60px] min-w-[50px]">
+                                          <ColumnFilter
+                                            column="grade"
+                                            title="Grade"
                       values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
                       selectedValues={filterGrade}
                       onFilterChange={setFilterGrade}
                     />
                   </TableHead>
-                  <TableHead className="w-[10rem]">Intenção de Compra</TableHead>
-                  <TableHead className="w-[10rem]">Website</TableHead>
-                  <TableHead className="w-[8rem]">Website Fit</TableHead>
-                  <TableHead className="w-[8rem]">LinkedIn</TableHead>
-                  <TableHead className="w-[10rem] text-right"><span className="font-semibold text-[10px]">Ações</span></TableHead>
-                </TableRow>
-              </TableHeader>
+                                            <TableHead className="w-[160px] min-w-[140px] text-center">Intenção de Compra</TableHead>
+                                            <TableHead className="min-w-[180px] flex-1 text-center">Website</TableHead>
+                                            <TableHead className="w-[100px] min-w-[90px] text-center">Website Fit</TableHead>
+                                            <TableHead className="w-[100px] min-w-[90px] text-center">LinkedIn</TableHead>
+                                            <TableHead className="w-20 min-w-[80px] text-center">Ações</TableHead>
+                                          </TableRow>
+                                        </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
@@ -2258,103 +2264,137 @@ export default function ICPQuarantine() {
                   
                   return (
                     <React.Fragment key={c.id}>
-                      <TableRow className={`h-[3.25rem] align-middle ${expandedRow === c.id ? 'bg-muted/30' : ''}`}>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpandedRow(expandedRow === c.id ? null : c.id);
-                            }}
-                          >
-                            {expandedRow === c.id ? (
-                              <ChevronUp className="h-4 w-4 text-primary" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
+                      <TableRow className={expandedRow === c.id ? 'bg-muted/30' : ''}>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedRow(expandedRow === c.id ? null : c.id);
+                              }}
+                            >
+                              {expandedRow === c.id ? (
+                                <ChevronUp className="h-4 w-4 text-primary" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </Button>
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedIds.includes(c.id)}
-                            onCheckedChange={(checked) => 
-                              handleSelectOne(c.id, checked as boolean)
-                            }
-                            disabled={c.status !== 'pendente'}
-                          />
-                        </TableCell>
-                        <TableCell className="w-[26rem] max-w-[26rem] truncate">
-                          <div 
-                            className="flex flex-col cursor-pointer hover:text-primary transition-colors"
-                            onClick={() => {
-                              // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
-                              if (c.company_id) {
-                                navigate(`/company/${c.company_id}`);
-                              } else {
-                                toast.error('Empresa sem ID vinculado', {
-                                  description: 'Não foi possível localizar o ID da empresa'
-                                });
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            <Checkbox
+                              checked={selectedIds.includes(c.id)}
+                              onCheckedChange={(checked) => 
+                                handleSelectOne(c.id, checked as boolean)
                               }
-                            }}
-                          >
-                            <span className="font-medium text-sm leading-snug line-clamp-2" title={c.razao_social}>
-                              {c.razao_social}
-                            </span>
-                            {c.website && (
-                              <span className="text-xs text-muted-foreground mt-0.5 truncate">{c.website}</span>
+                              disabled={c.status !== 'pendente'}
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <Building2 className="h-4 w-4 text-primary" />
+                            <div>
+                              <button
+                                onClick={() => {
+                                  // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
+                                  if (c.company_id) {
+                                    navigate(`/company/${c.company_id}`);
+                                  } else {
+                                    toast.error('Empresa sem ID vinculado', {
+                                      description: 'Não foi possível localizar o ID da empresa'
+                                    });
+                                  }
+                                }}
+                                className="font-medium hover:text-primary hover:underline"
+                                title={c.razao_social}
+                              >
+                                {c.razao_social}
+                              </button>
+                              {c.website && (
+                                <p className="text-xs text-muted-foreground">{c.website}</p>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            {c.cnpj ? (
+                              <Badge 
+                                variant="outline" 
+                                className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors"
+                                onClick={() => {
+                                  if (c.company_id) {
+                                    setExecutiveReportCompanyId(c.company_id);
+                                    setExecutiveReportOpen(true);
+                                  } else {
+                                    toast.info('Empresa ainda não possui relatório completo', {
+                                      description: 'Aprove a empresa primeiro para gerar o relatório executivo'
+                                    });
+                                  }
+                                }}
+                              >
+                                {c.cnpj}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">N/A</span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="w-[9rem]">
-                          {c.cnpj ? (
-                            <Badge 
-                              variant="outline" 
-                              className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
-                              onClick={() => {
-                                if (c.company_id) {
-                                  setExecutiveReportCompanyId(c.company_id);
-                                  setExecutiveReportOpen(true);
-                                } else {
-                                  toast.info('Empresa ainda não possui relatório completo', {
-                                    description: 'Aprove a empresa primeiro para gerar o relatório executivo'
-                                  });
-                                }
-                              }}
-                            >
-                              {c.cnpj}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">N/A</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="w-[7rem] max-w-[7rem] truncate">
-                          {c.source_name ? (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            {(() => {
+                              // ✅ MESMA LÓGICA DA TABELA ESTOQUE DE EMPRESAS QUALIFICADAS E BASE DE EMPRESAS
+                              // Buscar source_name em múltiplos lugares, priorizando qualified_prospects
+                              let origem = c.source_name || '';
+                              
+                              // Se source_name é um batch ID ou vazio, buscar de outros lugares (prioridade)
+                              if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+                                // Prioridade: raw_analysis > raw_data > outros campos (EXATAMENTE IGUAL BASE DE EMPRESAS)
+                                origem = (c as any).raw_analysis?.source_name ||
+                                        (c as any).raw_analysis?.origem_original ||
+                                        (c as any).raw_analysis?.source_file_name ||
+                                        (c as any).raw_data?.source_name ||
+                                        (c as any).raw_data?.origem ||
+                                        (c as any).raw_data?.origem_original ||
+                                        (c as any).raw_data?.source_file_name ||
+                                        (c as any).raw_data?.source ||
+                                        '';
+                              }
+                              
+                              // Se ainda for batch ID, tentar buscar de outros lugares (igual Base de Empresas)
+                              if ((!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-'))))) {
+                                origem = (c as any).raw_data?.import_batch_name ||
+                                        (c as any).raw_data?.batch_name ||
+                                        '';
+                              }
+                              
+                              // Se encontrou um nome válido (não batch ID), mostrar
+                              if (origem && typeof origem === 'string' && !origem.startsWith('batch-') && !origem.includes('batch-') && origem.trim() !== '') {
+                                return (
                                   <Badge 
                                     variant="secondary" 
-                                    className="bg-blue-600/10 text-blue-600 border-blue-600/30 hover:bg-blue-600/20 transition-colors cursor-help truncate"
+                                    className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
                                   >
-                                    {normalizeSourceName(c.source_name)}
+                                    {origem.trim()}
                                   </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <div className="text-xs space-y-1">
-                                    <p><strong>Origem:</strong> {normalizeSourceName(c.source_name)}</p>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ) : (
-                            <Badge variant="outline" className="text-xs text-muted-foreground">
-                              Legacy
-                            </Badge>
-                          )}
+                                );
+                              }
+                              
+                              // Se não encontrou, mostrar Legacy
+                              return (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                  Legacy
+                                </Badge>
+                              );
+                            })()}
+                          </div>
                         </TableCell>
-                        <TableCell className="w-[8rem]">
+                        <TableCell>
                           {(() => {
                             // ✅ USAR COMPONENTE IDÊNTICO À BASE DE EMPRESAS
                             const receitaData = c.raw_data?.receita_federal || c.raw_data?.receita || {};
@@ -2374,7 +2414,7 @@ export default function ICPQuarantine() {
                             return <QuarantineCNPJStatusBadge cnpj={c.cnpj || undefined} cnpjStatus={cnpjStatus} />;
                           })()}
                         </TableCell>
-                        <TableCell className="w-[10rem] max-w-[10rem] truncate">
+                        <TableCell className="text-center">
                           {(() => {
                             // ✅ PRIORIZAR APOLLO INDUSTRY > RECEITA FEDERAL (igual Base de Empresas)
                             const setor = c.raw_data?.apollo_organization?.industry ||
@@ -2391,77 +2431,77 @@ export default function ICPQuarantine() {
                             );
                           })()}
                         </TableCell>
-                        <TableCell className="w-[5rem]">
-                          <div className="flex flex-col gap-1">
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
                             {c.uf ? (
-                              <>
-                                <Badge variant="secondary" className="w-fit">
-                                  {c.uf}
-                                </Badge>
-                                {c.municipio && (
-                                  <span className="text-xs text-muted-foreground truncate" title={c.municipio}>
-                                    {c.municipio}
-                                  </span>
-                                )}
-                              </>
+                              <Badge variant="outline">{c.uf}</Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">N/A</span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="w-[7rem] text-center">
-                          <ICPScoreTooltip
-                            score={c.icp_score || 0}
-                            porte={c.porte}
-                            setor={c.segmento || c.setor}
-                            uf={c.uf}
-                            is_cliente_totvs={c.totvs_status === 'cliente'}
-                            hasReceitaData={!!c.raw_data?.receita_federal}
-                            hasApolloData={!!c.raw_data?.apollo || !!c.raw_data?.enrichment_360}
-                            hasWebsite={!!(c.website || c.website_encontrado)}
-                            hasContact={!!(c.email || c.telefone)}
-                          />
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            <ICPScoreTooltip
+                              score={c.icp_score || 0}
+                              porte={c.porte}
+                              setor={c.segmento || c.setor}
+                              uf={c.uf}
+                              is_cliente_totvs={c.totvs_status === 'cliente'}
+                              hasReceitaData={!!c.raw_data?.receita_federal}
+                              hasApolloData={!!c.raw_data?.apollo || !!c.raw_data?.enrichment_360}
+                              hasWebsite={!!(c.website || c.website_encontrado)}
+                              hasContact={!!(c.email || c.telefone)}
+                            />
+                          </div>
                         </TableCell>
-                        <TableCell className="w-[9rem]">
-                          <QuarantineEnrichmentStatusBadge 
-                            rawAnalysis={c.raw_data}
-                            totvsStatus={c.totvs_status}
-                            showProgress
-                          />
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            <QuarantineEnrichmentStatusBadge 
+                              rawAnalysis={c.raw_data}
+                              totvsStatus={c.totvs_status}
+                              showProgress
+                            />
+                          </div>
                         </TableCell>
                         {/* ✅ COLUNA: Status Verificação */}
-                        <TableCell className="w-[9rem]">
-                          <VerificationStatusBadge 
-                            status={c.totvs_status || 'nao-verificado'}
-                          />
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            <VerificationStatusBadge 
+                              status={c.totvs_status || 'nao-verificado'}
+                            />
+                          </div>
                         </TableCell>
                         {/* ✅ COLUNA ICP */}
-                        <TableCell className="w-[7rem]">
-                          {(() => {
-                            const icpId = c.icp_id;
-                            const icpName = c.raw_data?.best_icp_name || c.raw_data?.icp_name;
-                            
-                            // Se tiver icp_id mas não tiver nome, usar fallback
-                            if (icpId && !icpName) {
-                              return (
-                                <Badge variant="outline" className="text-xs">
-                                  ICP Principal
-                                </Badge>
-                              );
-                            }
-                            
-                            if (icpName) {
-                              return (
-                                <Badge variant="outline" className="text-xs">
-                                  {icpName}
-                                </Badge>
-                              );
-                            }
-                            return <span className="text-xs text-muted-foreground">N/A</span>;
-                          })()}
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            {(() => {
+                              const icpId = c.icp_id;
+                              const icpName = c.raw_data?.best_icp_name || c.raw_data?.icp_name;
+                              
+                              // Se tiver icp_id mas não tiver nome, usar fallback
+                              if (icpId && !icpName) {
+                                return (
+                                  <Badge variant="outline" className="text-xs">
+                                    ICP Principal
+                                  </Badge>
+                                );
+                              }
+                              
+                              if (icpName) {
+                                return (
+                                  <Badge variant="outline" className="text-xs">
+                                    {icpName}
+                                  </Badge>
+                                );
+                              }
+                              return <span className="text-xs text-muted-foreground">N/A</span>;
+                            })()}
+                          </div>
                         </TableCell>
                         {/* ✅ COLUNA FIT SCORE */}
-                        <TableCell className="w-[7rem]">
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
                           {(() => {
                             // ✅ LER fit_score de múltiplas fontes (igual Base de Empresas)
                             const fitScore = c.fit_score ?? c.raw_data?.fit_score ?? c.icp_score ?? 0;
@@ -2500,65 +2540,83 @@ export default function ICPQuarantine() {
                             }
                             return <span className="text-xs text-muted-foreground">N/A</span>;
                           })()}
+                          </div>
                         </TableCell>
                         {/* ✅ COLUNA GRADE */}
-                        <TableCell className="w-[6rem]">
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            {(() => {
+                              // ✅ LER grade de múltiplas fontes (igual Base de Empresas)
+                              const grade = c.grade || c.raw_data?.grade;
+                              
+                              if (!grade || grade === '-' || grade === 'null') {
+                                return <Badge variant="outline">-</Badge>;
+                              }
+                              
+                              const colors: Record<string, string> = {
+                                'A+': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+                                'A': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+                                'B': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+                                'C': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+                                'D': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+                              };
+                              
+                              return (
+                                <Badge className={colors[grade] || 'bg-gray-100 text-gray-800'}>
+                                  {grade}
+                                </Badge>
+                              );
+                            })()}
+                          </div>
+                        </TableCell>
+                        {/* ✅ COLUNA: Purchase Intent Score (igual Base de Empresas) */}
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            <PurchaseIntentBadge 
+                              score={c.purchase_intent_score || 0} 
+                              intentType={c.purchase_intent_type || 'potencial'}
+                              size="sm"
+                            />
+                          </div>
+                        </TableCell>
+                        {/* ✅ COLUNA: Website (igual Base de Empresas) */}
+                        <TableCell className="text-center">
                           {(() => {
-                            // ✅ LER grade de múltiplas fontes (igual Base de Empresas)
-                            const grade = c.grade || c.raw_data?.grade;
-                            
-                            if (!grade || grade === '-' || grade === 'null') {
-                              return <Badge variant="outline">-</Badge>;
+                            const websiteUrl = formatWebsiteUrl(c.website_encontrado || c.website);
+                            if (!websiteUrl) {
+                              return <span className="text-muted-foreground text-sm">-</span>;
                             }
-                            
-                            const colors: Record<string, string> = {
-                              'A+': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-                              'A': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-                              'B': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-                              'C': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-                              'D': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-                            };
-                            
                             return (
-                              <Badge className={colors[grade] || 'bg-gray-100 text-gray-800'}>
-                                {grade}
-                              </Badge>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <a
+                                      href={websiteUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center mx-auto text-primary hover:text-primary/80 transition-colors"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Globe className="h-4 w-4" />
+                                    </a>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-sm">{websiteUrl}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             );
                           })()}
                         </TableCell>
-                        {/* ✅ COLUNA: Purchase Intent Score (igual Base de Empresas) */}
-                        <TableCell className="w-[10rem]">
-                          <PurchaseIntentBadge 
-                            score={c.purchase_intent_score || 0} 
-                            intentType={c.purchase_intent_type || 'potencial'}
-                            size="sm"
-                          />
-                        </TableCell>
-                        {/* ✅ COLUNA: Website (igual Base de Empresas) */}
-                        <TableCell className="w-[10rem]">
-                          {c.website_encontrado || c.website ? (
-                            <a
-                              href={c.website_encontrado || c.website}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline flex items-center gap-1 text-xs"
-                            >
-                              <Globe className="h-3.5 w-3.5" />
-                              <span className="truncate max-w-[120px]">{c.website_encontrado || c.website}</span>
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
-                          )}
-                        </TableCell>
                         {/* ✅ COLUNA: Website Fit Score (igual Base de Empresas) */}
-                        <TableCell className="w-[8rem]">
+                        <TableCell className="text-center">
                           {c.website_fit_score != null && c.website_fit_score > 0 ? (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30 text-xs">
-                                    +{c.website_fit_score}pts
-                                  </Badge>
+                                  <div className="inline-flex items-center justify-center mx-auto text-green-600 cursor-help">
+                                    <Target className="h-4 w-4" />
+                                  </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <div className="space-y-1">
@@ -2583,26 +2641,40 @@ export default function ICPQuarantine() {
                               </Tooltip>
                             </TooltipProvider>
                           ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
+                            <span className="text-muted-foreground text-sm">-</span>
                           )}
                         </TableCell>
                         {/* ✅ COLUNA: LinkedIn (igual Base de Empresas) */}
-                        <TableCell className="w-[8rem]">
-                          {c.linkedin_url ? (
-                            <a
-                              href={c.linkedin_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline flex items-center gap-1 text-xs"
-                            >
-                              <span className="truncate max-w-[100px]">LinkedIn</span>
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
-                          )}
+                        <TableCell className="text-center">
+                          {(() => {
+                            const linkedinUrl = formatWebsiteUrl(c.linkedin_url);
+                            if (!linkedinUrl) {
+                              return <span className="text-muted-foreground text-sm">-</span>;
+                            }
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <a
+                                      href={linkedinUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center mx-auto text-[#0077B5] hover:text-[#0077B5]/80 transition-colors"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Linkedin className="h-4 w-4" />
+                                    </a>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-sm">{linkedinUrl}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })()}
                         </TableCell>
-                        <TableCell className="w-[10rem]">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
                         {/* STC */}
                         <TooltipProvider>
                           <Tooltip>
@@ -2737,7 +2809,7 @@ export default function ICPQuarantine() {
                 })
               )}
             </TableBody>
-          </Table>
+              </Table>
         </CardContent>
       </Card>
 

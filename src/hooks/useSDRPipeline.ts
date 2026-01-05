@@ -87,7 +87,8 @@ export function useSDRPipeline() {
       const { error } = await supabase
         .from('sdr_deals')
         .update({ 
-          deal_stage: newStage,
+          stage: newStage,
+          status: newStage === 'won' ? 'won' : newStage === 'lost' ? 'lost' : 'open',
           won_date: newStage === 'won' ? new Date().toISOString() : null,
         })
         .eq('id', leadId);

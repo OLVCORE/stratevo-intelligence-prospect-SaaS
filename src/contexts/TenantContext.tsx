@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode,
 import { useAuth } from './AuthContext';
 import { multiTenantService, type Tenant } from '@/services/multi-tenant.service';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface TenantContextType {
   tenant: Tenant | null;
@@ -21,6 +22,7 @@ const TenantContext = createContext<TenantContextType | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient(); // 🔥 CRÍTICO: Para invalidar queries quando tenant muda
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -243,7 +245,12 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('selectedTenantId', tenantId);
       console.log('[TenantContext] ✅ Tenant atualizado no contexto e localStorage:', tenantData.nome);
 
-      // 4. Disparar eventos para sincronizar todos os componentes
+      // 4. 🔥 CRÍTICO: Invalidar TODAS as queries do React Query para forçar nova busca
+      console.log('[TenantContext] 🔄 Invalidando TODAS as queries do React Query...');
+      queryClient.clear(); // Limpa todo o cache
+      console.log('[TenantContext] ✅ Cache do React Query limpo completamente');
+      
+      // 5. Disparar eventos para sincronizar todos os componentes
       window.dispatchEvent(new CustomEvent('tenant-switched', { 
         detail: { 
           tenantId: tenantData.id,
@@ -266,7 +273,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   const refreshTenant = useCallback(async () => {
     console.log('[TenantContext] 🔄 refreshTenant chamado');
@@ -363,6 +370,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('selectedTenantId', next.id);
         console.log('[HF-STRATEVO-TENANT] setTenant =>', next.id, next.nome);
         
+        // 🔥 CRÍTICO: Invalidar TODAS as queries quando tenant muda via setTenant
+        console.log('[TenantContext] 🔄 Invalidando TODAS as queries do React Query (setTenant)...');
+        queryClient.clear(); // Limpa todo o cache
+        console.log('[TenantContext] ✅ Cache do React Query limpo completamente (setTenant)');
+        
         // 🔥 NOVO: Disparar eventos para sincronização
         window.dispatchEvent(new CustomEvent('tenant-switched', { 
           detail: { 
@@ -373,11 +385,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       } else {
         localStorage.removeItem('selectedTenantId');
         console.log('[HF-STRATEVO-TENANT] setTenant => null (removido)');
+        
+        // 🔥 CRÍTICO: Limpar cache quando tenant é removido
+        queryClient.clear();
       }
     } catch (e) {
       console.warn('[TenantProvider] Falha ao gravar tenant no localStorage', e);
     }
-  }, []);
+  }, [queryClient]);
 
   const isActive = tenant
     ? tenant.status === 'ACTIVE' || tenant.status === 'TRIAL'

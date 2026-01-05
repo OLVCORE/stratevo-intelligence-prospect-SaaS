@@ -340,7 +340,7 @@ const [availableIcps, setAvailableIcps] = useState<any[]>([]); // 🔥 NOVO: Lis
       'perc_dividas_cnpj_socios_sobre_faturamento': ['% dívidas cnpj e sócios sobre faturamento anual', '% dividas cnpj e socios sobre faturamento'],
       'total_dividas_cnpj_uniao': ['total dívidas cnpj com a união', 'total dividas cnpj uniao'],
       'total_dividas_cnpj_socios_uniao': ['total dívidas cnpj e sócios com a união', 'total dividas cnpj socios uniao'],
-      'dividas_gerais_cnpj_uniao': ['dívidas gerais cnpj com a união', 'dividas gerais cnpj uniao'],
+      'dividas_gerais_cnpj_uniao': ['dívidas gerais cnpj com a união', 'dividas gerais cnpj uniao', 'total dividas', 'total dívidas'],
       'dividas_gerais_cnpj_socios_uniao': ['dívidas gerais cnpj e sócios com a união', 'dividas gerais cnpj socios uniao'],
       'dividas_cnpj_fgts': ['dívidas cnpj com o fgts', 'dividas cnpj fgts'],
       'dividas_cnpj_socios_fgts': ['dívidas cnpj e sócios com o fgts', 'dividas cnpj socios fgts'],

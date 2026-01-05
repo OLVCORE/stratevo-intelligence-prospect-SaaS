@@ -542,18 +542,20 @@ export function DealFormDialog({ open, onOpenChange, onSuccess }: DealFormDialog
       }
 
       // 🔥 CRIAR DEAL COM LEAD SOURCE
+      const { data: { user } } = await supabase.auth.getUser();
       const { error: dealError } = await supabase
         .from('sdr_deals')
         .insert({
-          deal_title: formData.title,
+          title: formData.title,
           company_id: companyId,
-          deal_stage: formData.stage || 'discovery',
+          stage: formData.stage || 'discovery',
           priority: formData.priority || 'medium',
-          deal_value: formData.value ? parseFloat(formData.value) : 0,
+          value: formData.value ? parseFloat(formData.value) : 0,
           probability: 30,
           description: formData.description || null,
-          lead_source: leadSource,
-          source_campaign: null,
+          source: leadSource || 'manual',
+          assigned_to: user?.id || null,
+          status: 'open',
         });
 
       if (dealError) throw dealError;

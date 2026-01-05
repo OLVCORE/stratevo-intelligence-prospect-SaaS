@@ -74,7 +74,11 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
   // Auto-scroll para última mensagem
   useEffect(() => {
     if (scrollRef.current && viewMode !== 'minimized') {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // ScrollArea do Radix UI: o ref aponta para o Root, mas precisamos acessar o Viewport
+      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [messages, viewMode]);
 
@@ -113,13 +117,13 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
     if (viewMode === 'fullscreen') {
       return `${baseClasses} inset-4`;
     } else if (viewMode === 'minimized') {
-      // Quando minimizado, ficar à esquerda (bottom-left) para não sobrepor TREVO (top-right)
+      // ✅ CORRIGIDO: Ficar à esquerda (bottom-left) para não sobrepor TREVO (bottom-right)
       // Responsivo: ajusta para mobile
-      return `${baseClasses} bottom-6 left-2 sm:left-6 w-[calc(100vw-1rem)] sm:w-[350px] h-[100px]`;
+      return `${baseClasses} bottom-4 left-4 w-[calc(100vw-2rem)] sm:w-[350px] h-[100px] max-h-[calc(100vh-6rem)]`;
     } else {
-      // Quando aberto, ficar à esquerda (bottom-left) para não sobrepor TREVO (top-right)
+      // ✅ CORRIGIDO: Ficar à esquerda (bottom-left) para não sobrepor TREVO (bottom-right)
       // Responsivo: ajusta para mobile
-      return `${baseClasses} bottom-6 left-2 sm:left-6 w-[calc(100vw-1rem)] sm:w-[450px]`;
+      return `${baseClasses} bottom-4 left-4 w-[calc(100vw-2rem)] sm:w-[420px] max-h-[calc(100vh-7rem)]`;
     }
   };
 
@@ -129,13 +133,16 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
     } else if (viewMode === 'minimized') {
       return '0px';
     } else {
-      return '400px';
+      // ✅ CORRIGIDO: Altura fixa para o scroll funcionar (considerando header ~80px + input ~100px + padding)
+      // Altura total do card: ~600px, header: ~80px, input: ~100px, sobra ~450px para scroll
+      // Altura suficiente para mostrar scroll quando necessário
+      return '450px';
     }
   };
 
   if (viewMode === 'minimized') {
     return (
-      <Card className={getCardClasses()}>
+      <Card className={`${getCardClasses()} flex flex-col overflow-hidden`}>
         <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5 p-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -169,8 +176,8 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
   }
 
   return (
-    <Card className={getCardClasses()}>
-      <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
+    <Card className={`${getCardClasses()} flex flex-col overflow-hidden`}>
+      <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Brain className="h-5 w-5 text-primary" />
@@ -212,57 +219,64 @@ export function CompanyIntelligenceChat({ company }: CompanyIntelligenceChatProp
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-0 flex flex-col" style={{ height: viewMode === 'fullscreen' ? 'calc(100vh - 120px)' : 'auto' }}>
-        <ScrollArea ref={scrollRef} className="flex-1 p-4" style={{ height: getScrollAreaHeight() }}>
-          {messages.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground mb-3">
-                Sugestões de perguntas:
-              </p>
-              {suggestedQuestions.map((q, i) => (
-                <Button
-                  key={i}
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start text-left h-auto py-2 px-3"
-                  onClick={() => {
-                    setInput(q);
-                  }}
-                >
-                  <Sparkles className="h-3 w-3 mr-2 flex-shrink-0" />
-                  <span className="text-xs">{q}</span>
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-lg px-4 py-2 ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  </div>
+      <CardContent className="p-0 flex flex-col overflow-hidden" style={{ 
+        height: viewMode === 'fullscreen' ? 'calc(100vh - 120px)' : '600px',
+        maxHeight: viewMode !== 'fullscreen' ? 'calc(100vh - 200px)' : 'none'
+      }}>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ScrollArea ref={scrollRef} className="h-full w-full [&_[data-radix-scroll-area-viewport]]:overflow-y-auto">
+            <div className="p-4">
+              {messages.length === 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Sugestões de perguntas:
+                  </p>
+                  {suggestedQuestions.map((q, i) => (
+                    <Button
+                      key={i}
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start text-left h-auto py-2 px-3"
+                      onClick={() => {
+                        setInput(q);
+                      }}
+                    >
+                      <Sparkles className="h-3 w-3 mr-2 flex-shrink-0" />
+                      <span className="text-xs">{q}</span>
+                    </Button>
+                  ))}
                 </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-muted rounded-lg px-4 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-lg px-4 py-2 ${
+                          msg.role === 'user'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        }`}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {isLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-muted rounded-lg px-4 py-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </ScrollArea>
-        <div className="p-4 border-t bg-background">
+          </ScrollArea>
+        </div>
+        <div className="p-4 border-t bg-background flex-shrink-0">
           <div className="flex gap-2">
             <Textarea
               value={input}

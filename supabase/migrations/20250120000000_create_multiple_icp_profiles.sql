@@ -4,49 +4,44 @@
 -- - N ICPs por setor/mercado alvo
 
 -- Modificar tabela icp_profile para suportar múltiplos ICPs
-DO $$
+-- ✅ CORRIGIDO: Remover bloco DO $$ para evitar erro de sintaxe DECLARE
+-- Criar função diretamente no nível superior da migração
+
+-- Primeiro, criar função para atualizar icp_profile em todos os tenants
+CREATE OR REPLACE FUNCTION update_icp_profile_table()
+RETURNS void AS $$
+DECLARE
+  tenant_record RECORD;
 BEGIN
-  -- Adicionar campos novos na tabela icp_profile de cada tenant
-  -- Isso será aplicado dinamicamente nos schemas dos tenants
-  
-  -- Primeiro, criar função para atualizar icp_profile em todos os tenants
-  CREATE OR REPLACE FUNCTION update_icp_profile_table()
-  RETURNS void AS $$
-  DECLARE
-    tenant_record RECORD;
-  BEGIN
-    -- Para cada tenant, atualizar a tabela icp_profile
-    FOR tenant_record IN SELECT schema_name FROM public.tenants
-    LOOP
-      -- Adicionar novos campos se não existirem
-      EXECUTE format('
-        ALTER TABLE %I.icp_profile 
-        ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''ICP Principal'',
-        ADD COLUMN IF NOT EXISTS descricao TEXT,
-        ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT ''core'' CHECK (tipo IN (''core'', ''mercado'')),
-        ADD COLUMN IF NOT EXISTS setor_foco TEXT,
-        ADD COLUMN IF NOT EXISTS nicho_foco TEXT,
-        ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT true,
-        ADD COLUMN IF NOT EXISTS icp_principal BOOLEAN NOT NULL DEFAULT false,
-        ADD COLUMN IF NOT EXISTS prioridade INTEGER DEFAULT 1,
-        ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES public.tenants(id) ON DELETE CASCADE
-      ', tenant_record.schema_name);
-      
-      -- Criar índice único para icp_principal (apenas um por tenant)
-      EXECUTE format('
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_icp_profile_principal_tenant 
-        ON %I.icp_profile(tenant_id) 
-        WHERE icp_principal = true AND ativo = true
-      ', tenant_record.schema_name);
-    END LOOP;
-  END;
-  $$ LANGUAGE plpgsql SECURITY DEFINER;
-  
-  -- Executar a função
-  PERFORM update_icp_profile_table();
-  
+  -- Para cada tenant, atualizar a tabela icp_profile
+  FOR tenant_record IN SELECT schema_name FROM public.tenants
+  LOOP
+    -- Adicionar novos campos se não existirem
+    EXECUTE format('
+      ALTER TABLE %I.icp_profile 
+      ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''ICP Principal'',
+      ADD COLUMN IF NOT EXISTS descricao TEXT,
+      ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT ''core'' CHECK (tipo IN (''core'', ''mercado'')),
+      ADD COLUMN IF NOT EXISTS setor_foco TEXT,
+      ADD COLUMN IF NOT EXISTS nicho_foco TEXT,
+      ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS icp_principal BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS prioridade INTEGER DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES public.tenants(id) ON DELETE CASCADE
+    ', tenant_record.schema_name);
+    
+    -- Criar índice único para icp_principal (apenas um por tenant)
+    EXECUTE format('
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_icp_profile_principal_tenant 
+      ON %I.icp_profile(tenant_id) 
+      WHERE icp_principal = true AND ativo = true
+    ', tenant_record.schema_name);
+  END LOOP;
 END;
-$$;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Executar a função
+SELECT update_icp_profile_table();
 
 -- Criar tabela pública para gerenciar múltiplos ICPs (metadados)
 CREATE TABLE IF NOT EXISTS public.icp_profiles_metadata (
@@ -64,12 +59,14 @@ CREATE TABLE IF NOT EXISTS public.icp_profiles_metadata (
   prioridade INTEGER DEFAULT 1,
   generated_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
-  -- Garantir apenas um ICP principal por tenant
-  CONSTRAINT unique_principal_per_tenant UNIQUE (tenant_id, icp_principal) 
-    WHERE icp_principal = true AND ativo = true
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- ✅ CORRIGIDO: Criar índice único parcial (não pode ser feito na constraint UNIQUE)
+-- Garantir apenas um ICP principal por tenant usando índice parcial
+CREATE UNIQUE INDEX IF NOT EXISTS unique_principal_per_tenant 
+  ON public.icp_profiles_metadata(tenant_id) 
+  WHERE icp_principal = true AND ativo = true;
 
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_icp_profiles_metadata_tenant ON public.icp_profiles_metadata(tenant_id);
@@ -135,7 +132,9 @@ CREATE TRIGGER trigger_update_icp_profiles_metadata_updated_at
 -- RLS Policies
 ALTER TABLE public.icp_profiles_metadata ENABLE ROW LEVEL SECURITY;
 
+-- ✅ CORRIGIDO: Adicionar DROP POLICY IF EXISTS antes de criar políticas
 -- Policy: Usuários podem ver ICPs do próprio tenant
+DROP POLICY IF EXISTS "Users can view ICPs from their tenant" ON public.icp_profiles_metadata;
 CREATE POLICY "Users can view ICPs from their tenant"
   ON public.icp_profiles_metadata
   FOR SELECT
@@ -147,6 +146,7 @@ CREATE POLICY "Users can view ICPs from their tenant"
   );
 
 -- Policy: Usuários podem criar ICPs no próprio tenant
+DROP POLICY IF EXISTS "Users can create ICPs in their tenant" ON public.icp_profiles_metadata;
 CREATE POLICY "Users can create ICPs in their tenant"
   ON public.icp_profiles_metadata
   FOR INSERT
@@ -158,6 +158,7 @@ CREATE POLICY "Users can create ICPs in their tenant"
   );
 
 -- Policy: Usuários podem atualizar ICPs do próprio tenant
+DROP POLICY IF EXISTS "Users can update ICPs from their tenant" ON public.icp_profiles_metadata;
 CREATE POLICY "Users can update ICPs from their tenant"
   ON public.icp_profiles_metadata
   FOR UPDATE
@@ -169,6 +170,7 @@ CREATE POLICY "Users can update ICPs from their tenant"
   );
 
 -- Policy: Usuários podem deletar ICPs do próprio tenant (exceto principal)
+DROP POLICY IF EXISTS "Users can delete ICPs from their tenant" ON public.icp_profiles_metadata;
 CREATE POLICY "Users can delete ICPs from their tenant"
   ON public.icp_profiles_metadata
   FOR DELETE
@@ -293,6 +295,8 @@ DECLARE
   v_icp_mercado_id UUID;
   v_result JSONB := '[]'::jsonb;
   v_generation_count INTEGER := 0;
+  v_setor TEXT; -- ✅ CORRIGIDO: Declarar variáveis usadas no loop aqui
+  v_nichos_do_setor TEXT[];
 BEGIN
   -- Usar dados fornecidos ou tentar buscar do onboarding_sessions se existir
   IF p_step2_data IS NULL OR p_step3_data IS NULL THEN
@@ -346,37 +350,34 @@ BEGIN
   v_result := v_result || jsonb_build_object('icp_core', v_icp_core_id);
   
   -- 2. Criar ICPs por Setor/Mercado (um para cada setor selecionado)
+  -- ✅ CORRIGIDO: Variáveis já declaradas no início do bloco DECLARE principal
   FOR i IN 1..array_length(v_setores_alvo, 1)
   LOOP
-    DECLARE
-      v_setor TEXT := v_setores_alvo[i];
-      v_nichos_do_setor TEXT[];
-    BEGIN
-      -- Filtrar nichos do setor atual (se houver)
-      -- Por enquanto, usar todos os nichos ou filtrar depois
-      v_nichos_do_setor := v_nichos_alvo;
-      
-      v_icp_mercado_id := public.create_icp_profile(
-        p_tenant_id := p_tenant_id,
-        p_nome := 'ICP ' || v_setor,
-        p_descricao := 'ICP focado no setor ' || v_setor,
-        p_tipo := 'mercado',
-        p_setor_foco := v_setor,
-        p_setores_alvo := jsonb_build_array(v_setor),
-        p_cnaes_alvo := COALESCE(v_step3_data->'cnaesAlvo', '[]'::jsonb),
-        p_porte_alvo := COALESCE(v_step3_data->'porteAlvo', '[]'::jsonb),
-        p_estados_alvo := COALESCE(v_step3_data->'localizacaoAlvo'->'estados', '[]'::jsonb),
-        p_regioes_alvo := COALESCE(v_step3_data->'localizacaoAlvo'->'regioes', '[]'::jsonb),
-        p_faturamento_min := (v_step3_data->'faturamentoAlvo'->>'minimo')::DECIMAL,
-        p_faturamento_max := (v_step3_data->'faturamentoAlvo'->>'maximo')::DECIMAL,
-        p_funcionarios_min := (v_step3_data->'funcionariosAlvo'->>'minimo')::INTEGER,
-        p_funcionarios_max := (v_step3_data->'funcionariosAlvo'->>'maximo')::INTEGER,
-        p_caracteristicas_buscar := COALESCE(v_step3_data->'caracteristicasEspeciais', '[]'::jsonb),
-        p_icp_principal := false
-      );
-      
-      v_result := v_result || jsonb_build_object('icp_' || i, v_icp_mercado_id);
-    END;
+    v_setor := v_setores_alvo[i];
+    -- Filtrar nichos do setor atual (se houver)
+    -- Por enquanto, usar todos os nichos ou filtrar depois
+    v_nichos_do_setor := v_nichos_alvo;
+    
+    v_icp_mercado_id := public.create_icp_profile(
+      p_tenant_id := p_tenant_id,
+      p_nome := 'ICP ' || v_setor,
+      p_descricao := 'ICP focado no setor ' || v_setor,
+      p_tipo := 'mercado',
+      p_setor_foco := v_setor,
+      p_setores_alvo := jsonb_build_array(v_setor),
+      p_cnaes_alvo := COALESCE(v_step3_data->'cnaesAlvo', '[]'::jsonb),
+      p_porte_alvo := COALESCE(v_step3_data->'porteAlvo', '[]'::jsonb),
+      p_estados_alvo := COALESCE(v_step3_data->'localizacaoAlvo'->'estados', '[]'::jsonb),
+      p_regioes_alvo := COALESCE(v_step3_data->'localizacaoAlvo'->'regioes', '[]'::jsonb),
+      p_faturamento_min := (v_step3_data->'faturamentoAlvo'->>'minimo')::DECIMAL,
+      p_faturamento_max := (v_step3_data->'faturamentoAlvo'->>'maximo')::DECIMAL,
+      p_funcionarios_min := (v_step3_data->'funcionariosAlvo'->>'minimo')::INTEGER,
+      p_funcionarios_max := (v_step3_data->'funcionariosAlvo'->>'maximo')::INTEGER,
+      p_caracteristicas_buscar := COALESCE(v_step3_data->'caracteristicasEspeciais', '[]'::jsonb),
+      p_icp_principal := false
+    );
+    
+    v_result := v_result || jsonb_build_object('icp_' || i, v_icp_mercado_id);
   END LOOP;
 
   SELECT generated_count INTO v_generation_count

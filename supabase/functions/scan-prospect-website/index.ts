@@ -8,29 +8,87 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+  'Access-Control-Max-Age': '86400',
 };
 
 interface ScanProspectRequest {
   tenant_id: string;
-  qualified_prospect_id: string;
+  qualified_prospect_id?: string; // Opcional: pode vir de company_id
+  company_id?: string; // NOVO: aceita company_id como alternativa
   website_url: string;
   razao_social?: string;
+  cnpj?: string; // NOVO: para buscar qualified_prospect_id se necessário
 }
 
 serve(async (req) => {
+  // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA - SEM TRY/CATCH)
+  // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
+  // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    console.log('[SCAN-PROSPECT-WEBSITE] ✅ OPTIONS preflight recebido');
+    return new Response('', { 
+      status: 200,
+      headers: corsHeaders
+    });
   }
 
   try {
-    const { tenant_id, qualified_prospect_id, website_url, razao_social } = await req.json() as ScanProspectRequest;
+    const { tenant_id, qualified_prospect_id, company_id, website_url, razao_social, cnpj } = await req.json() as ScanProspectRequest;
 
-    if (!tenant_id || !qualified_prospect_id || !website_url) {
+    if (!tenant_id || !website_url) {
       return new Response(
-        JSON.stringify({ success: false, error: 'tenant_id, qualified_prospect_id e website_url são obrigatórios' }),
+        JSON.stringify({ success: false, error: 'tenant_id e website_url são obrigatórios' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Buscar qualified_prospect_id se não fornecido
+    let prospectId = qualified_prospect_id;
+    
+    if (!prospectId) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Tentar buscar por company_id
+      if (company_id) {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('id, cnpj')
+          .eq('id', company_id)
+          .single();
+        
+        if (company?.cnpj) {
+          const { data: prospect } = await supabase
+            .from('qualified_prospects')
+            .select('id')
+            .eq('tenant_id', tenant_id)
+            .eq('cnpj', company.cnpj)
+            .single();
+          
+          if (prospect) prospectId = prospect.id;
+        }
+      }
+      
+      // Tentar buscar por CNPJ diretamente
+      if (!prospectId && cnpj) {
+        const { data: prospect } = await supabase
+          .from('qualified_prospects')
+          .select('id')
+          .eq('tenant_id', tenant_id)
+          .eq('cnpj', cnpj)
+          .single();
+        
+        if (prospect) prospectId = prospect.id;
+      }
+
+      if (!prospectId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'qualified_prospect_id não encontrado. Empresa precisa estar no estoque qualificado.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     console.log('[ScanProspect] 🔍 Escaneando website:', website_url);
@@ -46,6 +104,9 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Usar prospectId encontrado
+    const qualified_prospect_id = prospectId;
+
     // 1. Buscar produtos do tenant para comparação
     const { data: tenantProducts, error: tenantError } = await supabase
       .from('tenant_products')
@@ -58,6 +119,8 @@ serve(async (req) => {
 
     const tenantProductsList = tenantProducts || [];
     console.log(`[ScanProspect] 📦 Produtos do tenant para comparação: ${tenantProductsList.length}`);
+
+    console.log('[ScanProspect] ✅ Usando qualified_prospect_id:', qualified_prospect_id);
 
     // 2. Extrair domínio do website
     const domain = website_url.replace(/^https?:\/\//, '').split('/')[0];
@@ -75,6 +138,35 @@ serve(async (req) => {
 
       if (homepageResponse.ok) {
         const html = await homepageResponse.text();
+        
+        // ✅ NOVO: Extrair LinkedIn diretamente do HTML (rodapé, header, etc.)
+        const linkedinPatterns = [
+          /linkedin\.com\/company\/([a-zA-Z0-9\-]+)/gi,
+          /linkedin\.com\/company\/([a-zA-Z0-9\-]+)\/?/gi,
+          /href=["']([^"']*linkedin\.com\/company\/[^"']*)["']/gi,
+        ];
+        
+        for (const pattern of linkedinPatterns) {
+          const matches = html.match(pattern);
+          if (matches && matches.length > 0) {
+            for (const match of matches) {
+              let linkedinMatch = match;
+              if (match.includes('href=')) {
+                linkedinMatch = match.match(/linkedin\.com\/company\/[a-zA-Z0-9\-]+/)?.[0] || '';
+              }
+              if (linkedinMatch && !linkedinMatch.startsWith('http')) {
+                linkedinMatch = `https://www.${linkedinMatch}`;
+              }
+              if (linkedinMatch && linkedinMatch.includes('linkedin.com/company/')) {
+                console.log('[ScanProspect] ✅ LinkedIn encontrado no HTML do site:', linkedinMatch);
+                // Será usado mais tarde na seção de LinkedIn
+                html.match(/linkedin\.com\/company\/[a-zA-Z0-9\-]+/)?.[0];
+              }
+            }
+            break; // Encontrou, não precisa continuar
+          }
+        }
+        
         const textContent = html
           .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
           .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -209,7 +301,57 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
 
     // 6. Buscar LinkedIn com múltiplas estratégias
     let linkedinUrl: string | null = null;
-    if (serperKey) {
+    
+    // ✅ ESTRATÉGIA 1: Extrair do HTML do website (mais rápido e confiável)
+    try {
+      const homepageResponse = await fetch(baseUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(10000),
+      });
+      
+      if (homepageResponse.ok) {
+        const html = await homepageResponse.text();
+        
+        // Padrões para encontrar LinkedIn no HTML
+        const linkedinPatterns = [
+          /https?:\/\/[^"'\s]*linkedin\.com\/company\/[a-zA-Z0-9\-]+/gi,
+          /linkedin\.com\/company\/([a-zA-Z0-9\-]+)/gi,
+          /href=["']([^"']*linkedin\.com\/company\/[^"']*)["']/gi,
+        ];
+        
+        for (const pattern of linkedinPatterns) {
+          const matches = html.match(pattern);
+          if (matches && matches.length > 0) {
+            for (const match of matches) {
+              let url = match;
+              // Se encontrou em href, extrair apenas a URL
+              if (url.includes('href=')) {
+                const urlMatch = url.match(/https?:\/\/[^"'\s]*linkedin\.com\/company\/[a-zA-Z0-9\-]+/i);
+                if (urlMatch) url = urlMatch[0];
+                else {
+                  const companyMatch = url.match(/linkedin\.com\/company\/([a-zA-Z0-9\-]+)/i);
+                  if (companyMatch) url = `https://www.linkedin.com/company/${companyMatch[1]}`;
+                }
+              } else if (!url.startsWith('http')) {
+                url = `https://www.${url}`;
+              }
+              
+              if (url && url.includes('linkedin.com/company/') && !url.includes('/in/') && !url.includes('/pub/')) {
+                linkedinUrl = url.split('?')[0].split('#')[0]; // Remover query params e hash
+                console.log('[ScanProspect] ✅ LinkedIn extraído do HTML do site:', linkedinUrl);
+                break;
+              }
+            }
+            if (linkedinUrl) break;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[ScanProspect] ⚠️ Erro ao extrair LinkedIn do HTML:', error);
+    }
+    
+    // ✅ ESTRATÉGIA 2: Buscar via SERPER (se não encontrou no HTML)
+    if (!linkedinUrl && serperKey) {
       // ✅ Buscar prospect no banco para ter mais dados
       let prospectData: any = null;
       try {
@@ -230,7 +372,7 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
       if (!companyName && !nomeFantasia) {
         console.log('[ScanProspect] ⚠️ Sem nome da empresa para buscar LinkedIn');
       } else {
-        // ✅ ESTRATÉGIA 1: Buscar por razão social
+        // ✅ ESTRATÉGIA 2: Buscar por razão social via SERPER
         const queries = [];
         if (companyName) {
           queries.push(`"${companyName}" site:linkedin.com/company`);
@@ -241,7 +383,7 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
           queries.push(`${nomeFantasia} linkedin company brasil`);
         }
 
-        console.log('[ScanProspect] 🔍 Buscando LinkedIn com queries:', queries);
+        console.log('[ScanProspect] 🔍 Buscando LinkedIn via SERPER com queries:', queries);
 
         // ✅ Tentar todas as queries até encontrar
         for (const linkedinQuery of queries) {
@@ -309,10 +451,12 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
         }
         
         if (!linkedinUrl) {
-          console.log('[ScanProspect] ⚠️ LinkedIn não encontrado após tentar todas as queries');
+          console.log('[ScanProspect] ⚠️ LinkedIn não encontrado após tentar todas as queries SERPER');
+        } else {
+          console.log('[ScanProspect] ✅ LinkedIn encontrado via SERPER:', linkedinUrl);
         }
       }
-    } else {
+    } else if (!linkedinUrl) {
       console.log('[ScanProspect] ⚠️ SERPER_API_KEY não configurada, pulando busca LinkedIn');
     }
 
@@ -509,48 +653,203 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
     // ✅ CRÍTICO: Atualizar qualified_prospects com os dados calculados
     if (qualified_prospect_id) {
       const updatePayload: any = {
-        website_fit_score: websiteFitScore,
-        website_products_match: formattedCompatibleProducts,
         updated_at: new Date().toISOString(),
       };
 
-      // ✅ CORRIGIDO: Sempre atualizar website_encontrado com o website_url fornecido
-      // (não verificar se já existe, pois pode ser um website mais atualizado)
-      if (website_url) {
-        updatePayload.website_encontrado = website_url;
+      // ✅ SEMPRE atualizar website_encontrado com o website_url fornecido
+      if (website_url && website_url.trim()) {
+        updatePayload.website_encontrado = website_url.trim();
+        console.log('[ScanProspect] ✅ website_encontrado será atualizado:', updatePayload.website_encontrado);
+      } else {
+        console.warn('[ScanProspect] ⚠️ website_url vazio ou inválido:', website_url);
       }
 
-      // ✅ CORRIGIDO: Sempre atualizar linkedin_url se foi encontrado
-      if (linkedinUrl) {
-        updatePayload.linkedin_url = linkedinUrl;
+      // ✅ SEMPRE atualizar website_fit_score (mesmo se for 0)
+      updatePayload.website_fit_score = websiteFitScore || 0;
+      console.log('[ScanProspect] ✅ website_fit_score será atualizado:', updatePayload.website_fit_score);
+
+      // ✅ SEMPRE atualizar website_products_match (mesmo se for array vazio)
+      updatePayload.website_products_match = formattedCompatibleProducts || [];
+      console.log('[ScanProspect] ✅ website_products_match será atualizado:', updatePayload.website_products_match.length, 'produtos');
+
+      // ✅ SEMPRE atualizar linkedin_url se foi encontrado
+      if (linkedinUrl && linkedinUrl.trim()) {
+        updatePayload.linkedin_url = linkedinUrl.trim();
+        console.log('[ScanProspect] ✅ linkedin_url será atualizado:', updatePayload.linkedin_url);
+      } else {
+        console.log('[ScanProspect] ⚠️ linkedin_url não encontrado ou vazio');
       }
 
-      console.log('[ScanProspect] 📦 Atualizando qualified_prospects:', {
-        qualified_prospect_id,
-        website_encontrado: updatePayload.website_encontrado,
-        website_fit_score: updatePayload.website_fit_score,
-        linkedin_url: updatePayload.linkedin_url,
-        products_match_count: formattedCompatibleProducts.length,
-      });
+      console.log('[ScanProspect] 📦 Payload completo para atualização:', JSON.stringify(updatePayload, null, 2));
 
       const { error: updateError, data: updateData } = await supabase
         .from('qualified_prospects')
         .update(updatePayload)
         .eq('id', qualified_prospect_id)
         .eq('tenant_id', tenant_id)
-        .select('id, website_encontrado, linkedin_url, website_fit_score, website_products_match');
+        .select('id, website_encontrado, linkedin_url, website_fit_score, website_products_match, company_id, cnpj');
 
       if (updateError) {
-        console.error('[ScanProspect] ❌ Erro ao atualizar qualified_prospects:', updateError);
-        // Não falhar a requisição se a atualização falhar, mas logar o erro
+        console.error('[ScanProspect] ❌ ERRO ao atualizar qualified_prospects:', {
+          error: updateError,
+          code: updateError.code,
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          qualified_prospect_id,
+          tenant_id,
+          payload: updatePayload,
+        });
+        // Não falhar a requisição se a atualização falhar, mas logar o erro detalhadamente
       } else {
         console.log('[ScanProspect] ✅ qualified_prospects atualizado com sucesso:', {
           id: updateData?.[0]?.id,
           website_encontrado: updateData?.[0]?.website_encontrado,
           linkedin_url: updateData?.[0]?.linkedin_url,
           website_fit_score: updateData?.[0]?.website_fit_score,
+          products_match_count: Array.isArray(updateData?.[0]?.website_products_match) ? updateData[0].website_products_match.length : 0,
         });
+        
+        // ✅ Verificar se os dados foram realmente salvos
+        if (!updateData || updateData.length === 0) {
+          console.warn('[ScanProspect] ⚠️ Atualização retornou sem dados - pode indicar que o registro não existe ou RLS bloqueou');
+        } else {
+          // ✅ SINCRONIZAR COM companies SE HOUVER company_id
+          const prospectData = updateData[0];
+          const companyIdToSync = prospectData.company_id || company_id;
+          
+          if (companyIdToSync) {
+            console.log('[ScanProspect] 🔄 Sincronizando com companies (company_id:', companyIdToSync, ')');
+            
+            const companiesUpdatePayload: any = {
+              updated_at: new Date().toISOString(),
+            };
+            
+            // Sincronizar website
+            if (updatePayload.website_encontrado) {
+              companiesUpdatePayload.website = updatePayload.website_encontrado;
+              companiesUpdatePayload.domain = updatePayload.website_encontrado.replace(/^https?:\/\//, '').split('/')[0];
+            }
+            
+            // Sincronizar LinkedIn
+            if (updatePayload.linkedin_url) {
+              companiesUpdatePayload.linkedin_url = updatePayload.linkedin_url;
+            }
+            
+            // Atualizar raw_data também para manter consistência
+            const { data: currentCompany } = await supabase
+              .from('companies')
+              .select('raw_data')
+              .eq('id', companyIdToSync)
+              .single();
+            
+            if (currentCompany) {
+              const existingRawData = (currentCompany.raw_data && typeof currentCompany.raw_data === 'object' && !Array.isArray(currentCompany.raw_data))
+                ? currentCompany.raw_data as Record<string, any>
+                : {};
+              
+              companiesUpdatePayload.raw_data = {
+                ...existingRawData,
+                website_enrichment: {
+                  website_encontrado: updatePayload.website_encontrado,
+                  website_fit_score: updatePayload.website_fit_score,
+                  website_products_match: updatePayload.website_products_match,
+                  linkedin_url: updatePayload.linkedin_url,
+                  enriched_at: new Date().toISOString(),
+                }
+              };
+            }
+            
+            const { error: companiesUpdateError } = await supabase
+              .from('companies')
+              .update(companiesUpdatePayload)
+              .eq('id', companyIdToSync);
+            
+            if (companiesUpdateError) {
+              console.warn('[ScanProspect] ⚠️ Erro ao sincronizar com companies:', companiesUpdateError);
+            } else {
+              console.log('[ScanProspect] ✅ companies sincronizado com sucesso:', {
+                company_id: companyIdToSync,
+                website: companiesUpdatePayload.website || 'N/A',
+                linkedin_url: companiesUpdatePayload.linkedin_url || 'N/A',
+              });
+            }
+          } else {
+            // ✅ TENTAR ENCONTRAR company_id PELO CNPJ (se não tiver company_id direto)
+            const prospectCnpj = prospectData.cnpj;
+            if (prospectCnpj) {
+              const normalizedCnpj = prospectCnpj.replace(/\D/g, '');
+              const { data: matchingCompany } = await supabase
+                .from('companies')
+                .select('id')
+                .eq('cnpj', normalizedCnpj)
+                .eq('tenant_id', tenant_id)
+                .maybeSingle();
+              
+              if (matchingCompany?.id) {
+                console.log('[ScanProspect] 🔍 Encontrado company_id pelo CNPJ:', matchingCompany.id);
+                
+                // Atualizar companies
+                const companiesUpdatePayload: any = {
+                  updated_at: new Date().toISOString(),
+                };
+                
+                if (updatePayload.website_encontrado) {
+                  companiesUpdatePayload.website = updatePayload.website_encontrado;
+                  companiesUpdatePayload.domain = updatePayload.website_encontrado.replace(/^https?:\/\//, '').split('/')[0];
+                }
+                
+                if (updatePayload.linkedin_url) {
+                  companiesUpdatePayload.linkedin_url = updatePayload.linkedin_url;
+                }
+                
+                // Atualizar raw_data
+                const { data: currentCompany } = await supabase
+                  .from('companies')
+                  .select('raw_data')
+                  .eq('id', matchingCompany.id)
+                  .single();
+                
+                if (currentCompany) {
+                  const existingRawData = (currentCompany.raw_data && typeof currentCompany.raw_data === 'object' && !Array.isArray(currentCompany.raw_data))
+                    ? currentCompany.raw_data as Record<string, any>
+                    : {};
+                  
+                  companiesUpdatePayload.raw_data = {
+                    ...existingRawData,
+                    website_enrichment: {
+                      website_encontrado: updatePayload.website_encontrado,
+                      website_fit_score: updatePayload.website_fit_score,
+                      website_products_match: updatePayload.website_products_match,
+                      linkedin_url: updatePayload.linkedin_url,
+                      enriched_at: new Date().toISOString(),
+                    }
+                  };
+                }
+                
+                const { error: companiesUpdateError } = await supabase
+                  .from('companies')
+                  .update(companiesUpdatePayload)
+                  .eq('id', matchingCompany.id);
+                
+                if (companiesUpdateError) {
+                  console.warn('[ScanProspect] ⚠️ Erro ao sincronizar companies pelo CNPJ:', companiesUpdateError);
+                } else {
+                  console.log('[ScanProspect] ✅ companies sincronizado pelo CNPJ:', matchingCompany.id);
+                  
+                  // Atualizar company_id em qualified_prospects para próxima vez
+                  await supabase
+                    .from('qualified_prospects')
+                    .update({ company_id: matchingCompany.id })
+                    .eq('id', qualified_prospect_id);
+                }
+              }
+            }
+          }
+        }
       }
+    } else {
+      console.warn('[ScanProspect] ⚠️ qualified_prospect_id não encontrado, não é possível atualizar qualified_prospects');
     }
 
     console.log('[ScanProspect] 📤 Retornando resposta final:', {

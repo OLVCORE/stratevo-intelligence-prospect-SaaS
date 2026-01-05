@@ -1056,7 +1056,7 @@ export default function QualificationEnginePage() {
             Histórico de jobs de qualificação
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -1074,12 +1074,11 @@ export default function QualificationEnginePage() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <Table className="w-full min-w-[1400px] table-auto">
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
                     {/* ✅ NOVO: Coluna de checkbox para seleção múltipla */}
-                    <TableHead className="w-12">
+                    <TableHead className="w-12 min-w-[48px]">
                       <Checkbox
                         checked={selectedJobIds.size === jobs.length && jobs.length > 0}
                         onCheckedChange={(checked) => {
@@ -1091,19 +1090,19 @@ export default function QualificationEnginePage() {
                         }}
                       />
                     </TableHead>
-                    <TableHead>Nome do Lote</TableHead>
-                    <TableHead>ICP</TableHead>
-                    <TableHead>Origem</TableHead>
-                    <TableHead>Total CNPJs</TableHead>
-                    <TableHead>Processados</TableHead>
-                    <TableHead>Progresso</TableHead>
-                    <TableHead>A+</TableHead>
-                    <TableHead>A</TableHead>
-                    <TableHead>B</TableHead>
-                    <TableHead>C</TableHead>
-                    <TableHead>D</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                    <TableHead className="min-w-[200px] flex-1">Nome do Lote</TableHead>
+                    <TableHead className="w-[120px] min-w-[100px]">ICP</TableHead>
+                    <TableHead className="w-[140px] min-w-[120px]">Origem</TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">Total CNPJs</TableHead>
+                    <TableHead className="w-[120px] min-w-[100px]">Processados</TableHead>
+                    <TableHead className="w-[160px] min-w-[140px]">Progresso</TableHead>
+                    <TableHead className="w-[60px] min-w-[50px]">A+</TableHead>
+                    <TableHead className="w-[60px] min-w-[50px]">A</TableHead>
+                    <TableHead className="w-[60px] min-w-[50px]">B</TableHead>
+                    <TableHead className="w-[60px] min-w-[50px]">C</TableHead>
+                    <TableHead className="w-[60px] min-w-[50px]">D</TableHead>
+                    <TableHead className="w-[120px] min-w-[100px]">Status</TableHead>
+                    <TableHead className="w-20 min-w-[80px] text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1216,7 +1215,6 @@ export default function QualificationEnginePage() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
           )}
         </CardContent>
       </Card>

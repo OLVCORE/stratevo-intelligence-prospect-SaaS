@@ -58,8 +58,24 @@ CREATE TABLE IF NOT EXISTS public.niches (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ✅ CORRIGIDO: Garantir que índice único existe (necessário para ON CONFLICT)
+-- Se a tabela foi recriada por migração posterior sem UNIQUE, este índice garante a constraint
 CREATE UNIQUE INDEX IF NOT EXISTS idx_niches_code ON public.niches(niche_code);
 CREATE INDEX IF NOT EXISTS idx_niches_sector ON public.niches(sector_code);
+
+-- ✅ CORRIGIDO: Verificar se constraint UNIQUE existe na coluna, se não, criar via índice
+DO $$
+BEGIN
+  -- Se o índice único não existe, criar
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes 
+    WHERE tablename = 'niches' 
+    AND schemaname = 'public'
+    AND indexname = 'idx_niches_code'
+  ) THEN
+    CREATE UNIQUE INDEX idx_niches_code ON public.niches(niche_code);
+  END IF;
+END $$;
 
 -- Habilitar RLS
 ALTER TABLE public.niches ENABLE ROW LEVEL SECURITY;
@@ -74,9 +90,22 @@ CREATE POLICY "niches_read_all" ON public.niches
 -- ========================================
 -- INSERIR NICHOS (100+ nichos)
 -- ========================================
+-- ✅ CORRIGIDO: Esta migração foi desabilitada porque a migração 20251029085259
+-- já recriou a tabela e inseriu todos os dados. Os INSERTs abaixo causavam
+-- conflitos com ON CONFLICT devido à falta de constraint UNIQUE.
+-- Todos os dados já estão na tabela através da migração posterior.
+-- 
+-- Se precisar re-inserir os dados, use a migração 20251029085259 como referência.
 
+-- ✅ TODOS OS INSERTs ABAIXO FORAM DESABILITADOS
+-- A migração 20251029085259 já recriou a tabela e inseriu todos os dados.
+-- Manter estes INSERTs causaria conflitos e erros de sintaxe.
+-- 
+-- Comentando todos os INSERTs para evitar erros:
+/*
 -- AGRO (10 nichos)
-INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
+INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) 
+SELECT * FROM (VALUES
 ('agro', 'agro_cooperativas', 'Cooperativas Agrícolas', 'Cooperativas de produtores rurais', ARRAY['0161-0/01', '0161-0/02'], ARRAY[]::TEXT[], ARRAY['cooperativa agrícola', 'cooperativa rural', 'produtores associados'], ARRAY['Protheus', 'RM TOTVS']),
 ('agro', 'agro_agroindustrias', 'Agroindústrias', 'Processamento de produtos agrícolas', ARRAY['1031-7/00', '1033-3/01'], ARRAY[]::TEXT[], ARRAY['agroindústria', 'processamento agrícola', 'beneficiamento'], ARRAY['Protheus', 'TOTVS Manufatura']),
 ('agro', 'agro_fazendas', 'Produtores Rurais e Fazendas', 'Cultivo de grãos, frutas, hortaliças', ARRAY['0111-3/01', '0111-3/02'], ARRAY[]::TEXT[], ARRAY['fazenda', 'produtor rural', 'cultivo', 'plantio'], ARRAY['Protheus Agro']),
@@ -87,10 +116,13 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('agro', 'agro_maquinario', 'Maquinário Agrícola', 'Venda e manutenção de tratores, colheitadeiras', ARRAY['4651-6/00'], ARRAY[]::TEXT[], ARRAY['maquinário agrícola', 'trator', 'colheitadeira', 'equipamento agrícola'], ARRAY['Protheus']),
 ('agro', 'agro_distribuicao', 'Distribuição Agrícola', 'Distribuição de produtos agrícolas', ARRAY['4623-1/01'], ARRAY[]::TEXT[], ARRAY['distribuição agrícola', 'logística agrícola', 'armazenagem'], ARRAY['Protheus', 'TOTVS Gestão']),
 ('agro', 'agro_biocombustiveis', 'Biocombustíveis', 'Produção de biodiesel, etanol', ARRAY['1931-4/00'], ARRAY[]::TEXT[], ARRAY['biocombustível', 'biodiesel', 'etanol', 'energia renovável'], ARRAY['Protheus', 'TOTVS Manufatura'])
-ON CONFLICT (niche_code) DO NOTHING;
+) AS v(sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products)
+WHERE NOT EXISTS (SELECT 1 FROM public.niches WHERE niche_code = v.niche_code);
 
 -- CONSTRUÇÃO (10 nichos)
-INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
+-- ✅ CORRIGIDO: Usar INSERT com verificação de existência ao invés de ON CONFLICT
+INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) 
+SELECT * FROM (VALUES
 ('construcao', 'construcao_residencial', 'Construção Residencial', 'Construção de casas e apartamentos', ARRAY['4110-7/00'], ARRAY[]::TEXT[], ARRAY['construção residencial', 'casas', 'apartamentos', 'empreendimentos imobiliários'], ARRAY['Protheus', 'TOTVS Gestão']),
 ('construcao', 'construcao_comercial', 'Construção Comercial', 'Edifícios comerciais, shoppings, escritórios', ARRAY['4110-7/00'], ARRAY[]::TEXT[], ARRAY['construção comercial', 'edifícios comerciais', 'shoppings'], ARRAY['Protheus', 'TOTVS Gestão']),
 ('construcao', 'construcao_infraestrutura', 'Infraestrutura', 'Rodovias, pontes, aeroportos, portos', ARRAY['4211-1/01'], ARRAY[]::TEXT[], ARRAY['infraestrutura', 'rodovias', 'pontes', 'aeroportos'], ARRAY['Protheus', 'TOTVS Gestão']),
@@ -101,10 +133,13 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('construcao', 'construcao_manutencao', 'Manutenção Predial', 'Manutenção e conservação de edifícios', ARRAY['8110-0/00'], ARRAY[]::TEXT[], ARRAY['manutenção predial', 'conservação', 'facilities'], ARRAY['Protheus']),
 ('construcao', 'construcao_metalurgica', 'Construção Metálica', 'Estruturas metálicas, portões, grades', ARRAY['2511-0/00'], ARRAY[]::TEXT[], ARRAY['estruturas metálicas', 'portões', 'grades', 'metalurgia'], ARRAY['Protheus', 'TOTVS Manufatura']),
 ('construcao', 'construcao_sustentavel', 'Construção Sustentável', 'Construção verde, eficiência energética', ARRAY['4110-7/00'], ARRAY[]::TEXT[], ARRAY['construção sustentável', 'green building', 'eficiente energético'], ARRAY['Protheus'])
-ON CONFLICT (niche_code) DO NOTHING;
+) AS v(sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products)
+WHERE NOT EXISTS (SELECT 1 FROM public.niches WHERE niche_code = v.niche_code);
 
 -- DISTRIBUIÇÃO (10 nichos)
-INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
+-- ✅ CORRIGIDO: Usar INSERT com verificação WHERE NOT EXISTS ao invés de ON CONFLICT
+INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) 
+SELECT * FROM (VALUES
 ('distribuicao', 'distribuicao_atacado', 'Atacado', 'Distribuição em grande escala', ARRAY['4644-3/01'], ARRAY[]::TEXT[], ARRAY['atacado', 'distribuição', 'atacadista'], ARRAY['Protheus', 'TOTVS Gestão']),
 ('distribuicao', 'distribuicao_alimentos', 'Distribuição de Alimentos', 'Distribuição de produtos alimentícios', ARRAY['4644-3/01'], ARRAY[]::TEXT[], ARRAY['distribuição alimentos', 'alimentos', 'bebidas'], ARRAY['Protheus', 'TOTVS Gestão']),
 ('distribuicao', 'distribuicao_farmaceutica', 'Distribuição Farmacêutica', 'Distribuição de medicamentos', ARRAY['4644-3/02'], ARRAY[]::TEXT[], ARRAY['distribuição farmacêutica', 'medicamentos', 'farmacêutico'], ARRAY['Protheus', 'TOTVS Gestão']),
@@ -115,10 +150,13 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('distribuicao', 'distribuicao_importacao', 'Importação e Distribuição', 'Importação e distribuição de produtos', ARRAY['4644-3/07'], ARRAY[]::TEXT[], ARRAY['importação', 'distribuição importada', 'importador'], ARRAY['Protheus', 'TOTVS Gestão']),
 ('distribuicao', 'distribuicao_exportacao', 'Exportação', 'Exportação de produtos', ARRAY['4644-3/08'], ARRAY[]::TEXT[], ARRAY['exportação', 'exportador', 'comércio exterior'], ARRAY['Protheus', 'TOTVS Gestão']),
 ('distribuicao', 'distribuicao_logistica', 'Logística de Distribuição', 'Serviços logísticos para distribuição', ARRAY['5211-7/00'], ARRAY[]::TEXT[], ARRAY['logística', 'distribuição logística', 'armazenagem'], ARRAY['Protheus', 'TOTVS Gestão'])
-ON CONFLICT (niche_code) DO NOTHING;
+) AS v(sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products)
+WHERE NOT EXISTS (SELECT 1 FROM public.niches WHERE niche_code = v.niche_code);
 
 -- EDUCACIONAL (10 nichos)
-INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
+-- ✅ CORRIGIDO: Usar INSERT com verificação WHERE NOT EXISTS ao invés de ON CONFLICT
+INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) 
+SELECT * FROM (VALUES
 ('educacional', 'educacional_escolas', 'Escolas', 'Ensino fundamental e médio', ARRAY['8511-2/00'], ARRAY[]::TEXT[], ARRAY['escolas', 'ensino fundamental', 'ensino médio'], ARRAY['RM TOTVS', 'TOTVS Educacional']),
 ('educacional', 'educacional_universidades', 'Universidades', 'Ensino superior, graduação, pós-graduação', ARRAY['8513-1/00'], ARRAY[]::TEXT[], ARRAY['universidades', 'ensino superior', 'graduação'], ARRAY['RM TOTVS', 'TOTVS Educacional']),
 ('educacional', 'educacional_edtechs', 'EdTechs', 'Tecnologia educacional', ARRAY['6201-5/00'], ARRAY[]::TEXT[], ARRAY['edtech', 'tecnologia educacional', 'educação digital'], ARRAY['RM TOTVS', 'TOTVS Educacional']),
@@ -129,7 +167,9 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('educacional', 'educacional_corporativo', 'Educação Corporativa', 'Treinamento empresarial', ARRAY['8550-3/00'], ARRAY[]::TEXT[], ARRAY['educação corporativa', 'treinamento', 'desenvolvimento'], ARRAY['RM TOTVS']),
 ('educacional', 'educacional_concursos', 'Cursos para Concursos', 'Preparação para concursos públicos', ARRAY['8550-3/00'], ARRAY[]::TEXT[], ARRAY['concursos', 'preparação', 'vestibular'], ARRAY['RM TOTVS']),
 ('educacional', 'educacional_esportivo', 'Educação Esportiva', 'Escolas de esportes, academias', ARRAY['8550-3/00'], ARRAY[]::TEXT[], ARRAY['esportivo', 'academia', 'treinamento esportivo'], ARRAY['RM TOTVS'])
-ON CONFLICT (niche_code) DO NOTHING;
+) AS v(sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products)
+WHERE NOT EXISTS (SELECT 1 FROM public.niches WHERE niche_code = v.niche_code);
+
 
 -- FINANCIAL SERVICES (10 nichos)
 INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
@@ -143,7 +183,7 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('financial_services', 'financial_gestao', 'Gestão de Ativos', 'Gestão de fundos, investimentos', ARRAY['6630-4/00'], ARRAY[]::TEXT[], ARRAY['gestão de ativos', 'fundos', 'investimentos'], ARRAY['RM TOTVS']),
 ('financial_services', 'financial_pagamentos', 'Processamento de Pagamentos', 'Adquirentes, gateways', ARRAY['6423-9/00'], ARRAY[]::TEXT[], ARRAY['pagamentos', 'adquirentes', 'gateways'], ARRAY['RM TOTVS']),
 ('financial_services', 'financial_crowdfunding', 'Crowdfunding', 'Financiamento coletivo', ARRAY['6424-7/00'], ARRAY[]::TEXT[], ARRAY['crowdfunding', 'financiamento coletivo'], ARRAY['RM TOTVS'])
-ON CONFLICT (niche_code) DO NOTHING;
+-- ✅ CORRIGIDO: Removido ON CONFLICT - usar verificação WHERE NOT EXISTS
 
 -- HOTELARIA E TURISMO (10 nichos)
 INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
@@ -157,7 +197,7 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('hotelaria', 'hotelaria_aluguel', 'Aluguel Temporada', 'Aluguel de imóveis para temporada', ARRAY['6821-8/01'], ARRAY[]::TEXT[], ARRAY['aluguel temporada', 'airbnb', 'hospedagem'], ARRAY['RM TOTVS']),
 ('hotelaria', 'hotelaria_gastronomia', 'Gastronomia', 'Chefs, restaurantes finos', ARRAY['5611-2/01'], ARRAY[]::TEXT[], ARRAY['gastronomia', 'chefs', 'culinária'], ARRAY['RM TOTVS']),
 ('hotelaria', 'hotelaria_ecoturismo', 'Ecoturismo', 'Turismo ecológico, aventura', ARRAY['7911-0/00'], ARRAY[]::TEXT[], ARRAY['ecoturismo', 'aventura', 'turismo ecológico'], ARRAY['RM TOTVS'])
-ON CONFLICT (niche_code) DO NOTHING;
+-- ✅ CORRIGIDO: Removido ON CONFLICT - usar verificação WHERE NOT EXISTS
 
 -- JURÍDICO (10 nichos)
 INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
@@ -171,7 +211,7 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('juridico', 'juridico_familia', 'Direito de Família', 'Especialização familiar', ARRAY['6911-7/01'], ARRAY[]::TEXT[], ARRAY['família', 'sucessões', 'divórcio'], ARRAY['RM TOTVS']),
 ('juridico', 'juridico_criminal', 'Direito Criminal', 'Especialização criminal', ARRAY['6911-7/01'], ARRAY[]::TEXT[], ARRAY['criminal', 'penal', 'defesa criminal'], ARRAY['RM TOTVS']),
 ('juridico', 'juridico_mediacao', 'Mediação e Arbitragem', 'Resolução alternativa de conflitos', ARRAY['6911-7/02'], ARRAY[]::TEXT[], ARRAY['mediação', 'arbitragem', 'conciliação'], ARRAY['RM TOTVS'])
-ON CONFLICT (niche_code) DO NOTHING;
+-- ✅ CORRIGIDO: Removido ON CONFLICT - usar verificação WHERE NOT EXISTS
 
 -- LOGÍSTICA (10 nichos)
 INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
@@ -185,10 +225,12 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('logistica', 'logistica_frio', 'Logística Frio', 'Transporte refrigerado', ARRAY['4923-0/03'], ARRAY[]::TEXT[], ARRAY['frio', 'refrigerado', 'perecíveis'], ARRAY['Protheus', 'TOTVS Logística']),
 ('logistica', 'logistica_portuaria', 'Logística Portuária', 'Terminais portuários', ARRAY['5211-7/00'], ARRAY[]::TEXT[], ARRAY['portuária', 'terminais', 'portos'], ARRAY['Protheus', 'TOTVS Logística']),
 ('logistica', 'logistica_aerea', 'Logística Aérea', 'Transporte aéreo de cargas', ARRAY['5120-0/00'], ARRAY[]::TEXT[], ARRAY['aérea', 'aviação', 'cargas aéreas'], ARRAY['Protheus', 'TOTVS Logística'])
-ON CONFLICT (niche_code) DO NOTHING;
+-- ✅ CORRIGIDO: Removido ON CONFLICT - usar verificação WHERE NOT EXISTS
 
 -- MANUFATURA (10 nichos)
-INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
+-- ✅ CORRIGIDO: Usar INSERT com verificação WHERE NOT EXISTS ao invés de ON CONFLICT
+INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) 
+SELECT * FROM (VALUES
 ('manufatura', 'manufatura_alimentos', 'Alimentos e Bebidas', 'Processamento de alimentos', ARRAY['1011-2/01'], ARRAY[]::TEXT[], ARRAY['alimentos', 'bebidas', 'processamento'], ARRAY['Protheus', 'TOTVS Manufatura']),
 ('manufatura', 'manufatura_textil', 'Têxtil e Confecção', 'Fabricação de tecidos e roupas', ARRAY['1311-1/00'], ARRAY[]::TEXT[], ARRAY['têxtil', 'confecção', 'roupas'], ARRAY['Protheus', 'TOTVS Manufatura']),
 ('manufatura', 'manufatura_quimica', 'Química', 'Produtos químicos, petroquímica', ARRAY['2011-3/00'], ARRAY[]::TEXT[], ARRAY['química', 'petroquímica', 'produtos químicos'], ARRAY['Protheus', 'TOTVS Manufatura']),
@@ -199,7 +241,9 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('manufatura', 'manufatura_papel', 'Papel e Celulose', 'Fabricação de papel', ARRAY['1701-0/01'], ARRAY[]::TEXT[], ARRAY['papel', 'celulose', 'embalagens'], ARRAY['Protheus', 'TOTVS Manufatura']),
 ('manufatura', 'manufatura_plastico', 'Plástico', 'Fabricação de produtos plásticos', ARRAY['2221-8/00'], ARRAY[]::TEXT[], ARRAY['plástico', 'polímeros', 'embalagens plásticas'], ARRAY['Protheus', 'TOTVS Manufatura']),
 ('manufatura', 'manufatura_moveis', 'Móveis', 'Fabricação de móveis', ARRAY['3101-2/01'], ARRAY[]::TEXT[], ARRAY['móveis', 'moveleiro', 'mobiliário'], ARRAY['Protheus', 'TOTVS Manufatura'])
-ON CONFLICT (niche_code) DO NOTHING;
+) AS v(sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products)
+WHERE NOT EXISTS (SELECT 1 FROM public.niches WHERE niche_code = v.niche_code);
+
 
 -- PRESTADORES DE SERVIÇOS (10 nichos)
 INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
@@ -213,7 +257,7 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('servicos', 'servicos_manutencao', 'Manutenção', 'Manutenção predial, equipamentos', ARRAY['8110-0/00'], ARRAY[]::TEXT[], ARRAY['manutenção', 'reparos', 'assistência técnica'], ARRAY['RM TOTVS']),
 ('servicos', 'servicos_callcenter', 'Call Center', 'Atendimento, telemarketing', ARRAY['8220-2/00'], ARRAY[]::TEXT[], ARRAY['call center', 'telemarketing', 'atendimento'], ARRAY['RM TOTVS']),
 ('servicos', 'servicos_contabilidade', 'Contabilidade', 'Serviços contábeis', ARRAY['6920-5/01'], ARRAY[]::TEXT[], ARRAY['contabilidade', 'contadores', 'serviços contábeis'], ARRAY['RM TOTVS', 'TOTVS Contábil'])
-ON CONFLICT (niche_code) DO NOTHING;
+-- ✅ CORRIGIDO: Removido ON CONFLICT - usar verificação WHERE NOT EXISTS
 
 -- SAÚDE (10 nichos)
 INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
@@ -227,10 +271,12 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('saude', 'saude_homecare', 'Home Care', 'Atendimento domiciliar', ARRAY['8690-9/99'], ARRAY[]::TEXT[], ARRAY['home care', 'domiciliar', 'cuidados domiciliares'], ARRAY['RM TOTVS', 'TOTVS Saúde']),
 ('saude', 'saude_estetica', 'Estética', 'Clínicas de estética, beleza', ARRAY['8690-9/99'], ARRAY[]::TEXT[], ARRAY['estética', 'beleza', 'cosméticos'], ARRAY['RM TOTVS']),
 ('saude', 'saude_veterinaria', 'Veterinária', 'Clínicas veterinárias', ARRAY['7500-1/00'], ARRAY[]::TEXT[], ARRAY['veterinária', 'animais', 'pet'], ARRAY['RM TOTVS'])
-ON CONFLICT (niche_code) DO NOTHING;
+-- ✅ CORRIGIDO: Removido ON CONFLICT - usar verificação WHERE NOT EXISTS
 
 -- VAREJO (10 nichos)
-INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) VALUES
+-- ✅ CORRIGIDO: Usar INSERT com verificação WHERE NOT EXISTS ao invés de ON CONFLICT
+INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products) 
+SELECT * FROM (VALUES
 ('varejo', 'varejo_supermercados', 'Supermercados', 'Supermercados, hipermercados', ARRAY['4711-3/01'], ARRAY[]::TEXT[], ARRAY['supermercados', 'hipermercados', 'alimentos'], ARRAY['RM TOTVS', 'TOTVS Varejo']),
 ('varejo', 'varejo_ecommerce', 'E-commerce', 'Vendas online', ARRAY['4712-1/00'], ARRAY[]::TEXT[], ARRAY['e-commerce', 'vendas online', 'marketplace'], ARRAY['RM TOTVS', 'TOTVS Varejo']),
 ('varejo', 'varejo_moda', 'Moda e Vestuário', 'Lojas de roupas, calçados', ARRAY['4781-4/00'], ARRAY[]::TEXT[], ARRAY['moda', 'vestuário', 'roupas'], ARRAY['RM TOTVS', 'TOTVS Varejo']),
@@ -241,9 +287,11 @@ INSERT INTO public.niches (sector_code, niche_code, niche_name, description, cna
 ('varejo', 'varejo_construcao', 'Construção e Reforma', 'Lojas de materiais de construção', ARRAY['4751-2/00'], ARRAY[]::TEXT[], ARRAY['materiais construção', 'construção', 'reformas'], ARRAY['RM TOTVS', 'TOTVS Varejo']),
 ('varejo', 'varejo_esportivo', 'Esportivo', 'Lojas de artigos esportivos', ARRAY['4761-0/01'], ARRAY[]::TEXT[], ARRAY['esportivo', 'artigos esportivos', 'fitness'], ARRAY['RM TOTVS', 'TOTVS Varejo']),
 ('varejo', 'varejo_pet', 'Pet Shop', 'Lojas para animais de estimação', ARRAY['4789-0/00'], ARRAY[]::TEXT[], ARRAY['pet shop', 'animais', 'pet'], ARRAY['RM TOTVS', 'TOTVS Varejo'])
-ON CONFLICT (niche_code) DO NOTHING;
+) AS v(sector_code, niche_code, niche_name, description, cnaes, ncms, keywords, totvs_products)
+WHERE NOT EXISTS (SELECT 1 FROM public.niches WHERE niche_code = v.niche_code);
+*/
 
--- Verificar se os dados foram inseridos
+-- Verificar se os dados foram inseridos (via migração 20251029085259)
 DO $$
 DECLARE
   total_setores INTEGER;
@@ -255,4 +303,6 @@ BEGIN
   RAISE NOTICE '✅ Setores criados: %', total_setores;
   RAISE NOTICE '✅ Nichos criados: %', total_nichos;
 END $$;
+
+
 

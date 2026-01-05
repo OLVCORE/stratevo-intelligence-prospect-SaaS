@@ -18,8 +18,7 @@ export function useApprovedCompanies(filters?: {
           website_fit_score,
           website_products_match,
           linkedin_url,
-          purchase_intent_score,
-          purchase_intent_type
+          purchase_intent_score
         `)
         .eq('status', 'aprovada'); // ✅ APENAS APROVADAS
 
@@ -77,20 +76,28 @@ export function useSendToPipeline() {
     // 3. CRIAR DEALS (transferência para pipeline)
     const { data: { user } } = await supabase.auth.getUser();
     
-    const dealsToCreate = validCompanies.map(q => ({
-      deal_title: `Prospecção - ${q.razao_social}`,
-      description: `Empresa aprovada com ICP Score: ${q.icp_score || 0}`,
-      company_id: q.company_id,
-      deal_value: 0,
-      probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50),
-      priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
-      deal_stage: 'discovery',
-      assigned_sdr: user?.email || 'auto',
-      source: 'approved_to_pipeline',
-      lead_score: q.icp_score || 0,
-      notes: `Enviado de Aprovadas. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}.`,
-      raw_data: q.raw_analysis || {},
-    }));
+    const dealsToCreate = validCompanies.map(q => {
+      const rawData: any = {
+        ...(q.raw_data || {}),
+        ...(q.raw_analysis || {}),
+        icp_score: q.icp_score || 0,
+        temperatura: q.temperatura || 'cold',
+      };
+
+      return {
+        title: `Prospecção - ${q.razao_social}`,
+        description: `Empresa aprovada com ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}.`,
+        company_id: q.company_id,
+        value: 0,
+        probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50),
+        priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
+        stage: 'discovery',
+        assigned_to: user?.id || null,
+        source: 'approved_to_pipeline',
+        bitrix24_data: rawData,
+        status: 'open',
+      };
+    });
 
     const { error: insertError } = await supabase
       .from('sdr_deals')

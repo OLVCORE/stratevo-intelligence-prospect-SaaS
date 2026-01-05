@@ -16,7 +16,14 @@ serve(async (req) => {
   let companyId: string | undefined;
   try {
     const body = await req.json();
-    companyId = body.companyId;
+    companyId = body.companyId || body.company_id; // ✅ Suporta ambos os formatos
+    
+    if (!companyId) {
+      return new Response(
+        JSON.stringify({ error: 'companyId é obrigatório' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     const startTime = Date.now();
 
     const supabase = createClient(
@@ -25,23 +32,31 @@ serve(async (req) => {
     );
 
     // 1. Criar analysis_run para rastreabilidade
-    const { data: runData, error: runError } = await supabase
-      .from('analysis_runs')
-      .insert({
-        company_id: companyId,
-        run_type: 'manual',
-        status: 'running',
-        sources_attempted: ['companies', 'decision_makers', 'digital_presence', 'governance_signals', 'digital_maturity', 'financial_data', 'legal_data', 'ai']
-      })
-      .select()
-      .single();
+    let runId: string | undefined;
+    try {
+      const { data: runData, error: runError } = await supabase
+        .from('analysis_runs')
+        .insert({
+          company_id: companyId,
+          run_type: 'manual',
+          status: 'running',
+          sources_attempted: ['companies', 'decision_makers', 'digital_presence', 'governance_signals', 'digital_maturity', 'financial_data', 'legal_data', 'ai']
+        })
+        .select()
+        .single();
 
-    if (runError) {
-      console.error('[generate-company-report] Erro ao criar run:', runError);
-      throw runError;
+      if (runError) {
+        console.error('[generate-company-report] ⚠️ Erro ao criar run (continuando mesmo assim):', runError);
+        // ✅ NÃO lançar erro - continuar sem rastreabilidade se necessário
+      } else {
+        runId = runData.id;
+        console.log('[generate-company-report] ✅ Run criado:', runId);
+      }
+    } catch (runErr) {
+      console.error('[generate-company-report] ⚠️ Exceção ao criar run (continuando):', runErr);
+      // ✅ Continuar mesmo se falhar
     }
 
-    const runId = runData.id;
     const sourcesSucceeded: string[] = [];
     const sourcesFailed: string[] = [];
 
@@ -301,28 +316,30 @@ serve(async (req) => {
         company_id: companyId,
         report_type: 'company',
         content: report,
-        run_id: runId,
+        ...(runId ? { run_id: runId } : {}), // ✅ Só incluir se runId existir
         data_quality_score: dataQualityScore,
         sources_used: sourcesSucceeded
       }, { onConflict: 'company_id,report_type' })
       .select()
       .single();
 
-    // 9. Atualizar run com sucesso
-    const duration = Date.now() - startTime;
-    await supabase
-      .from('analysis_runs')
-      .update({
-        status: sourcesFailed.length === 0 ? 'completed' : 'partial',
-        completed_at: new Date().toISOString(),
-        duration_ms: duration,
-        sources_succeeded: sourcesSucceeded,
-        sources_failed: sourcesFailed,
-        data_quality_score: dataQualityScore,
-        fields_enriched: fieldsEnriched,
-        fields_total: Object.keys(report).length
-      })
-      .eq('id', runId);
+    // 9. Atualizar run com sucesso (se runId existir)
+    if (runId) {
+      const duration = Date.now() - startTime;
+      await supabase
+        .from('analysis_runs')
+        .update({
+          status: sourcesFailed.length === 0 ? 'completed' : 'partial',
+          completed_at: new Date().toISOString(),
+          duration_ms: duration,
+          sources_succeeded: sourcesSucceeded,
+          sources_failed: sourcesFailed,
+          data_quality_score: dataQualityScore,
+          fields_enriched: fieldsEnriched,
+          fields_total: Object.keys(report).length
+        })
+        .eq('id', runId);
+    }
 
     // 10. Criar versão do relatório
     if (reportData) {
@@ -336,7 +353,7 @@ serve(async (req) => {
         .insert({
           report_id: reportData.id,
           company_id: companyId,
-          run_id: runId,
+          ...(runId ? { run_id: runId } : {}), // ✅ Só incluir se runId existir
           version_number: versionNumber.data || 1,
           report_type: 'company',
           content: report

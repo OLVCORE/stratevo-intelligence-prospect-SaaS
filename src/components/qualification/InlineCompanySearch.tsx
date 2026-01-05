@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Search, Loader2, Building2, CheckCircle2, MapPin, 
   Briefcase, DollarSign, Calendar, AlertTriangle, Plus, X,
-  FileText, Scale, Users, Globe, CheckCircle, XCircle, BarChart
+  FileText, Scale, Users, Globe, CheckCircle, XCircle, BarChart, Instagram, Linkedin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -98,6 +98,9 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
                 cnae_principal: data.atividade_principal?.[0]?.code,
                 cnae_descricao: data.atividade_principal?.[0]?.text,
                 data_abertura: data.abertura,
+                website: data.website || null, // ✅ Inicializar website
+                instagram: null, // ✅ Inicializar instagram
+                linkedin: null, // ✅ Inicializar linkedin
                 raw_data: data,
                 source: 'receitaws'
               });
@@ -121,6 +124,9 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
           cnae_principal: data.cnae_fiscal?.toString(),
           cnae_descricao: data.cnae_fiscal_descricao,
           data_abertura: data.data_inicio_atividade,
+          website: data.website || null, // ✅ Inicializar website
+          instagram: null, // ✅ Inicializar instagram
+          linkedin: null, // ✅ Inicializar linkedin
           raw_data: data,
           source: 'brasilapi'
         });
@@ -143,6 +149,14 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
   // Salvar empresa na tabela companies com qualificação REAL baseada no ICP
   const handleSaveToQualification = async () => {
     if (!previewData) return;
+
+    // 🔥 CRÍTICO: Verificar tenant_id antes de continuar
+    if (!tenantId) {
+      toast.error('Erro ao salvar', {
+        description: 'Tenant não identificado. Por favor, selecione um tenant primeiro.'
+      });
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -277,9 +291,9 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
           grade: grade,
           pipeline_status: 'new', // ✅ Status 'new' para aparecer no estoque
           source_name: 'Motor de Qualificação - Busca Individual',
-          // ✅ Salvar breakdown e dados adicionais em raw_data
-          raw_data: {
-            ...previewData.raw_data,
+          // ✅ Salvar breakdown e dados adicionais em enrichment_data (coluna correta)
+          enrichment_data: {
+            ...(previewData.raw_data || {}),
             icp_score: icpScore,
             temperatura: temperatura,
             qualification_breakdown: qualificationBreakdown,
@@ -288,6 +302,10 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
             decision: decision,
             decision_reason: decisionReason,
             best_icp_name: bestIcpName,
+            // ✅ PRESERVAR DADOS DE PRESENÇA DIGITAL EDITADOS PELO USUÁRIO
+            website: previewData.website || null,
+            instagram: previewData.instagram || null,
+            linkedin: previewData.linkedin || null,
           }
         });
 
@@ -318,7 +336,15 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
       onCompanyAdded?.();
 
     } catch (error: any) {
-      console.error('Erro ao salvar:', error);
+      console.error('[InlineSearch] ❌ Erro ao salvar:', error);
+      console.error('[InlineSearch] 📊 Detalhes do erro:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        tenantId,
+        cnpj: previewData?.cnpj?.replace(/\D/g, '')
+      });
       
       if (error.message?.includes('duplicate') || error.code === '23505') {
         toast.error('Empresa já existe no estoque qualificado', {
@@ -328,8 +354,11 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
           }
         });
       } else {
+        // 🔥 Mostrar erro mais detalhado
+        const errorMsg = error.message || error.details || 'Erro desconhecido ao salvar';
+        console.error('[InlineSearch] ❌ Erro completo:', JSON.stringify(error, null, 2));
         toast.error('Erro ao adicionar empresa ao estoque', {
-          description: error.message
+          description: `${errorMsg}${error.hint ? ` (${error.hint})` : ''}`
         });
       }
     } finally {
@@ -582,6 +611,54 @@ export function InlineCompanySearch({ onCompanyAdded }: InlineCompanySearchProps
                           />
                         </div>
                       )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Presença Digital - EDITÁVEL */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <Globe className="h-4 w-4" />
+                        Presença Digital
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground flex items-center gap-2">
+                          <Globe className="h-3 w-3" />
+                          Website
+                        </label>
+                        <Input
+                          placeholder="https://exemplo.com.br"
+                          value={previewData.website || ''}
+                          onChange={(e) => setPreviewData({ ...previewData, website: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground flex items-center gap-2">
+                          <Instagram className="h-3 w-3" />
+                          Instagram
+                        </label>
+                        <Input
+                          placeholder="@empresa ou instagram.com/empresa"
+                          value={previewData.instagram || ''}
+                          onChange={(e) => setPreviewData({ ...previewData, instagram: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground flex items-center gap-2">
+                          <Linkedin className="h-3 w-3" />
+                          LinkedIn
+                        </label>
+                        <Input
+                          placeholder="linkedin.com/company/empresa"
+                          value={previewData.linkedin || ''}
+                          onChange={(e) => setPreviewData({ ...previewData, linkedin: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
                     </CardContent>
                   </Card>
 

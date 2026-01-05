@@ -480,6 +480,86 @@ async function buscarCNAEsPorSetorCategoria(
 }
 
 /**
+ * 🔥 PILAR 1: Buscar via Oportunidados
+ * Fonte complementar com alertas de novas empresas e filtros avançados
+ * Link: https://oportunidados.com.br/
+ * 
+ * O que oferece:
+ * - Lista de Empresas (20+ filtros avançados)
+ * - Alertas de Novas Empresas (leads frescos)
+ * - GeoMarketing (inteligência geoespacial)
+ * - API de Dados Estratégicos
+ * 
+ * TODO: Implementar quando API key estiver disponível
+ */
+async function buscarViaOportunidados(
+  filtros: FiltrosBusca,
+  metaCandidates: number
+): Promise<any[]> {
+  const oportunidadosKey = Deno.env.get('OPORTUNIDADOS_API_KEY');
+  if (!oportunidadosKey) {
+    console.log('[ProspeccaoAvancada] ⏳ Oportunidados: API key não configurada');
+    return [];
+  }
+
+  // TODO: Implementar chamada real à API Oportunidados
+  // Verificar documentação em: https://oportunidados.com.br/
+  // Endpoints prováveis:
+  // - GET /api/empresas?cnae=...&localizacao=...&porte=...
+  // - GET /api/novas-empresas (alertas)
+  
+  console.log('[ProspeccaoAvancada] ⏳ Oportunidados: API não implementada ainda (aguardando documentação)');
+  return [];
+}
+
+/**
+ * ⚠️ REMOVIDO: BaseCNPJ, Consultar.IO
+ * 
+ * Motivos:
+ * - BaseCNPJ: Redundante (já temos BrasilAPI/ReceitaWS para enriquecimento)
+ * - Consultar.IO: Foco em pessoa física, não busca em massa de empresas
+ * 
+ * FONTES:
+ * - EmpresaQui: Fonte principal (já integrada e funcionando)
+ * - Oportunidados: Fonte complementar (aguardando implementação)
+ */
+
+/**
+ * 🔥 PILAR 1: Merge e deduplicação de múltiplas fontes
+ * Combina resultados de EmpresaQui + Oportunidados e remove duplicados por CNPJ
+ */
+function mergeEFiltrarEmpresas(
+  resultados: any[][],
+  metaCandidates: number
+): any[] {
+  const seenCNPJs = new Set<string>();
+  const empresasUnicas: any[] = [];
+
+  // Processar cada fonte
+  for (const fonteResultados of resultados) {
+    for (const empresa of fonteResultados) {
+      const cnpj = empresa.cnpj ? empresa.cnpj.replace(/\D/g, '') : null;
+      
+      if (cnpj && cnpj.length === 14 && !seenCNPJs.has(cnpj)) {
+        seenCNPJs.add(cnpj);
+        empresasUnicas.push(empresa);
+        
+        if (empresasUnicas.length >= metaCandidates) {
+          break;
+        }
+      }
+    }
+    
+    if (empresasUnicas.length >= metaCandidates) {
+      break;
+    }
+  }
+
+  console.log('[ProspeccaoAvancada] ✅ Merge concluído:', empresasUnicas.length, 'empresas únicas de', resultados.length, 'fontes');
+  return empresasUnicas;
+}
+
+/**
  * Buscar empresas via EmpresaQui
  * Usa APENAS os filtros do formulário (incluindo CNAEs/NCMs do formulário)
  * ⚠️ NÃO usa CNAEs do ICP do tenant!
@@ -1120,12 +1200,99 @@ function validarCNPJ(cnpj: string): boolean {
 }
 
 /**
- * Calcular Relevância Score (0-100)
+ * 🔥 PILAR 2: Score de Qualidade (0-100)
+ * Mede completude, atualização e confiabilidade dos dados
+ */
+function calculateQualidadeScore(empresa: EmpresaEnriquecida): number {
+  let score = 0;
+
+  // ==========================================
+  // COMPLETUDE (0-40 pontos)
+  // ==========================================
+  
+  // Todos os campos básicos: +20
+  if (empresa.cnpj && empresa.razao_social && empresa.endereco && empresa.cidade && empresa.uf && empresa.cep) {
+    score += 20;
+  } else if (empresa.cnpj && empresa.razao_social && empresa.cidade && empresa.uf) {
+    score += 12; // Parcial
+  } else if (empresa.cnpj && empresa.razao_social) {
+    score += 6; // Mínimo
+  }
+
+  // Dados de contato: +10
+  if (empresa.telefones && empresa.telefones.length > 0 && empresa.emails && empresa.emails.length > 0) {
+    score += 10;
+  } else if (empresa.telefones?.length > 0 || empresa.emails?.length > 0) {
+    score += 5; // Parcial
+  }
+
+  // Dados financeiros: +10
+  if (empresa.faturamento_estimado && empresa.funcionarios_estimados && empresa.capital_social) {
+    score += 10;
+  } else if (empresa.faturamento_estimado || empresa.funcionarios_estimados || empresa.capital_social) {
+    score += 5; // Parcial
+  }
+
+  // ==========================================
+  // ATUALIZAÇÃO (0-30 pontos)
+  // ==========================================
+  
+  // Site ativo (assumimos que se está no resultado, está ativo): +15
+  if (empresa.site) {
+    score += 15;
+  }
+
+  // LinkedIn ativo: +10
+  if (empresa.linkedin) {
+    score += 10;
+  }
+
+  // Decisores recentes: +5
+  if (empresa.decisores && empresa.decisores.length > 0) {
+    score += 5;
+  }
+
+  // ==========================================
+  // CONFIABILIDADE (0-30 pontos)
+  // ==========================================
+  
+  // CNPJ válido (14 dígitos): +10
+  if (empresa.cnpj && empresa.cnpj.length === 14) {
+    score += 10;
+  }
+
+  // Múltiplas fontes confirmam (site + LinkedIn + decisores): +15
+  const fontesConfirmadas = [
+    empresa.site ? 1 : 0,
+    empresa.linkedin ? 1 : 0,
+    empresa.decisores && empresa.decisores.length > 0 ? 1 : 0,
+    empresa.emails && empresa.emails.length > 0 ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+  
+  if (fontesConfirmadas >= 3) {
+    score += 15;
+  } else if (fontesConfirmadas >= 2) {
+    score += 10; // Parcial
+  } else if (fontesConfirmadas >= 1) {
+    score += 5; // Mínimo
+  }
+
+  // Dados consistentes (nome + endereço + cidade/UF): +5
+  if (empresa.razao_social && empresa.cidade && empresa.uf) {
+    score += 5;
+  }
+
+  return Math.min(100, score);
+}
+
+/**
+ * 🔥 PILAR 2: Score de Relevância (0-100)
+ * Mede match com filtros do usuário + qualidade de dados
  * FASE 1: Melhorado para incluir qualidade e completude
  * Baseado em completude de dados + qualidade dos dados
  * ⚠️ NÃO usa ICP do tenant - estamos buscando empresas distintas!
  */
-function calculateRelevanciaScore(empresa: EmpresaEnriquecida): number {
+function calculateRelevanciaScore(empresa: EmpresaEnriquecida, filtros?: FiltrosBusca): number {
   let score = 0;
 
   // ==========================================
@@ -1333,23 +1500,49 @@ serve(async (req) => {
     const metaCandidates = Math.max(filtros.quantidadeDesejada * 3, 60);
     console.log('[ProspeccaoAvancada] 🎯 Meta candidatas:', metaCandidates, '(quantidade desejada:', filtros.quantidadeDesejada, ')');
 
-    // Buscar candidatas no EmpresaQui (usando APENAS filtros do formulário)
-    // FASE 1: Passar supabaseClient para filtragem inteligente por Setor/Categoria
-    console.log('[ProspeccaoAvancada] 🔍 Buscando candidatas no EmpresaQui...');
-    const empresaQuiCompanies = await buscarViaEmpresaQui(
-      {
-        ...filtros,
-        localizacao: cidade && uf ? `${cidade}, ${uf}` : filtros.localizacao,
-      },
-      metaCandidates,
-      supabaseClient // Passar cliente para busca inteligente por Setor/Categoria
-    );
+    // 🔥 PILAR 1: Buscar candidatas em múltiplas fontes (EmpresaQui + Oportunidados)
+    // EmpresaQui: Fonte principal (busca por CNAE/localização/porte)
+    // Oportunidados: Fonte complementar (filtros avançados, novas empresas)
+    console.log('[ProspeccaoAvancada] 🔍 Buscando candidatas em múltiplas fontes...');
+    
+    const filtrosComLocalizacao = {
+      ...filtros,
+      localizacao: cidade && uf ? `${cidade}, ${uf}` : filtros.localizacao,
+    };
+    
+    // Buscar em paralelo: EmpresaQui (principal) + Oportunidados (complementar)
+    const [empresaQuiResult, oportunidadosResult] = await Promise.allSettled([
+      buscarViaEmpresaQui(filtrosComLocalizacao, metaCandidates, supabaseClient),
+      buscarViaOportunidados(filtrosComLocalizacao, metaCandidates),
+    ]);
+
+    // Extrair resultados
+    const resultadosPorFonte: any[][] = [];
+    
+    if (empresaQuiResult.status === 'fulfilled') {
+      resultadosPorFonte.push(empresaQuiResult.value);
+      console.log('[ProspeccaoAvancada] ✅ EmpresaQui:', empresaQuiResult.value.length, 'empresas');
+    } else {
+      console.error('[ProspeccaoAvancada] ❌ EmpresaQui falhou:', empresaQuiResult.reason);
+      resultadosPorFonte.push([]);
+    }
+    
+    if (oportunidadosResult.status === 'fulfilled') {
+      resultadosPorFonte.push(oportunidadosResult.value);
+      console.log('[ProspeccaoAvancada] ✅ Oportunidados:', oportunidadosResult.value.length, 'empresas');
+    } else {
+      console.warn('[ProspeccaoAvancada] ⚠️ Oportunidados falhou ou não implementado:', oportunidadosResult.reason?.message || 'N/A');
+      resultadosPorFonte.push([]);
+    }
+
+    // Merge e deduplicação por CNPJ
+    const empresaQuiCompanies = mergeEFiltrarEmpresas(resultadosPorFonte, metaCandidates);
     
     diagnostics.candidates_collected = empresaQuiCompanies.length;
-    console.log('[ProspeccaoAvancada] 📊 Candidatas coletadas:', diagnostics.candidates_collected);
+    console.log('[ProspeccaoAvancada] 📊 Candidatas coletadas (após merge):', diagnostics.candidates_collected);
     
     if (empresaQuiCompanies.length === 0) {
-      console.warn('[ProspeccaoAvancada] ⚠️ NENHUMA candidata encontrada no EmpresaQui!');
+      console.warn('[ProspeccaoAvancada] ⚠️ NENHUMA candidata encontrada após merge de todas as fontes!');
       return new Response(
         JSON.stringify({
           sucesso: true,
@@ -1364,9 +1557,11 @@ serve(async (req) => {
       );
     }
 
-    // 🔥 PASSO C: Validar e filtrar candidatas (ANTES de enriquecer)
-    // FASE 1: Validação rigorosa de situação cadastral
-    console.log('[ProspeccaoAvancada] 🔍 Validando candidatas...');
+    // 🔥 PILAR 3: Validação e Filtragem Avançada (ANTES de enriquecer)
+    // - Situação cadastral (apenas ATIVAS)
+    // - Atividade real (site, LinkedIn, e-mail)
+    // - Filtragem por CNAE usando Setor/Categoria
+    console.log('[ProspeccaoAvancada] 🔍 Validando e filtrando candidatas...');
     const candidatasValidadas = empresaQuiCompanies.filter((empresa) => {
       // Validar CNPJ (14 dígitos após limpeza)
       if (empresa.cnpj) {
@@ -1415,8 +1610,9 @@ serve(async (req) => {
     diagnostics.candidates_after_filter = candidatasValidadas.length;
     console.log('[ProspeccaoAvancada] ✅ Candidatas validadas:', diagnostics.candidates_after_filter);
 
-    // 🔥 PASSO D: Enriquecer candidatas (COM LIMITES E TIMEOUT)
-    console.log('[ProspeccaoAvancada] 🔄 Enriquecendo candidatas...');
+    // 🔥 PILAR 4: Enriquecimento Multi-Camada (COM LIMITES E TIMEOUT)
+    // 🔥 PILAR 5: Batching otimizado (5 empresas em paralelo)
+    console.log('[ProspeccaoAvancada] 🔄 Enriquecendo candidatas (multi-camada)...');
     const empresasProcessadas: EmpresaEnriquecida[] = [];
     const seenCNPJs = new Set<string>();
     const seenDomains = new Set<string>();
@@ -1443,8 +1639,8 @@ serve(async (req) => {
               }
               if (empresa.cnpj) seenCNPJs.add(empresa.cnpj);
               
-              // Buscar dados cadastrais (BrasilAPI V2)
-              const receitaData = empresa.cnpj ? await buscarDadosCadastrais(empresa.cnpj) : null;
+              // 🔥 PILAR 4: Camada 1 - Buscar dados cadastrais (com cache de 7 dias)
+              const receitaData = empresa.cnpj ? await buscarDadosCadastraisComCache(empresa.cnpj, supabaseClient) : null;
               
               // 🔥 FASE 1: Validar situação cadastral APÓS buscar dados cadastrais
               if (receitaData) {
@@ -1472,17 +1668,26 @@ serve(async (req) => {
               if (domain && seenDomains.has(domain)) return null;
               if (domain) seenDomains.add(domain);
               
-              // 🔥 FASE 2: Enriquecimento Multi-Camada
-              // Buscar decisores (Apollo), e-mails (Hunter), e LinkedIn (PhantomBuster) em paralelo
+              // 🔥 PILAR 4: Enriquecimento Multi-Camada (5 camadas)
+              // Camada 2: Dados Digitais (site, LinkedIn, e-mails) - paralelo
+              // Camada 3: Decisores e Contatos (Apollo + PhantomBuster) - paralelo
+              // Camada 4: Dados Financeiros (já buscado na Camada 1 via ReceitaWS)
+              // Camada 5: Dados Contextuais (opcional, mais lento - não implementado ainda)
+              
               const [decisores, emails, linkedinData] = await Promise.all([
+                // Camada 3: Decisores (Apollo)
                 buscarDecisoresApollo(
                   empresa.razao_social || receitaData?.razao_social || receitaData?.nome || '',
                   domain || undefined
                 ),
+                // Camada 2: E-mails (Hunter.io)
                 domain ? buscarEmailsHunter(domain) : Promise.resolve([]),
-                // 🔥 FASE 2: Buscar LinkedIn via PhantomBuster (se tiver site)
+                // Camada 2: LinkedIn (PhantomBuster)
                 domain ? buscarLinkedInPhantomBuster(domain, empresa.razao_social || receitaData?.razao_social || '') : Promise.resolve(null),
               ]);
+              
+              // Camada 4: Dados Financeiros (já obtidos via ReceitaWS/BrasilAPI na Camada 1)
+              // faturamento_estimado, funcionarios_estimados, capital_social já estão em receitaData
               
               const empresaEnriquecida: EmpresaEnriquecida = {
                 razao_social: empresa.razao_social || receitaData?.razao_social || receitaData?.nome || 'N/A',
@@ -1556,17 +1761,22 @@ serve(async (req) => {
       });
     }
 
-    // Classificar e Scorear empresas (Relevância apenas - sem ICP do tenant)
-    console.log('[ProspeccaoAvancada] 📊 Calculando scores...');
+    // 🔥 PILAR 2: Classificar e Scorear empresas (Relevância + Qualidade)
+    console.log('[ProspeccaoAvancada] 📊 Calculando scores (Relevância + Qualidade)...');
     const empresasComScore = empresasFiltradas.map((emp) => {
-      // Score baseado apenas em relevância (completude de dados)
-      // NÃO usamos ICP do tenant porque estamos buscando empresas distintas
-      const relevanciaScore = calculateRelevanciaScore(emp);
-      const scoreTotal = relevanciaScore;
+      // Score de Relevância (match com filtros + dados básicos + enriquecimento)
+      const relevanciaScore = calculateRelevanciaScore(emp, filtros);
+      
+      // Score de Qualidade (completude + atualização + confiabilidade)
+      const qualidadeScore = calculateQualidadeScore(emp);
+      
+      // Score Total = média ponderada (60% relevância + 40% qualidade)
+      const scoreTotal = Math.round((relevanciaScore * 0.6) + (qualidadeScore * 0.4));
       
       return {
         ...emp,
         _relevancia_score: relevanciaScore,
+        _qualidade_score: qualidadeScore,
         _score_total: scoreTotal,
       };
     });
@@ -1578,7 +1788,7 @@ serve(async (req) => {
     });
 
     // Remover campos internos de score antes de retornar
-    const empresasOrdenadas = empresasComScore.map(({ _relevancia_score, _score_total, ...emp }) => emp);
+    const empresasOrdenadas = empresasComScore.map(({ _relevancia_score, _qualidade_score, _score_total, ...emp }) => emp);
 
     console.log('[ProspeccaoAvancada] ✅ Empresas ordenadas por score:', empresasOrdenadas.length);
     if (empresasOrdenadas.length > 0) {
@@ -1586,6 +1796,7 @@ serve(async (req) => {
         rank: i + 1,
         empresa: e.razao_social,
         relevancia_score: e._relevancia_score,
+        qualidade_score: e._qualidade_score,
         total: e._score_total,
       })));
     }

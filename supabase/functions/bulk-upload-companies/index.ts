@@ -93,6 +93,21 @@ serve(async (req) => {
           continue;
         }
 
+        // ✅ VERIFICAR SE EMPRESA JÁ EXISTE (para fazer merge do raw_data)
+        let existingCompany = null;
+        if (cnpj) {
+          const { data: existing } = await supabaseClient
+            .from('companies')
+            .select('raw_data')
+            .eq('cnpj', cnpj)
+            .maybeSingle();
+          
+          if (existing) {
+            existingCompany = existing;
+            console.log(`🔄 Empresa existente encontrada (CNPJ: ${cnpj}), fazendo merge de dados...`);
+          }
+        }
+
         // Prepara dados completos da empresa (TODOS OS 87 CAMPOS + RASTREABILIDADE)
         const companyData: any = {
           name: name || 'Empresa Importada',
@@ -115,6 +130,10 @@ serve(async (req) => {
           },
           
           raw_data: {
+            // ✅ MERGE: Preservar dados existentes e adicionar/atualizar apenas campos novos
+            ...(existingCompany?.raw_data && typeof existingCompany.raw_data === 'object' && !Array.isArray(existingCompany.raw_data) 
+              ? existingCompany.raw_data as Record<string, any>
+              : {}),
             imported_at: new Date().toISOString(),
             csv_row: i + 2,
             source: 'econodata_87_campos',
@@ -224,16 +243,17 @@ serve(async (req) => {
             nivel_atividade: row.nivel_atividade || null,
             
             // === DÍVIDAS ===
-            perc_dividas_cnpj_sobre_faturamento: row.perc_dividas_cnpj_sobre_faturamento || null,
-            perc_dividas_cnpj_socios_sobre_faturamento: row.perc_dividas_cnpj_socios_sobre_faturamento || null,
-            total_dividas_cnpj_uniao: row.total_dividas_cnpj_uniao || null,
-            total_dividas_cnpj_socios_uniao: row.total_dividas_cnpj_socios_uniao || null,
-            dividas_gerais_cnpj_uniao: row.dividas_gerais_cnpj_uniao || null,
-            dividas_gerais_cnpj_socios_uniao: row.dividas_gerais_cnpj_socios_uniao || null,
-            dividas_cnpj_fgts: row.dividas_cnpj_fgts || null,
-            dividas_cnpj_socios_fgts: row.dividas_cnpj_socios_fgts || null,
-            dividas_cnpj_previdencia: row.dividas_cnpj_previdencia || null,
-            dividas_cnpj_socios_previdencia: row.dividas_cnpj_socios_previdencia || null
+            // ✅ ATUALIZAR APENAS SE VALOR EXISTIR NA PLANILHA (preservar valores existentes)
+            ...(row.perc_dividas_cnpj_sobre_faturamento ? { perc_dividas_cnpj_sobre_faturamento: row.perc_dividas_cnpj_sobre_faturamento } : {}),
+            ...(row.perc_dividas_cnpj_socios_sobre_faturamento ? { perc_dividas_cnpj_socios_sobre_faturamento: row.perc_dividas_cnpj_socios_sobre_faturamento } : {}),
+            ...(row.total_dividas_cnpj_uniao ? { total_dividas_cnpj_uniao: row.total_dividas_cnpj_uniao } : {}),
+            ...(row.total_dividas_cnpj_socios_uniao ? { total_dividas_cnpj_socios_uniao: row.total_dividas_cnpj_socios_uniao } : {}),
+            ...(row.dividas_gerais_cnpj_uniao ? { dividas_gerais_cnpj_uniao: row.dividas_gerais_cnpj_uniao } : {}),
+            ...(row.dividas_gerais_cnpj_socios_uniao ? { dividas_gerais_cnpj_socios_uniao: row.dividas_gerais_cnpj_socios_uniao } : {}),
+            ...(row.dividas_cnpj_fgts ? { dividas_cnpj_fgts: row.dividas_cnpj_fgts } : {}),
+            ...(row.dividas_cnpj_socios_fgts ? { dividas_cnpj_socios_fgts: row.dividas_cnpj_socios_fgts } : {}),
+            ...(row.dividas_cnpj_previdencia ? { dividas_cnpj_previdencia: row.dividas_cnpj_previdencia } : {}),
+            ...(row.dividas_cnpj_socios_previdencia ? { dividas_cnpj_socios_previdencia: row.dividas_cnpj_socios_previdencia } : {})
           }
         };
         
@@ -309,22 +329,57 @@ serve(async (req) => {
         }
 
         // Insere ou atualiza empresa
-        const { data: company, error: companyError } = await supabaseClient
-          .from('companies')
-          .upsert(companyData, {
-            onConflict: cnpj ? 'cnpj' : undefined,
-            ignoreDuplicates: false
-          })
-          .select()
-          .single();
+        let company: any;
+        
+        if (cnpj && existingCompany) {
+          // ✅ EMPRESA EXISTENTE: Fazer merge do raw_data usando SQL JSONB
+          // Usar || (merge) do PostgreSQL para preservar dados existentes
+          const { data: updatedCompany, error: updateError } = await supabaseClient
+            .from('companies')
+            .update({
+              // Atualizar apenas campos que vieram na planilha (não sobrescrever com null)
+              ...(name ? { name, company_name: name } : {}),
+              ...(row.setor_amigavel || row.Setor ? { industry: row.setor_amigavel || row.Setor } : {}),
+              ...(row['Score Maturidade Digital'] ? { digital_maturity_score: parseFloat(String(row['Score Maturidade Digital'])) } : {}),
+              // ✅ MERGE DO raw_data: usar || para fazer merge JSONB (preserva existentes, adiciona novos)
+              raw_data: companyData.raw_data, // Já tem merge feito acima com spread
+              updated_at: new Date().toISOString()
+            })
+            .eq('cnpj', cnpj)
+            .select()
+            .single();
+          
+          if (updateError) {
+            console.error(`Error updating company at row ${i + 2}:`, updateError);
+            results.errors.push(`Linha ${i + 2}: ${updateError.message}`);
+            continue;
+          }
+          
+          company = updatedCompany;
+          console.log(`🔄 Empresa existente atualizada (CNPJ: ${cnpj})`);
+        } else {
+          // ✅ NOVA EMPRESA: Inserir normalmente
+          const { data: newCompany, error: companyError } = await supabaseClient
+            .from('companies')
+            .insert(companyData)
+            .select()
+            .single();
 
-        if (companyError) {
-          console.error(`Error saving company at row ${i + 2}:`, companyError);
-          results.errors.push(`Linha ${i + 2}: ${companyError.message}`);
+          if (companyError) {
+            console.error(`Error saving company at row ${i + 2}:`, companyError);
+            results.errors.push(`Linha ${i + 2}: ${companyError.message}`);
+            continue;
+          }
+          
+          company = newCompany;
+        }
+
+        if (!company) {
+          results.errors.push(`Linha ${i + 2}: Empresa não foi salva/atualizada`);
           continue;
         }
 
-        console.log(`✅ Successfully saved company: ${company.name} (${company.id})`);
+        console.log(`✅ Successfully ${existingCompany ? 'updated' : 'saved'} company: ${company.name} (${company.id})`);
         
         // 🎯 SE DESTINO FOR QUARENTENA, CRIAR EM ICP_ANALYSIS_RESULTS
         if (metadata?.destination === 'quarantine') {

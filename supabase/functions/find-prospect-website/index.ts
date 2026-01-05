@@ -72,7 +72,7 @@ serve(async (req) => {
         const serperData = await serperResponse.json();
         const organic = serperData.organic || [];
 
-        // 🚫 DOMÍNIOS INVÁLIDOS (backlinks, redes sociais, etc.)
+        // 🚫 DOMÍNIOS INVÁLIDOS (backlinks, redes sociais, consultas, etc.)
         const invalidDomains = [
           'cnpj.net', 'cnpj.biz', 'cnpj.ws',
           'empresasaqui.com.br', 'econodata.com.br',
@@ -80,6 +80,10 @@ serve(async (req) => {
           'linkedin.com', 'facebook.com', 'instagram.com',
           'twitter.com', 'youtube.com',
           'reclameaqui.com.br', 'glassdoor.com',
+          'serasaexperian.com.br', 'serasa.com.br', // ✅ CORRIGIDO: Bloquear Serasa
+          'consultacnpj.com.br', 'receitaws.com.br',
+          'consulta-cnpj.com.br', 'cnpj.info',
+          'empresas.terra.com.br', 'empresas.uol.com.br',
         ];
 
         for (const result of organic) {

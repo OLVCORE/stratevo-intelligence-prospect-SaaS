@@ -147,8 +147,7 @@ export function useQuarantineCompanies(filters?: {
             website_fit_score,
             website_products_match,
             linkedin_url,
-            purchase_intent_score,
-            purchase_intent_type
+            purchase_intent_score
           `)
           .order('icp_score', { ascending: false });
 
@@ -344,6 +343,7 @@ export function useApproveQuarantineBatch() {
       // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao criar deals
       const dealsToCreate = validCompanies.map(q => {
         const rawData: any = {
+          ...(q.raw_data || {}),
           ...(q.raw_analysis || {}),
           // Preservar dados de enriquecimento de website
           website_enrichment: q.website_encontrado ? {
@@ -353,28 +353,30 @@ export function useApproveQuarantineBatch() {
             linkedin_url: q.linkedin_url,
           } : undefined,
           // Preservar fit_score e grade se existirem
-          fit_score: (q.raw_analysis as any)?.fit_score,
-          grade: (q.raw_analysis as any)?.grade,
-          icp_id: (q.raw_analysis as any)?.icp_id,
+          fit_score: (q.raw_data as any)?.fit_score || (q.raw_analysis as any)?.fit_score,
+          grade: (q.raw_data as any)?.grade || (q.raw_analysis as any)?.grade,
+          icp_id: (q.raw_data as any)?.icp_id || (q.raw_analysis as any)?.icp_id,
           // Preservar dados de enriquecimento da Receita Federal
-          receita_federal: (q.raw_analysis as any)?.receita_federal,
+          receita_federal: (q.raw_data as any)?.receita_federal || (q.raw_analysis as any)?.receita_federal,
           // Preservar dados de enriquecimento do Apollo
-          apollo: (q.raw_analysis as any)?.apollo,
+          apollo: (q.raw_data as any)?.apollo || (q.raw_analysis as any)?.apollo,
+          // Metadados adicionais
+          icp_score: q.icp_score || 0,
+          temperatura: q.temperatura || 'cold',
         };
 
         return {
-          deal_title: `Prospecção - ${q.razao_social}`,
-          description: `Empresa aprovada da quarentena com ICP Score: ${q.icp_score || 0}`,
+          title: `Prospecção - ${q.razao_social}`,
+          description: `Empresa aprovada da quarentena com ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
           company_id: q.company_id,
-          deal_value: 0, // Será preenchido depois pelo vendedor
+          value: 0, // Será preenchido depois pelo vendedor
           probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50), // ICP Score → probabilidade inicial
           priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
-          deal_stage: 'discovery', // Primeiro estágio do pipeline
-          assigned_sdr: currentUser?.email || 'auto',
+          stage: 'discovery', // Primeiro estágio do pipeline
+          assigned_to: currentUser?.id || null,
           source: 'quarantine_approval',
-          lead_score: q.icp_score || 0,
-          notes: `Auto-criado da quarentena. ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
-          raw_data: rawData,
+          bitrix24_data: rawData,
+          status: 'open',
         };
       });
 
@@ -433,6 +435,7 @@ export function useApproveQuarantineBatch() {
       }
       
       queryClient.invalidateQueries({ queryKey: ICP_QUARANTINE_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['approved-companies'] }); // ✅ INVALIDAR LEADS APROVADOS
       queryClient.invalidateQueries({ queryKey: ['leads-pool'] });
       queryClient.invalidateQueries({ queryKey: ['sdr-deals'] });
     },

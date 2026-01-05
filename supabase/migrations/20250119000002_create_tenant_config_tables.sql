@@ -61,8 +61,28 @@ BEGIN
     CREATE INDEX IF NOT EXISTS idx_tenant_products_active ON public.tenant_products(tenant_id, is_active) WHERE is_active = true;
   END IF;
 END $$;
-CREATE INDEX IF NOT EXISTS idx_tenant_products_sector_fit ON public.tenant_products USING GIN(sector_fit);
-CREATE INDEX IF NOT EXISTS idx_tenant_products_niche_fit ON public.tenant_products USING GIN(niche_fit);
+-- ✅ CORRIGIDO: Verificar se colunas sector_fit e niche_fit existem antes de criar índices
+-- A migração 20250201000001_tenant_products_catalog.sql cria a tabela com estrutura diferente (setores_alvo ao invés de sector_fit)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_products' 
+    AND column_name = 'sector_fit'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tenant_products_sector_fit ON public.tenant_products USING GIN(sector_fit);
+  END IF;
+  
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_products' 
+    AND column_name = 'niche_fit'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tenant_products_niche_fit ON public.tenant_products USING GIN(niche_fit);
+  END IF;
+END $$;
 
 -- ==========================================
 -- TABELA: tenant_search_configs (Configuração de Busca)
@@ -90,7 +110,18 @@ CREATE TABLE IF NOT EXISTS public.tenant_search_configs (
 
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_tenant_search_configs_tenant ON public.tenant_search_configs(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_tenant_search_configs_search_terms ON public.tenant_search_configs USING GIN(search_terms);
+-- ✅ CORRIGIDO: Verificar se coluna search_terms existe antes de criar índice
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_search_configs' 
+    AND column_name = 'search_terms'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tenant_search_configs_search_terms ON public.tenant_search_configs USING GIN(search_terms);
+  END IF;
+END $$;
 
 -- ==========================================
 -- TABELA: sector_configs (Configuração por Setor - Reutilizável)
@@ -151,7 +182,18 @@ CREATE TABLE IF NOT EXISTS public.tenant_competitor_configs (
 
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_tenant_competitor_configs_tenant ON public.tenant_competitor_configs(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_tenant_competitor_configs_competitors ON public.tenant_competitor_configs USING GIN(known_competitors);
+-- ✅ CORRIGIDO: Verificar se coluna known_competitors existe antes de criar índice
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'tenant_competitor_configs' 
+    AND column_name = 'known_competitors'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tenant_competitor_configs_competitors ON public.tenant_competitor_configs USING GIN(known_competitors);
+  END IF;
+END $$;
 
 -- ==========================================
 -- ROW LEVEL SECURITY

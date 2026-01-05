@@ -9,7 +9,7 @@ import { ApolloImportDialog } from '@/components/companies/ApolloImportDialog';
 import { BulkActionsToolbar } from '@/components/companies/BulkActionsToolbar';
 import { CompanyRowActions } from '@/components/companies/CompanyRowActions';
 import { HeaderActionsMenu } from '@/components/companies/HeaderActionsMenu';
-import { CompaniesActionsMenu } from '@/components/companies/CompaniesActionsMenu';
+import { UnifiedActionsMenu } from '@/components/common/UnifiedActionsMenu';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp, TrendingUp, HelpCircle, CheckCircle2, MapPin, Briefcase, Activity, Maximize, Minimize } from 'lucide-react';
+import { Building2, Search, Edit, Trash2, Zap, Plus, Loader2, Eye, Sparkles, ArrowUpDown, CheckCircle, AlertTriangle, XCircle, Clock, RefreshCw, FileText, Download, FileSpreadsheet, Image, Upload, Database, Target, Users, Globe, ChevronDown, ChevronUp, TrendingUp, HelpCircle, CheckCircle2, MapPin, Briefcase, Activity, Maximize, Minimize, Linkedin } from 'lucide-react';
 import { TableSkeleton } from '@/components/ui/skeletons';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -118,9 +118,32 @@ export default function CompaniesManagementPage() {
   const companies = useMemo(() => {
     let filtered = [...allCompanies];
     
-    // Filtro por Origem
+    // Filtro por Origem (normalizado)
     if (filterOrigin.length > 0) {
-      filtered = filtered.filter(c => filterOrigin.includes(c.source_name || ''));
+      filtered = filtered.filter(c => {
+        // ✅ MESMA LÓGICA DA RENDERIZAÇÃO: buscar origem em múltiplos lugares
+        let origem = (c as any).origem || (c as any).source_name || '';
+        
+        // Se origem/source_name começa com "batch-", buscar de outros lugares
+        if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+          origem = (c as any).origem ||
+                  (c as any).source_name ||
+                  (c as any).source_metadata?.source_name ||
+                  (c as any).source_metadata?.campaign ||
+                  (c as any).raw_data?.origem ||
+                  (c as any).raw_data?.source_name ||
+                  (c as any).raw_data?.origem_original ||
+                  (c as any).raw_data?.source_file_name ||
+                  (c as any).raw_data?.source ||
+                  '';
+        }
+        
+        if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+          return filterOrigin.includes('Legacy');
+        }
+        
+        return filterOrigin.includes(origem.trim());
+      });
     }
     
     // Filtro por Status CNPJ
@@ -759,24 +782,37 @@ export default function CompaniesManagementPage() {
       // 3. Escanear website (se tiver qualified_prospect_id)
       let scanData: any = null;
       if (qualifiedProspectId) {
-        const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        // ✅ CORRIGIDO: Usar supabase.functions.invoke() em vez de fetch() para evitar CORS
+        const { data: scanResponse, error: scanError } = await supabase.functions.invoke('scan-prospect-website', {
+          body: {
             tenant_id: tenantId,
             qualified_prospect_id: qualifiedProspectId,
             website_url: websiteData.website,
             razao_social: company.company_name || (company as any).razao_social,
-          }),
+          }
         });
 
-        if (scanWebsiteResponse.ok) {
-          scanData = await scanWebsiteResponse.json();
-        } else {
-          console.warn('[Enriquecimento Website] Erro ao escanear website:', await scanWebsiteResponse.text());
+        if (scanError) {
+          console.warn('[Enriquecimento Website] Erro ao escanear website:', scanError);
+        } else if (scanResponse) {
+          scanData = scanResponse;
+        }
+      } else if (companyId) {
+        // ✅ TAMBÉM FUNCIONA COM company_id (para empresas que não estão no estoque)
+        const { data: scanResponse, error: scanError } = await supabase.functions.invoke('scan-prospect-website', {
+          body: {
+            tenant_id: tenantId,
+            company_id: companyId,
+            website_url: websiteData.website,
+            razao_social: company.company_name || (company as any).razao_social,
+            cnpj: company.cnpj,
+          }
+        });
+
+        if (scanError) {
+          console.warn('[Enriquecimento Website] Erro ao escanear website:', scanError);
+        } else if (scanResponse) {
+          scanData = scanResponse;
         }
       }
 
@@ -941,23 +977,17 @@ export default function CompaniesManagementPage() {
           if (!websiteData.success || !websiteData.website) continue;
 
           // 2. Escanear website
-          const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+          // ✅ CORRIGIDO: Usar supabase.functions.invoke() em vez de fetch() para evitar CORS
+          const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-prospect-website', {
+            body: {
               tenant_id: tenantId,
               qualified_prospect_id: companyId,
               website_url: websiteData.website,
               razao_social: company.company_name || (company as any).razao_social,
-            }),
+            }
           });
 
-          if (!scanWebsiteResponse.ok) continue;
-          const scanData = await scanWebsiteResponse.json();
-          if (!scanData.success) continue;
+          if (scanError || !scanData || !scanData.success) continue;
 
           // 3. Atualizar
           const { error } = await supabase
@@ -2288,13 +2318,14 @@ export default function CompaniesManagementPage() {
 
                   {/* Dropdown de Ações em Massa - SÓ APARECE COM SELEÇÃO */}
                   {selectedCompanies.length > 0 && (
-                    <CompaniesActionsMenu
+                    <UnifiedActionsMenu
+                      context="companies"
                       selectedCount={selectedCompanies.length}
-                      onBulkDelete={handleBulkDelete}
-                      onExport={handleExportCSV}
-                      onBulkEnrichReceita={handleBatchEnrichReceitaWS}
-                      onBulkEnrichApollo={handleBatchEnrichApollo}
-                      onBulkEnrich360={handleBatchEnrich360}
+                      onEnrichReceita={handleBatchEnrichReceitaWS}
+                      onEnrichApollo={handleBatchEnrichApollo}
+                      onEnrich360={handleBatchEnrich360}
+                      onExportCSV={handleExportCSV}
+                      onDelete={handleBulkDelete}
                       isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
                     />
                   )}
@@ -2337,169 +2368,197 @@ export default function CompaniesManagementPage() {
                 </Button>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10"></TableHead>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedCompanies.length === companies.length && companies.length > 0}
-                        onCheckedChange={toggleSelectAll}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSort('name')}
-                        className="h-8 flex items-center gap-1"
-                      >
-                        Empresa
-                        <ArrowUpDown className="h-3 w-3" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSort('cnpj')}
-                        className="h-8 flex items-center gap-1"
-                      >
-                        CNPJ
-                        <ArrowUpDown className="h-3 w-3" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <ColumnFilter
-                        column="source_name"
-                        title="Origem"
-                        values={allCompanies.map(c => c.source_name)}
-                        selectedValues={filterOrigin}
-                        onFilterChange={setFilterOrigin}
-                        onSort={() => handleSort('source_name')}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <ColumnFilter
-                        column="cnpj_status"
-                        title="Status CNPJ"
-                        values={allCompanies.map(c => {
-                          const receitaData = (c as any).raw_data?.receita_federal || (c as any).raw_data;
-                          let status = 'PENDENTE';
-                          
-                          if (receitaData) {
-                            status = receitaData.situacao || receitaData.status || 'PENDENTE';
+              <Table className="w-full min-w-[1400px] table-auto">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="w-10 min-w-[40px]"></TableHead>
+                      <TableHead className="w-12 min-w-[48px]">
+                        <Checkbox
+                          checked={selectedCompanies.length === companies.length && companies.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </TableHead>
+                      <TableHead className="min-w-[200px] flex-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSort('name')}
+                          className="h-8 flex items-center gap-1"
+                        >
+                          Empresa
+                          <ArrowUpDown className="h-3 w-3" />
+                        </Button>
+                      </TableHead>
+                      <TableHead className="w-[140px] min-w-[120px]">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSort('cnpj')}
+                          className="h-8 flex items-center gap-1"
+                        >
+                          CNPJ
+                          <ArrowUpDown className="h-3 w-3" />
+                        </Button>
+                      </TableHead>
+                      <TableHead className="w-[140px] min-w-[120px]">
+                        <ColumnFilter
+                          column="source_name"
+                          title="Origem"
+                          values={allCompanies.map(c => {
+                            // ✅ MESMA LÓGICA DA RENDERIZAÇÃO: buscar origem em múltiplos lugares
+                            let origem = (c as any).origem || (c as any).source_name || '';
                             
-                            if (status.toUpperCase().includes('ATIVA') || status === '02') {
-                              status = 'ATIVA';
-                            } else if (status.toUpperCase().includes('SUSPENSA') || status === '03') {
-                              status = 'SUSPENSA';
-                            } else if (status.toUpperCase().includes('INAPTA') || status === '04') {
-                              status = 'INAPTA';
-                            } else if (status.toUpperCase().includes('BAIXADA') || status === '08') {
-                              status = 'BAIXADA';
-                            } else if (status.toUpperCase().includes('NULA') || status === '01') {
-                              status = 'NULA';
+                            // Se origem/source_name começa com "batch-", buscar de outros lugares
+                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+                              origem = (c as any).origem ||
+                                      (c as any).source_name ||
+                                      (c as any).source_metadata?.source_name ||
+                                      (c as any).source_metadata?.campaign ||
+                                      (c as any).raw_data?.origem ||
+                                      (c as any).raw_data?.source_name ||
+                                      (c as any).raw_data?.origem_original ||
+                                      (c as any).raw_data?.source_file_name ||
+                                      (c as any).raw_data?.source ||
+                                      '';
                             }
-                          }
-                          
-                          return status;
-                        })}
-                        selectedValues={filterStatus}
-                        onFilterChange={setFilterStatus}
-                        onSort={() => handleSort('cnpj_status')}
-                      />
-                    </TableHead>
-                    <TableHead>
-                      <ColumnFilter
-                        column="industry"
-                        title="Setor"
-                        values={allCompanies.map(c => c.industry || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A')}
-                        selectedValues={filterSector}
-                        onFilterChange={setFilterSector}
-                        onSort={() => handleSort('industry')}
-                      />
-                    </TableHead>
-                     <TableHead>
-                      <ColumnFilter
-                        column="region"
-                        title="UF"
-                        values={allCompanies.map(c => (c as any).raw_data?.uf || '')}
-                        selectedValues={filterRegion}
-                        onFilterChange={setFilterRegion}
-                      />
-                     </TableHead>
-                     <TableHead>
-                      <ColumnFilter
-                        column="icp"
-                        title="ICP"
-                        values={[...new Set(allCompanies.map(c => {
-                          const rawData = (c as any).raw_data || {};
-                          return rawData.best_icp_name || rawData.icp_name || 'Sem ICP';
-                        }).filter(Boolean))]}
-                        selectedValues={filterICP}
-                        onFilterChange={setFilterICP}
-                      />
-                     </TableHead>
-                     <TableHead>
-                      <ColumnFilter
-                        column="fit_score"
-                        title="Fit Score"
-                        values={['90-100', '75-89', '60-74', '40-59', '0-39']}
-                        selectedValues={filterFitScore}
-                        onFilterChange={setFilterFitScore}
-                      />
-                     </TableHead>
-                     <TableHead>
-                      <ColumnFilter
-                        column="grade"
-                        title="Grade"
-                        values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
-                        selectedValues={filterGrade}
-                        onFilterChange={setFilterGrade}
-                      />
-                     </TableHead>
-                    <TableHead>Intenção de Compra</TableHead>
-                    <TableHead>Website</TableHead>
-                    <TableHead>Website Fit</TableHead>
-                    <TableHead>LinkedIn</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
+                            
+                            // Verificar novamente se ainda é um batch ID após buscar de outros lugares
+                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+                              return 'Legacy';
+                            }
+                            
+                            return origem.trim();
+                          })}
+                          selectedValues={filterOrigin}
+                          onFilterChange={setFilterOrigin}
+                          onSort={() => handleSort('source_name')}
+                        />
+                      </TableHead>
+                      <TableHead className="w-[100px] min-w-[90px]">
+                        <ColumnFilter
+                          column="cnpj_status"
+                          title="Status CNPJ"
+                          values={allCompanies.map(c => {
+                            const receitaData = (c as any).raw_data?.receita_federal || (c as any).raw_data;
+                            let status = 'PENDENTE';
+                            
+                            if (receitaData) {
+                              status = receitaData.situacao || receitaData.status || 'PENDENTE';
+                              
+                              if (status.toUpperCase().includes('ATIVA') || status === '02') {
+                                status = 'ATIVA';
+                              } else if (status.toUpperCase().includes('SUSPENSA') || status === '03') {
+                                status = 'SUSPENSA';
+                              } else if (status.toUpperCase().includes('INAPTA') || status === '04') {
+                                status = 'INAPTA';
+                              } else if (status.toUpperCase().includes('BAIXADA') || status === '08') {
+                                status = 'BAIXADA';
+                              } else if (status.toUpperCase().includes('NULA') || status === '01') {
+                                status = 'NULA';
+                              }
+                            }
+                            
+                            return status;
+                          })}
+                          selectedValues={filterStatus}
+                          onFilterChange={setFilterStatus}
+                          onSort={() => handleSort('cnpj_status')}
+                        />
+                      </TableHead>
+                      <TableHead className="min-w-[180px] flex-[1.5]">
+                        <ColumnFilter
+                          column="industry"
+                          title="Setor"
+                          values={allCompanies.map(c => c.industry || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A')}
+                          selectedValues={filterSector}
+                          onFilterChange={setFilterSector}
+                          onSort={() => handleSort('industry')}
+                        />
+                      </TableHead>
+                      <TableHead className="w-[60px] min-w-[50px]">
+                        <ColumnFilter
+                          column="region"
+                          title="UF"
+                          values={allCompanies.map(c => (c as any).raw_data?.uf || '')}
+                          selectedValues={filterRegion}
+                          onFilterChange={setFilterRegion}
+                        />
+                      </TableHead>
+                      <TableHead className="w-[120px] min-w-[100px]">
+                        <ColumnFilter
+                          column="icp"
+                          title="ICP"
+                          values={[...new Set(allCompanies.map(c => {
+                            const rawData = (c as any).raw_data || {};
+                            return rawData.best_icp_name || rawData.icp_name || 'Sem ICP';
+                          }).filter(Boolean))]}
+                          selectedValues={filterICP}
+                          onFilterChange={setFilterICP}
+                        />
+                      </TableHead>
+                      <TableHead className="w-[100px] min-w-[90px]">
+                        <ColumnFilter
+                          column="fit_score"
+                          title="Fit Score"
+                          values={['90-100', '75-89', '60-74', '40-59', '0-39']}
+                          selectedValues={filterFitScore}
+                          onFilterChange={setFilterFitScore}
+                        />
+                      </TableHead>
+                      <TableHead className="w-[60px] min-w-[50px]">
+                        <ColumnFilter
+                          column="grade"
+                          title="Grade"
+                          values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
+                          selectedValues={filterGrade}
+                          onFilterChange={setFilterGrade}
+                        />
+                      </TableHead>
+                      <TableHead className="w-[160px] min-w-[140px]">Intenção de Compra</TableHead>
+                      <TableHead className="min-w-[180px] flex-1">Website</TableHead>
+                      <TableHead className="w-[100px] min-w-[90px]">Website Fit</TableHead>
+                      <TableHead className="w-[100px] min-w-[90px]">LinkedIn</TableHead>
+                      <TableHead className="w-20 min-w-[80px] text-center">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {paginatedCompanies.map((company) => (
                     <React.Fragment key={company.id}>
                     <TableRow className={expandedRow === company.id ? 'bg-muted/30' : ''}>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedRow(expandedRow === company.id ? null : company.id);
-                          }}
-                        >
-                          {expandedRow === company.id ? (
-                            <ChevronUp className="h-4 w-4 text-primary" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </Button>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedRow(expandedRow === company.id ? null : company.id);
+                            }}
+                          >
+                            {expandedRow === company.id ? (
+                              <ChevronUp className="h-4 w-4 text-primary" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
                       </TableCell>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedCompanies.includes(company.id)}
-                          onCheckedChange={() => toggleSelectCompany(company.id)}
-                        />
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={selectedCompanies.includes(company.id)}
+                            onCheckedChange={() => toggleSelectCompany(company.id)}
+                          />
+                        </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <Building2 className="h-4 w-4 text-primary" />
                           <div>
                             <button
                               onClick={() => navigate(`/company/${company.id}`)}
-                              className="font-medium hover:text-primary hover:underline text-left"
+                              className="font-medium hover:text-primary hover:underline"
                             >
                               {(company as any).razao_social || company.name || (company as any).nome_fantasia || 'Sem nome'}
                             </button>
@@ -2509,7 +2568,7 @@ export default function CompaniesManagementPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {editingCnpjId === company.id ? (
                           <div className="flex items-center gap-1">
                             <Input
@@ -2560,23 +2619,74 @@ export default function CompaniesManagementPage() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {(company as any).source_name ? (
-                          <Badge 
-                            variant="secondary" 
-                            className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
-                          >
-                            {(company as any).source_name}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">
-                            Legacy
-                          </Badge>
-                        )}
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {(() => {
+                            // ✅ MESMA LÓGICA DA TABELA ESTOQUE DE EMPRESAS QUALIFICADAS
+                            // Buscar origem em múltiplos lugares, priorizando coluna direta
+                            let origem = (company as any).origem || (company as any).source_name || '';
+                            
+                            // Se origem/source_name é um batch ID ou vazio, buscar de outros lugares (prioridade)
+                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+                              // Prioridade: coluna direta > source_metadata > raw_data > outros campos
+                              origem = (company as any).origem ||
+                                      (company as any).source_name ||
+                                      (company as any).source_metadata?.source_name ||
+                                      (company as any).source_metadata?.campaign ||
+                                      (company as any).raw_data?.origem ||
+                                      (company as any).raw_data?.source_name ||
+                                      (company as any).raw_data?.origem_original ||
+                                      (company as any).raw_data?.source_file_name ||
+                                      (company as any).raw_data?.source ||
+                                      '';
+                            }
+                            
+                            // Se ainda for batch ID, tentar buscar do import_batch_id relacionado
+                            if ((!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) && (company as any).import_batch_id) {
+                              // Se tem import_batch_id, pode ter sido salvo em outro lugar
+                              origem = (company as any).raw_data?.import_batch_name ||
+                                      (company as any).raw_data?.batch_name ||
+                                      '';
+                            }
+                            
+                            // ✅ NOVO: Se ainda não encontrou, buscar de qualified_prospects (via relacionamento)
+                            // Nota: Isso será resolvido pela migração SQL, mas mantemos como fallback
+                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+                              // Tentar buscar de qualified_prospects relacionado (se disponível no objeto)
+                              const qualifiedProspect = (company as any).qualified_prospect;
+                              if (qualifiedProspect) {
+                                origem = qualifiedProspect.source_name ||
+                                        qualifiedProspect.job?.source_file_name ||
+                                        qualifiedProspect.job?.job_name ||
+                                        '';
+                              }
+                            }
+                            
+                            // Se encontrou um nome válido (não batch ID), mostrar
+                            if (origem && typeof origem === 'string' && !origem.startsWith('batch-') && !origem.includes('batch-') && origem.trim() !== '') {
+                              return (
+                                <Badge 
+                                  variant="secondary" 
+                                  className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
+                                >
+                                  {origem.trim()}
+                                </Badge>
+                              );
+                            }
+                            
+                            // Se não encontrou, mostrar Legacy
+                            return (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                Legacy
+                              </Badge>
+                            );
+                          })()}
+                        </div>
                       </TableCell>
-                       <TableCell>
-                        {(() => {
-                          // ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA
+                       <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {(() => {
+                            // ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA
                           const receitaData = (company as any).raw_data?.receita_federal || (company as any).raw_data?.receita;
                           const situacao = receitaData?.situacao || 
                                          receitaData?.descricao_situacao_cadastral || 
@@ -2593,53 +2703,43 @@ export default function CompaniesManagementPage() {
                           
                           return <QuarantineCNPJStatusBadge cnpj={company.cnpj || undefined} cnpjStatus={cnpjStatus} />;
                         })()}
+                        </div>
                       </TableCell>
-                      <TableCell>
-                        {(() => {
-                          // ✅ PRIORIZAR APOLLO INDUSTRY > RECEITA FEDERAL
-                          const setor = (company as any).raw_data?.apollo_organization?.industry ||
-                                       company.industry || 
-                                       (company as any).raw_data?.receita_federal?.atividade_principal?.[0]?.text ||
-                                       (company as any).raw_data?.receita?.atividade_principal?.[0]?.text ||
-                                       (company as any).raw_data?.atividade_economica ||
-                                       (company as any).raw_data?.setor_amigavel;
-                          return setor ? (
-                            <span className="text-xs">{setor}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Não identificado</span>
-                          );
-                        })()}
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {(() => {
+                            // ✅ PRIORIZAR APOLLO INDUSTRY > RECEITA FEDERAL
+                            const setor = (company as any).raw_data?.apollo_organization?.industry ||
+                                         company.industry || 
+                                         (company as any).raw_data?.receita_federal?.atividade_principal?.[0]?.text ||
+                                         (company as any).raw_data?.receita?.atividade_principal?.[0]?.text ||
+                                         (company as any).raw_data?.atividade_economica ||
+                                         (company as any).raw_data?.setor_amigavel;
+                            return setor ? (
+                              <span className="text-xs">{setor}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Não identificado</span>
+                            );
+                          })()}
+                        </div>
                       </TableCell>
-                       <TableCell>
-                        <div className="flex flex-col gap-1">
+                       <TableCell className="text-center">
+                        <div className="flex justify-center">
                           {(() => {
                             const uf = (company.location as any)?.state || 
                                       (company as any).raw_data?.receita?.uf ||
                                       (company as any).raw_data?.uf;
-                            const city = (company.location as any)?.city || 
-                                        (company as any).raw_data?.receita?.municipio ||
-                                        (company as any).raw_data?.municipio;
                             
                             if (uf) {
-                              return (
-                                <>
-                                  <Badge variant="secondary" className="w-fit">
-                                    {uf}
-                                  </Badge>
-                                  {city && (
-                                    <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={city}>
-                                      {city}
-                                    </span>
-                                  )}
-                                </>
-                              );
+                              return <Badge variant="outline">{uf}</Badge>;
                             }
-                            return <span className="text-xs text-muted-foreground">N/A</span>;
+                          return <span className="text-xs text-muted-foreground">N/A</span>;
                           })()}
                         </div>
                       </TableCell>
                        {/* ✅ COLUNA ICP */}
-                       <TableCell>
+                       <TableCell className="text-center">
+                        <div className="flex justify-center">
                          {(() => {
                            const rawData = (company as any).raw_data || {};
                            // ✅ LER icp_id de raw_data (onde foi salvo durante a migração)
@@ -2665,10 +2765,12 @@ export default function CompaniesManagementPage() {
                            }
                            
                            return <span className="text-xs text-muted-foreground">N/A</span>;
-                         })()}
+                          })()}
+                        </div>
                        </TableCell>
                        {/* ✅ COLUNA FIT SCORE */}
-                       <TableCell>
+                       <TableCell className="text-center">
+                        <div className="flex justify-center">
                          {(() => {
                            const rawData = (company as any).raw_data || {};
                            // ✅ LER fit_score de raw_data (onde foi salvo durante a migração)
@@ -2707,10 +2809,12 @@ export default function CompaniesManagementPage() {
                              );
                            }
                            return <span className="text-xs text-muted-foreground">N/A</span>;
-                         })()}
+                          })()}
+                        </div>
                        </TableCell>
                        {/* ✅ COLUNA GRADE */}
-                       <TableCell>
+                       <TableCell className="text-center">
+                        <div className="flex justify-center">
                          {(() => {
                            const rawData = (company as any).raw_data || {};
                            // ✅ LER grade de raw_data (onde foi salvo durante a migração)
@@ -2733,41 +2837,57 @@ export default function CompaniesManagementPage() {
                                {grade}
                              </Badge>
                            );
-                         })()}
+                          })()}
+                        </div>
                        </TableCell>
                        {/* ✅ NOVA COLUNA: Purchase Intent */}
-                       <TableCell>
-                         <PurchaseIntentBadge 
+                       <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <PurchaseIntentBadge 
                            score={(company as any).purchase_intent_score} 
                            intentType={(company as any).purchase_intent_type || 'potencial'}
                            size="sm"
-                         />
+                          />
+                        </div>
                        </TableCell>
                        {/* ✅ NOVA COLUNA: Website */}
-                       <TableCell>
-                         {company.website_encontrado || company.website ? (
-                           <a
-                             href={company.website_encontrado || company.website}
-                             target="_blank"
-                             rel="noopener noreferrer"
-                             className="text-primary hover:underline flex items-center gap-1 text-xs"
-                           >
-                             <Globe className="h-3.5 w-3.5" />
-                             <span className="truncate max-w-[120px]">{company.website_encontrado || company.website}</span>
-                           </a>
-                         ) : (
-                           <span className="text-muted-foreground text-xs">-</span>
-                         )}
+                       <TableCell className="text-center">
+                         {(() => {
+                           const websiteUrl = formatWebsiteUrl(company.website_encontrado || company.website);
+                           if (!websiteUrl) {
+                             return <span className="text-muted-foreground text-sm">-</span>;
+                           }
+                           return (
+                             <TooltipProvider>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <a
+                                     href={websiteUrl}
+                                     target="_blank"
+                                     rel="noopener noreferrer"
+                                     className="inline-flex items-center justify-center mx-auto text-primary hover:text-primary/80 transition-colors"
+                                     onClick={(e) => e.stopPropagation()}
+                                   >
+                                     <Globe className="h-4 w-4" />
+                                   </a>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p className="text-sm">{websiteUrl}</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                             </TooltipProvider>
+                           );
+                         })()}
                        </TableCell>
                        {/* ✅ NOVA COLUNA: Website Fit Score */}
-                       <TableCell>
+                       <TableCell className="text-center">
                          {company.website_fit_score != null && company.website_fit_score > 0 ? (
                            <TooltipProvider>
                              <Tooltip>
                                <TooltipTrigger asChild>
-                                 <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30 text-xs">
-                                   +{company.website_fit_score}pts
-                                 </Badge>
+                                 <div className="inline-flex items-center justify-center mx-auto text-green-600 cursor-help">
+                                   <Target className="h-4 w-4" />
+                                 </div>
                                </TooltipTrigger>
                                <TooltipContent>
                                  <div className="space-y-1">
@@ -2792,26 +2912,40 @@ export default function CompaniesManagementPage() {
                              </Tooltip>
                            </TooltipProvider>
                          ) : (
-                           <span className="text-muted-foreground text-xs">-</span>
+                           <span className="text-muted-foreground text-sm">-</span>
                          )}
                        </TableCell>
                        {/* ✅ NOVA COLUNA: LinkedIn */}
-                       <TableCell>
-                         {company.linkedin_url ? (
-                           <a
-                             href={company.linkedin_url}
-                             target="_blank"
-                             rel="noopener noreferrer"
-                             className="text-primary hover:underline flex items-center gap-1 text-xs"
-                           >
-                             <span className="truncate max-w-[100px]">LinkedIn</span>
-                           </a>
-                         ) : (
-                           <span className="text-muted-foreground text-xs">-</span>
-                         )}
+                       <TableCell className="text-center">
+                         {(() => {
+                           const linkedinUrl = formatWebsiteUrl(company.linkedin_url);
+                           if (!linkedinUrl) {
+                             return <span className="text-muted-foreground text-sm">-</span>;
+                           }
+                           return (
+                             <TooltipProvider>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <a
+                                     href={linkedinUrl}
+                                     target="_blank"
+                                     rel="noopener noreferrer"
+                                     className="inline-flex items-center justify-center mx-auto text-[#0077B5] hover:text-[#0077B5]/80 transition-colors"
+                                     onClick={(e) => e.stopPropagation()}
+                                   >
+                                     <Linkedin className="h-4 w-4" />
+                                   </a>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p className="text-sm">{linkedinUrl}</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                             </TooltipProvider>
+                           );
+                         })()}
                        </TableCell>
-                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                       <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <STCAgent 
                             companyId={company.id}
                             companyName={company.name || 'Empresa'}
@@ -2857,7 +2991,7 @@ export default function CompaniesManagementPage() {
                     </React.Fragment>
                   ))}
                 </TableBody>
-              </Table>
+                </Table>
             )}
             
             {/* Paginação */}

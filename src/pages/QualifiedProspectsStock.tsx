@@ -68,6 +68,7 @@ import {
   Maximize,
   Minimize,
   Target,
+  Linkedin,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
@@ -102,13 +103,14 @@ import {
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { STCAgent } from '@/components/intelligence/STCAgent';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
-import { QualifiedStockActionsMenu } from '@/components/qualification/QualifiedStockActionsMenu';
+import { UnifiedActionsMenu } from '@/components/common/UnifiedActionsMenu';
 import { ExplainabilityButton } from '@/components/common/ExplainabilityButton';
 import LocationMap from '@/components/map/LocationMap';
 import { QuarantineCNPJStatusBadge } from '@/components/icp/QuarantineCNPJStatusBadge';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
 import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
+import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
 
 interface QualifiedProspect {
   id: string;
@@ -633,7 +635,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
   const [sortBy, setSortBy] = useState<'razao_social' | 'cnpj' | 'setor' | 'created_at'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
-  const handleSort = (column: 'razao_social' | 'cnpj' | 'setor' | 'created_at') => {
+  const handleSort = (column: 'razao_social' | 'cnpj' | 'setor' | 'created_at' | 'name' | 'source_name' | 'cnpj_status') => {
     if (sortBy === column) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -746,25 +748,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           throw existingError;
         }
 
-        // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS
-        const companyData: any = {
-          tenant_id: tenantId,
-          cnpj: normalizedCnpj,
-          company_name: companyName,
-          name: companyName, // Campo obrigatório
-          industry: sector,
-          website: website || null,
-          location: city && state ? { city, state } : null,
-          origem: origem, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
-          source_name: origem, // ✅ PRESERVAR source_name também
-          updated_at: new Date().toISOString(),
-        };
-
-        // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
-        // NOTA: Esses campos podem não existir na tabela companies, então salvamos apenas em raw_data
-        // Se as colunas existirem, podem ser adicionadas aqui no futuro
-
-        // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo)
+        // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo) - ANTES de criar companyData
         let jobData: any = null;
         if (prospect.job_id) {
           try {
@@ -789,6 +773,24 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                         jobData?.source_type === 'google_sheets' ? 'Google Sheets' :
                         jobData?.source_type === 'api_empresas_aqui' ? 'API Empresas Aqui' :
                         'Qualification Engine');
+
+        // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS
+        const companyData: any = {
+          tenant_id: tenantId,
+          cnpj: normalizedCnpj,
+          company_name: companyName,
+          name: companyName, // Campo obrigatório
+          industry: sector,
+          website: website || null,
+          location: city && state ? { city, state } : null,
+          origem: origem, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
+          source_name: origem, // ✅ PRESERVAR source_name também
+          updated_at: new Date().toISOString(),
+        };
+
+        // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
+        // NOTA: Esses campos podem não existir na tabela companies, então salvamos apenas em raw_data
+        // Se as colunas existirem, podem ser adicionadas aqui no futuro
 
         // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS EM raw_data
         const rawData: any = {
@@ -1084,11 +1086,12 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             
             const rawData: any = { ...parsedExisting };
             
-            // ✅ DADOS DE QUALIFICAÇÃO
-            const sourceName = prospect.source_name || prospect.job?.source_file_name || 'Qualification Engine';
-            if (sourceName) {
-              rawData.source_name = sourceName;
-            }
+            // ✅ DADOS DE QUALIFICAÇÃO - USAR origemUpdate (já calculado acima)
+            rawData.origem = origemUpdate; // ✅ PRESERVAR ORIGEM NO raw_data
+            rawData.source_name = origemUpdate; // ✅ PRESERVAR source_name também
+            rawData.source_file_name = jobData?.source_file_name || null;
+            rawData.job_name = jobData?.job_name || null;
+            rawData.source_type = jobData?.source_type || null;
             if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
               rawData.fit_score = Number(prospect.fit_score);
             }
@@ -1299,10 +1302,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               cnpj: insertPayload.cnpj,
               company_name: insertPayload.company_name,
               name: insertPayload.name,
+              origem: insertPayload.origem, // ✅ CRÍTICO: Verificar origem
+              source_name: insertPayload.source_name, // ✅ CRÍTICO: Verificar source_name
               has_city: !!insertPayload.headquarters_city,
               has_state: !!insertPayload.headquarters_state,
               has_industry: !!insertPayload.industry,
               has_website: !!insertPayload.website,
+              has_origem: !!insertPayload.origem, // ✅ CRÍTICO
               has_source_name: !!insertPayload.source_name,
               has_fit_score: insertPayload.fit_score !== undefined,
               has_grade: !!insertPayload.grade,
@@ -1679,36 +1685,22 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           if (!websiteData.success || !websiteData.website) continue;
 
           // 2. Escanear website
-          const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+          // ✅ CORRIGIDO: Usar supabase.functions.invoke() em vez de fetch() para evitar CORS
+          const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-prospect-website', {
+            body: {
               tenant_id: tenantId,
               qualified_prospect_id: prospectId,
               website_url: websiteData.website,
               razao_social: prospect.razao_social,
-            }),
+            }
           });
 
-          if (!scanWebsiteResponse.ok) continue;
-          const scanData = await scanWebsiteResponse.json();
-          if (!scanData.success) continue;
+          if (scanError || !scanData || !scanData.success) continue;
 
-          // 3. Atualizar
-          const { error } = await ((supabase as any).from('qualified_prospects'))
-            .update({
-              website_encontrado: websiteData.website,
-              website_fit_score: scanData.website_fit_score || 0,
-              website_products_match: scanData.compatible_products_count > 0 ? scanData.compatible_products : [],
-              linkedin_url: scanData.linkedin_url || null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', prospectId);
-
-          if (error) throw error;
+          // ✅ REMOVIDO: A Edge Function scan-prospect-website JÁ atualiza a tabela
+          // Não precisamos fazer atualização duplicada aqui
+          // Apenas aguardar um momento para garantir sincronização
+          await new Promise(resolve => setTimeout(resolve, 500));
           enrichedCount++;
         } catch (error: any) {
           const prospectData = prospects.find(p => p.id === prospectId);
@@ -1831,6 +1823,99 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       toast({
         title: 'Erro ao enriquecer',
         description: error.message || 'Não foi possível enriquecer as empresas',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+      setBulkProgress(null);
+    }
+  };
+
+  // ✅ NOVO: Enriquecimento Apollo (decisores)
+  const handleBulkEnrichApollo = async () => {
+    const idsToEnrich = selectedIds.size > 0 
+      ? Array.from(selectedIds) 
+      : prospects.map(p => p.id);
+
+    if (idsToEnrich.length === 0) {
+      toast({
+        title: 'Atenção',
+        description: 'Nenhuma empresa selecionada para enriquecer',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    setBulkProgress({ current: 0, total: idsToEnrich.length });
+    try {
+      toast({
+        title: '🔍 Buscando decisores no Apollo...',
+        description: `Processando ${idsToEnrich.length} empresa(s)`,
+      });
+
+      let enrichedCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < idsToEnrich.length; i++) {
+        const prospectId = idsToEnrich[i];
+        try {
+          const prospect = prospects.find(p => p.id === prospectId);
+          if (!prospect || !tenantId) {
+            setBulkProgress({ current: i + 1, total: idsToEnrich.length, currentItem: 'Pulando...' });
+            continue;
+          }
+
+          setBulkProgress({ 
+            current: i + 1, 
+            total: idsToEnrich.length, 
+            currentItem: prospect.razao_social || prospect.cnpj 
+          });
+
+          // ✅ Chamar Edge Function com qualified_prospect_id
+          const { error } = await supabase.functions.invoke('enrich-apollo-decisores', {
+            body: {
+              qualified_prospect_id: prospectId, // ✅ NOVO: usar qualified_prospect_id
+              company_name: prospect.razao_social || prospect.nome_fantasia,
+              domain: prospect.website,
+              modes: ['people', 'company'],
+              city: prospect.cidade,
+              state: prospect.estado,
+              industry: prospect.setor,
+              cep: prospect.cep,
+              fantasia: prospect.nome_fantasia,
+            }
+          });
+
+          if (error) throw error;
+          enrichedCount++;
+        } catch (error: any) {
+          const prospect = prospects.find(p => p.id === prospectId);
+          console.error(`[Bulk Apollo] Erro ao enriquecer prospect ${prospectId}:`, error);
+          errors.push(`CNPJ ${prospect?.cnpj || prospectId}: ${error.message || 'Erro desconhecido'}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        toast({
+          title: '⚠️ Enriquecimento parcial',
+          description: `${enrichedCount} empresa(s) enriquecida(s). ${errors.length} erro(s).`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: '✅ Decisores encontrados com sucesso!',
+          description: `${enrichedCount} empresa(s) foram enriquecidas com dados do Apollo.`,
+          duration: 6000,
+        });
+      }
+
+      await loadProspects();
+    } catch (error: any) {
+      console.error('[Bulk Apollo] Erro:', error);
+      toast({
+        title: 'Erro ao enriquecer',
+        description: error.message || 'Não foi possível enriquecer com Apollo',
         variant: 'destructive',
       });
     } finally {
@@ -1975,28 +2060,23 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       });
 
       // 2. Escanear website e calcular fit score
-      const scanWebsiteResponse = await fetch(`${supabaseUrl}/functions/v1/scan-prospect-website`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tenant_id: tenantId,
-          qualified_prospect_id: prospectId,
-          website_url: websiteData.website,
-          razao_social: prospect.razao_social,
-        }),
-      });
+          // ✅ CORRIGIDO: Usar supabase.functions.invoke() em vez de fetch() para evitar CORS
+          const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-prospect-website', {
+            body: {
+              tenant_id: tenantId,
+              qualified_prospect_id: prospectId,
+              website_url: websiteData.website,
+              razao_social: prospect.razao_social,
+            }
+          });
 
-      if (!scanWebsiteResponse.ok) {
-        throw new Error('Erro ao escanear website');
-      }
+          if (scanError) {
+            throw new Error(scanError.message || 'Erro ao escanear website');
+          }
 
-      const scanData = await scanWebsiteResponse.json();
-      if (!scanData.success) {
-        throw new Error(scanData.error || 'Erro ao escanear website');
-      }
+          if (!scanData || !scanData.success) {
+            throw new Error(scanData?.error || 'Erro ao escanear website');
+          }
 
       // ✅ CORRIGIDO: A Edge Function scan-prospect-website JÁ atualiza a tabela qualified_prospects
       // Não precisamos fazer uma atualização duplicada aqui, apenas aguardar um momento
@@ -2599,16 +2679,18 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               <span className="font-medium">
                 {selectedIds.size} empresa(s) selecionada(s)
               </span>
-              <QualifiedStockActionsMenu
+              <UnifiedActionsMenu
+                context="stock"
                 selectedCount={selectedIds.size}
                 totalCount={prospects.length}
-                onBulkDelete={handleBulkDelete}
-                onDeleteAll={handleDeleteAll}
-                onBulkEnrichment={handleBulkEnrichment}
-                onBulkEnrichWebsite={handleBulkEnrichWebsite}
-                onBulkCalculatePurchaseIntent={handleBulkCalculatePurchaseIntent}
                 onPromoteToCompanies={handlePromoteToCompanies}
-                onExportSelected={handleExportSelected}
+                onEnrichReceita={handleBulkEnrichment}
+                onEnrichApollo={handleBulkEnrichApollo}
+                onEnrichWebsite={handleBulkEnrichWebsite}
+                onCalculatePurchaseIntent={handleBulkCalculatePurchaseIntent}
+                onExportCSV={handleExportSelected}
+                onDelete={handleBulkDelete}
+                onDeleteAll={handleDeleteAll}
                 isProcessing={processing}
               />
             </div>
@@ -2653,119 +2735,131 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               Nenhuma empresa encontrada
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedIds.size === prospects.length && prospects.length > 0}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('razao_social')}
-                      className="h-8 flex items-center gap-1"
-                    >
-                      Empresa
-                      <ArrowUpDown className="h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSort('cnpj')}
-                      className="h-8 flex items-center gap-1"
-                    >
-                      CNPJ
-                      <ArrowUpDown className="h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead>
-                    <ColumnFilter
-                      column="origem"
-                      title="Origem"
-                      values={[...new Set(prospects.map(p => p.source_name || p.job?.source_file_name || '').filter(Boolean))]}
-                      selectedValues={filterOrigin}
-                      onFilterChange={setFilterOrigin}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ColumnFilter
-                      column="status_cnpj"
-                      title="Status CNPJ"
-                      values={['ATIVA', 'SUSPENSA', 'INAPTA', 'BAIXADA', 'NULA']}
-                      selectedValues={filterStatusCNPJ}
-                      onFilterChange={setFilterStatusCNPJ}
-                    />
-                  </TableHead>
-                  <TableHead>Nome Fantasia</TableHead>
-                  <TableHead>Cidade/UF</TableHead>
-                  <TableHead>
-                    <ColumnFilter
-                      column="setor"
-                      title="Setor"
-                      values={uniqueSectors}
-                      selectedValues={sectorFilter !== 'all' ? [sectorFilter] : []}
-                      onFilterChange={(values) => setSectorFilter(values.length > 0 ? values[0] : 'all')}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ColumnFilter
-                      column="icp"
-                      title="ICP"
-                      values={[...new Set(prospects.map(p => p.icp?.nome || 'Sem ICP').filter(Boolean))]}
-                      selectedValues={filterICP}
-                      onFilterChange={setFilterICP}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ColumnFilter
-                      column="fit_score"
-                      title="Fit Score"
-                      values={['90-100', '75-89', '60-74', '40-59', '0-39']}
-                      selectedValues={filterFitScore}
-                      onFilterChange={setFilterFitScore}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ColumnFilter
-                      column="grade"
-                      title="Grade"
-                      values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
-                      selectedValues={filterGrade}
-                      onFilterChange={setFilterGrade}
-                    />
-                  </TableHead>
-                  <TableHead>Intenção de Compra</TableHead>
-                  <TableHead>Website</TableHead>
-                  <TableHead>Website Fit</TableHead>
-                  <TableHead>LinkedIn</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
+            <Table className="w-full min-w-[1400px] table-auto">
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="w-12 min-w-[48px]">
+                      <Checkbox
+                        checked={selectedIds.size === prospects.length && prospects.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedIds(new Set(prospects.map(p => p.id)));
+                          } else {
+                            setSelectedIds(new Set());
+                          }
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead className="min-w-[200px] flex-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSort('razao_social')}
+                        className="h-8 flex items-center gap-1"
+                      >
+                        Empresa
+                        <ArrowUpDown className="h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSort('cnpj')}
+                        className="h-8 flex items-center gap-1"
+                      >
+                        CNPJ
+                        <ArrowUpDown className="h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px]">
+                      <ColumnFilter
+                        column="origem"
+                        title="Origem"
+                        values={[...new Set(prospects.map(p => p.source_name || p.job?.source_file_name || '').filter(Boolean))]}
+                        selectedValues={filterOrigin}
+                        onFilterChange={setFilterOrigin}
+                        onSort={() => {}}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">
+                      <ColumnFilter
+                        column="status_cnpj"
+                        title="Status CNPJ"
+                        values={['ATIVA', 'SUSPENSA', 'INAPTA', 'BAIXADA', 'NULA']}
+                        selectedValues={filterStatusCNPJ}
+                        onFilterChange={setFilterStatusCNPJ}
+                        onSort={() => {}}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[150px] min-w-[150px]">Nome Fantasia</TableHead>
+                    <TableHead className="w-[140px] min-w-[120px]">Cidade/UF</TableHead>
+                    <TableHead className="min-w-[180px] flex-[1.5]">
+                      <ColumnFilter
+                        column="setor"
+                        title="Setor"
+                        values={uniqueSectors}
+                        selectedValues={sectorFilter !== 'all' ? [sectorFilter] : []}
+                        onFilterChange={(values) => setSectorFilter(values.length > 0 ? values[0] : 'all')}
+                        onSort={() => handleSort('setor')}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[120px] min-w-[100px]">
+                      <ColumnFilter
+                        column="icp"
+                        title="ICP"
+                        values={[...new Set(prospects.map(p => p.icp?.nome || 'Sem ICP').filter(Boolean))]}
+                        selectedValues={filterICP}
+                        onFilterChange={setFilterICP}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">
+                      <ColumnFilter
+                        column="fit_score"
+                        title="Fit Score"
+                        values={['90-100', '75-89', '60-74', '40-59', '0-39']}
+                        selectedValues={filterFitScore}
+                        onFilterChange={setFilterFitScore}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[60px] min-w-[50px]">
+                      <ColumnFilter
+                        column="grade"
+                        title="Grade"
+                        values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
+                        selectedValues={filterGrade}
+                        onFilterChange={setFilterGrade}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[160px] min-w-[140px]">Intenção de Compra</TableHead>
+                    <TableHead className="min-w-[180px] flex-1">Website</TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">Website Fit</TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">LinkedIn</TableHead>
+                    <TableHead className="w-20 min-w-[80px] text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {prospects.map((prospect) => (
                     <TableRow key={prospect.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedIds.has(prospect.id)}
-                          onCheckedChange={(checked) =>
-                            handleSelectOne(prospect.id, checked as boolean)
-                          }
-                        />
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={selectedIds.has(prospect.id)}
+                            onCheckedChange={(checked) =>
+                              handleSelectOne(prospect.id, checked as boolean)
+                            }
+                          />
+                        </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 1. Empresa (Razão Social) */}
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <Building2 className="h-4 w-4 text-primary" />
                           <div>
                             <button
                               onClick={() => handleShowFullPreview(prospect.cnpj)}
-                              className="font-medium hover:text-primary hover:underline text-left"
+                              className="font-medium hover:text-primary hover:underline"
+                              title={prospect.razao_social || 'Sem nome'}
                             >
                               {prospect.razao_social || 'Sem nome'}
                             </button>
@@ -2773,150 +2867,167 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                         </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 2. CNPJ */}
-                      <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
-                          onClick={() => handleShowFullPreview(prospect.cnpj)}
-                        >
-                          {prospect.cnpj}
-                        </Badge>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <Badge 
+                            variant="outline" 
+                            className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors"
+                            onClick={() => handleShowFullPreview(prospect.cnpj)}
+                          >
+                            {prospect.cnpj}
+                          </Badge>
+                        </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 3. Origem */}
-                      <TableCell>
-                        {(() => {
-                          const origem = prospect.source_name || prospect.job?.source_file_name || '';
-                          if (origem) {
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {(() => {
+                            const origem = prospect.source_name || prospect.job?.source_file_name || '';
+                            if (origem) {
+                              return (
+                                <Badge 
+                                  variant="secondary" 
+                                  className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
+                                >
+                                  {origem}
+                                </Badge>
+                              );
+                            }
                             return (
-                              <Badge 
-                                variant="secondary" 
-                                className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
-                              >
-                                {origem}
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                Legacy
                               </Badge>
                             );
-                          }
-                          return (
-                            <Badge variant="outline" className="text-xs text-muted-foreground">
-                              Legacy
-                            </Badge>
-                          );
-                        })()}
+                          })()}
+                        </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 4. Status CNPJ */}
-                      <TableCell>
-                        {(() => {
-                          const receitaData = prospect.enrichment?.raw || {};
-                          const situacao = receitaData.situacao || receitaData.descricao_situacao_cadastral || '';
-                          
-                          // Normalizar status para o componente
-                          let cnpjStatus = 'pendente';
-                          if (situacao) {
-                            const sitUpper = situacao.toUpperCase();
-                            if (sitUpper.includes('ATIVA')) cnpjStatus = 'ativa';
-                            else if (sitUpper.includes('INAPTA') || sitUpper.includes('SUSPENSA') || sitUpper.includes('BAIXADA')) cnpjStatus = 'inativo';
-                            else if (sitUpper.includes('NULA')) cnpjStatus = 'inexistente';
-                          }
-                          
-                          return <QuarantineCNPJStatusBadge cnpj={prospect.cnpj || undefined} cnpjStatus={cnpjStatus} />;
-                        })()}
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {(() => {
+                            const receitaData = prospect.enrichment?.raw || {};
+                            const situacao = receitaData.situacao || receitaData.descricao_situacao_cadastral || '';
+                            
+                            // Normalizar status para o componente
+                            let cnpjStatus = 'pendente';
+                            if (situacao) {
+                              const sitUpper = situacao.toUpperCase();
+                              if (sitUpper.includes('ATIVA')) cnpjStatus = 'ativa';
+                              else if (sitUpper.includes('INAPTA') || sitUpper.includes('SUSPENSA') || sitUpper.includes('BAIXADA')) cnpjStatus = 'inativo';
+                              else if (sitUpper.includes('NULA')) cnpjStatus = 'inexistente';
+                            }
+                            
+                            return <QuarantineCNPJStatusBadge cnpj={prospect.cnpj || undefined} cnpjStatus={cnpjStatus} />;
+                          })()}
+                        </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 5. Nome Fantasia */}
-                      <TableCell>
+                      <TableCell className="text-center">
                         {(() => {
                           const fantasia = prospect.enrichment?.fantasia || prospect.nome_fantasia;
                           if (fantasia && 
                               fantasia.trim() !== '' && 
                               fantasia.trim().toUpperCase() !== prospect.razao_social?.trim().toUpperCase()) {
-                            return fantasia;
+                            return <span title={fantasia}>{fantasia}</span>;
                           }
                           return '-';
                         })()}
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 6. Cidade/UF */}
-                      <TableCell>
-                        {prospect.cidade && prospect.estado
-                          ? `${prospect.cidade}/${prospect.estado}`
-                          : prospect.estado || '-'}
+                      <TableCell className="text-center">
+                        <span>
+                          {prospect.cidade && prospect.estado
+                            ? `${prospect.cidade}/${prospect.estado}`
+                            : prospect.estado || '-'}
+                        </span>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 7. Setor */}
-                      <TableCell>{prospect.setor || '-'}</TableCell>
+                      <TableCell className="text-center">
+                        <span title={prospect.setor || '-'}>
+                          {prospect.setor || '-'}
+                        </span>
+                      </TableCell>
                       {/* ✅ ORDEM CORRETA: 8. ICP */}
-                      <TableCell>
-                        {prospect.icp?.nome ? (
-                          <Badge variant="outline" className="text-xs">
-                            {prospect.icp.nome}
-                          </Badge>
-                        ) : (
-                          '-'
-                        )}
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {prospect.icp?.nome ? (
+                            <Badge variant="outline" className="text-xs">
+                              {prospect.icp.nome}
+                            </Badge>
+                          ) : (
+                            '-'
+                          )}
+                        </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 9. Fit Score */}
-                      <TableCell>
-                        {(() => {
-                          const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
-                          const matchBreakdown = prospect.match_breakdown;
-                          
-                          if (fitScore != null && fitScore > 0) {
-                            let breakdownText = '';
-                            if (matchBreakdown && Array.isArray(matchBreakdown)) {
-                              const breakdown = matchBreakdown.map((item: any) => 
-                                `${item.label}: ${item.score.toFixed(1)}% (peso ${item.weight}%)`
-                              ).join('\n');
-                              breakdownText = `Breakdown do Fit Score:\n${breakdown}\n\nTotal: ${fitScore.toFixed(1)}%`;
-                            } else {
-                              breakdownText = `Fit Score: ${fitScore.toFixed(1)}%\n\nCálculo baseado em:\n• Setor (40%): Match com ICP\n• Localização (30%): UF/Cidade\n• Dados completos (20%): Qualidade dos dados\n• Website (5%): Presença digital\n• Contato (5%): Email/Telefone`;
-                            }
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {(() => {
+                            const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
+                            const matchBreakdown = prospect.match_breakdown;
                             
+                            if (fitScore != null && fitScore > 0) {
+                              let breakdownText = '';
+                              if (matchBreakdown && Array.isArray(matchBreakdown)) {
+                                const breakdown = matchBreakdown.map((item: any) => 
+                                  `${item.label}: ${item.score.toFixed(1)}% (peso ${item.weight}%)`
+                                ).join('\n');
+                                breakdownText = `Breakdown do Fit Score:\n${breakdown}\n\nTotal: ${fitScore.toFixed(1)}%`;
+                              } else {
+                                breakdownText = `Fit Score: ${fitScore.toFixed(1)}%\n\nCálculo baseado em:\n• Setor (40%): Match com ICP\n• Localização (30%): UF/Cidade\n• Dados completos (20%): Qualidade dos dados\n• Website (5%): Presença digital\n• Contato (5%): Email/Telefone`;
+                              }
+                              
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center justify-center gap-2 cursor-help group">
+                                        <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                        <span className="font-medium">{fitScore.toFixed(1)}%</span>
+                                        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="max-w-sm p-4">
+                                      <div className="space-y-2">
+                                        <p className="font-semibold text-sm border-b pb-2">
+                                          Por que esta empresa tem Fit Score {fitScore.toFixed(1)}%?
+                                        </p>
+                                        <div className="text-xs space-y-1.5 whitespace-pre-line">
+                                          {breakdownText}
+                                        </div>
+                                        {prospect.enrichment?.data_quality && (
+                                          <div className="pt-2 border-t mt-2">
+                                            <p className="text-xs font-medium">Qualidade dos Dados: {prospect.enrichment.data_quality}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              );
+                            }
                             return (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-2 cursor-help group">
-                                      <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                      <span className="font-medium">{fitScore.toFixed(1)}%</span>
-                                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
+                                    <span className="text-muted-foreground text-sm cursor-help">
+                                      Não calculado
+                                    </span>
                                   </TooltipTrigger>
-                                  <TooltipContent side="left" className="max-w-sm p-4">
-                                    <div className="space-y-2">
-                                      <p className="font-semibold text-sm border-b pb-2">
-                                        Por que esta empresa tem Fit Score {fitScore.toFixed(1)}%?
-                                      </p>
-                                      <div className="text-xs space-y-1.5 whitespace-pre-line">
-                                        {breakdownText}
-                                      </div>
-                                      {prospect.enrichment?.data_quality && (
-                                        <div className="pt-2 border-t mt-2">
-                                          <p className="text-xs font-medium">Qualidade dos Dados: {prospect.enrichment.data_quality}</p>
-                                        </div>
-                                      )}
-                                    </div>
+                                  <TooltipContent side="left" className="max-w-xs">
+                                    <p className="text-sm">
+                                      O Fit Score será calculado quando você executar o Motor de Qualificação para esta empresa.
+                                    </p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             );
-                          }
-                          return (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-muted-foreground text-sm cursor-help">
-                                    Não calculado
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="left" className="max-w-xs">
-                                  <p className="text-sm">
-                                    O Fit Score será calculado quando você executar o Motor de Qualificação para esta empresa.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          );
-                        })()}
+                          })()}
+                        </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 10. Grade */}
-                      <TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
                         {(() => {
                           const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
                           
@@ -2988,40 +3099,55 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                             </TooltipProvider>
                           );
                         })()}
+                        </div>
                       </TableCell>
                       {/* ✅ NOVO: 11. Purchase Intent Score */}
-                      <TableCell>
-                        <PurchaseIntentBadge 
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <PurchaseIntentBadge 
                           score={prospect.purchase_intent_score} 
                           intentType={(prospect as any).purchase_intent_type || 'potencial'}
                           size="sm"
                         />
                       </TableCell>
                       {/* ✅ NOVA COLUNA: Website */}
-                      <TableCell>
-                        {prospect.website_encontrado ? (
-                          <a
-                            href={prospect.website_encontrado}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline flex items-center gap-1 text-sm"
-                          >
-                            <Globe className="h-3.5 w-3.5" />
-                            <span className="truncate max-w-[150px]">{prospect.website_encontrado}</span>
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        )}
+                      <TableCell className="text-center">
+                        {(() => {
+                          const websiteUrl = formatWebsiteUrl(prospect.website_encontrado || prospect.website);
+                          if (!websiteUrl) {
+                            return <span className="text-muted-foreground text-sm">-</span>;
+                          }
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <a
+                                    href={websiteUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center mx-auto text-primary hover:text-primary/80 transition-colors"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Globe className="h-4 w-4" />
+                                  </a>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-sm">{websiteUrl}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
                       </TableCell>
                       {/* ✅ NOVA COLUNA: Website Fit Score */}
-                      <TableCell>
+                      <TableCell className="text-center">
                         {prospect.website_fit_score != null && prospect.website_fit_score >= 0 ? (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Badge variant="secondary" className="bg-green-600/10 text-green-600 border-green-600/30">
-                                  +{prospect.website_fit_score}pts
-                                </Badge>
+                                <div className="inline-flex items-center justify-center mx-auto text-green-600 cursor-help">
+                                  <Target className="h-4 w-4" />
+                                </div>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <div className="space-y-1">
@@ -3050,22 +3176,36 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                         )}
                       </TableCell>
                       {/* ✅ NOVA COLUNA: LinkedIn */}
-                      <TableCell>
-                        {prospect.linkedin_url ? (
-                          <a
-                            href={prospect.linkedin_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline flex items-center gap-1 text-sm"
-                          >
-                            <span className="truncate max-w-[120px]">LinkedIn</span>
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        )}
+                      <TableCell className="text-center">
+                        {(() => {
+                          const linkedinUrl = formatWebsiteUrl(prospect.linkedin_url);
+                          if (!linkedinUrl) {
+                            return <span className="text-muted-foreground text-sm">-</span>;
+                          }
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <a
+                                    href={linkedinUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center mx-auto text-[#0077B5] hover:text-[#0077B5]/80 transition-colors"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Linkedin className="h-4 w-4" />
+                                  </a>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-sm">{linkedinUrl}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
                           {/* ✅ Botão STC */}
                           <STCAgent
                             companyId={prospect.id}

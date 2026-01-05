@@ -1221,93 +1221,91 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
               </p>
             </div>
           ) : (
-            <Table className="table-fixed w-full">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedLeads.length === filteredLeads.length && filteredLeads.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[26rem]">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('name')} className="h-8 flex items-center gap-1">
-                      Empresa <ArrowUpDown className="h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[9rem]">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('cnpj')} className="h-8 flex items-center gap-1">
-                      CNPJ <ArrowUpDown className="h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[7rem] text-center">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('icp_score')} className="h-8 flex items-center gap-1">
-                      Score ICP <ArrowUpDown className="h-3 w-3" />
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[8rem]">
-                    <ColumnFilter
-                      column="temperatura"
-                      title="Temperatura"
-                      values={leads.map(l => l.temperatura || '')}
-                      selectedValues={filterTemperatura}
-                      onFilterChange={setFilterTemperatura}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[8rem]">
-                    <ColumnFilter
-                      column="cnpj_status"
-                      title="Status CNPJ"
-                      values={leads.map(l => {
-                        const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
-                        const situacao = receita?.situacao || receita?.descricao_situacao_cadastral || l.situacao_cadastral || '';
-                        const s = typeof situacao === 'string' ? situacao.toUpperCase() : String(situacao || '').toUpperCase();
-                        if (s.includes('ATIVA')) return 'Ativa';
-                        if (s.includes('BAIXA') || s.includes('INATIV')) return 'Inativa';
-                        if (s.includes('INAPTA') || s.includes('SUSPENS')) return 'Inapta';
-                        return 'Pendente';
-                      })}
-                      selectedValues={filterCnpjStatus}
-                      onFilterChange={setFilterCnpjStatus}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[9rem]">
-                    <ColumnFilter
-                      column="analysis_status"
-                      title="Status Análise"
-                      values={leads.map(l => getAnalysisStatusFromLead(l))}
-                      selectedValues={filterAnalysisStatus}
-                      onFilterChange={setFilterAnalysisStatus}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[5rem]">
-                    <ColumnFilter
-                      column="uf"
-                      title="UF"
-                      values={leads.map(l => l.uf || '')}
-                      selectedValues={filterUF}
-                      onFilterChange={setFilterUF}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[10rem]">
-                    <ColumnFilter
-                      column="setor"
-                      title="Setor"
-                      values={leads.map(l => l.setor || l.raw_data?.setor_amigavel || '')}
-                      selectedValues={filterSetor}
-                      onFilterChange={setFilterSetor}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[10rem] text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <Table className="w-full min-w-[1400px] table-auto">
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="w-10 min-w-[40px]"></TableHead>
+                    <TableHead className="w-12 min-w-[48px]">
+                      <Checkbox
+                        checked={selectedLeads.length === filteredLeads.length && filteredLeads.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead className="min-w-[200px] flex-1">
+                      <Button variant="ghost" size="sm" onClick={() => handleSort('name')} className="h-8 flex items-center gap-1">
+                        Empresa <ArrowUpDown className="h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px]">
+                      <Button variant="ghost" size="sm" onClick={() => handleSort('cnpj')} className="h-8 flex items-center gap-1">
+                        CNPJ <ArrowUpDown className="h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">
+                      <Button variant="ghost" size="sm" onClick={() => handleSort('icp_score')} className="h-8 flex items-center gap-1">
+                        Score ICP <ArrowUpDown className="h-3 w-3" />
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">
+                      <ColumnFilter
+                        column="temperatura"
+                        title="Temperatura"
+                        values={leads.map(l => l.temperatura || '')}
+                        selectedValues={filterTemperatura}
+                        onFilterChange={setFilterTemperatura}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[100px] min-w-[90px]">
+                      <ColumnFilter
+                        column="cnpj_status"
+                        title="Status CNPJ"
+                        values={leads.map(l => {
+                          const receita = l.raw_data?.receita_federal || l.raw_data?.receita;
+                          const situacao = receita?.situacao || receita?.descricao_situacao_cadastral || l.situacao_cadastral || '';
+                          const s = typeof situacao === 'string' ? situacao.toUpperCase() : String(situacao || '').toUpperCase();
+                          if (s.includes('ATIVA')) return 'Ativa';
+                          if (s.includes('BAIXA') || s.includes('INATIV')) return 'Inativa';
+                          if (s.includes('INAPTA') || s.includes('SUSPENS')) return 'Inapta';
+                          return 'Pendente';
+                        })}
+                        selectedValues={filterCnpjStatus}
+                        onFilterChange={setFilterCnpjStatus}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[120px] min-w-[100px]">
+                      <ColumnFilter
+                        column="analysis_status"
+                        title="Status Análise"
+                        values={leads.map(l => getAnalysisStatusFromLead(l))}
+                        selectedValues={filterAnalysisStatus}
+                        onFilterChange={setFilterAnalysisStatus}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[60px] min-w-[50px]">
+                      <ColumnFilter
+                        column="uf"
+                        title="UF"
+                        values={leads.map(l => l.uf || '')}
+                        selectedValues={filterUF}
+                        onFilterChange={setFilterUF}
+                      />
+                    </TableHead>
+                    <TableHead className="min-w-[180px] flex-[1.5]">
+                      <ColumnFilter
+                        column="setor"
+                        title="Setor"
+                        values={leads.map(l => l.setor || l.raw_data?.setor_amigavel || '')}
+                        selectedValues={filterSetor}
+                        onFilterChange={setFilterSetor}
+                      />
+                    </TableHead>
+                    <TableHead className="w-20 min-w-[80px] text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 {filteredLeads.slice(0, pageSize).map((lead) => (
                   <React.Fragment key={lead.id}>
-                    <TableRow 
-                      className={`h-[3.25rem] align-middle ${expandedRow === lead.id ? 'bg-muted/30' : ''} ${selectedLeads.includes(lead.id) ? 'bg-primary/5' : ''}`}
-                    >
+                    <TableRow className={expandedRow === lead.id ? 'bg-muted/30' : ''}>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -1328,27 +1326,27 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                           onCheckedChange={() => toggleSelectLead(lead.id)}
                         />
                       </TableCell>
-                      <TableCell className="w-[26rem] max-w-[26rem] truncate">
+                      <TableCell>
                         <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="font-medium truncate" title={lead.name}>
+                          <Building2 className="h-4 w-4 text-primary" />
+                          <div>
+                            <p className="font-medium" title={lead.name}>
                               {lead.name}
                             </p>
                             {lead.nome_fantasia && lead.nome_fantasia !== lead.name && (
-                              <p className="text-xs text-muted-foreground truncate">
+                              <p className="text-xs text-muted-foreground">
                                 {lead.nome_fantasia}
                               </p>
                             )}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="w-[9rem]">
+                      <TableCell>
                         <Badge variant="outline" className="font-mono text-xs">
                           {lead.cnpj || 'N/A'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="w-[7rem] text-center">
+                      <TableCell>
                         <div className="flex items-center justify-center gap-2">
                           <div className="w-12 h-2 bg-muted rounded-full overflow-hidden">
                             <div 
@@ -1359,10 +1357,10 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                           <span className="text-sm font-medium">{lead.icp_score || 0}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="w-[8rem]">
+                      <TableCell>
                         <TemperatureBadge temp={lead.temperatura} score={lead.icp_score} />
                       </TableCell>
-                      <TableCell className="w-[8rem]">
+                      <TableCell>
                         {/* Badge de Status CNPJ - Igual à tabela de empresas */}
                         {(() => {
                           // Extrair situação da Receita Federal
@@ -1386,26 +1384,26 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                           return <QuarantineCNPJStatusBadge cnpj={lead.cnpj} cnpjStatus={cnpjStatus} />;
                         })()}
                       </TableCell>
-                      <TableCell className="w-[9rem]">
+                      <TableCell>
                         {/* Badge de Status Análise com progresso 0-100% */}
                         <QuarantineEnrichmentStatusBadge 
                           rawAnalysis={lead.raw_data || {}}
                           showProgress={true}
                         />
                       </TableCell>
-                      <TableCell className="w-[5rem]">
+                      <TableCell>
                         {lead.uf ? (
                           <Badge variant="outline">{lead.uf}</Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">N/A</span>
                         )}
                       </TableCell>
-                      <TableCell className="w-[10rem] max-w-[10rem] truncate">
-                        <span className="text-xs truncate block" title={lead.setor}>
+                      <TableCell>
+                        <span className="text-xs" title={lead.setor}>
                           {lead.setor || 'N/A'}
                         </span>
                       </TableCell>
-                      <TableCell className="w-[10rem]">
+                      <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           {/* Barra de Score Visual */}
                           <TooltipProvider>
@@ -1724,7 +1722,7 @@ export function LeadsQualificationTable({ onLeadSelect, onRefresh }: LeadsQualif
                   </React.Fragment>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
           )}
         </CardContent>
       </Card>

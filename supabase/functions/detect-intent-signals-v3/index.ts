@@ -5,7 +5,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+  'Access-Control-Max-Age': '86400',
 };
 
 type IntentSignal = {
@@ -158,8 +159,11 @@ function validateMention(text: string, companyName: string): boolean {
 }
 
 serve(async (req: Request) => {
+  // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA - SEM TRY/CATCH)
+  // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
+  // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response('', { status: 200, headers: corsHeaders });
   }
 
   try {

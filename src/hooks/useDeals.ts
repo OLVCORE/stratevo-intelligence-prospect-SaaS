@@ -5,14 +5,11 @@ import { toastMessages } from '@/lib/utils/toastMessages';
 
 export interface Deal {
   id: string;
-  deal_title: string; // FIX: Usar deal_title (nome real da coluna no banco)
-  title?: string; // Alias para compatibilidade (computado automaticamente)
+  title: string;
   description?: string | null;
   company_id?: string | null;
-  deal_stage: string; // FIX: Usar deal_stage (nome real da coluna no banco)
-  stage?: string; // Alias para compatibilidade (computado automaticamente)
-  deal_value: number; // FIX: Usar deal_value (nome real da coluna no banco)
-  value?: number; // Alias para compatibilidade (computado automaticamente)
+  stage: string;
+  value: number;
   probability: number;
   status: 'open' | 'won' | 'lost' | 'abandoned';
   priority: 'low' | 'medium' | 'high' | 'urgent';
@@ -34,10 +31,10 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
         .order('created_at', { ascending: false });
       
       // Filtro por stage
-      if (filters?.stage) query = query.eq('deal_stage', filters.stage);
+      if (filters?.stage) query = query.eq('stage', filters.stage);
       
-      // 🔥 REMOVIDO: Coluna 'status' não existe na tabela sdr_deals
-      // Se precisar filtrar por status, usar deal_stage (discovery/won/lost/etc)
+      // Filtro por status
+      if (filters?.status) query = query.eq('status', filters.status);
       
       const { data, error } = await query;
       if (error) {
@@ -48,15 +45,8 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
       
       console.log('✅ Deals carregados:', data?.length || 0);
       
-      // 🔥 MAPEAR ALIASES PARA COMPATIBILIDADE COM CÓDIGO LEGADO
-      const dealsWithAliases = (data || []).map(deal => ({
-        ...deal,
-        title: deal.deal_title,      // Alias: title → deal_title
-        stage: deal.deal_stage,      // Alias: stage → deal_stage
-        value: deal.deal_value,      // Alias: value → deal_value
-      }));
-      
-      return dealsWithAliases as Deal[];
+      // ✅ Dados já vêm com campos corretos (title, stage, value)
+      return (data || []) as Deal[];
     },
     // ✅ HABILITADO: Agora temos deals criados com sucesso!
   });
@@ -65,8 +55,21 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
 export function useCreateDeal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (deal: { deal_title: string; description?: string; company_id?: string; deal_stage?: string; value?: number; priority?: string }) => {
-      const { data, error} = await supabase.from('sdr_deals').insert([deal]).select().single();
+    mutationFn: async (deal: { title: string; description?: string; company_id?: string; stage?: string; value?: number; priority?: string; assigned_to?: string; source?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const dealToInsert = {
+        title: deal.title,
+        description: deal.description || null,
+        company_id: deal.company_id || null,
+        stage: deal.stage || 'discovery',
+        value: deal.value || 0,
+        probability: 0,
+        priority: deal.priority || 'medium',
+        assigned_to: deal.assigned_to || user?.id || null,
+        source: deal.source || 'manual',
+        status: 'open',
+      };
+      const { data, error} = await supabase.from('sdr_deals').insert([dealToInsert]).select().single();
       if (error) throw error;
       return data;
     },
@@ -96,7 +99,7 @@ export function useMoveDeal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ dealId, newStage }: { dealId: string; newStage: string }) => {
-      const { data, error } = await supabase.from('sdr_deals').update({ deal_stage: newStage }).eq('id', dealId).select().single(); // FIX: deal_stage
+      const { data, error } = await supabase.from('sdr_deals').update({ stage: newStage, status: newStage === 'won' ? 'won' : newStage === 'lost' ? 'lost' : 'open' }).eq('id', dealId).select().single();
       if (error) throw error;
       return data;
     },
