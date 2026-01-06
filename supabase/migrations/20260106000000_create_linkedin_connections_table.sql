@@ -17,10 +17,14 @@ CREATE TABLE IF NOT EXISTS public.linkedin_connections (
   has_premium BOOLEAN DEFAULT false,
   
   -- Status e rastreamento
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'accepted', 'rejected', 'ignored')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'accepted', 'rejected', 'ignored', 'failed')),
   sent_date DATE NOT NULL DEFAULT CURRENT_DATE,
   sent_at TIMESTAMPTZ,
   responded_at TIMESTAMPTZ,
+  
+  -- ✅ NOVO: Rastreamento PhantomBuster (envio real)
+  phantom_container_id TEXT, -- ID do container do PhantomBuster
+  phantom_result JSONB, -- Resultado completo do PhantomBuster
   
   -- Relacionamentos
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
