@@ -21,7 +21,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Zap, TrendingUp, Building2, Download } from 'lucide-react';
 import { LinkedInLeadCollector } from '@/components/icp/LinkedInLeadCollector';
-import { useState } from 'react';
 
 export default function ProspeccaoAvancadaPage() {
   const { tenant } = useTenant();

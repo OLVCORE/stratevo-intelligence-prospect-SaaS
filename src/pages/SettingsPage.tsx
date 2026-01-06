@@ -16,8 +16,10 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings } from 'lucide-react';
+import { Loader2, Upload, Settings, Linkedin, CheckCircle2, XCircle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { LinkedInCredentialsDialog } from '@/components/icp/LinkedInCredentialsDialog';
+import { useState } from 'react';
 
 interface UserProfile {
   id: string;
@@ -67,11 +69,29 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadProfile();
+    checkLinkedInStatus();
   }, [user]);
 
   useEffect(() => {
     loadIcpData();
   }, [tenant]);
+
+  const checkLinkedInStatus = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('linkedin_connected, linkedin_profile_data')
+          .eq('id', user.id)
+          .single();
+        
+        setLinkedInConnected(profile?.linkedin_connected || false);
+      }
+    } catch (error) {
+      console.error('[Settings] Erro ao verificar LinkedIn:', error);
+    }
+  };
 
   const loadProfile = async () => {
     if (!user) return;
