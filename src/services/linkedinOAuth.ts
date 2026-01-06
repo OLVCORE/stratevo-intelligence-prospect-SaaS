@@ -1,115 +1,174 @@
 // src/services/linkedinOAuth.ts
-// Serviço de Autenticação LinkedIn OAuth
+// LinkedIn OAuth 2.0 - Implementação similar ao Summitfy
 
 import { supabase } from '@/integrations/supabase/client';
 
 const LINKEDIN_CLIENT_ID = import.meta.env.VITE_LINKEDIN_CLIENT_ID;
-const LINKEDIN_REDIRECT_URI = `${window.location.origin}/auth/linkedin/callback`;
-
-// Escopos necessários para conexões
+const LINKEDIN_REDIRECT_URI = `${window.location.origin}/linkedin/callback`;
 const LINKEDIN_SCOPES = [
-  'r_liteprofile',
-  'r_emailaddress',
-  'w_member_social', // Para enviar conexões
   'openid',
   'profile',
-  'email'
+  'email',
+  'w_member_social', // Para enviar convites
+  'r_liteprofile',
+  'r_basicprofile',
 ].join(' ');
 
-export interface LinkedInProfile {
-  id: string;
-  firstName: string;
-  lastName: string;
-  profilePicture?: string;
-  email?: string;
-  headline?: string;
-  location?: string;
-}
-
 /**
- * Iniciar autenticação OAuth do LinkedIn
+ * Iniciar fluxo OAuth do LinkedIn (similar ao Summitfy)
  */
-export async function initiateLinkedInAuth(): Promise<void> {
+export function initiateLinkedInOAuth(): void {
   if (!LINKEDIN_CLIENT_ID) {
-    throw new Error('LINKEDIN_CLIENT_ID não configurado. Configure nas variáveis de ambiente.');
+    throw new Error('LINKEDIN_CLIENT_ID não configurado');
   }
 
-  const state = generateRandomState();
+  const state = crypto.randomUUID();
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = generateCodeChallenge(codeVerifier);
+
+  // Salvar state e code_verifier no sessionStorage para validação
   sessionStorage.setItem('linkedin_oauth_state', state);
+  sessionStorage.setItem('linkedin_code_verifier', codeVerifier);
 
-  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?` +
-    `response_type=code&` +
-    `client_id=${LINKEDIN_CLIENT_ID}&` +
-    `redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&` +
-    `state=${state}&` +
-    `scope=${encodeURIComponent(LINKEDIN_SCOPES)}`;
+  const authUrl = new URL('https://www.linkedin.com/oauth/v2/authorization');
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('client_id', LINKEDIN_CLIENT_ID);
+  authUrl.searchParams.set('redirect_uri', LINKEDIN_REDIRECT_URI);
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('scope', LINKEDIN_SCOPES);
+  authUrl.searchParams.set('code_challenge', codeChallenge);
+  authUrl.searchParams.set('code_challenge_method', 'S256');
 
-  window.location.href = authUrl;
+  // Redirecionar para LinkedIn OAuth
+  window.location.href = authUrl.toString();
 }
 
 /**
- * ✅ VERIFICAÇÃO UNIFICADA: Usa validação real
+ * Trocar código por access token (callback)
  */
-export async function checkLinkedInAuth(): Promise<{
-  isConnected: boolean;
-  profile?: LinkedInProfile;
+export async function handleLinkedInCallback(
+  code: string,
+  state: string
+): Promise<{ success: boolean; error?: string }> {
+  // Validar state
+  const savedState = sessionStorage.getItem('linkedin_oauth_state');
+  if (state !== savedState) {
+    return { success: false, error: 'State inválido' };
+  }
+
+  const codeVerifier = sessionStorage.getItem('linkedin_code_verifier');
+  if (!codeVerifier) {
+    return { success: false, error: 'Code verifier não encontrado' };
+  }
+
+  try {
+    // Trocar código por tokens via Edge Function (mais seguro)
+    const { data, error } = await supabase.functions.invoke('linkedin-oauth-callback', {
+      body: {
+        code,
+        code_verifier: codeVerifier,
+        redirect_uri: LINKEDIN_REDIRECT_URI,
+      },
+    });
+
+    if (error) throw error;
+
+    // Limpar sessionStorage
+    sessionStorage.removeItem('linkedin_oauth_state');
+    sessionStorage.removeItem('linkedin_code_verifier');
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('[LinkedIn OAuth] Erro no callback:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Gerar code verifier (PKCE)
+ */
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return base64UrlEncode(array);
+}
+
+/**
+ * Gerar code challenge (PKCE)
+ */
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+/**
+ * Base64 URL encode
+ */
+function base64UrlEncode(array: Uint8Array): string {
+  return btoa(String.fromCharCode(...array))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+/**
+ * Verificar se LinkedIn está conectado
+ */
+export async function checkLinkedInOAuthStatus(): Promise<{
+  connected: boolean;
+  account?: any;
 }> {
-  // Usar serviço de validação unificado
-  const { validateLinkedInConnection } = await import('./linkedinValidation');
-  const validation = await validateLinkedInConnection();
-  
-  return {
-    isConnected: validation.isConnected && validation.isValid,
-    profile: validation.profile as LinkedInProfile
-  };
-}
-
-/**
- * Salvar token de acesso do LinkedIn
- */
-export async function saveLinkedInToken(
-  accessToken: string,
-  profile: LinkedInProfile
-): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      throw new Error('Usuário não autenticado');
+      return { connected: false };
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        linkedin_connected: true,
-        linkedin_access_token: accessToken, // ⚠️ Em produção, criptografar
-        linkedin_profile_url: `https://www.linkedin.com/in/${profile.id}`,
-        linkedin_profile_data: profile,
-        linkedin_connected_at: new Date().toISOString()
-      })
-      .eq('id', user.id);
+    // Buscar conta LinkedIn ativa
+    const { data: account, error } = await supabase
+      .from('linkedin_accounts')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (error) {
-      throw error;
+    if (error || !account) {
+      return { connected: false };
     }
+
+    // Verificar se token ainda é válido
+    if (account.access_token_expires_at && new Date(account.access_token_expires_at) < new Date()) {
+      // Token expirado, tentar renovar
+      const refreshed = await refreshLinkedInToken(account.id);
+      if (!refreshed) {
+        return { connected: false };
+      }
+    }
+
+    return { connected: true, account };
   } catch (error) {
-    console.error('[LinkedIn OAuth] Erro ao salvar token:', error);
-    throw error;
+    console.error('[LinkedIn OAuth] Erro ao verificar status:', error);
+    return { connected: false };
   }
 }
 
 /**
- * Gerar state aleatório para OAuth
+ * Renovar access token usando refresh token
  */
-function generateRandomState(): string {
-  return Math.random().toString(36).substring(2, 15) + 
-         Math.random().toString(36).substring(2, 15);
-}
+async function refreshLinkedInToken(accountId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.functions.invoke('linkedin-oauth-refresh', {
+      body: { account_id: accountId },
+    });
 
-/**
- * Validar state do OAuth
- */
-export function validateOAuthState(state: string): boolean {
-  const savedState = sessionStorage.getItem('linkedin_oauth_state');
-  return savedState === state;
+    if (error) throw error;
+    return data?.success === true;
+  } catch (error) {
+    console.error('[LinkedIn OAuth] Erro ao renovar token:', error);
+    return false;
+  }
 }
-

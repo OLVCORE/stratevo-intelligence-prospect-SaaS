@@ -1,13 +1,11 @@
 // src/features/linkedin/components/LinkedInConnect.tsx
-import { useState } from "react";
+// Conectar LinkedIn via OAuth (similar ao Summitfy)
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -17,108 +15,144 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert";
-import { Linkedin, AlertCircle, Loader2 } from "lucide-react";
+import { Linkedin, CheckCircle2, AlertCircle, Loader2, ExternalLink } from "lucide-react";
+import { initiateLinkedInOAuth, checkLinkedInOAuthStatus } from "@/services/linkedinOAuth";
 import { useLinkedInAccount } from "../hooks/useLinkedInAccount";
 
 export function LinkedInConnect() {
-  const { connect, isConnecting } = useLinkedInAccount();
+  const { account, isLoading } = useLinkedInAccount();
   const [open, setOpen] = useState(false);
-  const [liAtCookie, setLiAtCookie] = useState("");
-  const [jsessionidCookie, setJsessionidCookie] = useState("");
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [oauthStatus, setOauthStatus] = useState<{ connected: boolean; account?: any } | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      checkStatus();
+    }
+  }, [open, account]);
+
+  const checkStatus = async () => {
+    const status = await checkLinkedInOAuthStatus();
+    setOauthStatus(status);
+  };
 
   const handleConnect = () => {
-    connect({
-      li_at_cookie: liAtCookie,
-      jsessionid_cookie: jsessionidCookie || undefined,
-    }, {
-      onSuccess: () => {
-        setOpen(false);
-        setLiAtCookie("");
-        setJsessionidCookie("");
-      },
-    });
+    setIsConnecting(true);
+    try {
+      initiateLinkedInOAuth();
+      // O redirecionamento vai acontecer automaticamente
+    } catch (error: any) {
+      console.error('[LinkedIn Connect] Erro:', error);
+      setIsConnecting(false);
+    }
   };
+
+  const isConnected = oauthStatus?.connected || !!account;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
+        <Button className="gap-2" variant={isConnected ? "outline" : "default"}>
           <Linkedin className="h-4 w-4" />
-          Conectar LinkedIn
+          {isConnected ? "Gerenciar Conexão" : "Conectar LinkedIn"}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Linkedin className="h-5 w-5 text-[#0A66C2]" />
-            Conectar sua conta LinkedIn
+            {isConnected ? "Conexão LinkedIn" : "Conectar sua conta LinkedIn"}
           </DialogTitle>
           <DialogDescription>
-            Para conectar sua conta, você precisa fornecer os cookies de autenticação do LinkedIn.
+            {isConnected
+              ? "Sua conta LinkedIn está conectada via OAuth (método oficial e seguro)"
+              : "Conecte sua conta LinkedIn usando o método oficial OAuth, igual ao Summitfy"}
           </DialogDescription>
         </DialogHeader>
 
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Como obter os cookies</AlertTitle>
-          <AlertDescription className="text-sm">
-            <ol className="list-decimal ml-4 mt-2 space-y-1">
-              <li>Faça login no LinkedIn em seu navegador</li>
-              <li>Abra as Ferramentas do Desenvolvedor (F12)</li>
-              <li>Vá para a aba "Application" {">"} "Cookies"</li>
-              <li>Encontre "www.linkedin.com"</li>
-              <li>Copie o valor do cookie "li_at"</li>
-              <li>Opcionalmente, copie "JSESSIONID"</li>
-            </ol>
-          </AlertDescription>
-        </Alert>
+        {isConnected ? (
+          <div className="space-y-4 py-4">
+            <Alert>
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertTitle>LinkedIn Conectado ✅</AlertTitle>
+              <AlertDescription className="text-sm">
+                <p className="font-medium">{account?.linkedin_name || oauthStatus?.account?.linkedin_name}</p>
+                {account?.linkedin_email && (
+                  <p className="text-muted-foreground">{account.linkedin_email}</p>
+                )}
+                {account?.linkedin_profile_url && (
+                  <a
+                    href={account.linkedin_profile_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-600 hover:underline mt-2"
+                  >
+                    Ver perfil <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </AlertDescription>
+            </Alert>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="li_at">
-              Cookie li_at <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="li_at"
-              type="password"
-              placeholder="AQEDAxxxx..."
-              value={liAtCookie}
-              onChange={(e) => setLiAtCookie(e.target.value)}
-            />
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Método OAuth</AlertTitle>
+              <AlertDescription className="text-sm">
+                Sua conexão usa OAuth 2.0 oficial do LinkedIn, o mesmo método usado pelo Summitfy.
+                É mais seguro e não requer cookies manuais.
+              </AlertDescription>
+            </Alert>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="jsessionid">Cookie JSESSIONID (opcional)</Label>
-            <Input
-              id="jsessionid"
-              type="password"
-              placeholder="ajax:xxxx..."
-              value={jsessionidCookie}
-              onChange={(e) => setJsessionidCookie(e.target.value)}
-            />
+        ) : (
+          <div className="space-y-4 py-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Método OAuth (Recomendado)</AlertTitle>
+              <AlertDescription className="text-sm">
+                Conecte sua conta usando o método oficial OAuth do LinkedIn, igual ao Summitfy.
+                Você será redirecionado para autorizar a conexão de forma segura.
+              </AlertDescription>
+            </Alert>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Vantagens do OAuth</AlertTitle>
+              <AlertDescription className="text-sm">
+                <ul className="list-disc ml-4 mt-2 space-y-1">
+                  <li>✅ Método oficial e seguro</li>
+                  <li>✅ Não precisa de cookies manuais</li>
+                  <li>✅ Renovação automática de tokens</li>
+                  <li>✅ Menos risco de bloqueios</li>
+                  <li>✅ Conformidade com termos do LinkedIn</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
           </div>
-        </div>
+        )}
 
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Aviso de Segurança</AlertTitle>
-          <AlertDescription className="text-sm">
-            Seus cookies são armazenados de forma segura e criptografada. Nunca compartilhe
-            esses cookies com terceiros. Eles dão acesso total à sua conta LinkedIn.
-          </AlertDescription>
-        </Alert>
-
-        <DialogFooter>
+        <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancelar
+            {isConnected ? "Fechar" : "Cancelar"}
           </Button>
-          <Button
-            onClick={handleConnect}
-            disabled={!liAtCookie || isConnecting}
-          >
-            {isConnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Conectar
-          </Button>
-        </DialogFooter>
+          {!isConnected && (
+            <Button
+              onClick={handleConnect}
+              disabled={isConnecting}
+              className="bg-[#0A66C2] hover:bg-[#004182]"
+            >
+              {isConnecting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Conectando...
+                </>
+              ) : (
+                <>
+                  <Linkedin className="mr-2 h-4 w-4" />
+                  Conectar com LinkedIn
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
