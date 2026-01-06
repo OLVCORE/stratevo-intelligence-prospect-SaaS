@@ -47,19 +47,56 @@ serve(async (req) => {
       message_length: message?.length || 0
     });
 
-    // ✅ OBTER CREDENCIAIS DO USUÁRIO (session cookie)
+    // ✅ OBTER CREDENCIAIS DO USUÁRIO (OAuth primeiro, depois fallback para session cookie)
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('linkedin_session_cookie, linkedin_connected')
-      .eq('id', user_id)
-      .single();
+    // ✅ PRIORIDADE 1: Buscar conta OAuth ativa
+    const { data: oauthAccount, error: oauthError } = await supabase
+      .from('linkedin_accounts')
+      .select('*')
+      .eq('user_id', user_id)
+      .eq('status', 'active')
+      .in('auth_method', ['oauth', 'cookie'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (profileError || !profile?.linkedin_session_cookie || !profile?.linkedin_connected) {
-      console.error('[SEND-LINKEDIN-CONNECTION] ❌ Usuário não tem LinkedIn conectado:', profileError);
+    let sessionCookie: string | null = null;
+    let useOAuth = false;
+
+    if (oauthAccount) {
+      // ✅ Se tem OAuth, usar access_token (se disponível) ou cookies
+      if (oauthAccount.auth_method === 'oauth' && oauthAccount.access_token) {
+        // TODO: Usar access_token para enviar via LinkedIn API diretamente
+        // Por enquanto, usar cookies se disponíveis
+        useOAuth = true;
+        sessionCookie = oauthAccount.li_at_cookie || null;
+        console.log('[SEND-LINKEDIN-CONNECTION] ✅ Usando conta OAuth');
+      } else if (oauthAccount.li_at_cookie) {
+        // Usar cookies da conta
+        sessionCookie = oauthAccount.li_at_cookie;
+        console.log('[SEND-LINKEDIN-CONNECTION] ✅ Usando cookies da conta LinkedIn');
+      }
+    }
+
+    // ✅ FALLBACK: Buscar session cookie no método antigo (profiles)
+    if (!sessionCookie) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('linkedin_session_cookie, linkedin_connected')
+        .eq('id', user_id)
+        .maybeSingle();
+
+      if (profile?.linkedin_session_cookie && profile?.linkedin_connected) {
+        sessionCookie = profile.linkedin_session_cookie;
+        console.log('[SEND-LINKEDIN-CONNECTION] ✅ Usando session cookie do método antigo');
+      }
+    }
+
+    if (!sessionCookie) {
+      console.error('[SEND-LINKEDIN-CONNECTION] ❌ Usuário não tem LinkedIn conectado');
       return new Response(
         JSON.stringify({
           success: false,
@@ -69,8 +106,6 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const sessionCookie = profile.linkedin_session_cookie;
 
     // ✅ PHANTOMBUSTER: LinkedIn Connection Request Sender
     const phantomBusterKey = Deno.env.get('PHANTOMBUSTER_API_KEY');

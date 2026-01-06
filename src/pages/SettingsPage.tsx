@@ -79,11 +79,11 @@ export default function SettingsPage() {
 
   const checkLinkedInStatus = async () => {
     try {
-      // ✅ USAR VALIDAÇÃO UNIFICADA (mesma função do modal)
-      const { validateLinkedInConnection } = await import('@/services/linkedinValidation');
-      const validation = await validateLinkedInConnection();
+      // ✅ USAR OAUTH STATUS (novo método)
+      const { checkLinkedInOAuthStatus } = await import('@/services/linkedinOAuth');
+      const status = await checkLinkedInOAuthStatus();
       
-      setLinkedInConnected(validation.isConnected && validation.isValid);
+      setLinkedInConnected(status.connected);
     } catch (error) {
       console.error('[Settings] Erro ao verificar LinkedIn:', error);
       setLinkedInConnected(false);

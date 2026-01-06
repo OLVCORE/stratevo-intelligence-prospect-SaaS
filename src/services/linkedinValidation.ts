@@ -15,7 +15,7 @@ export interface LinkedInValidationResult {
 }
 
 /**
- * ✅ VALIDAÇÃO REAL: Testa se as credenciais do LinkedIn funcionam
+ * ✅ VALIDAÇÃO UNIFICADA: Verifica OAuth primeiro, depois método antigo
  * Similar ao Summitfy.ai - valida antes de marcar como conectado
  */
 export async function validateLinkedInConnection(): Promise<LinkedInValidationResult> {
@@ -25,7 +25,26 @@ export async function validateLinkedInConnection(): Promise<LinkedInValidationRe
       return { isValid: false, isConnected: false, error: 'Usuário não autenticado' };
     }
 
-    // Buscar perfil do usuário
+    // ✅ PRIORIDADE 1: Verificar OAuth (novo método)
+    try {
+      const { checkLinkedInOAuthStatus } = await import('@/services/linkedinOAuth');
+      const oauthStatus = await checkLinkedInOAuthStatus();
+      if (oauthStatus.connected && oauthStatus.account) {
+        return {
+          isValid: true,
+          isConnected: true,
+          profile: {
+            name: oauthStatus.account.linkedin_name,
+            email: oauthStatus.account.linkedin_email,
+            profileUrl: oauthStatus.account.linkedin_profile_url,
+          },
+        };
+      }
+    } catch (error) {
+      console.warn('[LINKEDIN-VALIDATION] OAuth não disponível, tentando método antigo...');
+    }
+
+    // ✅ FALLBACK: Verificar método antigo (profiles)
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('linkedin_connected, linkedin_session_cookie, linkedin_access_token, linkedin_profile_data, linkedin_profile_url')
