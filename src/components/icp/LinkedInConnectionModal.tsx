@@ -115,14 +115,13 @@ export function LinkedInConnectionModal({
       const wasConnected = linkedInConnected;
       const isNowConnected = validation.isConnected && validation.isValid;
       
+      // 🔥 SEMPRE atualizar estado, mesmo se não mudou (para garantir sincronização)
       setLinkedInConnected(isNowConnected);
       
-      // 🔥 Só logar se mudou de estado ou se é a primeira verificação
-      if (!isNowConnected && validation.error) {
-        // Só logar uma vez, não repetidamente
-        if (!wasConnected) {
-          console.warn('[LINKEDIN-CONNECTION] LinkedIn não conectado:', validation.error);
-        }
+      // 🔥 Log apenas se mudou de estado (para evitar spam)
+      if (!isNowConnected && validation.error && !wasConnected) {
+        // Log apenas uma vez quando detecta desconexão
+        console.warn('[LINKEDIN-CONNECTION] LinkedIn não conectado:', validation.error);
       } else if (isNowConnected && !wasConnected) {
         console.log('[LINKEDIN-CONNECTION] ✅ LinkedIn conectado com sucesso!');
       }

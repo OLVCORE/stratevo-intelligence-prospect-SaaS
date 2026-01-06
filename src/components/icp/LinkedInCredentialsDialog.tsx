@@ -236,11 +236,44 @@ export function LinkedInCredentialsDialog({
       setIsConnected(true);
       setLinkedInProfile({ connected_via: 'session_cookie' });
       
-      toast.success('LinkedIn conectado com sucesso!', {
-        description: 'Session Cookie salvo. As conexões serão enviadas pela sua conta.'
+      // ✅ VALIDAR SESSION COOKIE ANTES DE MARCAR COMO CONECTADO
+      toast.info('Validando Session Cookie...', {
+        description: 'Testando se o cookie está funcionando...'
       });
 
-      onAuthSuccess?.();
+      const { testLinkedInSessionCookie } = await import('@/services/linkedinValidation');
+      const isValid = await testLinkedInSessionCookie(sessionCookie);
+      
+      if (!isValid) {
+        // Se inválido, reverter o status
+        await supabase
+          .from('profiles')
+          .update({
+            linkedin_connected: false,
+            linkedin_session_cookie: null
+          })
+          .eq('id', user.id);
+        
+        setIsConnected(false);
+        setLinkedInProfile(null);
+        
+        toast.error('Session Cookie inválido', {
+          description: 'O cookie não está funcionando. Verifique se está correto e atualizado.'
+        });
+        return;
+      }
+      
+      toast.success('LinkedIn conectado e validado com sucesso!', {
+        description: 'Session Cookie testado e funcionando. As conexões serão enviadas pela sua conta.'
+      });
+
+      // ✅ Atualizar status local novamente após validação
+      setIsConnected(true);
+      
+      // ✅ Chamar callback para atualizar status em outros componentes
+      if (onAuthSuccess) {
+        onAuthSuccess();
+      }
     } catch (error: any) {
       console.error('[LINKEDIN-CREDENTIALS] Erro:', error);
       toast.error('Erro ao conectar LinkedIn', {
