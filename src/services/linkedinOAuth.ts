@@ -70,6 +70,14 @@ export async function initiateLinkedInOAuth(): Promise<void> {
     throw new Error(errorMsg);
   }
 
+  // ✅ BLOQUEAR localhost - LinkedIn não aceita localhost como redirect_uri
+  if (LINKEDIN_REDIRECT_URI.includes('localhost') || LINKEDIN_REDIRECT_URI.includes('127.0.0.1')) {
+    const errorMsg = 'LinkedIn não aceita localhost como redirect_uri. Configure VITE_LINKEDIN_REDIRECT_URI no Vercel com a URL de produção: https://stratevo-intelligence-prospect-saa.vercel.app/linkedin/callback';
+    console.error('[LinkedIn OAuth] ❌', errorMsg);
+    console.error('[LinkedIn OAuth] ❌ Redirect URI atual:', LINKEDIN_REDIRECT_URI);
+    throw new Error(errorMsg);
+  }
+
   // ✅ AVISO: Se estiver usando origin dinâmico (preview), avisar
   const isPreviewUrl = window.location.hostname.includes('-') && 
                        window.location.hostname.match(/[a-z0-9]{8,}/g)?.length > 2; // Preview URLs têm hash no meio
