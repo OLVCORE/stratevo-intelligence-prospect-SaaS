@@ -378,10 +378,12 @@ export default function UsageVerificationCard({
 
   // 🔥 NOVO: Hook para análise de fit de produtos
   // 🔥 CORRIGIDO: Garantir que tenantId esteja disponível antes de chamar useProductFit
+  // 🔥 CRÍTICO: Não chamar o hook se companyId ou tenantId não estiverem disponíveis
+  const hasRequiredParams = !!companyId && !!tenant?.id;
   const { data: fitData, isLoading: isLoadingFit, refetch, isFetching } = useProductFit({
     companyId: companyId || undefined,
     tenantId: tenant?.id || undefined,
-    enabled: enabled && !!companyId && !!tenant?.id, // Só habilitar se ambos estiverem disponíveis
+    enabled: enabled && hasRequiredParams, // Só habilitar se ambos estiverem disponíveis
   });
   
   // 🔥 DEBUG: Log para verificar se companyId e tenantId estão disponíveis

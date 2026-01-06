@@ -49,17 +49,41 @@ export const useProductFit = ({
     refetchOnWindowFocus: false, // Não refetch ao focar janela
     refetchOnReconnect: true, // Refetch ao reconectar
     queryFn: async () => {
+      // 🔥 VALIDAÇÃO ANTES DE TUDO: Não executar se parâmetros não estiverem disponíveis
+      if (!companyId || !tenantId) {
+        const errorMsg = 'companyId e tenantId são obrigatórios';
+        console.warn('[PRODUCT-FIT-HOOK] ⚠️ Parâmetros não disponíveis:', { 
+          companyId: companyId || 'NÃO DISPONÍVEL',
+          tenantId: tenantId || 'NÃO DISPONÍVEL',
+          enabled 
+        });
+        // Retornar dados vazios ao invés de lançar erro (evita quebrar o componente)
+        return {
+          status: 'error' as const,
+          error: errorMsg,
+          fit_score: 0,
+          fit_level: 'low' as const,
+          products_recommendation: [],
+          analysis: {
+            tenant_products_count: 0,
+            analyzed_products_count: 0,
+            cnae_match: false,
+            sector_match: false,
+            overall_justification: 'Parâmetros não disponíveis'
+          },
+          metadata: {
+            analyzed_at: new Date().toISOString(),
+            ai_model: 'none',
+            confidence: 'low' as const
+          }
+        } as ProductFitResult;
+      }
+
       console.log('[PRODUCT-FIT-HOOK] 🚀 Chamando calculate-product-fit...', { 
         companyId, 
         tenantId,
         enabled 
       });
-
-      if (!companyId || !tenantId) {
-        const errorMsg = 'companyId e tenantId são obrigatórios';
-        console.error('[PRODUCT-FIT-HOOK] ❌', errorMsg);
-        throw new Error(errorMsg);
-      }
 
       console.log('[PRODUCT-FIT-HOOK] 🔍 Invocando Edge Function...');
       const startTime = Date.now();
