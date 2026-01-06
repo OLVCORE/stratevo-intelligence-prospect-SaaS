@@ -117,7 +117,7 @@ function base64UrlEncode(array: Uint8Array): string {
 }
 
 /**
- * Verificar se LinkedIn está conectado
+ * Verificar se LinkedIn está conectado (OAuth ou método antigo)
  */
 export async function checkLinkedInOAuthStatus(): Promise<{
   connected: boolean;
@@ -129,30 +129,58 @@ export async function checkLinkedInOAuthStatus(): Promise<{
       return { connected: false };
     }
 
-    // Buscar conta LinkedIn ativa
-    const { data: account, error } = await supabase
+    // ✅ PRIORIDADE 1: Buscar conta LinkedIn OAuth ativa
+    const { data: oauthAccount, error: oauthError } = await supabase
       .from('linkedin_accounts')
       .select('*')
       .eq('user_id', user.id)
       .eq('status', 'active')
+      .in('auth_method', ['oauth', 'cookie']) // Aceitar ambos
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (error || !account) {
-      return { connected: false };
-    }
-
-    // Verificar se token ainda é válido
-    if (account.access_token_expires_at && new Date(account.access_token_expires_at) < new Date()) {
-      // Token expirado, tentar renovar
-      const refreshed = await refreshLinkedInToken(account.id);
-      if (!refreshed) {
-        return { connected: false };
+    if (oauthAccount) {
+      // Verificar se token ainda é válido (se for OAuth)
+      if (oauthAccount.auth_method === 'oauth' && oauthAccount.access_token_expires_at) {
+        const expiresAt = new Date(oauthAccount.access_token_expires_at);
+        if (expiresAt < new Date()) {
+          // Token expirado, tentar renovar
+          const refreshed = await refreshLinkedInToken(oauthAccount.id);
+          if (!refreshed) {
+            return { connected: false };
+          }
+          // Buscar novamente após renovar
+          const { data: refreshedAccount } = await supabase
+            .from('linkedin_accounts')
+            .select('*')
+            .eq('id', oauthAccount.id)
+            .single();
+          return { connected: true, account: refreshedAccount };
+        }
       }
+      return { connected: true, account: oauthAccount };
     }
 
-    return { connected: true, account };
+    // ✅ FALLBACK: Verificar método antigo (profiles.linkedin_connected)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('linkedin_connected, linkedin_profile_data, linkedin_session_cookie')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile?.linkedin_connected) {
+      return {
+        connected: true,
+        account: {
+          linkedin_name: profile.linkedin_profile_data?.name || 'Usuário',
+          linkedin_email: profile.linkedin_profile_data?.email,
+          auth_method: 'legacy',
+        },
+      };
+    }
+
+    return { connected: false };
   } catch (error) {
     console.error('[LinkedIn OAuth] Erro ao verificar status:', error);
     return { connected: false };

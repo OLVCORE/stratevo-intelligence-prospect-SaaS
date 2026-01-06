@@ -1,15 +1,13 @@
 // src/components/icp/LinkedInCredentialsDialog.tsx
-// Dialog para autenticação LinkedIn via credenciais (estilo Summitfy)
+// Dialog para autenticação LinkedIn via OAuth (Similar ao Summitfy)
 
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Linkedin, CheckCircle2, AlertCircle, Loader2, XCircle, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Linkedin, CheckCircle2, AlertCircle, Loader2, XCircle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { initiateLinkedInOAuth, checkLinkedInOAuthStatus } from '@/services/linkedinOAuth';
 import { supabase } from '@/integrations/supabase/client';
 
 interface LinkedInCredentialsDialogProps {
@@ -24,18 +22,9 @@ export function LinkedInCredentialsDialog({
   onAuthSuccess
 }: LinkedInCredentialsDialogProps) {
   const [isConnected, setIsConnected] = useState(false);
-  const [linkedInProfile, setLinkedInProfile] = useState<any>(null);
+  const [linkedInAccount, setLinkedInAccount] = useState<any>(null);
   const [isChecking, setIsChecking] = useState(true);
-  
-  // Opção 1: Email e Senha
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  
-  // Opção 2: Session Cookie (PhantomBuster)
-  const [sessionCookie, setSessionCookie] = useState('');
-  const [useSessionCookie, setUseSessionCookie] = useState(false);
 
   // Verificar se já está conectado
   useEffect(() => {
@@ -47,239 +36,30 @@ export function LinkedInCredentialsDialog({
   const checkLinkedInConnection = async () => {
     setIsChecking(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('linkedin_connected, linkedin_profile_url, linkedin_profile_data, linkedin_session_cookie')
-          .eq('id', user.id)
-          .maybeSingle(); // ✅ Usar maybeSingle para não dar erro se não existir
-
-        if (error && error.code !== 'PGRST116') { // PGRST116 = não encontrado (OK)
-          console.error('[LINKEDIN-CREDENTIALS] Erro ao verificar:', error);
-        }
-
-        if (profile?.linkedin_connected) {
-          setIsConnected(true);
-          setLinkedInProfile(profile.linkedin_profile_data);
-          if (profile.linkedin_session_cookie) {
-            setSessionCookie(profile.linkedin_session_cookie);
-            setUseSessionCookie(true);
-          }
-        }
-      }
+      const status = await checkLinkedInOAuthStatus();
+      setIsConnected(status.connected);
+      setLinkedInAccount(status.account);
     } catch (error) {
-      console.error('[LINKEDIN-CREDENTIALS] Erro ao verificar conexão:', error);
+      console.error('[LINKEDIN-OAUTH] Erro ao verificar conexão:', error);
       setIsConnected(false);
     } finally {
       setIsChecking(false);
     }
   };
 
-  const handleConnectWithCredentials = async () => {
-    if (!email.trim() || !password.trim()) {
-      toast.error('Email e senha são obrigatórios');
-      return;
-    }
-
+  const handleConnect = () => {
     setIsConnecting(true);
-
     try {
-      // ⚠️ IMPORTANTE: Não armazenamos senha diretamente
-      // Usamos PhantomBuster ou automação para validar credenciais
-      // Por enquanto, apenas salvamos o status de "conectado"
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      // Salvar credenciais (criptografadas em produção)
-      // Por enquanto, apenas marcamos como conectado
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email || email,
-          linkedin_connected: true,
-          linkedin_profile_url: `https://www.linkedin.com/in/${email.split('@')[0]}`,
-          linkedin_connected_at: new Date().toISOString(),
-          linkedin_profile_data: {
-            email: email,
-            connected_via: 'credentials'
-          }
-        }, {
-          onConflict: 'id'
-        });
-
-      if (error) {
-        // Se a tabela não existe, criar o perfil primeiro
-        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
-          console.warn('[LINKEDIN-CREDENTIALS] Tabela profiles não existe, criando perfil...');
-          // Tentar criar o perfil básico primeiro
-          const { error: insertError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              email: user.email || email,
-              linkedin_connected: true,
-              linkedin_profile_url: `https://www.linkedin.com/in/${email.split('@')[0]}`,
-              linkedin_connected_at: new Date().toISOString(),
-              linkedin_profile_data: {
-                email: email,
-                connected_via: 'credentials'
-              }
-            });
-          if (insertError) throw insertError;
-        } else {
-          throw error;
-        }
-      }
-
-      setIsConnected(true);
-      setLinkedInProfile({ email, connected_via: 'credentials' });
-      
-      // ✅ VALIDAR CREDENCIAIS ANTES DE MARCAR COMO CONECTADO
-      toast.info('Validando credenciais do LinkedIn...', {
-        description: 'Testando se suas credenciais funcionam...'
+      initiateLinkedInOAuth();
+      // O redirecionamento vai acontecer automaticamente
+      toast.info('Redirecionando para LinkedIn...', {
+        description: 'Você será redirecionado para autorizar a conexão'
       });
-
-      // Testar session cookie se foi usado
-      if (useSessionCookie && sessionCookie) {
-        const { testLinkedInSessionCookie } = await import('@/services/linkedinValidation');
-        const isValid = await testLinkedInSessionCookie(sessionCookie);
-        
-        if (!isValid) {
-          toast.error('Credenciais inválidas', {
-            description: 'O session cookie não está funcionando. Verifique se está correto.'
-          });
-          return;
-        }
-      }
-
-      toast.success('LinkedIn conectado e validado com sucesso!', {
-        description: 'Suas credenciais foram testadas e estão funcionando. As conexões serão enviadas pela sua conta.'
-      });
-
-      // ✅ Atualizar status local
-      setIsConnected(true);
-      
-      // ✅ Chamar callback para atualizar status em outros componentes
-      if (onAuthSuccess) {
-        onAuthSuccess();
-      }
-
-      onAuthSuccess?.();
     } catch (error: any) {
-      console.error('[LINKEDIN-CREDENTIALS] Erro:', error);
-      toast.error('Erro ao conectar LinkedIn', {
-        description: error.message || 'Tente novamente mais tarde.'
+      console.error('[LINKEDIN-OAUTH] Erro:', error);
+      toast.error('Erro ao iniciar conexão', {
+        description: error.message || 'Verifique se VITE_LINKEDIN_CLIENT_ID está configurado'
       });
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  const handleConnectWithSessionCookie = async () => {
-    if (!sessionCookie.trim()) {
-      toast.error('Session Cookie é obrigatório');
-      return;
-    }
-
-    setIsConnecting(true);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      // Validar session cookie com PhantomBuster (opcional)
-      // Por enquanto, apenas salvamos
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email || '',
-          linkedin_connected: true,
-          linkedin_session_cookie: sessionCookie,
-          linkedin_connected_at: new Date().toISOString(),
-          linkedin_profile_data: {
-            connected_via: 'session_cookie'
-          }
-        }, {
-          onConflict: 'id'
-        });
-
-      if (error) {
-        // Se a tabela não existe, criar o perfil primeiro
-        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
-          console.warn('[LINKEDIN-CREDENTIALS] Tabela profiles não existe, criando perfil...');
-          const { error: insertError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              email: user.email || '',
-              linkedin_connected: true,
-              linkedin_session_cookie: sessionCookie,
-              linkedin_connected_at: new Date().toISOString(),
-              linkedin_profile_data: {
-                connected_via: 'session_cookie'
-              }
-            });
-          if (insertError) throw insertError;
-        } else {
-          throw error;
-        }
-      }
-
-      setIsConnected(true);
-      setLinkedInProfile({ connected_via: 'session_cookie' });
-      
-      // ✅ VALIDAR SESSION COOKIE ANTES DE MARCAR COMO CONECTADO
-      toast.info('Validando Session Cookie...', {
-        description: 'Testando se o cookie está funcionando...'
-      });
-
-      const { testLinkedInSessionCookie } = await import('@/services/linkedinValidation');
-      const isValid = await testLinkedInSessionCookie(sessionCookie);
-      
-      if (!isValid) {
-        // Se inválido, reverter o status
-        await supabase
-          .from('profiles')
-          .update({
-            linkedin_connected: false,
-            linkedin_session_cookie: null
-          })
-          .eq('id', user.id);
-        
-        setIsConnected(false);
-        setLinkedInProfile(null);
-        
-        toast.error('Session Cookie inválido', {
-          description: 'O cookie não está funcionando. Verifique se está correto e atualizado.'
-        });
-        return;
-      }
-      
-      toast.success('LinkedIn conectado e validado com sucesso!', {
-        description: 'Session Cookie testado e funcionando. As conexões serão enviadas pela sua conta.'
-      });
-
-      // ✅ Atualizar status local novamente após validação
-      setIsConnected(true);
-      
-      // ✅ Chamar callback para atualizar status em outros componentes
-      if (onAuthSuccess) {
-        onAuthSuccess();
-      }
-    } catch (error: any) {
-      console.error('[LINKEDIN-CREDENTIALS] Erro:', error);
-      toast.error('Erro ao conectar LinkedIn', {
-        description: error.message || 'Tente novamente mais tarde.'
-      });
-    } finally {
       setIsConnecting(false);
     }
   };
@@ -288,25 +68,24 @@ export function LinkedInCredentialsDialog({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase
-          .from('profiles')
-          .update({
-            linkedin_connected: false,
-            linkedin_session_cookie: null,
-            linkedin_profile_url: null,
-            linkedin_profile_data: null
-          })
-          .eq('id', user.id);
+        // Marcar conta como desconectada
+        const { error } = await supabase
+          .from('linkedin_accounts')
+          .update({ status: 'disconnected' })
+          .eq('user_id', user.id);
+
+        if (error) throw error;
 
         setIsConnected(false);
-        setLinkedInProfile(null);
-        setEmail('');
-        setPassword('');
-        setSessionCookie('');
+        setLinkedInAccount(null);
         toast.success('LinkedIn desconectado com sucesso');
+        
+        if (onAuthSuccess) {
+          onAuthSuccess();
+        }
       }
     } catch (error: any) {
-      console.error('[LINKEDIN-CREDENTIALS] Erro ao desconectar:', error);
+      console.error('[LINKEDIN-OAUTH] Erro ao desconectar:', error);
       toast.error('Erro ao desconectar LinkedIn');
     }
   };
@@ -316,229 +95,139 @@ export function LinkedInCredentialsDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Linkedin className="w-5 h-5 text-blue-600" />
+            <Linkedin className="w-5 h-5 text-[#0A66C2]" />
             Conectar Conta do LinkedIn
           </DialogTitle>
           <DialogDescription>
-            Conecte sua conta do LinkedIn para enviar conexões automaticamente (estilo Summitfy.ai)
+            Conecte sua conta do LinkedIn usando OAuth 2.0 (método oficial e seguro, similar ao Summitfy)
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Status da Conexão */}
           {isChecking ? (
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  Verificando status da conexão...
-                </p>
-              </div>
-            </div>
+            <Alert>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <AlertTitle>Verificando conexão...</AlertTitle>
+              <AlertDescription>
+                Aguarde enquanto verificamos o status da sua conta LinkedIn.
+              </AlertDescription>
+            </Alert>
           ) : isConnected ? (
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 flex-1">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  <div className="flex-1">
-                    <p className="font-medium text-green-800 dark:text-green-200">
-                      LinkedIn Conectado ✅
-                    </p>
-                    {linkedInProfile?.email && (
-                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                        {linkedInProfile.email}
-                      </p>
-                    )}
-                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                      Sua conta está conectada e pronta para enviar conexões
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDisconnect}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <XCircle className="w-4 h-4 mr-1" />
-                  Desconectar
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium text-blue-800 dark:text-blue-200 mb-2">
-                    Como Funciona (estilo Summitfy.ai)
+            <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertTitle className="text-green-800 dark:text-green-200">
+                LinkedIn Conectado ✅
+              </AlertTitle>
+              <AlertDescription className="text-green-700 dark:text-green-300">
+                <div className="mt-2 space-y-1">
+                  <p className="font-medium">{linkedInAccount?.linkedin_name || 'Conta conectada'}</p>
+                  {linkedInAccount?.linkedin_email && (
+                    <p className="text-sm">{linkedInAccount.linkedin_email}</p>
+                  )}
+                  {linkedInAccount?.linkedin_profile_url && (
+                    <a
+                      href={linkedInAccount.linkedin_profile_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-blue-600 hover:underline text-sm mt-2"
+                    >
+                      Ver perfil no LinkedIn <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                  <p className="text-xs mt-2">
+                    Sua conta está conectada via OAuth e pronta para enviar conexões.
                   </p>
-                  <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-                    <li>Digite suas credenciais do LinkedIn (email e senha)</li>
-                    <li>Ou cole o Session Cookie do PhantomBuster</li>
-                    <li>Suas credenciais são salvas de forma segura</li>
-                    <li>As conexões serão enviadas pela sua conta pessoal</li>
-                    <li>Você pode ver os convites no LinkedIn normalmente</li>
-                  </ol>
                 </div>
-              </div>
-            </div>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Conectar com OAuth</AlertTitle>
+              <AlertDescription>
+                <p className="mb-2">
+                  Conecte sua conta usando o método oficial OAuth do LinkedIn, igual ao Summitfy.
+                </p>
+                <ul className="list-disc ml-4 space-y-1 text-sm">
+                  <li>✅ Método oficial e seguro</li>
+                  <li>✅ Não precisa de senhas ou cookies</li>
+                  <li>✅ Renovação automática de tokens</li>
+                  <li>✅ Conformidade com termos do LinkedIn</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
 
           {!isConnected && (
-            <>
-              {/* Tabs: Credenciais ou Session Cookie */}
-              <div className="flex gap-2 border-b">
-                <button
-                  onClick={() => setUseSessionCookie(false)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    !useSessionCookie
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-muted-foreground'
-                  }`}
-                >
-                  Email e Senha
-                </button>
-                <button
-                  onClick={() => setUseSessionCookie(true)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    useSessionCookie
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-muted-foreground'
-                  }`}
-                >
-                  Session Cookie (PhantomBuster)
-                </button>
-              </div>
+            <div className="space-y-4">
+              <Button
+                onClick={handleConnect}
+                disabled={isConnecting}
+                className="w-full bg-[#0A66C2] hover:bg-[#004182] text-white"
+                size="lg"
+              >
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Conectando...
+                  </>
+                ) : (
+                  <>
+                    <Linkedin className="w-4 h-4 mr-2" />
+                    Conectar com LinkedIn (OAuth)
+                  </>
+                )}
+              </Button>
 
-              {/* Formulário: Email e Senha */}
-              {!useSessionCookie && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="linkedin-email">Email do LinkedIn *</Label>
-                    <Input
-                      id="linkedin-email"
-                      type="email"
-                      placeholder="seu.email@exemplo.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={isConnecting}
-                    />
-                  </div>
+              <Alert className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertTitle className="text-blue-800 dark:text-blue-200">
+                  Como Funciona
+                </AlertTitle>
+                <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+                  <ol className="list-decimal ml-4 space-y-1 mt-2">
+                    <li>Clique em "Conectar com LinkedIn"</li>
+                    <li>Você será redirecionado para o LinkedIn</li>
+                    <li>Autorize a conexão na tela do LinkedIn</li>
+                    <li>Você será redirecionado de volta automaticamente</li>
+                    <li>Sua conta estará conectada e pronta para uso</li>
+                  </ol>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="linkedin-password">Senha do LinkedIn *</Label>
-                    <div className="relative">
-                      <Input
-                        id="linkedin-password"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="Sua senha do LinkedIn"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        disabled={isConnecting}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleConnectWithCredentials}
-                    disabled={isConnecting || !email.trim() || !password.trim()}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                    size="lg"
-                  >
-                    {isConnecting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Conectando...
-                      </>
-                    ) : (
-                      <>
-                        <Linkedin className="w-4 h-4 mr-2" />
-                        Conectar com Email e Senha
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {/* Formulário: Session Cookie */}
-              {useSessionCookie && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="session-cookie">Session Cookie do PhantomBuster *</Label>
-                    <Textarea
-                      id="session-cookie"
-                      placeholder="Cole aqui o Session Cookie do PhantomBuster..."
-                      value={sessionCookie}
-                      onChange={(e) => setSessionCookie(e.target.value)}
-                      disabled={isConnecting}
-                      className="min-h-[100px] font-mono text-xs"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      💡 Como obter: Acesse PhantomBuster → Settings → LinkedIn → Copie o Session Cookie
-                    </p>
-                    <a
-                      href="https://www.phantombuster.com/login"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                    >
-                      Acessar PhantomBuster
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-
-                  <Button
-                    onClick={handleConnectWithSessionCookie}
-                    disabled={isConnecting || !sessionCookie.trim()}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                    size="lg"
-                  >
-                    {isConnecting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Conectando...
-                      </>
-                    ) : (
-                      <>
-                        <Linkedin className="w-4 h-4 mr-2" />
-                        Conectar com Session Cookie
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </>
+          {isConnected && (
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={handleDisconnect}
+                className="text-red-600 hover:text-red-700"
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                Desconectar
+              </Button>
+            </div>
           )}
 
           {/* Informações Importantes */}
-          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-1">
+          <Alert className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+            <AlertCircle className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-800 dark:text-yellow-200">
               ⚠️ Importante sobre Segurança
-            </p>
-            <ul className="text-xs text-yellow-700 dark:text-yellow-300 space-y-1 list-disc list-inside">
-              <li>Suas credenciais são armazenadas de forma segura e criptografada</li>
-              <li>Você pode ver convites enviados diretamente no LinkedIn (aba "Rede")</li>
-              <li>O sistema rastreia status quando a conexão é aceita</li>
-              <li>Você pode desconectar a qualquer momento</li>
-            </ul>
-          </div>
+            </AlertTitle>
+            <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-sm">
+              <ul className="list-disc ml-4 space-y-1 mt-2">
+                <li>OAuth é o método oficial e mais seguro do LinkedIn</li>
+                <li>Você pode ver convites enviados diretamente no LinkedIn</li>
+                <li>Os tokens são renovados automaticamente</li>
+                <li>Você pode desconectar a qualquer momento</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
-

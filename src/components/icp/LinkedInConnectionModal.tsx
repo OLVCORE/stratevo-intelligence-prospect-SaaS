@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Linkedin, Rocket, Loader2, AlertCircle, CheckCircle2, ExternalLink, User, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { checkLinkedInAuth } from '@/services/linkedinOAuth';
+import { checkLinkedInOAuthStatus } from '@/services/linkedinOAuth';
 
 interface LinkedInConnectionModalProps {
   open: boolean;
@@ -106,22 +106,20 @@ export function LinkedInConnectionModal({
 
   const checkLinkedInStatus = async () => {
     try {
-      // ✅ USAR VALIDAÇÃO UNIFICADA (mesma função do Settings)
-      const { validateLinkedInConnection } = await import('@/services/linkedinValidation');
-      const validation = await validateLinkedInConnection();
+      // ✅ USAR OAUTH STATUS (novo método)
+      const status = await checkLinkedInOAuthStatus();
       
       const wasConnected = linkedInConnected;
-      const isNowConnected = validation.isConnected && validation.isValid;
+      const isNowConnected = status.connected;
       
       // 🔥 SEMPRE atualizar estado, mesmo se não mudou (para garantir sincronização)
       setLinkedInConnected(isNowConnected);
       
       // 🔥 Log apenas se mudou de estado (para evitar spam)
-      if (!isNowConnected && validation.error && !wasConnected) {
-        // Log apenas uma vez quando detecta desconexão
-        console.warn('[LINKEDIN-CONNECTION] LinkedIn não conectado:', validation.error);
-      } else if (isNowConnected && !wasConnected) {
-        console.log('[LINKEDIN-CONNECTION] ✅ LinkedIn conectado com sucesso!');
+      if (isNowConnected && !wasConnected) {
+        console.log('[LINKEDIN-CONNECTION] ✅ LinkedIn conectado via OAuth!');
+      } else if (!isNowConnected && wasConnected) {
+        console.warn('[LINKEDIN-CONNECTION] LinkedIn desconectado');
       }
     } catch (error) {
       // Silenciar erros repetidos
