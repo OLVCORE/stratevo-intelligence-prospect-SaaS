@@ -632,13 +632,10 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            {/* ✅ LinkedIn OAuth Callback - NÃO proteger (é parte do fluxo de autenticação) */}
             <Route
               path="/linkedin/callback"
-              element={
-                <ProtectedRoute>
-                  <LinkedInCallbackPage />
-                </ProtectedRoute>
-              }
+              element={<LinkedInCallbackPage />}
             />
             <Route
               path="/my-companies"
