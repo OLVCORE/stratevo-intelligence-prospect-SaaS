@@ -1767,13 +1767,14 @@ export default function UsageVerificationCard({
         <TabsContent value="decisors" className="mt-0 flex-1 overflow-hidden">
           <UniversalTabWrapper tabName="Decisores">
           <DecisorsContactsTab
+            key={`decisors-${companyId}-${latestReport?.id || 'new'}-${latestReport?.updated_at || ''}`} // 🔥 FORÇAR RE-RENDER quando latestReport mudar
             companyId={companyId}
             companyName={companyName}
             linkedinUrl={companyData?.linkedin_url || companyData?.raw_data?.linkedin_url || companyData?.raw_data?.apollo_organization?.linkedin_url}
             domain={domain || companyData?.domain || companyData?.website}
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
-            savedData={latestReport?.full_report?.decisors_report}
+            savedData={tabDataRef.current.decisors || latestReport?.full_report?.decisors_report} // 🔥 PRIORIDADE: tabDataRef primeiro, depois latestReport
             onDataChange={(decisorsData) => {
               console.log('[VERIFICATION] 💾 Salvando decisores:', decisorsData);
               tabDataRef.current.decisors = decisorsData;
