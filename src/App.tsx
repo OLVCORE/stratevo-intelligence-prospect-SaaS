@@ -93,6 +93,7 @@ const SDRWhatsAppConfigPage = lazy(() => import("./pages/SDRWhatsAppConfigPage")
 const SDRAnalyticsPage = lazy(() => import("./pages/SDRAnalyticsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const EmailSettingsPage = lazy(() => import("./pages/EmailSettingsPage"));
+const LinkedInPage = lazy(() => import("./pages/LinkedInPage"));
 const MyCompaniesPage = lazy(() => import("./pages/MyCompanies"));
 const UsersManagementPage = lazy(() => import("./pages/admin/UsersManagement"));
 const GeographicAnalysisPage = lazy(() => import("./pages/GeographicAnalysisPage"));
@@ -619,6 +620,14 @@ const App = () => (
                   <AppLayout>
                     <EmailSettingsPage />
                   </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/linkedin"
+              element={
+                <ProtectedRoute>
+                  <LinkedInPage />
                 </ProtectedRoute>
               }
             />

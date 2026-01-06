@@ -1,67 +1,28 @@
 // src/features/linkedin/utils/linkedinLimits.ts
 
-/**
- * Limites seguros para automação LinkedIn
- * Baseado em práticas recomendadas para evitar bloqueios
- */
-
+// Limites seguros do LinkedIn (baseados em boas práticas)
 export const LINKEDIN_LIMITS = {
   // Convites
-  MAX_DAILY_INVITES: 25,           // Máximo recomendado por dia
-  MAX_WEEKLY_INVITES: 100,         // Máximo por semana
-  MAX_MONTHLY_INVITES: 500,        // Máximo por mês
+  MAX_INVITES_PER_DAY: 25,
+  MAX_INVITES_PER_WEEK: 100,
+  MAX_INVITES_PER_MONTH: 500,
   
-  // Mensagens
-  MAX_DAILY_MESSAGES: 50,           // Máximo de mensagens por dia
-  MAX_WEEKLY_MESSAGES: 200,         // Máximo por semana
+  // Mensagens (após conexão)
+  MAX_MESSAGES_PER_DAY: 50,
+  MAX_MESSAGES_PER_WEEK: 200,
+  
+  // Buscas/Scraping
+  MAX_SEARCH_RESULTS: 1000,
+  MAX_PROFILES_PER_SEARCH: 100,
   
   // Delays (em segundos)
-  MIN_DELAY_BETWEEN_INVITES: 30,    // Mínimo entre convites
-  MAX_DELAY_BETWEEN_INVITES: 120,   // Máximo entre convites
-  MIN_DELAY_BETWEEN_MESSAGES: 60,   // Mínimo entre mensagens
-  MAX_DELAY_BETWEEN_MESSAGES: 300,  // Máximo entre mensagens
+  MIN_DELAY_BETWEEN_INVITES: 60, // 1 minuto
+  MAX_DELAY_BETWEEN_INVITES: 300, // 5 minutos
+  MIN_DELAY_BETWEEN_MESSAGES: 30, // 30 segundos
+  MAX_DELAY_BETWEEN_MESSAGES: 120, // 2 minutos
   
   // Horários de trabalho (padrão)
-  DEFAULT_WORK_START: '08:00',
-  DEFAULT_WORK_END: '18:00',
-  DEFAULT_TIMEZONE: 'America/Sao_Paulo',
-  
-  // Scraping
-  MAX_LEADS_PER_IMPORT: 100,        // Máximo de leads por importação
-  MAX_SEARCH_PAGES: 40,             // Máximo de páginas de busca (25 por página)
-  
-  // Retries
-  MAX_RETRIES: 3,                    // Máximo de tentativas
-  RETRY_DELAY_SECONDS: 300,         // Delay entre tentativas (5 min)
+  WORK_START_HOUR: 9, // 9h
+  WORK_END_HOUR: 18, // 18h
+  WORK_DAYS: [1, 2, 3, 4, 5], // Segunda a Sexta
 } as const;
-
-/**
- * Verifica se está dentro do horário de trabalho
- */
-export function isWithinWorkingHours(
-  start: string,
-  end: string,
-  timezone: string = LINKEDIN_LIMITS.DEFAULT_TIMEZONE
-): boolean {
-  const now = new Date();
-  const currentHour = parseInt(
-    now.toLocaleString('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      hour12: false,
-    })
-  );
-  
-  const [startHour] = start.split(':').map(Number);
-  const [endHour] = end.split(':').map(Number);
-  
-  return currentHour >= startHour && currentHour < endHour;
-}
-
-/**
- * Calcula delay randômico entre ações
- */
-export function getRandomDelay(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-

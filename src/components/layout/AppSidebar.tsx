@@ -55,7 +55,8 @@ import {
   Plus,
   Package,
   Mic,
-  Phone
+  Phone,
+  Linkedin
 } from "lucide-react";
 import {
   Sidebar,
@@ -199,6 +200,13 @@ const menuGroups: MenuGroup[] = [
         icon: Target,
         url: "/expansao/empresas-similares",
         description: "Buscar empresas com perfil semelhante para expansão de mercado"
+      },
+      {
+        title: "LinkedIn Automation",
+        icon: Linkedin,
+        url: "/linkedin",
+        highlighted: true,
+        description: "Automatize prospecção, importe leads e envie convites personalizados"
       },
     ]
   },
