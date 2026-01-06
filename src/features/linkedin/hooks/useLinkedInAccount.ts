@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { LinkedInAccount, LinkedInConnectFormData } from "../types/linkedin.types";
 import { toast } from "sonner";
 import { connectLinkedInAccount, syncLinkedInStatus } from "../services/linkedinApi";
-import { useTenant } from "@/hooks/useTenant";
+import { useTenant } from "@/contexts/TenantContext";
 
 export function useLinkedInAccount() {
   const queryClient = useQueryClient();

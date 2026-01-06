@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { LinkedInCampaign, LinkedInCampaignFormData } from "../types/linkedin.types";
 import { toast } from "sonner";
-import { useTenant } from "@/hooks/useTenant";
+import { useTenant } from "@/contexts/TenantContext";
 
 export function useLinkedInCampaigns(accountId?: string) {
   const queryClient = useQueryClient();

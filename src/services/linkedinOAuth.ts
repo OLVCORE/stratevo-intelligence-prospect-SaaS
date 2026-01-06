@@ -3,7 +3,10 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-const LINKEDIN_CLIENT_ID = import.meta.env.VITE_LINKEDIN_CLIENT_ID;
+// LinkedIn OAuth Configuration
+// Variáveis de ambiente devem ser configuradas no Vercel (Environment Variables)
+// e no Supabase (Edge Function Secrets)
+const LINKEDIN_CLIENT_ID = import.meta.env.VITE_LINKEDIN_CLIENT_ID || '';
 const LINKEDIN_REDIRECT_URI = `${window.location.origin}/linkedin/callback`;
 const LINKEDIN_SCOPES = [
   'openid',

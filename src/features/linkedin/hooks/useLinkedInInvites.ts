@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { LinkedInLead } from "../types/linkedin.types";
 import { toast } from "sonner";
-import { useTenant } from "@/hooks/useTenant";
+import { useTenant } from "@/contexts/TenantContext";
 import { sendLinkedInInvite, sendBulkLinkedInInvites } from "../services/linkedinApi";
 
 export function useLinkedInInvites(accountId?: string) {
