@@ -84,21 +84,17 @@ export function LinkedInConnectionModal({
   }, [open]);
 
   // ✅ NOVO: Re-verificar status quando modal reabre (após conectar)
-  // 🔥 REDUZIDO: Verificar apenas a cada 10 segundos (não 2s) para evitar spam
+  // 🔥 SEMPRE verificar a cada 5 segundos para detectar mudanças de status
   useEffect(() => {
     if (open) {
-      // Verificar status inicial
+      // Verificar status IMEDIATAMENTE ao abrir
       checkLinkedInStatus();
       
-      // Re-verificar status a cada 10 segundos enquanto modal estiver aberto
-      // (apenas se ainda não estiver conectado, para detectar quando conectar)
+      // Re-verificar status a cada 5 segundos enquanto modal estiver aberto
+      // SEMPRE verificar (não apenas se não conectado) para detectar mudanças
       const interval = setInterval(() => {
-        // Só verificar novamente se ainda não estiver conectado
-        // (evita chamadas desnecessárias quando já está conectado)
-        if (!linkedInConnected) {
-          checkLinkedInStatus();
-        }
-      }, 10000); // 10 segundos ao invés de 2
+        checkLinkedInStatus();
+      }, 5000); // 5 segundos
       
       return () => clearInterval(interval);
     } else {
@@ -106,7 +102,7 @@ export function LinkedInConnectionModal({
       // Isso garante que o status seja atualizado mesmo após fechar
       checkLinkedInStatus();
     }
-  }, [open, linkedInConnected]); // Adicionar linkedInConnected como dependência
+  }, [open]); // Remover linkedInConnected da dependência para sempre verificar
 
   const checkLinkedInStatus = async () => {
     try {
