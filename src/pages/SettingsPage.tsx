@@ -359,6 +359,64 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* ✅ LinkedIn Connection Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Linkedin className="h-5 w-5 text-blue-600" />
+              Conexão LinkedIn
+            </CardTitle>
+            <CardDescription>
+              Conecte sua conta do LinkedIn para enviar conexões automaticamente (estilo Summitfy.ai)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className={`p-4 rounded-lg border ${
+              linkedInConnected
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {linkedInConnected ? (
+                    <>
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      <div>
+                        <p className="font-medium text-green-800 dark:text-green-200">
+                          LinkedIn Conectado ✅
+                        </p>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Sua conta está conectada e pronta para enviar conexões
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-5 w-5 text-yellow-600" />
+                      <div>
+                        <p className="font-medium text-yellow-800 dark:text-yellow-200">
+                          LinkedIn Não Conectado
+                        </p>
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                          Conecte sua conta para enviar conexões automaticamente
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <Button
+                  onClick={() => setLinkedInAuthOpen(true)}
+                  variant={linkedInConnected ? 'outline' : 'default'}
+                  className={linkedInConnected ? '' : 'bg-blue-600 hover:bg-blue-700'}
+                >
+                  <Linkedin className="h-4 w-4 mr-2" />
+                  {linkedInConnected ? 'Gerenciar Conexão' : 'Conectar LinkedIn'}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Contact Info */}
         <Card>
           <CardHeader>
