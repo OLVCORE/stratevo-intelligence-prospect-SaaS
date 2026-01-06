@@ -1555,6 +1555,18 @@ export function DecisorsContactsTab({
             setLinkedInAuthOpen(true);
           }, 300);
         }}
+        onAuthSuccess={() => {
+          // ✅ Forçar verificação de status quando LinkedIn for conectado
+          console.log('[DECISORES-TAB] 🔄 LinkedIn conectado, forçando verificação no modal...');
+          // O modal vai verificar automaticamente quando reabrir
+          // Mas também podemos forçar uma verificação imediata
+          setTimeout(() => {
+            // Reabrir modal para forçar verificação
+            if (selectedDecisorForConnection) {
+              setLinkedInConnectionModalOpen(true);
+            }
+          }, 500);
+        }}
       />
 
       {/* 🔐 AUTENTICAÇÃO LINKEDIN */}
@@ -1563,15 +1575,16 @@ export function DecisorsContactsTab({
         onOpenChange={setLinkedInAuthOpen}
         onAuthSuccess={() => {
           toast.success('LinkedIn conectado com sucesso!');
-          // ✅ Reabrir modal de conexão após conectar
+          // ✅ Fechar modal de auth
+          setLinkedInAuthOpen(false);
+          
+          // ✅ Aguardar um pouco para garantir que o banco foi atualizado
           setTimeout(() => {
+            // Reabrir modal de conexão para forçar verificação de status
             if (selectedDecisorForConnection) {
-              setLinkedInAuthOpen(false);
-              setTimeout(() => {
-                setLinkedInConnectionModalOpen(true);
-              }, 300);
+              setLinkedInConnectionModalOpen(true);
             }
-          }, 1000);
+          }, 1000); // 1 segundo para garantir que o banco foi atualizado
         }}
       />
     </div>

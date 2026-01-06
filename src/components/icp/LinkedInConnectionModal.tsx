@@ -28,6 +28,7 @@ interface LinkedInConnectionModalProps {
   };
   onConnectionSent?: () => void;
   onOpenAuthDialog?: () => void; // ✅ NOVO: Callback para abrir modal de autenticação
+  onAuthSuccess?: () => void; // ✅ NOVO: Callback quando LinkedIn for conectado
 }
 
 // Templates de mensagens validadas
@@ -58,7 +59,8 @@ export function LinkedInConnectionModal({
   onOpenChange,
   decisor,
   onConnectionSent,
-  onOpenAuthDialog // ✅ NOVO: Receber callback
+  onOpenAuthDialog, // ✅ NOVO: Receber callback
+  onAuthSuccess // ✅ NOVO: Callback quando LinkedIn for conectado
 }: LinkedInConnectionModalProps) {
   const [linkedInPremium, setLinkedInPremium] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
