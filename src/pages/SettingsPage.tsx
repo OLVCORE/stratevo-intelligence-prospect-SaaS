@@ -581,6 +581,16 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
+
+      {/* LinkedIn Auth Dialog */}
+      <LinkedInCredentialsDialog
+        open={linkedInAuthOpen}
+        onOpenChange={setLinkedInAuthOpen}
+        onAuthSuccess={() => {
+          checkLinkedInStatus();
+          toast.success('LinkedIn conectado com sucesso!');
+        }}
+      />
     </AppLayout>
   );
 }
