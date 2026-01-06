@@ -49,9 +49,24 @@ export function useTenantProducts() {
         .select('*')
         .eq('tenant_id', tenant.id)
         .eq('is_active', true)
-        .order('display_order', { ascending: true });
+        .order('display_order', { ascending: true, nullsFirst: false });
 
-      if (error) throw error;
+      if (error) {
+        // Se erro 400 (coluna não existe ou sintaxe), tentar sem order
+        if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
+          console.warn('[useTenantProducts] Coluna display_order não existe, ordenando por nome');
+          const { data: dataFallback, error: errorFallback } = await supabase
+            .from('tenant_products')
+            .select('*')
+            .eq('tenant_id', tenant.id)
+            .eq('is_active', true)
+            .order('nome', { ascending: true });
+          
+          if (errorFallback) throw errorFallback;
+          return dataFallback || [];
+        }
+        throw error;
+      }
       return data || [];
     },
     enabled: !!tenant?.id,
