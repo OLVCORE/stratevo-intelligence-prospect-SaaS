@@ -79,18 +79,14 @@ export default function SettingsPage() {
 
   const checkLinkedInStatus = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('linkedin_connected, linkedin_profile_data')
-          .eq('id', user.id)
-          .single();
-        
-        setLinkedInConnected(profile?.linkedin_connected || false);
-      }
+      // ✅ USAR VALIDAÇÃO UNIFICADA (mesma função do modal)
+      const { validateLinkedInConnection } = await import('@/services/linkedinValidation');
+      const validation = await validateLinkedInConnection();
+      
+      setLinkedInConnected(validation.isConnected && validation.isValid);
     } catch (error) {
       console.error('[Settings] Erro ao verificar LinkedIn:', error);
+      setLinkedInConnected(false);
     }
   };
 
