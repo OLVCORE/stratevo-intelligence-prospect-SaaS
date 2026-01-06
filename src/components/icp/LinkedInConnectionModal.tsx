@@ -251,10 +251,18 @@ export function LinkedInConnectionModal({
     setIsSending(true);
 
     try {
-      // Salvar solicitação de conexão no banco
-      const { data, error } = await supabase
+      // ✅ OBTER USER_ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Usuário não autenticado');
+        return;
+      }
+
+      // ✅ PRIMEIRO: Salvar registro no banco (status: pending)
+      const { data: connectionRecord, error: insertError } = await supabase
         .from('linkedin_connections')
         .insert({
+          user_id: user.id,
           decisor_name: decisor.name,
           decisor_linkedin_url: decisor.linkedin_url,
           message: customMessage,
@@ -265,14 +273,64 @@ export function LinkedInConnectionModal({
         .select()
         .single();
 
-      if (error) throw error;
+      if (insertError) {
+        // Se tabela não existe, continuar mesmo assim (não é crítico)
+        console.warn('[LINKEDIN-MODAL] Erro ao salvar registro (não crítico):', insertError);
+      }
 
-      // Abrir perfil do LinkedIn em nova aba
-      window.open(decisor.linkedin_url, '_blank');
+      // ✅ ENVIAR CONEXÃO REAL via PhantomBuster (Edge Function)
+      toast.loading('Enviando conexão via PhantomBuster...', {
+        description: 'Aguarde, estamos enviando a conexão real ao LinkedIn.',
+        duration: 10000
+      });
 
-      toast.success('Solicitação de conexão registrada!', {
-        description: 'Abra o perfil do LinkedIn e envie a solicitação manualmente. O sistema irá rastrear o status.',
-        duration: 5000
+      const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-linkedin-connection', {
+        body: {
+          user_id: user.id,
+          profile_url: decisor.linkedin_url,
+          message: linkedInPremium ? customMessage : undefined,
+          has_premium: linkedInPremium
+        }
+      });
+
+      if (sendError || !sendResult?.success) {
+        console.error('[LINKEDIN-MODAL] Erro ao enviar conexão:', sendError || sendResult);
+        
+        // Se falhou, pelo menos abrir o perfil para envio manual
+        window.open(decisor.linkedin_url, '_blank');
+        
+        toast.error('Erro ao enviar conexão automaticamente', {
+          description: sendResult?.message || sendError?.message || 'Abra o perfil e envie manualmente. O sistema tentará novamente.',
+          duration: 8000,
+          action: {
+            label: 'Verificar no LinkedIn',
+            onClick: () => {
+              window.open('https://www.linkedin.com/mynetwork/invitation-manager/sent/', '_blank');
+            }
+          }
+        });
+
+        // Atualizar status para 'failed' se tiver registro
+        if (connectionRecord?.id) {
+          await supabase
+            .from('linkedin_connections')
+            .update({ status: 'failed', phantom_result: sendResult })
+            .eq('id', connectionRecord.id);
+        }
+
+        return;
+      }
+
+      // ✅ SUCESSO: Conexão enviada via PhantomBuster
+      toast.success('✅ Conexão enviada com sucesso!', {
+        description: 'A conexão foi enviada via PhantomBuster. Verifique em https://www.linkedin.com/mynetwork/invitation-manager/sent/',
+        duration: 8000,
+        action: {
+          label: 'Verificar no LinkedIn',
+          onClick: () => {
+            window.open('https://www.linkedin.com/mynetwork/invitation-manager/sent/', '_blank');
+          }
+        }
       });
 
       // Atualizar contador
@@ -285,15 +343,16 @@ export function LinkedInConnectionModal({
       // Callback
       onConnectionSent?.();
       
-      // Fechar modal após 2 segundos
+      // Fechar modal após 3 segundos
       setTimeout(() => {
         onOpenChange(false);
-      }, 2000);
+      }, 3000);
 
     } catch (error: any) {
-      console.error('[LINKEDIN-MODAL] Erro ao salvar conexão:', error);
-      toast.error('Erro ao registrar conexão', {
-        description: error.message || 'Tente novamente mais tarde.'
+      console.error('[LINKEDIN-MODAL] Erro geral:', error);
+      toast.error('Erro ao enviar conexão', {
+        description: error.message || 'Tente novamente mais tarde.',
+        duration: 5000
       });
     } finally {
       setIsSending(false);
