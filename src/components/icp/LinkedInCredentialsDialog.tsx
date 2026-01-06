@@ -49,11 +49,15 @@ export function LinkedInCredentialsDialog({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase
+        const { data: profile, error } = await supabase
           .from('profiles')
           .select('linkedin_connected, linkedin_profile_url, linkedin_profile_data, linkedin_session_cookie')
           .eq('id', user.id)
-          .single();
+          .maybeSingle(); // ✅ Usar maybeSingle para não dar erro se não existir
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = não encontrado (OK)
+          console.error('[LINKEDIN-CREDENTIALS] Erro ao verificar:', error);
+        }
 
         if (profile?.linkedin_connected) {
           setIsConnected(true);
@@ -94,7 +98,9 @@ export function LinkedInCredentialsDialog({
       // Por enquanto, apenas marcamos como conectado
       const { error } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
+          email: user.email || email,
           linkedin_connected: true,
           linkedin_profile_url: `https://www.linkedin.com/in/${email.split('@')[0]}`,
           linkedin_connected_at: new Date().toISOString(),
@@ -102,10 +108,33 @@ export function LinkedInCredentialsDialog({
             email: email,
             connected_via: 'credentials'
           }
-        })
-        .eq('id', user.id);
+        }, {
+          onConflict: 'id'
+        });
 
-      if (error) throw error;
+      if (error) {
+        // Se a tabela não existe, criar o perfil primeiro
+        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
+          console.warn('[LINKEDIN-CREDENTIALS] Tabela profiles não existe, criando perfil...');
+          // Tentar criar o perfil básico primeiro
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.email || email,
+              linkedin_connected: true,
+              linkedin_profile_url: `https://www.linkedin.com/in/${email.split('@')[0]}`,
+              linkedin_connected_at: new Date().toISOString(),
+              linkedin_profile_data: {
+                email: email,
+                connected_via: 'credentials'
+              }
+            });
+          if (insertError) throw insertError;
+        } else {
+          throw error;
+        }
+      }
 
       setIsConnected(true);
       setLinkedInProfile({ email, connected_via: 'credentials' });
@@ -143,17 +172,40 @@ export function LinkedInCredentialsDialog({
       // Por enquanto, apenas salvamos
       const { error } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
+          email: user.email || '',
           linkedin_connected: true,
           linkedin_session_cookie: sessionCookie,
           linkedin_connected_at: new Date().toISOString(),
           linkedin_profile_data: {
             connected_via: 'session_cookie'
           }
-        })
-        .eq('id', user.id);
+        }, {
+          onConflict: 'id'
+        });
 
-      if (error) throw error;
+      if (error) {
+        // Se a tabela não existe, criar o perfil primeiro
+        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
+          console.warn('[LINKEDIN-CREDENTIALS] Tabela profiles não existe, criando perfil...');
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.email || '',
+              linkedin_connected: true,
+              linkedin_session_cookie: sessionCookie,
+              linkedin_connected_at: new Date().toISOString(),
+              linkedin_profile_data: {
+                connected_via: 'session_cookie'
+              }
+            });
+          if (insertError) throw insertError;
+        } else {
+          throw error;
+        }
+      }
 
       setIsConnected(true);
       setLinkedInProfile({ connected_via: 'session_cookie' });
