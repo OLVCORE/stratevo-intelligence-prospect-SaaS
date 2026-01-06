@@ -37,23 +37,58 @@ export async function validateLinkedInConnection(): Promise<LinkedInValidationRe
       return { isValid: false, isConnected: false, error: profileError.message };
     }
 
-    // Se não tem perfil ou não está marcado como conectado
-    if (!profile || !profile.linkedin_connected) {
-      return { isValid: false, isConnected: false, error: 'LinkedIn não conectado' };
+    // Se não tem perfil
+    if (!profile) {
+      return { isValid: false, isConnected: false, error: 'Perfil não encontrado' };
     }
 
     // ✅ VALIDAÇÃO REAL: Testar se session cookie ou access token funciona
     const hasSessionCookie = !!profile.linkedin_session_cookie;
     const hasAccessToken = !!profile.linkedin_access_token;
 
+    // Se não tem credenciais, não está conectado
     if (!hasSessionCookie && !hasAccessToken) {
-      // Tem flag de conectado, mas não tem credenciais válidas
       return {
         isValid: false,
         isConnected: false,
         error: 'Credenciais não encontradas. Reconecte sua conta.'
       };
     }
+
+    // Se tem credenciais mas não está marcado como conectado, ainda assim consideramos válido
+    // (pode ser que o flag não foi atualizado ainda)
+    const isMarkedAsConnected = profile.linkedin_connected === true;
+
+    // Se tem credenciais, está conectado (mesmo que o flag não esteja atualizado)
+    if (hasSessionCookie || hasAccessToken) {
+      // Se o flag não está atualizado, atualizar agora
+      if (!isMarkedAsConnected) {
+        console.log('[LINKEDIN-VALIDATION] ⚠️ Flag não atualizado, mas credenciais existem. Atualizando...');
+        // Atualizar flag silenciosamente (não esperar resultado)
+        supabase
+          .from('profiles')
+          .update({ linkedin_connected: true })
+          .eq('id', user.id)
+          .then(({ error }) => {
+            if (error) {
+              console.warn('[LINKEDIN-VALIDATION] Erro ao atualizar flag:', error);
+            }
+          });
+      }
+      
+      // Retornar como conectado
+      return {
+        isValid: true,
+        isConnected: true,
+        profile: profile.linkedin_profile_data || {
+          name: profile.linkedin_profile_url ? 'Perfil LinkedIn' : undefined,
+          profileUrl: profile.linkedin_profile_url
+        }
+      };
+    }
+
+    // Se chegou aqui e não tem credenciais, não está conectado
+    return { isValid: false, isConnected: false, error: 'LinkedIn não conectado' };
 
     // ✅ TESTAR CREDENCIAIS: Fazer uma chamada de teste ao LinkedIn
     // Por enquanto, validamos se temos as credenciais
