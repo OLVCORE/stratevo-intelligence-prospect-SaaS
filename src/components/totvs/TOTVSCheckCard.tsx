@@ -1139,6 +1139,43 @@ export default function UsageVerificationCard({
       // 🔥 CRITICAL: Refetch do latestReport para atualizar o componente
       await queryClient.refetchQueries({ queryKey: ['latest-stc-report', companyId] });
       
+      // 🔥 CRITICAL: Aguardar um pouco mais para garantir que o banco processou
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 🔥 CRITICAL: Forçar recarregamento dos dados salvos no tabDataRef
+      // Isso garante que ao reabrir, os dados estejam disponíveis
+      try {
+        const { data: refreshedReport } = await supabase
+          .from('stc_verification_history')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        // 🔥 CRITICAL: Se recarregou, restaurar dados no tabDataRef
+        if (refreshedReport?.full_report) {
+          const refreshedFullReport = refreshedReport.full_report;
+          console.log('[SAVE] 🔄 Restaurando dados do relatório recarregado...');
+          
+          // Restaurar todos os dados
+          if (refreshedFullReport.decisors_report) tabDataRef.current.decisors = refreshedFullReport.decisors_report;
+          if (refreshedFullReport.digital_report) tabDataRef.current.digital = refreshedFullReport.digital_report;
+          if (refreshedFullReport.competitors_report) tabDataRef.current.competitors = refreshedFullReport.competitors_report;
+          if (refreshedFullReport.similar_companies_report) tabDataRef.current.similar = refreshedFullReport.similar_companies_report;
+          if (refreshedFullReport.clients_report) tabDataRef.current.clients = refreshedFullReport.clients_report;
+          if (refreshedFullReport.analysis_report) tabDataRef.current.analysis = refreshedFullReport.analysis_report;
+          if (refreshedFullReport.products_report) tabDataRef.current.products = refreshedFullReport.products_report;
+          if (refreshedFullReport.opportunities_report) tabDataRef.current.opportunities = refreshedFullReport.opportunities_report;
+          if (refreshedFullReport.executive_report) tabDataRef.current.executive = refreshedFullReport.executive_report;
+          if (refreshedFullReport.product_fit_report) tabDataRef.current.detection = refreshedFullReport.product_fit_report;
+          
+          console.log('[SAVE] ✅ Dados restaurados após salvar - relatório persistido!');
+        }
+      } catch (refreshError) {
+        console.warn('[SAVE] ⚠️ Erro ao recarregar dados (não crítico):', refreshError);
+      }
+      
       toast.success('✅ Relatório salvo no sistema!', {
         description: `${successes.length} aba(s) salva(s) com sucesso. Os dados serão carregados automaticamente ao reabrir.`,
         duration: 5000,
