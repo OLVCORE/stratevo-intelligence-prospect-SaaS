@@ -65,6 +65,8 @@ export default function SettingsPage() {
   const [icps, setIcps] = useState<ICPMetadata[]>([]);
   const [icpsLoading, setIcpLoading] = useState(false);
   const [generatedIcpCount, setGeneratedIcpCount] = useState<number | null>(null);
+  const [linkedInAuthOpen, setLinkedInAuthOpen] = useState(false);
+  const [linkedInConnected, setLinkedInConnected] = useState(false);
 
   useEffect(() => {
     loadProfile();
