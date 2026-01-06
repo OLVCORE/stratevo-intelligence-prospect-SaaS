@@ -53,17 +53,41 @@ export function useTenantProducts() {
 
       if (error) {
         // Se erro 400 (coluna não existe ou sintaxe), tentar sem order
-        if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
-          console.warn('[useTenantProducts] Coluna display_order não existe, ordenando por nome');
-          const { data: dataFallback, error: errorFallback } = await supabase
+        if (error.code === '42703' || error.code === '42883' || error.status === 400 || 
+            error.message?.includes('column') || error.message?.includes('does not exist') ||
+            error.message?.includes('ORDER BY')) {
+          console.warn('[useTenantProducts] Erro ao ordenar, tentando sem order ou por nome');
+          
+          // Tentar primeiro por nome
+          try {
+            const { data: dataFallback, error: errorFallback } = await supabase
+              .from('tenant_products')
+              .select('*')
+              .eq('tenant_id', tenant.id)
+              .eq('is_active', true)
+              .order('nome', { ascending: true });
+            
+            if (!errorFallback) {
+              return dataFallback || [];
+            }
+          } catch (fallbackError) {
+            // Se falhar, tentar sem order
+            console.warn('[useTenantProducts] Erro ao ordenar por nome, tentando sem order');
+          }
+          
+          // Último recurso: sem order
+          const { data: dataNoOrder, error: errorNoOrder } = await supabase
             .from('tenant_products')
             .select('*')
             .eq('tenant_id', tenant.id)
-            .eq('is_active', true)
-            .order('nome', { ascending: true });
+            .eq('is_active', true);
           
-          if (errorFallback) throw errorFallback;
-          return dataFallback || [];
+          if (errorNoOrder) {
+            console.error('[useTenantProducts] Erro mesmo sem order:', errorNoOrder);
+            throw errorNoOrder;
+          }
+          
+          return dataNoOrder || [];
         }
         throw error;
       }

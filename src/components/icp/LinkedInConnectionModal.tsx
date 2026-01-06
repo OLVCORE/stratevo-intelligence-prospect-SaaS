@@ -82,25 +82,49 @@ export function LinkedInConnectionModal({
   }, [open]);
 
   // ✅ NOVO: Re-verificar status quando modal reabre (após conectar)
+  // 🔥 REDUZIDO: Verificar apenas a cada 10 segundos (não 2s) para evitar spam
   useEffect(() => {
     if (open) {
-      // Re-verificar status a cada 2 segundos enquanto modal estiver aberto
+      // Verificar status inicial
+      checkLinkedInStatus();
+      
+      // Re-verificar status a cada 10 segundos enquanto modal estiver aberto
+      // (apenas se ainda não estiver conectado, para detectar quando conectar)
       const interval = setInterval(() => {
-        checkLinkedInStatus();
-      }, 2000);
+        // Só verificar novamente se ainda não estiver conectado
+        // (evita chamadas desnecessárias quando já está conectado)
+        if (!linkedInConnected) {
+          checkLinkedInStatus();
+        }
+      }, 10000); // 10 segundos ao invés de 2
+      
       return () => clearInterval(interval);
     }
-  }, [open]);
+  }, [open, linkedInConnected]); // Adicionar linkedInConnected como dependência
 
   const checkLinkedInStatus = async () => {
-    // ✅ USAR VALIDAÇÃO UNIFICADA (mesma função do Settings)
-    const { validateLinkedInConnection } = await import('@/services/linkedinValidation');
-    const validation = await validateLinkedInConnection();
-    
-    setLinkedInConnected(validation.isConnected && validation.isValid);
-    
-    if (!validation.isValid && validation.error) {
-      console.warn('[LINKEDIN-CONNECTION] Status inválido:', validation.error);
+    try {
+      // ✅ USAR VALIDAÇÃO UNIFICADA (mesma função do Settings)
+      const { validateLinkedInConnection } = await import('@/services/linkedinValidation');
+      const validation = await validateLinkedInConnection();
+      
+      const wasConnected = linkedInConnected;
+      const isNowConnected = validation.isConnected && validation.isValid;
+      
+      setLinkedInConnected(isNowConnected);
+      
+      // 🔥 Só logar se mudou de estado ou se é a primeira verificação
+      if (!isNowConnected && validation.error) {
+        // Só logar uma vez, não repetidamente
+        if (!wasConnected) {
+          console.warn('[LINKEDIN-CONNECTION] LinkedIn não conectado:', validation.error);
+        }
+      } else if (isNowConnected && !wasConnected) {
+        console.log('[LINKEDIN-CONNECTION] ✅ LinkedIn conectado com sucesso!');
+      }
+    } catch (error) {
+      // Silenciar erros repetidos
+      console.error('[LINKEDIN-CONNECTION] Erro ao verificar status:', error);
     }
   };
 
