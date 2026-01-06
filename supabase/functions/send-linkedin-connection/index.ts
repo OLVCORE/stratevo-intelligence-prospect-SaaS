@@ -226,14 +226,25 @@ serve(async (req) => {
     }
 
     // ✅ VERIFICAR SE CONEXÃO FOI ENVIADA COM SUCESSO
-    const connectionResult = resultData[0];
+    // 🔥 PhantomBuster pode retornar em diferentes formatos
+    const connectionResult = Array.isArray(resultData) ? resultData[0] : resultData;
+    
+    console.log('[SEND-LINKEDIN-CONNECTION] 📊 Resultado bruto do PhantomBuster:', JSON.stringify(resultData, null, 2));
+    
+    // Verificar múltiplos indicadores de sucesso
     const wasSent = connectionResult?.sent === true || 
                     connectionResult?.status === 'sent' || 
-                    connectionResult?.success === true;
+                    connectionResult?.success === true ||
+                    connectionResult?.connectionSent === true ||
+                    (typeof connectionResult === 'string' && connectionResult.toLowerCase().includes('sent')) ||
+                    (resultData && resultData.length > 0 && resultData[0]?.output?.sent === true);
 
-    console.log('[SEND-LINKEDIN-CONNECTION] 📊 Resultado:', {
+    console.log('[SEND-LINKEDIN-CONNECTION] 📊 Análise do resultado:', {
       wasSent,
-      result: connectionResult
+      connectionResult,
+      resultData_type: typeof resultData,
+      isArray: Array.isArray(resultData),
+      first_item: Array.isArray(resultData) ? resultData[0] : resultData
     });
 
     // ✅ ATUALIZAR REGISTRO NO BANCO
