@@ -33,7 +33,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|.*\\.(js|css|json|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)).*)",
+      "source": "/((?!assets|.*\\.(js|css|json|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map)).*)",
       "destination": "/index.html"
     }
   ]
