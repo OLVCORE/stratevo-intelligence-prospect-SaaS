@@ -43,12 +43,25 @@ export function DecisorsContactsTab({
   onDataChange 
 }: DecisorsContactsTabProps) {
   const { toast } = useToast();
-  const [analysisData, setAnalysisData] = useState<any>(savedData || {
-    decisors: [],
-    decisorsWithEmails: [],
-    insights: [],
-    companyData: null,
-    companyApolloOrg: null // 🏢 Apollo Organization data
+  
+  // 🔥 CRÍTICO: Inicializar com savedData se existir (usar função para evitar re-inicialização)
+  const [analysisData, setAnalysisData] = useState<any>(() => {
+    if (savedData && (savedData.decisors?.length > 0 || savedData.companyApolloOrg)) {
+      console.log('[DECISORES-TAB] 📦 Inicializando com savedData:', {
+        hasDecisors: !!savedData.decisors,
+        decisorsCount: savedData.decisors?.length || 0,
+        hasCompanyApolloOrg: !!savedData.companyApolloOrg,
+        keys: Object.keys(savedData)
+      });
+      return savedData;
+    }
+    return {
+      decisors: [],
+      decisorsWithEmails: [],
+      insights: [],
+      companyData: null,
+      companyApolloOrg: null // 🏢 Apollo Organization data
+    };
   });
   const [customLinkedInUrl, setCustomLinkedInUrl] = useState(linkedinUrl || '');
   const [customApolloUrl, setCustomApolloUrl] = useState('');
