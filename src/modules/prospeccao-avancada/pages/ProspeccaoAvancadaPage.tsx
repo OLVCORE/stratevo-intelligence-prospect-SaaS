@@ -18,13 +18,17 @@ import {
 } from '../services/enrichmentService';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Zap, TrendingUp, Building2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Zap, TrendingUp, Building2, Download } from 'lucide-react';
+import { LinkedInLeadCollector } from '@/components/icp/LinkedInLeadCollector';
+import { useState } from 'react';
 
 export default function ProspeccaoAvancadaPage() {
   const { tenant } = useTenant();
   const [empresas, setEmpresas] = useState<EmpresaEnriquecida[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [empresasSalvas, setEmpresasSalvas] = useState<number[]>([]);
+  const [linkedInLeadCollectorOpen, setLinkedInLeadCollectorOpen] = useState(false);
 
   const handleBuscar = async (filtros: FiltrosBusca) => {
     if (!tenant?.id) {
@@ -171,6 +175,14 @@ export default function ProspeccaoAvancadaPage() {
             Encontre empresas ideais com filtros específicos e enriquecimento automático de dados
           </p>
         </div>
+        <Button
+          onClick={() => setLinkedInLeadCollectorOpen(true)}
+          variant="outline"
+          className="gap-2"
+        >
+          <Download className="h-4 w-4" />
+          Coletar Leads do LinkedIn
+        </Button>
       </div>
 
       {/* Cards de Estatísticas */}
@@ -223,6 +235,19 @@ export default function ProspeccaoAvancadaPage() {
           onEnviarQualificacao={handleEnviarQualificacao}
         />
       )}
+
+      {/* 📥 COLETOR DE LEADS LINKEDIN */}
+      <LinkedInLeadCollector
+        open={linkedInLeadCollectorOpen}
+        onOpenChange={setLinkedInLeadCollectorOpen}
+        companyId={undefined}
+        onLeadsCollected={(count) => {
+          toast({
+            title: 'Leads coletados!',
+            description: `${count} leads coletados com sucesso.`,
+          });
+        }}
+      />
     </div>
   );
 }

@@ -5,9 +5,9 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Linkedin, CheckCircle2, AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { Linkedin, CheckCircle2, AlertCircle, Loader2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { checkLinkedInAuth, initiateLinkedInAuth } from '@/services/linkedinOAuth';
 
 interface LinkedInAuthDialogProps {
   open: boolean;
@@ -23,6 +23,7 @@ export function LinkedInAuthDialog({
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [linkedInProfile, setLinkedInProfile] = useState<any>(null);
+  const [isChecking, setIsChecking] = useState(true);
 
   // Verificar se já está conectado
   useEffect(() => {
@@ -32,22 +33,18 @@ export function LinkedInAuthDialog({
   }, [open]);
 
   const checkLinkedInConnection = async () => {
+    setIsChecking(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('linkedin_connected, linkedin_profile_url, linkedin_session_cookie')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.linkedin_connected) {
-          setIsConnected(true);
-          setLinkedInProfile(profile);
-        }
+      const { isConnected: connected, profile } = await checkLinkedInAuth();
+      setIsConnected(connected);
+      if (connected && profile) {
+        setLinkedInProfile(profile);
       }
     } catch (error) {
       console.error('[LINKEDIN-AUTH] Erro ao verificar conexão:', error);
+      setIsConnected(false);
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -55,43 +52,41 @@ export function LinkedInAuthDialog({
     setIsConnecting(true);
 
     try {
-      // ⚠️ IMPORTANTE: LinkedIn não permite OAuth direto para conexões
-      // Solução: Usuário precisa autenticar via PhantomBuster
-      
-      // Opção 1: Redirecionar para PhantomBuster (recomendado)
-      const phantomBusterAuthUrl = 'https://www.phantombuster.com/login';
-      
-      toast.info('Redirecionando para PhantomBuster...', {
-        description: 'Você precisará fazer login no LinkedIn através do PhantomBuster para automação.'
-      });
-
-      // Abrir PhantomBuster em nova aba
-      window.open(phantomBusterAuthUrl, '_blank');
-
-      // Salvar status de "em processo de conexão"
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase
-          .from('profiles')
-          .update({
-            linkedin_connecting: true,
-            linkedin_connected_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
-      }
-
-      toast.success('Siga as instruções no PhantomBuster', {
-        description: '1. Faça login no LinkedIn no PhantomBuster\n2. Copie o Session Cookie\n3. Cole no campo abaixo',
-        duration: 10000
-      });
-
+      // ✅ AUTENTICAÇÃO REAL DO LINKEDIN OAuth
+      await initiateLinkedInAuth();
+      // O usuário será redirecionado para o LinkedIn
+      // Após autorizar, será redirecionado de volta para /auth/linkedin/callback
     } catch (error: any) {
       console.error('[LINKEDIN-AUTH] Erro:', error);
       toast.error('Erro ao conectar LinkedIn', {
         description: error.message || 'Tente novamente mais tarde.'
       });
-    } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectLinkedIn = async () => {
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({
+            linkedin_connected: false,
+            linkedin_access_token: null,
+            linkedin_profile_url: null,
+            linkedin_profile_data: null
+          })
+          .eq('id', user.id);
+
+        setIsConnected(false);
+        setLinkedInProfile(null);
+        toast.success('LinkedIn desconectado com sucesso');
+      }
+    } catch (error: any) {
+      console.error('[LINKEDIN-AUTH] Erro ao desconectar:', error);
+      toast.error('Erro ao desconectar LinkedIn');
     }
   };
 
@@ -104,24 +99,50 @@ export function LinkedInAuthDialog({
             Conectar Conta do LinkedIn
           </DialogTitle>
           <DialogDescription>
-            Para enviar conexões automaticamente, você precisa autenticar sua conta do LinkedIn
+            Para enviar conexões automaticamente, você precisa autenticar sua conta pessoal do LinkedIn
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Status da Conexão */}
-          {isConnected ? (
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+          {isChecking ? (
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <div className="flex-1">
-                  <p className="font-medium text-green-800 dark:text-green-200">
-                    LinkedIn Conectado
-                  </p>
-                  <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                    Sua conta está autenticada e pronta para enviar conexões
-                  </p>
+                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  Verificando status da conexão...
+                </p>
+              </div>
+            </div>
+          ) : isConnected ? (
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 flex-1">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <div className="flex-1">
+                    <p className="font-medium text-green-800 dark:text-green-200">
+                      LinkedIn Conectado ✅
+                    </p>
+                    {linkedInProfile && (
+                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                        {linkedInProfile.firstName} {linkedInProfile.lastName}
+                        {linkedInProfile.headline && ` - ${linkedInProfile.headline}`}
+                      </p>
+                    )}
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      Sua conta pessoal está autenticada e pronta para enviar conexões
+                    </p>
+                  </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDisconnectLinkedIn}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <XCircle className="w-4 h-4 mr-1" />
+                  Desconectar
+                </Button>
               </div>
             </div>
           ) : (
@@ -130,15 +151,18 @@ export function LinkedInAuthDialog({
                 <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-medium text-blue-800 dark:text-blue-200 mb-2">
-                    Como Funciona a Autenticação
+                    Autenticação via LinkedIn OAuth
                   </p>
                   <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-                    <li>O LinkedIn não permite automação direta via API oficial</li>
-                    <li>Usamos PhantomBuster para automação segura</li>
-                    <li>Você faz login no LinkedIn através do PhantomBuster</li>
-                    <li>O PhantomBuster gera um Session Cookie</li>
-                    <li>Este cookie é usado para enviar conexões automaticamente</li>
+                    <li>Você será redirecionado para o LinkedIn</li>
+                    <li>Faça login na sua conta pessoal do LinkedIn</li>
+                    <li>Autorize o acesso para enviar conexões</li>
+                    <li>Você será redirecionado de volta ao sistema</li>
+                    <li>Sua conta estará conectada e pronta para uso</li>
                   </ol>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                    ⚠️ As conexões serão enviadas pela sua conta pessoal do LinkedIn
+                  </p>
                 </div>
               </div>
             </div>
@@ -168,32 +192,18 @@ export function LinkedInAuthDialog({
               {isConnecting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Conectando...
+                  Redirecionando...
                 </>
               ) : (
                 <>
                   <Linkedin className="w-4 h-4 mr-2" />
-                  Conectar via PhantomBuster
+                  Conectar Minha Conta do LinkedIn
                 </>
               )}
             </Button>
           )}
-
-          {/* Link para PhantomBuster */}
-          <div className="text-center">
-            <a
-              href="https://www.phantombuster.com/login"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-blue-600 hover:text-blue-700 flex items-center justify-center gap-1"
-            >
-              Acessar PhantomBuster
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
-

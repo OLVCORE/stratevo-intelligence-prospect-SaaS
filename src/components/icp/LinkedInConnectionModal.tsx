@@ -10,9 +10,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Linkedin, Rocket, Loader2, AlertCircle, CheckCircle2, ExternalLink, User } from 'lucide-react';
+import { Linkedin, Rocket, Loader2, AlertCircle, CheckCircle2, ExternalLink, User, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { checkLinkedInAuth } from '@/services/linkedinOAuth';
 
 interface LinkedInConnectionModalProps {
   open: boolean;
@@ -67,14 +68,21 @@ export function LinkedInConnectionModal({
   const [showAddTemplate, setShowAddTemplate] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateMessage, setNewTemplateMessage] = useState('');
+  const [linkedInConnected, setLinkedInConnected] = useState(false);
 
   // Carregar perfil do usuário e contador de conexões
   useEffect(() => {
     if (open) {
       loadUserData();
       loadConnectionsCount();
+      checkLinkedInStatus();
     }
   }, [open]);
+
+  const checkLinkedInStatus = async () => {
+    const { isConnected } = await checkLinkedInAuth();
+    setLinkedInConnected(isConnected);
+  };
 
   const loadUserData = async () => {
     try {
@@ -169,6 +177,21 @@ export function LinkedInConnectionModal({
   };
 
   const handleSendConnection = async () => {
+    // ✅ Verificar se LinkedIn está conectado
+    if (!linkedInConnected) {
+      toast.error('LinkedIn não conectado!', {
+        description: 'Conecte sua conta do LinkedIn antes de enviar conexões.',
+        action: {
+          label: 'Conectar',
+          onClick: () => {
+            onOpenChange(false);
+            // Abrir modal de autenticação (será implementado no componente pai)
+          }
+        }
+      });
+      return;
+    }
+
     // Verificar limite diário
     if (connectionsToday >= DAILY_CONNECTION_LIMIT) {
       toast.error(`Limite diário atingido! Máximo de ${DAILY_CONNECTION_LIMIT} conexões por dia.`, {
@@ -253,6 +276,27 @@ export function LinkedInConnectionModal({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* ✅ Status de Conexão LinkedIn */}
+          {linkedInConnected ? (
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                  LinkedIn Conectado ✅ - Conexões serão enviadas pela sua conta pessoal
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <div className="flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-600" />
+                <span className="text-sm font-medium text-red-800 dark:text-red-200">
+                  LinkedIn não conectado - Conecte sua conta para enviar conexões
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Status de Conexões Hoje */}
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
             <div className="flex items-center justify-between">

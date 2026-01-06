@@ -867,16 +867,6 @@ export function DecisorsContactsTab({
             </Button>
             
             <Button
-              onClick={() => setLinkedInLeadCollectorOpen(true)}
-              variant="outline"
-              size="sm"
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Coletar Leads (URL)
-            </Button>
-            
-            <Button
               onClick={() => linkedinMutation.mutate()}
               disabled={linkedinMutation.isPending}
               variant="default"
@@ -1557,22 +1547,6 @@ export function DecisorsContactsTab({
         onConnectionSent={() => {
           // Recarregar dados após conexão enviada
           handleRefreshData();
-        }}
-      />
-
-      {/* 📥 COLETOR DE LEADS LINKEDIN */}
-      <LinkedInLeadCollector
-        open={linkedInLeadCollectorOpen}
-        onOpenChange={setLinkedInLeadCollectorOpen}
-        companyId={companyId}
-        onLeadsCollected={(count) => {
-          toast.success(`${count} leads coletados!`, {
-            description: 'Recarregando lista de decisores...'
-          });
-          // Recarregar dados após coleta
-          setTimeout(() => {
-            handleRefreshData();
-          }, 1000);
         }}
       />
 
