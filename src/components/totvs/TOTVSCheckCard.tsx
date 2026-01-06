@@ -1811,7 +1811,7 @@ export default function UsageVerificationCard({
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
             stcStatus={data?.status}
-            savedData={latestReport?.full_report?.digital_report} // 🔥 PASSAR DADOS SALVOS!
+            savedData={tabDataRef.current.digital || latestReport?.full_report?.digital_report} // 🔥 PRIORIDADE: tabDataRef primeiro
             stcHistoryId={stcHistoryId || undefined}
             onDataChange={(dataChange) => {
               tabDataRef.current.digital = dataChange;
@@ -1869,7 +1869,7 @@ export default function UsageVerificationCard({
             domain={domain}
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
-            savedData={latestReport?.full_report?.competitors_report}
+            savedData={tabDataRef.current.competitors || latestReport?.full_report?.competitors_report} // 🔥 PRIORIDADE: tabDataRef primeiro
             stcHistoryId={stcHistoryId || undefined}
             similarCompanies={sharedSimilarCompanies}
             onDataChange={(competitorsData) => {
@@ -1902,7 +1902,7 @@ export default function UsageVerificationCard({
               tenantId={tenant?.id}
               tenantSectorCode={tenant?.sector_code}
               tenantNicheCode={tenant?.niche_code}
-              savedData={latestReport?.full_report?.similar_companies_report}
+              savedData={tabDataRef.current.similar || latestReport?.full_report?.similar_companies_report} // 🔥 PRIORIDADE: tabDataRef primeiro
               stcHistoryId={stcHistoryId || undefined}
               onDataChange={(similarData) => {
                 tabDataRef.current.similar = similarData;
@@ -1939,7 +1939,7 @@ export default function UsageVerificationCard({
             cnpj={cnpj}
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
-            savedData={latestReport?.full_report?.clients_report}
+            savedData={tabDataRef.current.clients || latestReport?.full_report?.clients_report} // 🔥 PRIORIDADE: tabDataRef primeiro
             stcHistoryId={stcHistoryId || undefined}
             onDataChange={(clientsData) => {
               tabDataRef.current.clients = clientsData;
@@ -1971,7 +1971,7 @@ export default function UsageVerificationCard({
               similarCompanies={similarCompaniesData}
               tenantId={tenant?.id}
               tenantSectorCode={tenant?.sector_code}
-              savedData={latestReport?.full_report?.analysis_report}
+              savedData={tabDataRef.current.analysis || latestReport?.full_report?.analysis_report} // 🔥 PRIORIDADE: tabDataRef primeiro
               stcHistoryId={stcHistoryId || undefined}
               onDataChange={(analysisData) => {
                 tabDataRef.current.analysis = analysisData;
@@ -2010,7 +2010,7 @@ export default function UsageVerificationCard({
             similarCompanies={similarCompaniesData}
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
-            savedData={latestReport?.full_report?.products_report}
+            savedData={tabDataRef.current.products || latestReport?.full_report?.products_report} // 🔥 PRIORIDADE: tabDataRef primeiro
             stcHistoryId={stcHistoryId}
             onDataChange={(productsData) => {
               tabDataRef.current.products = productsData;
@@ -2041,7 +2041,7 @@ export default function UsageVerificationCard({
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
             stcResult={data}
-            savedData={latestReport?.full_report?.opportunities_report}
+            savedData={tabDataRef.current.opportunities || latestReport?.full_report?.opportunities_report} // 🔥 PRIORIDADE: tabDataRef primeiro
             stcHistoryId={stcHistoryId}
             onDataChange={(opportunitiesData) => {
               tabDataRef.current.opportunities = opportunitiesData;
@@ -2097,7 +2097,7 @@ export default function UsageVerificationCard({
             maturityScore={data?.digital_maturity_score || 0}
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
-            savedData={latestReport?.full_report?.executive_report}
+            savedData={tabDataRef.current.executive || latestReport?.full_report?.executive_report} // 🔥 PRIORIDADE: tabDataRef primeiro
             stcHistoryId={stcHistoryId || undefined}
             onDataChange={(executiveData) => {
               tabDataRef.current.executive = executiveData;
