@@ -115,17 +115,31 @@ export function LinkedInConnectionModal({
 
   const loadConnectionsCount = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const { data, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      const { data, error, count } = await supabase
         .from('linkedin_connections')
-        .select('id', { count: 'exact' })
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
         .eq('sent_date', today);
       
-      if (!error && data) {
-        setConnectionsToday(data.length || 0);
+      if (error) {
+        // Se a tabela não existe (404), retornar 0
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('does not exist')) {
+          console.warn('[LINKEDIN-MODAL] Tabela linkedin_connections não existe ainda');
+          setConnectionsToday(0);
+          return;
+        }
+        throw error;
       }
+      
+      setConnectionsToday(count || 0);
     } catch (error) {
       console.error('[LINKEDIN-MODAL] Erro ao carregar contador:', error);
+      setConnectionsToday(0); // Fallback para 0 em caso de erro
     }
   };
 
