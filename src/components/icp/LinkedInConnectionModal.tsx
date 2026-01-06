@@ -99,6 +99,10 @@ export function LinkedInConnectionModal({
       }, 10000); // 10 segundos ao invés de 2
       
       return () => clearInterval(interval);
+    } else {
+      // 🔥 NOVO: Quando modal fecha, verificar status uma última vez
+      // Isso garante que o status seja atualizado mesmo após fechar
+      checkLinkedInStatus();
     }
   }, [open, linkedInConnected]); // Adicionar linkedInConnected como dependência
 

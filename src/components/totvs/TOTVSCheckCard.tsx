@@ -438,11 +438,12 @@ export default function UsageVerificationCard({
   const [discoveredWebsite, setDiscoveredWebsite] = useState<string | null>(null);
 
   // 🔥 CRÍTICO: Carregar dados salvos no tabDataRef quando latestReport existir
+  // 🔥 CORRIGIDO: Executar apenas uma vez quando latestReport mudar (não em cada render)
   useEffect(() => {
     if (latestReport?.full_report) {
       const report = latestReport.full_report;
       
-        console.log('[VERIFICATION] 📦 Full report recebido:', {
+      console.log('[VERIFICATION] 📦 Full report recebido - RESTAURANDO DADOS:', {
         hasDetection: !!report.detection_report,
         hasDecisors: !!report.decisors_report,
         hasKeywords: !!report.keywords_seo_report,
@@ -452,20 +453,64 @@ export default function UsageVerificationCard({
         has360: !!report.analysis_report,
         hasProducts: !!report.products_report,
         hasExecutive: !!report.executive_report,
+        hasProductFit: !!report.product_fit_report,
+        reportKeys: Object.keys(report),
       });
       
-      if (report.keywords_report) tabDataRef.current.keywords = report.keywords_report;
-      if (report.keywords_seo_report) tabDataRef.current.keywords = report.keywords_seo_report;
-      if (report.detection_report) tabDataRef.current.detection = report.detection_report;
-      if (report.digital_report) tabDataRef.current.digital = report.digital_report; // 🔥 Digital Intelligence
-      if (report.competitors_report) tabDataRef.current.competitors = report.competitors_report;
-      if (report.similar_companies_report) tabDataRef.current.similar = report.similar_companies_report;
-      if (report.clients_report) tabDataRef.current.clients = report.clients_report;
-      if (report.decisors_report) tabDataRef.current.decisors = report.decisors_report;
-      if (report.analysis_report) tabDataRef.current.analysis = report.analysis_report;
-      if (report.products_report) tabDataRef.current.products = report.products_report;
-      if (report.opportunities_report) tabDataRef.current.opportunities = report.opportunities_report; // 🔥 Oportunidades
-      if (report.executive_report) tabDataRef.current.executive = report.executive_report;
+      // 🔥 RESTAURAR TODOS OS DADOS SALVOS
+      if (report.keywords_report) {
+        tabDataRef.current.keywords = report.keywords_report;
+        console.log('[VERIFICATION] ✅ Restaurado: keywords_report');
+      }
+      if (report.keywords_seo_report) {
+        tabDataRef.current.keywords = report.keywords_seo_report;
+        console.log('[VERIFICATION] ✅ Restaurado: keywords_seo_report');
+      }
+      if (report.detection_report) {
+        tabDataRef.current.detection = report.detection_report;
+        console.log('[VERIFICATION] ✅ Restaurado: detection_report');
+      }
+      if (report.product_fit_report) {
+        // 🔥 NOVO: Restaurar product_fit_report também
+        tabDataRef.current.detection = report.product_fit_report;
+        console.log('[VERIFICATION] ✅ Restaurado: product_fit_report');
+      }
+      if (report.digital_report) {
+        tabDataRef.current.digital = report.digital_report;
+        console.log('[VERIFICATION] ✅ Restaurado: digital_report');
+      }
+      if (report.competitors_report) {
+        tabDataRef.current.competitors = report.competitors_report;
+        console.log('[VERIFICATION] ✅ Restaurado: competitors_report');
+      }
+      if (report.similar_companies_report) {
+        tabDataRef.current.similar = report.similar_companies_report;
+        console.log('[VERIFICATION] ✅ Restaurado: similar_companies_report');
+      }
+      if (report.clients_report) {
+        tabDataRef.current.clients = report.clients_report;
+        console.log('[VERIFICATION] ✅ Restaurado: clients_report');
+      }
+      if (report.decisors_report) {
+        tabDataRef.current.decisors = report.decisors_report;
+        console.log('[VERIFICATION] ✅ Restaurado: decisors_report');
+      }
+      if (report.analysis_report) {
+        tabDataRef.current.analysis = report.analysis_report;
+        console.log('[VERIFICATION] ✅ Restaurado: analysis_report');
+      }
+      if (report.products_report) {
+        tabDataRef.current.products = report.products_report;
+        console.log('[VERIFICATION] ✅ Restaurado: products_report');
+      }
+      if (report.opportunities_report) {
+        tabDataRef.current.opportunities = report.opportunities_report;
+        console.log('[VERIFICATION] ✅ Restaurado: opportunities_report');
+      }
+      if (report.executive_report) {
+        tabDataRef.current.executive = report.executive_report;
+        console.log('[VERIFICATION] ✅ Restaurado: executive_report');
+      }
       
       // 🔥 NOVO: Propagar website descoberto pelos decisores
       if (report.decisors_report?.companyData?.website) {
@@ -509,7 +554,7 @@ export default function UsageVerificationCard({
       }
       
       console.log('[VERIFICATION] ✅ Dados salvos carregados em tabDataRef');
-        console.log('[VERIFICATION] 📊 Status das abas após carregar:', {
+      console.log('[VERIFICATION] 📊 Status das abas após carregar:', {
         detection: !!(report.product_fit_report || report.detection_report),
         decisors: !!report.decisors_report,
         digital: !!report.digital_report,
