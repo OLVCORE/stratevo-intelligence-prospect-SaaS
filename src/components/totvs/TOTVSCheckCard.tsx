@@ -542,6 +542,7 @@ export default function UsageVerificationCard({
       // 🔥 CRITICAL: Marcar outras abas como salvas se tiverem dados (atualizar unsavedChanges)
       if (report.decisors_report) {
         setUnsavedChanges(prev => ({ ...prev, decisors: false }));
+        console.log('[VERIFICATION] ✅ Decisores marcados como salvos (dados do histórico)');
       }
       if (report.digital_report) {
         setUnsavedChanges(prev => ({ ...prev, digital: false }));

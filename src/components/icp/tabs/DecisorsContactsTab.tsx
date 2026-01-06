@@ -75,20 +75,39 @@ export function DecisorsContactsTab({
   // 🔐 AUTENTICAÇÃO LINKEDIN
   const [linkedInAuthOpen, setLinkedInAuthOpen] = useState(false);
   
-  // 🔥 BUSCAR DECISORES JÁ SALVOS (de enrichment em massa) - USA FUNÇÃO AUXILIAR
+  // 🔥 CRÍTICO: Carregar dados salvos PRIMEIRO (de savedData ou full_report)
   useEffect(() => {
+    if (savedData) {
+      console.log('[DECISORES-TAB] 📦 Dados salvos recebidos via prop savedData:', {
+        hasDecisors: !!savedData.decisors,
+        decisorsCount: savedData.decisors?.length || 0,
+        hasCompanyApolloOrg: !!savedData.companyApolloOrg,
+        keys: Object.keys(savedData)
+      });
+      
+      // ✅ PRIORIDADE 1: Usar dados salvos se existirem
+      setAnalysisData(savedData);
+      
+      if (savedData.decisors && savedData.decisors.length > 0) {
+        sonnerToast.success(`✅ ${savedData.decisors.length} decisores restaurados do histórico!`);
+        console.log('[DECISORES-TAB] ✅ Dados restaurados do histórico');
+        return; // Não carregar do banco se já tem dados salvos
+      }
+    }
+    
+    // ✅ PRIORIDADE 2: Se não tem dados salvos, carregar do banco
     const loadExistingDecisors = async () => {
       const data = await loadDecisorsData();
       if (data) {
         setAnalysisData(data);
         if (data.decisors && data.decisors.length > 0) {
-          sonnerToast.success(`✅ ${data.decisors.length} decisores carregados!`);
+          sonnerToast.success(`✅ ${data.decisors.length} decisores carregados do banco!`);
         }
       }
     };
     
     loadExistingDecisors();
-  }, [companyId]);
+  }, [companyId, savedData]); // ✅ Adicionar savedData como dependência
   
   // ✅ FUNÇÃO AUXILIAR SIMPLIFICADA (para handleRefreshData e handleEnrichApollo)
   // NOTA: A função completa loadDecisorsData está acima (linha 66)
