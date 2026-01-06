@@ -1,21 +1,42 @@
 // src/features/linkedin/hooks/useLinkedInAccount.ts
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { LinkedInAccount, LinkedInConnectFormData } from "../types/linkedin.types";
+import { LinkedInAccount } from "../types/linkedin.types";
 import { toast } from "sonner";
-import { connectLinkedInAccount, syncLinkedInStatus } from "../services/linkedinApi";
+import { checkLinkedInOAuthStatus } from "@/services/linkedinOAuth";
 import { useTenant } from "@/contexts/TenantContext";
 
 export function useLinkedInAccount() {
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
 
-  // Buscar conta conectada
+  // Buscar conta conectada (usando novo OAuth)
   const { data: account, isLoading, error } = useQuery({
     queryKey: ['linkedin-account', tenant?.id],
     queryFn: async (): Promise<LinkedInAccount | null> => {
       if (!tenant?.id) return null;
 
+      // Usar novo método OAuth para verificar status
+      const { connected, account: oauthAccount } = await checkLinkedInOAuthStatus();
+      
+      if (connected && oauthAccount) {
+        // Se a conta OAuth existe e tem id, buscar dados completos da tabela
+        if (oauthAccount.id) {
+          const { data, error } = await supabase
+            .from('linkedin_accounts')
+            .select('*')
+            .eq('id', oauthAccount.id)
+            .maybeSingle();
+
+          if (error) throw error;
+          if (data) return data;
+        }
+        
+        // Se não tem id (legacy), retornar o account como está (mas não é LinkedInAccount completo)
+        // Neste caso, retornar null para forçar busca no tenant
+      }
+
+      // Fallback: buscar conta ativa no tenant
       const { data, error } = await supabase
         .from('linkedin_accounts')
         .select('*')
@@ -29,24 +50,6 @@ export function useLinkedInAccount() {
       return data;
     },
     enabled: !!tenant?.id,
-  });
-
-  // Conectar conta LinkedIn
-  const connectMutation = useMutation({
-    mutationFn: async (formData: LinkedInConnectFormData) => {
-      const result = await connectLinkedInAccount(formData);
-      if (!result.success) {
-        throw new Error(result.error || 'Erro ao conectar');
-      }
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['linkedin-account'] });
-      toast.success('Conta LinkedIn conectada com sucesso!');
-    },
-    onError: (error: Error) => {
-      toast.error(`Erro ao conectar: ${error.message}`);
-    },
   });
 
   // Desconectar conta
@@ -68,40 +71,12 @@ export function useLinkedInAccount() {
     },
   });
 
-  // Sincronizar convites
-  const syncMutation = useMutation({
-    mutationFn: async ({ accountId, syncType }: { accountId: string; syncType: string }) => {
-      const result = await syncLinkedInStatus({
-        linkedin_account_id: accountId,
-        sync_type: syncType as any,
-      });
-
-      if (!result.success) {
-        throw new Error(result.error || 'Erro na sincronização');
-      }
-
-      return result;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['linkedin-leads'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedin-account'] });
-      toast.success(`Sincronização concluída: ${data.items_updated || 0} atualizados`);
-    },
-    onError: (error: Error) => {
-      toast.error(`Erro na sincronização: ${error.message}`);
-    },
-  });
-
   return {
     account,
     isLoading,
     error,
-    connect: connectMutation.mutate,
-    isConnecting: connectMutation.isPending,
     disconnect: disconnectMutation.mutate,
     isDisconnecting: disconnectMutation.isPending,
-    sync: syncMutation.mutate,
-    isSyncing: syncMutation.isPending,
   };
 }
 
