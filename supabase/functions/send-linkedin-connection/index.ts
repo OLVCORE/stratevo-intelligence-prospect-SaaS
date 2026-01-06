@@ -17,6 +17,7 @@ interface SendConnectionRequest {
   profile_url: string; // URL do perfil do LinkedIn do destinatário
   message?: string; // Mensagem personalizada (requer Premium)
   has_premium?: boolean;
+  connection_id?: string; // ID do registro em linkedin_connections (para atualizar)
 }
 
 serve(async (req) => {
@@ -28,7 +29,7 @@ serve(async (req) => {
   }
 
   try {
-    const { profile_url, message, has_premium, user_id }: SendConnectionRequest = await req.json();
+    const { profile_url, message, has_premium, user_id, connection_id }: SendConnectionRequest = await req.json();
 
     if (!profile_url || !user_id) {
       return new Response(
@@ -73,37 +74,65 @@ serve(async (req) => {
 
     // ✅ PHANTOMBUSTER: LinkedIn Connection Request Sender
     const phantomBusterKey = Deno.env.get('PHANTOMBUSTER_API_KEY');
+    // 🔥 FALLBACKS: Aceitar múltiplas variáveis de ambiente
     const phantomConnectionAgentId = Deno.env.get('PHANTOM_LINKEDIN_CONNECTION_AGENT_ID') || 
-                                     Deno.env.get('PHANTOMBUSTER_LINKEDIN_CONNECTION_AGENT_ID');
+                                     Deno.env.get('PHANTOMBUSTER_LINKEDIN_CONNECTION_AGENT_ID') ||
+                                     Deno.env.get('PHANTOMBUSTER_AGENT_ID'); // Fallback para variável genérica
+
+    console.log('[SEND-LINKEDIN-CONNECTION] 🔍 Verificando configuração PhantomBuster:', {
+      has_api_key: !!phantomBusterKey,
+      agent_id: phantomConnectionAgentId ? '✅ Configurado' : '❌ Não encontrado',
+      env_vars_checked: [
+        'PHANTOM_LINKEDIN_CONNECTION_AGENT_ID',
+        'PHANTOMBUSTER_LINKEDIN_CONNECTION_AGENT_ID',
+        'PHANTOMBUSTER_AGENT_ID'
+      ]
+    });
 
     if (!phantomBusterKey || !phantomConnectionAgentId) {
-      console.warn('[SEND-LINKEDIN-CONNECTION] ⚠️ PhantomBuster não configurado');
+      console.error('[SEND-LINKEDIN-CONNECTION] ❌ PhantomBuster não configurado:', {
+        has_api_key: !!phantomBusterKey,
+        has_agent_id: !!phantomConnectionAgentId
+      });
       return new Response(
         JSON.stringify({
           success: false,
           error: 'PhantomBuster não configurado',
-          message: 'Configure PHANTOMBUSTER_API_KEY e PHANTOM_LINKEDIN_CONNECTION_AGENT_ID',
-          required_vars: [
-            'PHANTOMBUSTER_API_KEY',
-            'PHANTOM_LINKEDIN_CONNECTION_AGENT_ID'
-          ]
+          message: 'Configure PHANTOMBUSTER_API_KEY e uma das variáveis: PHANTOM_LINKEDIN_CONNECTION_AGENT_ID, PHANTOMBUSTER_LINKEDIN_CONNECTION_AGENT_ID ou PHANTOMBUSTER_AGENT_ID',
+          required_vars: {
+            api_key: 'PHANTOMBUSTER_API_KEY',
+            agent_id: 'PHANTOM_LINKEDIN_CONNECTION_AGENT_ID (ou PHANTOMBUSTER_AGENT_ID)'
+          },
+          debug: {
+            has_api_key: !!phantomBusterKey,
+            has_agent_id: !!phantomConnectionAgentId
+          }
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // ✅ LANÇAR AGENT DO PHANTOMBUSTER PARA ENVIAR CONEXÃO
-    const launchPayload = {
+    // 🔥 FORMATO CORRETO: PhantomBuster espera argument como objeto com campos específicos
+    const launchPayload: any = {
       id: phantomConnectionAgentId,
       argument: {
         sessionCookie: sessionCookie,
-        profileUrls: [profile_url], // URL do perfil do destinatário
-        ...(has_premium && message ? { message: message } : {}), // Mensagem apenas se Premium
+        profileUrls: [profile_url], // Array com URL do perfil do destinatário
         numberOfConnections: 1 // Enviar apenas 1 conexão por vez (mais seguro)
       }
     };
 
+    // Adicionar mensagem personalizada se Premium (formato pode variar por Agent)
+    if (has_premium && message) {
+      // Tentar múltiplos formatos possíveis
+      launchPayload.argument.message = message;
+      launchPayload.argument.messages = [message]; // Alguns agents usam array
+      launchPayload.argument.customMessage = message; // Outros usam customMessage
+    }
+
     console.log('[SEND-LINKEDIN-CONNECTION] 📦 Payload PhantomBuster:', JSON.stringify(launchPayload, null, 2));
+    console.log('[SEND-LINKEDIN-CONNECTION] 🔍 Agent ID:', phantomConnectionAgentId);
 
     const launchResponse = await fetch('https://api.phantombuster.com/api/v2/agents/launch', {
       method: 'POST',
@@ -116,16 +145,32 @@ serve(async (req) => {
 
     if (!launchResponse.ok) {
       const errorText = await launchResponse.text();
-      console.error('[SEND-LINKEDIN-CONNECTION] ❌ Erro ao lançar PhantomBuster:', launchResponse.status, errorText);
+      let errorJson: any = {};
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        // Se não for JSON, usar texto direto
+      }
+      
+      console.error('[SEND-LINKEDIN-CONNECTION] ❌ Erro ao lançar PhantomBuster:', {
+        status: launchResponse.status,
+        statusText: launchResponse.statusText,
+        errorText,
+        errorJson
+      });
       
       return new Response(
         JSON.stringify({
           success: false,
           error: `Erro ao enviar conexão (${launchResponse.status})`,
-          message: errorText || 'Falha ao iniciar automação do PhantomBuster',
+          message: errorJson?.error || errorJson?.message || errorText || 'Falha ao iniciar automação do PhantomBuster',
           details: {
             status: launchResponse.status,
-            error: errorText
+            statusText: launchResponse.statusText,
+            error: errorText,
+            errorJson,
+            agent_id: phantomConnectionAgentId,
+            payload_sent: launchPayload
           }
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -192,22 +237,39 @@ serve(async (req) => {
     });
 
     // ✅ ATUALIZAR REGISTRO NO BANCO
-    if (wasSent) {
-      const { error: updateError } = await supabase
-        .from('linkedin_connections')
-        .update({
-          status: 'sent',
-          sent_at: new Date().toISOString(),
-          phantom_container_id: containerId,
-          phantom_result: connectionResult
-        })
-        .eq('user_id', user_id)
-        .eq('decisor_linkedin_url', profile_url)
-        .order('created_at', { ascending: false })
-        .limit(1);
+    if (wasSent || connection_id) {
+      const updateData: any = {
+        phantom_container_id: containerId,
+        phantom_result: connectionResult
+      };
+
+      if (wasSent) {
+        updateData.status = 'sent';
+        updateData.sent_at = new Date().toISOString();
+      } else {
+        updateData.status = 'failed';
+      }
+
+      // 🔥 USAR connection_id SE DISPONÍVEL (mais preciso)
+      let updateQuery = supabase.from('linkedin_connections').update(updateData);
+      
+      if (connection_id) {
+        updateQuery = updateQuery.eq('id', connection_id);
+        console.log('[SEND-LINKEDIN-CONNECTION] 📝 Atualizando registro por ID:', connection_id);
+      } else {
+        // Fallback: buscar por user_id + profile_url
+        updateQuery = updateQuery
+          .eq('user_id', user_id)
+          .eq('decisor_linkedin_url', profile_url);
+        console.log('[SEND-LINKEDIN-CONNECTION] 📝 Atualizando registro por user_id + profile_url');
+      }
+
+      const { data: updatedRecord, error: updateError } = await updateQuery.select().single();
 
       if (updateError) {
         console.error('[SEND-LINKEDIN-CONNECTION] ⚠️ Erro ao atualizar registro:', updateError);
+      } else {
+        console.log('[SEND-LINKEDIN-CONNECTION] ✅ Registro atualizado:', updatedRecord?.id);
       }
     }
 

@@ -284,14 +284,25 @@ export function LinkedInConnectionModal({
         duration: 10000
       });
 
+      console.log('[LINKEDIN-MODAL] 🚀 Enviando conexão via Edge Function:', {
+        user_id: user.id,
+        profile_url: decisor.linkedin_url,
+        connection_id: connectionRecord?.id,
+        has_premium: linkedInPremium,
+        message_length: customMessage?.length || 0
+      });
+
       const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-linkedin-connection', {
         body: {
           user_id: user.id,
           profile_url: decisor.linkedin_url,
           message: linkedInPremium ? customMessage : undefined,
-          has_premium: linkedInPremium
+          has_premium: linkedInPremium,
+          connection_id: connectionRecord?.id // 🔥 PASSAR connection_id para atualizar registro
         }
       });
+
+      console.log('[LINKEDIN-MODAL] 📥 Resposta da Edge Function:', { sendResult, sendError });
 
       if (sendError || !sendResult?.success) {
         console.error('[LINKEDIN-MODAL] Erro ao enviar conexão:', sendError || sendResult);
