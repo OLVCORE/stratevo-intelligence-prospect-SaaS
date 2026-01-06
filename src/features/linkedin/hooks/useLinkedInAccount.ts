@@ -55,15 +55,23 @@ export function useLinkedInAccount() {
   // Desconectar conta
   const disconnectMutation = useMutation({
     mutationFn: async (accountId: string) => {
+      // ✅ ATUALIZAR STATUS NO BANCO
       const { error } = await supabase
         .from('linkedin_accounts')
         .update({ status: 'disconnected' })
         .eq('id', accountId);
 
       if (error) throw error;
+
+      // ✅ AGUARDAR UM POUCO PARA GARANTIR QUE O BANCO FOI ATUALIZADO
+      await new Promise(resolve => setTimeout(resolve, 300));
     },
     onSuccess: () => {
+      // ✅ INVALIDAR TODOS OS CACHES RELACIONADOS
       queryClient.invalidateQueries({ queryKey: ['linkedin-account'] });
+      queryClient.invalidateQueries({ queryKey: ['linkedin'] });
+      queryClient.removeQueries({ queryKey: ['linkedin-account'] });
+      
       toast.success('Conta LinkedIn desconectada');
     },
     onError: (error: Error) => {

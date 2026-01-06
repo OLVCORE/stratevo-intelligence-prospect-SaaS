@@ -4,8 +4,10 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Linkedin, CheckCircle2, AlertCircle, Loader2, XCircle, ExternalLink } from 'lucide-react';
+import { Linkedin, CheckCircle2, AlertCircle, Loader2, XCircle, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { initiateLinkedInOAuth, checkLinkedInOAuthStatus } from '@/services/linkedinOAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,9 +28,13 @@ export function LinkedInCredentialsDialog({
   const [isChecking, setIsChecking] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  // Verificar se já está conectado
+  // ✅ SEMPRE VERIFICAR STATUS QUANDO O MODAL ABRIR
   useEffect(() => {
     if (open) {
+      // ✅ FORÇAR RESET DO ESTADO ANTES DE VERIFICAR
+      setIsConnected(false);
+      setLinkedInAccount(null);
+      // ✅ VERIFICAR STATUS NO BANCO
       checkLinkedInConnection();
     }
   }, [open]);
@@ -36,29 +42,107 @@ export function LinkedInCredentialsDialog({
   const checkLinkedInConnection = async () => {
     setIsChecking(true);
     try {
-      const status = await checkLinkedInOAuthStatus();
-      setIsConnected(status.connected);
-      setLinkedInAccount(status.account);
+      // ✅ FORÇAR CONSULTA DIRETA AO BANCO (sem cache)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setIsConnected(false);
+        setLinkedInAccount(null);
+        return;
+      }
+
+      // ✅ PRIMEIRO: VERIFICAR TODAS AS CONTAS DO USUÁRIO (para debug)
+      const { data: allAccounts, error: allAccountsError } = await supabase
+        .from('linkedin_accounts')
+        .select('id, status, auth_method, linkedin_name, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (allAccountsError) {
+        console.error('[LINKEDIN-OAUTH] Erro ao buscar todas as contas:', allAccountsError);
+      } else {
+        console.log('[LINKEDIN-OAUTH] 🔍 TODAS as contas do usuário:', allAccounts);
+        const activeAccounts = allAccounts?.filter(a => a.status === 'active') || [];
+        console.log('[LINKEDIN-OAUTH] 🔍 Contas ATIVAS:', activeAccounts);
+        if (activeAccounts.length > 0) {
+          console.error('[LINKEDIN-OAUTH] ⚠️ PROBLEMA: Encontradas', activeAccounts.length, 'contas ATIVAS quando deveria estar DESCONECTADO!');
+        }
+      }
+
+      // ✅ CONSULTAR BANCO DIRETAMENTE - APENAS STATUS 'active'
+      const { data: account, error } = await supabase
+        .from('linkedin_accounts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active') // ✅ APENAS ATIVAS
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[LINKEDIN-OAUTH] ❌ Erro ao consultar banco:', error);
+        setIsConnected(false);
+        setLinkedInAccount(null);
+        return;
+      }
+
+      // ✅ SE NÃO TEM CONTA ATIVA, ESTÁ DESCONECTADO
+      if (!account) {
+        console.log('[LINKEDIN-OAUTH] ✅ Nenhuma conta ativa encontrada - DESCONECTADO');
+        setIsConnected(false);
+        setLinkedInAccount(null);
+        return;
+      }
+
+      // ✅ TEM CONTA ATIVA - MAS ISSO NÃO DEVERIA ACONTECER SE DESCONECTOU!
+      console.error('[LINKEDIN-OAUTH] ⚠️ PROBLEMA: Conta ativa encontrada quando deveria estar desconectada!', {
+        id: account.id,
+        status: account.status,
+        auth_method: account.auth_method,
+        name: account.linkedin_name,
+        created_at: account.created_at
+      });
+      setIsConnected(true);
+      setLinkedInAccount(account);
     } catch (error) {
       console.error('[LINKEDIN-OAUTH] Erro ao verificar conexão:', error);
       setIsConnected(false);
+      setLinkedInAccount(null);
     } finally {
       setIsChecking(false);
     }
   };
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
+    // ✅ SEMPRE VERIFICAR STATUS ANTES DE CONECTAR (forçar consulta ao banco)
+    await checkLinkedInConnection();
+    
+    // ✅ SE JÁ ESTÁ CONECTADO, NÃO PERMITIR
+    if (isConnected) {
+      toast.info('Você já está conectado', {
+        description: 'Sua conta LinkedIn já está conectada. Use "Desconectar" se quiser conectar outra conta.'
+      });
+      return;
+    }
+
     setIsConnecting(true);
     try {
-      initiateLinkedInOAuth();
-      // O redirecionamento vai acontecer automaticamente
-      toast.info('Redirecionando para LinkedIn...', {
-        description: 'Você será redirecionado para autorizar a conexão'
-      });
+      console.log('[LINKEDIN-OAUTH] Iniciando OAuth...');
+      
+      // ✅ VERIFICAR SE CLIENT_ID ESTÁ CONFIGURADO
+      const clientId = import.meta.env.VITE_LINKEDIN_CLIENT_ID;
+      if (!clientId || clientId.trim() === '') {
+        throw new Error('VITE_LINKEDIN_CLIENT_ID não está configurado no Vercel. Configure a variável de ambiente primeiro.');
+      }
+
+      // ✅ INICIAR OAUTH (vai redirecionar para LinkedIn)
+      await initiateLinkedInOAuth();
+      
+      // ✅ O redirecionamento vai acontecer automaticamente
+      // Não precisa mostrar toast aqui porque a página vai mudar
     } catch (error: any) {
       console.error('[LINKEDIN-OAUTH] Erro:', error);
       toast.error('Erro ao iniciar conexão', {
-        description: error.message || 'Verifique se VITE_LINKEDIN_CLIENT_ID está configurado'
+        description: error.message || 'Verifique se VITE_LINKEDIN_CLIENT_ID está configurado no Vercel'
       });
       setIsConnecting(false);
     }
@@ -67,26 +151,115 @@ export function LinkedInCredentialsDialog({
   const handleDisconnect = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Marcar conta como desconectada
-        const { error } = await supabase
+      if (!user) {
+        toast.error('Usuário não autenticado');
+        return;
+      }
+
+      console.log('[LINKEDIN-OAUTH] Iniciando desconexão para user:', user.id);
+
+      // ✅ BUSCAR TODAS AS CONTAS DO USUÁRIO (qualquer status)
+      const { data: accounts, error: fetchError } = await supabase
+        .from('linkedin_accounts')
+        .select('id, status')
+        .eq('user_id', user.id);
+
+      if (fetchError) {
+        console.error('[LINKEDIN-OAUTH] Erro ao buscar contas:', fetchError);
+        throw fetchError;
+      }
+
+      console.log('[LINKEDIN-OAUTH] Contas encontradas:', accounts);
+
+      // ✅ DESCONECTAR TODAS AS CONTAS DO USUÁRIO (QUALQUER STATUS)
+      if (accounts && accounts.length > 0) {
+        console.log('[LINKEDIN-OAUTH] 🔍 Contas encontradas antes de desconectar:', accounts);
+        
+        // ✅ ATUALIZAR TODAS AS CONTAS PARA 'disconnected' (não apenas as ativas)
+        const { error: updateError, data: updated } = await supabase
           .from('linkedin_accounts')
           .update({ status: 'disconnected' })
-          .eq('user_id', user.id);
+          .eq('user_id', user.id) // ✅ TODAS AS CONTAS DO USUÁRIO
+          .select('id, status');
 
-        if (error) throw error;
-
-        setIsConnected(false);
-        setLinkedInAccount(null);
-        toast.success('LinkedIn desconectado com sucesso');
-        
-        if (onAuthSuccess) {
-          onAuthSuccess();
+        if (updateError) {
+          console.error('[LINKEDIN-OAUTH] ❌ Erro ao atualizar status:', updateError);
+          throw updateError;
         }
+
+        console.log('[LINKEDIN-OAUTH] ✅ Contas atualizadas para disconnected:', updated);
+        
+        // ✅ VERIFICAR SE REALMENTE FOI ATUALIZADO
+        const { data: verifyAccounts } = await supabase
+          .from('linkedin_accounts')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('status', 'active');
+        
+        if (verifyAccounts && verifyAccounts.length > 0) {
+          console.error('[LINKEDIN-OAUTH] ⚠️ PROBLEMA: Ainda há', verifyAccounts.length, 'contas ATIVAS após desconectar!', verifyAccounts);
+          throw new Error('Falha ao desconectar: ainda há contas ativas no banco');
+        } else {
+          console.log('[LINKEDIN-OAUTH] ✅ Confirmado: Nenhuma conta ativa após desconectar');
+        }
+      } else {
+        console.log('[LINKEDIN-OAUTH] ℹ️ Nenhuma conta encontrada para desconectar');
+      }
+
+      // ✅ LIMPAR DADOS ANTIGOS DA TABELA PROFILES (se existir)
+      try {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ 
+            linkedin_connected: false,
+            linkedin_session_cookie: null,
+            linkedin_access_token: null
+          })
+          .eq('id', user.id);
+
+        if (profileError && profileError.code !== 'PGRST116' && profileError.code !== '42P01') {
+          console.warn('[LINKEDIN-OAUTH] Aviso ao limpar dados antigos do profiles:', profileError);
+          // Não lançar erro, apenas avisar
+        } else {
+          console.log('[LINKEDIN-OAUTH] Dados antigos do profiles limpos');
+        }
+      } catch (profileCleanError) {
+        console.warn('[LINKEDIN-OAUTH] Erro ao limpar profiles (pode não existir):', profileCleanError);
+        // Não lançar erro, apenas avisar
+      }
+
+      // ✅ FORÇAR ATUALIZAÇÃO DO ESTADO LOCAL IMEDIATAMENTE
+      setIsConnected(false);
+      setLinkedInAccount(null);
+      
+      // ✅ AGUARDAR PARA GARANTIR QUE O BANCO FOI ATUALIZADO
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // ✅ VERIFICAR NOVAMENTE O STATUS DO BANCO (deve retornar desconectado)
+      await checkLinkedInConnection();
+      
+      // ✅ VERIFICAR MAIS UMA VEZ PARA TER CERTEZA
+      const { data: verifyAccount } = await supabase
+        .from('linkedin_accounts')
+        .select('id, status')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (verifyAccount) {
+        console.error('[LINKEDIN-OAUTH] ⚠️ AINDA TEM CONTA ATIVA APÓS DESCONECTAR!', verifyAccount);
+        toast.error('Erro: Ainda há conta ativa. Tente novamente.');
+      } else {
+        console.log('[LINKEDIN-OAUTH] ✅ Confirmado: Nenhuma conta ativa');
+        toast.success('LinkedIn desconectado com sucesso');
+      }
+      
+      if (onAuthSuccess) {
+        onAuthSuccess();
       }
     } catch (error: any) {
       console.error('[LINKEDIN-OAUTH] Erro ao desconectar:', error);
-      toast.error('Erro ao desconectar LinkedIn');
+      toast.error('Erro ao desconectar LinkedIn: ' + (error.message || 'Erro desconhecido'));
     }
   };
 
@@ -199,15 +372,134 @@ export function LinkedInCredentialsDialog({
           )}
 
           {isConnected && (
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                onClick={handleDisconnect}
-                className="text-red-600 hover:text-red-700"
-              >
-                <XCircle className="w-4 h-4 mr-2" />
-                Desconectar
-              </Button>
+            <div className="space-y-4">
+              {/* ✅ CAMPO PARA COOKIE li_at (mesmo com OAuth) */}
+              <div className="space-y-2">
+                <Label htmlFor="li_at_cookie" className="text-sm font-medium">
+                  Cookie li_at (Opcional - necessário para enviar conexões)
+                </Label>
+                <div className="space-y-2">
+                  <Input
+                    id="li_at_cookie"
+                    type="password"
+                    placeholder="Cole o cookie li_at aqui (obtido do navegador)"
+                    value={linkedInAccount?.li_at_cookie || ''}
+                    onChange={async (e) => {
+                      const cookieValue = e.target.value.trim();
+                      if (!cookieValue) return;
+
+                      try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (!user || !linkedInAccount?.id) return;
+
+                        const { error } = await supabase
+                          .from('linkedin_accounts')
+                          .update({ li_at_cookie: cookieValue })
+                          .eq('id', linkedInAccount.id);
+
+                        if (error) {
+                          toast.error('Erro ao salvar cookie: ' + error.message);
+                        } else {
+                          toast.success('Cookie salvo com sucesso!');
+                          await checkLinkedInConnection();
+                        }
+                      } catch (error: any) {
+                        toast.error('Erro: ' + error.message);
+                      }
+                    }}
+                    className="font-mono text-xs"
+                  />
+                  {!linkedInAccount?.li_at_cookie && (
+                    <Alert className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 mt-2">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <AlertTitle className="text-amber-800 dark:text-amber-200 text-xs">
+                        ⚠️ Cookie necessário para enviar conexões
+                      </AlertTitle>
+                      <AlertDescription className="text-amber-700 dark:text-amber-300 text-xs">
+                        <p className="mt-1">
+                          Para enviar conexões via PhantomBuster, é necessário fornecer o cookie <strong>li_at</strong> <strong>apenas uma vez</strong>.
+                        </p>
+                        <p className="mt-2 font-semibold">Como obter (2 minutos):</p>
+                        <ol className="list-decimal ml-4 mt-1 space-y-1">
+                          <li>Abra o LinkedIn no navegador (você já está logado após OAuth)</li>
+                          <li>Pressione <strong>F12</strong> → <strong>Application</strong> → <strong>Cookies</strong> → <strong>linkedin.com</strong></li>
+                          <li>Copie o valor do cookie <strong>"li_at"</strong></li>
+                          <li>Cole no campo acima</li>
+                        </ol>
+                        <p className="mt-2 text-xs font-semibold">
+                          ✅ Após salvar, o sistema funcionará 100% automaticamente!
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {linkedInAccount?.li_at_cookie && (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                      ✅ Cookie configurado - Sistema pronto para enviar conexões automaticamente!
+                    </p>
+                  )}
+                  {linkedInAccount?.li_at_cookie && (
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      ✅ Cookie configurado - Conexões podem ser enviadas
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    // ✅ FORÇAR DESCONEXÃO TOTAL - LIMPAR TUDO
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) return;
+
+                      console.log('[LINKEDIN-OAUTH] 🔥 FORÇANDO DESCONEXÃO TOTAL...');
+                      
+                      // 1. Desconectar TODAS as contas (qualquer status)
+                      const { error: disconnectError } = await supabase
+                        .from('linkedin_accounts')
+                        .update({ status: 'disconnected' })
+                        .eq('user_id', user.id);
+
+                      if (disconnectError) {
+                        console.error('[LINKEDIN-OAUTH] Erro ao desconectar:', disconnectError);
+                      }
+
+                      // 2. Limpar dados antigos do profiles
+                      await supabase
+                        .from('profiles')
+                        .update({ 
+                          linkedin_connected: false,
+                          linkedin_session_cookie: null,
+                          linkedin_access_token: null
+                        })
+                        .eq('id', user.id);
+
+                      // 3. Verificar novamente
+                      await checkLinkedInConnection();
+                      
+                      toast.success('Desconexão total realizada');
+                    } catch (error: any) {
+                      console.error('[LINKEDIN-OAUTH] Erro na desconexão total:', error);
+                      toast.error('Erro: ' + error.message);
+                    }
+                  }}
+                  className="text-orange-600 hover:text-orange-700"
+                  size="sm"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Forçar Desconexão Total
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleDisconnect}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Desconectar
+                </Button>
+              </div>
             </div>
           )}
 

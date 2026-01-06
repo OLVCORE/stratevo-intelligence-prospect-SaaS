@@ -18,6 +18,7 @@ import {
 import { Linkedin, CheckCircle2, AlertCircle, Loader2, ExternalLink } from "lucide-react";
 import { initiateLinkedInOAuth, checkLinkedInOAuthStatus } from "@/services/linkedinOAuth";
 import { useLinkedInAccount } from "../hooks/useLinkedInAccount";
+import { toast } from "sonner";
 
 export function LinkedInConnect() {
   const { account, isLoading } = useLinkedInAccount();
@@ -31,23 +32,38 @@ export function LinkedInConnect() {
     }
   }, [open, account]);
 
+  // ✅ VERIFICAR STATUS SEMPRE QUE O MODAL ABRIR (forçar consulta ao banco)
   const checkStatus = async () => {
+    // ✅ SEMPRE CONSULTAR O BANCO (sem usar cache)
     const status = await checkLinkedInOAuthStatus();
     setOauthStatus(status);
   };
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     setIsConnecting(true);
     try {
-      initiateLinkedInOAuth();
+      // ✅ VERIFICAR SE JÁ ESTÁ CONECTADO
+      if (isConnected) {
+        toast.info('Você já está conectado');
+        setIsConnecting(false);
+        return;
+      }
+
+      // ✅ INICIAR OAUTH (vai redirecionar para LinkedIn)
+      await initiateLinkedInOAuth();
       // O redirecionamento vai acontecer automaticamente
     } catch (error: any) {
       console.error('[LinkedIn Connect] Erro:', error);
+      toast.error('Erro ao conectar', {
+        description: error.message || 'Verifique se VITE_LINKEDIN_CLIENT_ID está configurado'
+      });
       setIsConnecting(false);
     }
   };
 
-  const isConnected = oauthStatus?.connected || !!account;
+  // ✅ VERIFICAR STATUS REAL DO BANCO (não confiar apenas no cache)
+  // Se oauthStatus diz que está conectado, usar isso. Caso contrário, verificar account
+  const isConnected = oauthStatus?.connected === true;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

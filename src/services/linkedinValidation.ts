@@ -15,8 +15,9 @@ export interface LinkedInValidationResult {
 }
 
 /**
- * ✅ VALIDAÇÃO UNIFICADA: Verifica OAuth primeiro, depois método antigo
+ * ✅ VALIDAÇÃO UNIFICADA: APENAS OAuth (sem fallback para método antigo)
  * Similar ao Summitfy.ai - valida antes de marcar como conectado
+ * ⚠️ REMOVIDO FALLBACK: Não usa mais profiles.linkedin_connected
  */
 export async function validateLinkedInConnection(): Promise<LinkedInValidationResult> {
   try {
@@ -25,116 +26,27 @@ export async function validateLinkedInConnection(): Promise<LinkedInValidationRe
       return { isValid: false, isConnected: false, error: 'Usuário não autenticado' };
     }
 
-    // ✅ PRIORIDADE 1: Verificar OAuth (novo método)
-    try {
-      const { checkLinkedInOAuthStatus } = await import('@/services/linkedinOAuth');
-      const oauthStatus = await checkLinkedInOAuthStatus();
-      if (oauthStatus.connected && oauthStatus.account) {
-        return {
-          isValid: true,
-          isConnected: true,
-          profile: {
-            name: oauthStatus.account.linkedin_name,
-            email: oauthStatus.account.linkedin_email,
-            profileUrl: oauthStatus.account.linkedin_profile_url,
-          },
-        };
-      }
-    } catch (error) {
-      console.warn('[LINKEDIN-VALIDATION] OAuth não disponível, tentando método antigo...');
-    }
-
-    // ✅ FALLBACK: Verificar método antigo (profiles)
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('linkedin_connected, linkedin_session_cookie, linkedin_access_token, linkedin_profile_data, linkedin_profile_url')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profileError && profileError.code !== 'PGRST116') {
-      console.error('[LINKEDIN-VALIDATION] Erro ao buscar perfil:', profileError);
-      return { isValid: false, isConnected: false, error: profileError.message };
-    }
-
-    // Se não tem perfil
-    if (!profile) {
-      return { isValid: false, isConnected: false, error: 'Perfil não encontrado' };
-    }
-
-    // ✅ VALIDAÇÃO REAL: Testar se session cookie ou access token funciona
-    const hasSessionCookie = !!profile.linkedin_session_cookie;
-    const hasAccessToken = !!profile.linkedin_access_token;
-
-    // Se não tem credenciais, não está conectado
-    if (!hasSessionCookie && !hasAccessToken) {
-      return {
-        isValid: false,
-        isConnected: false,
-        error: 'Credenciais não encontradas. Reconecte sua conta.'
-      };
-    }
-
-    // Se tem credenciais mas não está marcado como conectado, ainda assim consideramos válido
-    // (pode ser que o flag não foi atualizado ainda)
-    const isMarkedAsConnected = profile.linkedin_connected === true;
-
-    // Se tem credenciais, está conectado (mesmo que o flag não esteja atualizado)
-    if (hasSessionCookie || hasAccessToken) {
-      // Se o flag não está atualizado, atualizar agora
-      if (!isMarkedAsConnected) {
-        console.log('[LINKEDIN-VALIDATION] ⚠️ Flag não atualizado, mas credenciais existem. Atualizando...');
-        // Atualizar flag silenciosamente (não esperar resultado)
-        supabase
-          .from('profiles')
-          .update({ linkedin_connected: true })
-          .eq('id', user.id)
-          .then(({ error }) => {
-            if (error) {
-              console.warn('[LINKEDIN-VALIDATION] Erro ao atualizar flag:', error);
-            }
-          });
-      }
-      
-      // Retornar como conectado
+    // ✅ APENAS OAuth - SEM FALLBACK
+    const { checkLinkedInOAuthStatus } = await import('@/services/linkedinOAuth');
+    const oauthStatus = await checkLinkedInOAuthStatus();
+    
+    if (oauthStatus.connected && oauthStatus.account) {
       return {
         isValid: true,
         isConnected: true,
-        profile: profile.linkedin_profile_data || {
-          name: profile.linkedin_profile_url ? 'Perfil LinkedIn' : undefined,
-          profileUrl: profile.linkedin_profile_url
-        }
+        profile: {
+          name: oauthStatus.account.linkedin_name,
+          email: oauthStatus.account.linkedin_email,
+          profileUrl: oauthStatus.account.linkedin_profile_url,
+        },
       };
     }
 
-    // Se chegou aqui e não tem credenciais, não está conectado
-    return { isValid: false, isConnected: false, error: 'LinkedIn não conectado' };
-
-    // ✅ TESTAR CREDENCIAIS: Fazer uma chamada de teste ao LinkedIn
-    // Por enquanto, validamos se temos as credenciais
-    // Em produção, podemos fazer uma chamada real à API do LinkedIn para validar
-    
-    // Se tem session cookie, podemos testar via PhantomBuster
-    if (hasSessionCookie) {
-      // TODO: Fazer chamada de teste ao PhantomBuster para validar session cookie
-      // Por enquanto, assumimos que se tem session cookie, está válido
-      // (mas idealmente deveríamos testar)
-    }
-
-    // Se tem access token, podemos testar via LinkedIn API
-    if (hasAccessToken) {
-      // TODO: Fazer chamada de teste à LinkedIn API para validar token
-      // Por enquanto, assumimos que se tem token, está válido
-      // (mas idealmente deveríamos testar)
-    }
-
-    // Se chegou aqui, tem credenciais e está marcado como conectado
-    return {
-      isValid: true,
-      isConnected: true,
-      profile: profile.linkedin_profile_data || {
-        name: profile.linkedin_profile_url ? 'Perfil LinkedIn' : undefined,
-        profileUrl: profile.linkedin_profile_url
-      }
+    // ✅ SE NÃO TEM OAUTH, NÃO ESTÁ CONECTADO
+    return { 
+      isValid: false, 
+      isConnected: false, 
+      error: 'LinkedIn não conectado via OAuth. Conecte sua conta.' 
     };
 
   } catch (error: any) {

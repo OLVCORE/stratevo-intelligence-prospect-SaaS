@@ -83,47 +83,65 @@ export function LinkedInConnectionModal({
     }
   }, [open]);
 
-  // ✅ NOVO: Re-verificar status quando modal reabre (após conectar)
-  // 🔥 SEMPRE verificar a cada 5 segundos para detectar mudanças de status
+  // ✅ Verificar status quando modal abre
   useEffect(() => {
     if (open) {
-      // Verificar status IMEDIATAMENTE ao abrir
-      checkLinkedInStatus();
-      
-      // Re-verificar status a cada 5 segundos enquanto modal estiver aberto
-      // SEMPRE verificar (não apenas se não conectado) para detectar mudanças
-      const interval = setInterval(() => {
-        checkLinkedInStatus();
-      }, 5000); // 5 segundos
-      
-      return () => clearInterval(interval);
-    } else {
-      // 🔥 NOVO: Quando modal fecha, verificar status uma última vez
-      // Isso garante que o status seja atualizado mesmo após fechar
+      // Verificar status apenas quando modal abre
       checkLinkedInStatus();
     }
-  }, [open]); // Remover linkedInConnected da dependência para sempre verificar
+  }, [open]);
 
   const checkLinkedInStatus = async () => {
     try {
-      // ✅ USAR OAUTH STATUS (novo método)
-      const status = await checkLinkedInOAuthStatus();
-      
+      // ✅ FORÇAR CONSULTA DIRETA AO BANCO (sem cache)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('[LINKEDIN-CONNECTION] Usuário não autenticado');
+        setLinkedInConnected(false);
+        return;
+      }
+
+      // ✅ CONSULTAR BANCO DIRETAMENTE - SEM CACHE
+      const { data: oauthAccount, error: oauthError } = await supabase
+        .from('linkedin_accounts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (oauthError) {
+        console.error('[LINKEDIN-CONNECTION] ❌ Erro ao consultar banco:', oauthError);
+        setLinkedInConnected(false);
+        return;
+      }
+
       const wasConnected = linkedInConnected;
-      const isNowConnected = status.connected;
-      
-      // 🔥 SEMPRE atualizar estado, mesmo se não mudou (para garantir sincronização)
+      const isNowConnected = !!oauthAccount;
+
+      // 🔥 SEMPRE atualizar estado
       setLinkedInConnected(isNowConnected);
-      
-      // 🔥 Log apenas se mudou de estado (para evitar spam)
-      if (isNowConnected && !wasConnected) {
-        console.log('[LINKEDIN-CONNECTION] ✅ LinkedIn conectado via OAuth!');
-      } else if (!isNowConnected && wasConnected) {
-        console.warn('[LINKEDIN-CONNECTION] LinkedIn desconectado');
+
+      // 🔥 Log detalhado
+      if (isNowConnected) {
+        console.log('[LINKEDIN-CONNECTION] ✅ LinkedIn conectado via OAuth!', {
+          accountId: oauthAccount.id,
+          status: oauthAccount.status,
+          authMethod: oauthAccount.auth_method,
+          name: oauthAccount.linkedin_name
+        });
+      } else {
+        console.warn('[LINKEDIN-CONNECTION] ⚠️ LinkedIn não conectado - Nenhuma conta ativa encontrada');
+      }
+
+      // 🔥 Se mudou de desconectado para conectado, chamar callback
+      if (isNowConnected && !wasConnected && onAuthSuccess) {
+        onAuthSuccess();
       }
     } catch (error) {
-      // Silenciar erros repetidos
-      console.error('[LINKEDIN-CONNECTION] Erro ao verificar status:', error);
+      console.error('[LINKEDIN-CONNECTION] ❌ Erro ao verificar status:', error);
+      setLinkedInConnected(false);
     }
   };
 
@@ -302,10 +320,7 @@ export function LinkedInConnectionModal({
       }
 
       // ✅ ENVIAR CONEXÃO REAL via PhantomBuster (Edge Function)
-      toast.loading('Enviando conexão via PhantomBuster...', {
-        description: 'Aguarde, estamos enviando a conexão real ao LinkedIn.',
-        duration: 10000
-      });
+      // Removido toast.loading - usar apenas loader no botão
 
       console.log('[LINKEDIN-MODAL] 🚀 Enviando conexão via Edge Function:', {
         user_id: user.id,
@@ -424,11 +439,31 @@ export function LinkedInConnectionModal({
             </div>
           ) : (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-              <div className="flex items-center gap-2">
-                <XCircle className="w-4 h-4 text-red-600" />
-                <span className="text-sm font-medium text-red-800 dark:text-red-200">
-                  LinkedIn não conectado - Conecte sua conta para enviar conexões
-                </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-sm font-medium text-red-800 dark:text-red-200">
+                    LinkedIn não conectado - Conecte sua conta para enviar conexões
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    onOpenChange(false);
+                    if (onOpenAuthDialog) {
+                      setTimeout(() => {
+                        onOpenAuthDialog();
+                      }, 300);
+                    } else {
+                      window.location.href = '/settings';
+                    }
+                  }}
+                  className="text-red-700 border-red-300 hover:bg-red-100"
+                >
+                  <Linkedin className="w-4 h-4 mr-2" />
+                  Conectar LinkedIn
+                </Button>
               </div>
             </div>
           )}
