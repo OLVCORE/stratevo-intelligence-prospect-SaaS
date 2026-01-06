@@ -377,11 +377,24 @@ export default function UsageVerificationCard({
   };
 
   // 🔥 NOVO: Hook para análise de fit de produtos
+  // 🔥 CORRIGIDO: Garantir que tenantId esteja disponível antes de chamar useProductFit
   const { data: fitData, isLoading: isLoadingFit, refetch, isFetching } = useProductFit({
-    companyId,
-    tenantId: tenant?.id,
-    enabled: enabled && !!companyId && !!tenant?.id,
+    companyId: companyId || undefined,
+    tenantId: tenant?.id || undefined,
+    enabled: enabled && !!companyId && !!tenant?.id, // Só habilitar se ambos estiverem disponíveis
   });
+  
+  // 🔥 DEBUG: Log para verificar se companyId e tenantId estão disponíveis
+  useEffect(() => {
+    if (enabled) {
+      console.log('[PRODUCT-FIT] 🔍 Verificando parâmetros:', {
+        companyId: companyId || 'NÃO DISPONÍVEL',
+        tenantId: tenant?.id || 'NÃO DISPONÍVEL',
+        enabled,
+        willCall: !!companyId && !!tenant?.id
+      });
+    }
+  }, [companyId, tenant?.id, enabled]);
 
   // ✅ BUSCAR DADOS DA EMPRESA (incluindo linkedin_url) do banco
   const { data: companyData } = useQuery({
