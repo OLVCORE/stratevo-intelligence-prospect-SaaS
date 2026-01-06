@@ -583,8 +583,9 @@ export default function SettingsPage() {
         open={linkedInAuthOpen}
         onOpenChange={setLinkedInAuthOpen}
         onAuthSuccess={() => {
+          // ✅ Atualizar status após conectar
           checkLinkedInStatus();
-          toast.success('LinkedIn conectado com sucesso!');
+          // Toast já é exibido pelo LinkedInCredentialsDialog
         }}
       />
     </AppLayout>
