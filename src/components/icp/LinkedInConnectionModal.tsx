@@ -80,8 +80,15 @@ export function LinkedInConnectionModal({
   }, [open]);
 
   const checkLinkedInStatus = async () => {
-    const { isConnected } = await checkLinkedInAuth();
-    setLinkedInConnected(isConnected);
+    // ✅ USAR VALIDAÇÃO UNIFICADA (mesma função do Settings)
+    const { validateLinkedInConnection } = await import('@/services/linkedinValidation');
+    const validation = await validateLinkedInConnection();
+    
+    setLinkedInConnected(validation.isConnected && validation.isValid);
+    
+    if (!validation.isValid && validation.error) {
+      console.warn('[LINKEDIN-CONNECTION] Status inválido:', validation.error);
+    }
   };
 
   const loadUserData = async () => {

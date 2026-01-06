@@ -48,36 +48,20 @@ export async function initiateLinkedInAuth(): Promise<void> {
 }
 
 /**
- * Verificar se o usuário está autenticado no LinkedIn
+ * ✅ VERIFICAÇÃO UNIFICADA: Usa validação real
  */
 export async function checkLinkedInAuth(): Promise<{
   isConnected: boolean;
   profile?: LinkedInProfile;
 }> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { isConnected: false };
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('linkedin_connected, linkedin_profile_url, linkedin_access_token, linkedin_profile_data')
-      .eq('id', user.id)
-      .single();
-
-    if (profile?.linkedin_connected && profile?.linkedin_access_token) {
-      return {
-        isConnected: true,
-        profile: profile.linkedin_profile_data as LinkedInProfile
-      };
-    }
-
-    return { isConnected: false };
-  } catch (error) {
-    console.error('[LinkedIn OAuth] Erro ao verificar autenticação:', error);
-    return { isConnected: false };
-  }
+  // Usar serviço de validação unificado
+  const { validateLinkedInConnection } = await import('./linkedinValidation');
+  const validation = await validateLinkedInConnection();
+  
+  return {
+    isConnected: validation.isConnected && validation.isValid,
+    profile: validation.profile as LinkedInProfile
+  };
 }
 
 /**

@@ -139,8 +139,26 @@ export function LinkedInCredentialsDialog({
       setIsConnected(true);
       setLinkedInProfile({ email, connected_via: 'credentials' });
       
-      toast.success('LinkedIn conectado com sucesso!', {
-        description: 'Suas credenciais foram salvas. As conexões serão enviadas pela sua conta.'
+      // ✅ VALIDAR CREDENCIAIS ANTES DE MARCAR COMO CONECTADO
+      toast.info('Validando credenciais do LinkedIn...', {
+        description: 'Testando se suas credenciais funcionam...'
+      });
+
+      // Testar session cookie se foi usado
+      if (useSessionCookie && sessionCookie) {
+        const { testLinkedInSessionCookie } = await import('@/services/linkedinValidation');
+        const isValid = await testLinkedInSessionCookie(sessionCookie);
+        
+        if (!isValid) {
+          toast.error('Credenciais inválidas', {
+            description: 'O session cookie não está funcionando. Verifique se está correto.'
+          });
+          return;
+        }
+      }
+
+      toast.success('LinkedIn conectado e validado com sucesso!', {
+        description: 'Suas credenciais foram testadas e estão funcionando. As conexões serão enviadas pela sua conta.'
       });
 
       onAuthSuccess?.();
