@@ -19,7 +19,6 @@ import { toast } from 'sonner';
 import { Loader2, Upload, Settings, Linkedin, CheckCircle2, XCircle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LinkedInCredentialsDialog } from '@/components/icp/LinkedInCredentialsDialog';
-import { useState } from 'react';
 
 interface UserProfile {
   id: string;
