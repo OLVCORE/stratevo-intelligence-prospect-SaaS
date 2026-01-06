@@ -16,21 +16,23 @@ interface CollectLeadsRequest {
   linkedin_search_url: string;
   max_leads?: number; // Máximo 50 (conforme solicitado)
   company_id?: string;
+  source_name?: string; // ✅ NOVO: Nome da origem dos leads
+  tenant_id?: string; // ✅ NOVO: Tenant ID para multi-tenant
 }
 
 const MAX_LEADS = 50; // Limite máximo por URL
 
 serve(async (req) => {
-  // Handle CORS preflight
+  // Handle CORS preflight - ✅ CORRIGIDO
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
-      status: 200,
+    return new Response(null, { 
+      status: 204,
       headers: corsHeaders 
     });
   }
 
   try {
-    const { linkedin_search_url, max_leads = 25, company_id }: CollectLeadsRequest = await req.json();
+    const { linkedin_search_url, max_leads = 25, company_id, source_name, tenant_id }: CollectLeadsRequest = await req.json();
 
     if (!linkedin_search_url) {
       return new Response(
