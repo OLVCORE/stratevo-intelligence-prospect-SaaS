@@ -27,6 +27,7 @@ interface LinkedInConnectionModalProps {
     company_name?: string;
   };
   onConnectionSent?: () => void;
+  onOpenAuthDialog?: () => void; // ✅ NOVO: Callback para abrir modal de autenticação
 }
 
 // Templates de mensagens validadas
@@ -56,7 +57,8 @@ export function LinkedInConnectionModal({
   open,
   onOpenChange,
   decisor,
-  onConnectionSent
+  onConnectionSent,
+  onOpenAuthDialog // ✅ NOVO: Receber callback
 }: LinkedInConnectionModalProps) {
   const [linkedInPremium, setLinkedInPremium] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
@@ -76,6 +78,17 @@ export function LinkedInConnectionModal({
       loadUserData();
       loadConnectionsCount();
       checkLinkedInStatus();
+    }
+  }, [open]);
+
+  // ✅ NOVO: Re-verificar status quando modal reabre (após conectar)
+  useEffect(() => {
+    if (open) {
+      // Re-verificar status a cada 2 segundos enquanto modal estiver aberto
+      const interval = setInterval(() => {
+        checkLinkedInStatus();
+      }, 2000);
+      return () => clearInterval(interval);
     }
   }, [open]);
 
@@ -205,10 +218,19 @@ export function LinkedInConnectionModal({
         action: {
           label: 'Conectar',
           onClick: () => {
-            onOpenChange(false);
-            // Abrir modal de autenticação (será implementado no componente pai)
+            onOpenChange(false); // Fechar modal de conexão
+            // ✅ Abrir modal de autenticação via callback
+            if (onOpenAuthDialog) {
+              setTimeout(() => {
+                onOpenAuthDialog();
+              }, 300); // Pequeno delay para fechar primeiro modal
+            } else {
+              // Fallback: redirecionar para Settings
+              window.location.href = '/settings';
+            }
           }
-        }
+        },
+        duration: 5000 // Manter toast visível por mais tempo
       });
       return;
     }

@@ -161,6 +161,14 @@ export function LinkedInCredentialsDialog({
         description: 'Suas credenciais foram testadas e estão funcionando. As conexões serão enviadas pela sua conta.'
       });
 
+      // ✅ Atualizar status local
+      setIsConnected(true);
+      
+      // ✅ Chamar callback para atualizar status em outros componentes
+      if (onAuthSuccess) {
+        onAuthSuccess();
+      }
+
       onAuthSuccess?.();
     } catch (error: any) {
       console.error('[LINKEDIN-CREDENTIALS] Erro:', error);

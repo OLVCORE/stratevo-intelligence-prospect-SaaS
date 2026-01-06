@@ -1548,6 +1548,13 @@ export function DecisorsContactsTab({
           // Recarregar dados após conexão enviada
           handleRefreshData();
         }}
+        onOpenAuthDialog={() => {
+          // ✅ Abrir modal de autenticação quando toast for clicado
+          setLinkedInConnectionModalOpen(false);
+          setTimeout(() => {
+            setLinkedInAuthOpen(true);
+          }, 300);
+        }}
       />
 
       {/* 🔐 AUTENTICAÇÃO LINKEDIN */}
@@ -1556,6 +1563,15 @@ export function DecisorsContactsTab({
         onOpenChange={setLinkedInAuthOpen}
         onAuthSuccess={() => {
           toast.success('LinkedIn conectado com sucesso!');
+          // ✅ Reabrir modal de conexão após conectar
+          setTimeout(() => {
+            if (selectedDecisorForConnection) {
+              setLinkedInAuthOpen(false);
+              setTimeout(() => {
+                setLinkedInConnectionModalOpen(true);
+              }, 300);
+            }
+          }, 1000);
         }}
       />
     </div>
