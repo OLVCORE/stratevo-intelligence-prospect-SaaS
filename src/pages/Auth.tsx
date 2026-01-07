@@ -22,12 +22,22 @@ export default function Auth() {
 
   // Redirecionar se já estiver autenticado
   useEffect(() => {
+    console.log('[Auth] 🔍 Verificando redirecionamento:', { 
+      authLoading, 
+      tenantLoading, 
+      hasUser: !!user, 
+      hasTenant: !!tenant,
+      pathname: window.location.pathname
+    });
+    
     if (!authLoading && !tenantLoading && user) {
       if (tenant) {
         // Tem tenant → redirecionar para dashboard
+        console.log('[Auth] ✅ Usuário autenticado com tenant, redirecionando para /dashboard');
         navigate('/dashboard', { replace: true });
       } else {
         // Não tem tenant → redirecionar para onboarding
+        console.log('[Auth] ✅ Usuário autenticado sem tenant, redirecionando para /tenant-onboarding');
         navigate('/tenant-onboarding', { replace: true });
       }
     }
@@ -41,9 +51,11 @@ export default function Auth() {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
+    console.log('[Auth] 🔐 Tentando fazer login...');
     const { error } = await signIn(email, password);
 
     if (error) {
+      console.error('[Auth] ❌ Erro no login:', error);
       toast({
         variant: 'destructive',
         title: 'Erro ao fazer login',
@@ -53,6 +65,7 @@ export default function Auth() {
       });
       setIsLoading(false);
     } else {
+      console.log('[Auth] ✅ Login bem-sucedido, aguardando redirecionamento...');
       // Login bem-sucedido - aguardar TenantContext carregar e redirecionar
       // O useEffect acima vai fazer o redirecionamento
       setIsLoading(false);

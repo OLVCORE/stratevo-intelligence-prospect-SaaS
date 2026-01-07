@@ -57,9 +57,14 @@ const LINKEDIN_SCOPES = [
  */
 export async function initiateLinkedInOAuth(): Promise<void> {
   // ✅ VALIDAÇÃO RIGOROSA: Se não tiver CLIENT_ID, não pode conectar
+  console.log('[LinkedIn OAuth] 🔍 Verificando configuração...');
+  console.log('[LinkedIn OAuth] 🔍 LINKEDIN_CLIENT_ID:', LINKEDIN_CLIENT_ID ? `${LINKEDIN_CLIENT_ID.substring(0, 10)}...` : 'NÃO CONFIGURADO');
+  console.log('[LinkedIn OAuth] 🔍 LINKEDIN_REDIRECT_URI:', LINKEDIN_REDIRECT_URI);
+  
   if (!LINKEDIN_CLIENT_ID || LINKEDIN_CLIENT_ID.trim() === '') {
     const errorMsg = 'LINKEDIN_CLIENT_ID não configurado. Configure VITE_LINKEDIN_CLIENT_ID no Vercel.';
-    console.error('[LinkedIn OAuth]', errorMsg);
+    console.error('[LinkedIn OAuth] ❌', errorMsg);
+    console.error('[LinkedIn OAuth] ❌ Variáveis disponíveis:', Object.keys(import.meta.env).filter(k => k.includes('LINKEDIN')));
     throw new Error(errorMsg);
   }
 

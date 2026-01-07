@@ -126,21 +126,30 @@ export function LinkedInCredentialsDialog({
 
     setIsConnecting(true);
     try {
-      console.log('[LINKEDIN-OAUTH] Iniciando OAuth...');
+      console.log('[LINKEDIN-OAUTH] 🚀 Iniciando OAuth...');
+      console.log('[LINKEDIN-OAUTH] 🔍 Verificando variáveis de ambiente...');
       
       // ✅ VERIFICAR SE CLIENT_ID ESTÁ CONFIGURADO
       const clientId = import.meta.env.VITE_LINKEDIN_CLIENT_ID;
+      console.log('[LINKEDIN-OAUTH] 🔍 VITE_LINKEDIN_CLIENT_ID:', clientId ? `${clientId.substring(0, 10)}...` : 'NÃO CONFIGURADO');
+      console.log('[LINKEDIN-OAUTH] 🔍 VITE_LINKEDIN_REDIRECT_URI:', import.meta.env.VITE_LINKEDIN_REDIRECT_URI || 'NÃO CONFIGURADO');
+      console.log('[LINKEDIN-OAUTH] 🔍 VITE_APP_URL:', import.meta.env.VITE_APP_URL || 'NÃO CONFIGURADO');
+      
       if (!clientId || clientId.trim() === '') {
-        throw new Error('VITE_LINKEDIN_CLIENT_ID não está configurado no Vercel. Configure a variável de ambiente primeiro.');
+        const errorMsg = 'VITE_LINKEDIN_CLIENT_ID não está configurado no Vercel. Configure a variável de ambiente primeiro.';
+        console.error('[LINKEDIN-OAUTH] ❌', errorMsg);
+        throw new Error(errorMsg);
       }
 
       // ✅ INICIAR OAUTH (vai redirecionar para LinkedIn)
+      console.log('[LINKEDIN-OAUTH] ✅ Configuração OK, iniciando OAuth...');
       await initiateLinkedInOAuth();
       
       // ✅ O redirecionamento vai acontecer automaticamente
       // Não precisa mostrar toast aqui porque a página vai mudar
+      console.log('[LINKEDIN-OAUTH] ✅ OAuth iniciado, redirecionando para LinkedIn...');
     } catch (error: any) {
-      console.error('[LINKEDIN-OAUTH] Erro:', error);
+      console.error('[LINKEDIN-OAUTH] ❌ Erro:', error);
       toast.error('Erro ao iniciar conexão', {
         description: error.message || 'Verifique se VITE_LINKEDIN_CLIENT_ID está configurado no Vercel'
       });
