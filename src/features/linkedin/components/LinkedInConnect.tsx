@@ -1,5 +1,6 @@
 // src/features/linkedin/components/LinkedInConnect.tsx
-// Conectar LinkedIn via OAuth (similar ao Summitfy)
+// ⚠️ DEPRECADO: Use LinkedInPersonalConnect ao invés deste componente
+// Mantido apenas para compatibilidade temporária
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {

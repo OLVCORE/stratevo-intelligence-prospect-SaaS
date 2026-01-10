@@ -6,7 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Linkedin, Users, Send, Settings, BarChart3, Loader2 } from "lucide-react";
-import { LinkedInConnect } from "@/features/linkedin/components/LinkedInConnect";
+import { LinkedInSimpleConnect } from "@/features/linkedin/components/LinkedInSimpleConnect";
 import { LinkedInAccountStatus } from "@/features/linkedin/components/LinkedInAccountStatus";
 import { LinkedInCampaignManager } from "@/features/linkedin/components/LinkedInCampaignManager";
 import { LinkedInImportLeads } from "@/features/linkedin/components/LinkedInImportLeads";
@@ -64,7 +64,7 @@ export default function LinkedInPage() {
             </p>
           </div>
           
-          {!account && !isAccountLoading && <LinkedInConnect />}
+          {!account && !isAccountLoading && <LinkedInSimpleConnect />}
         </div>
 
         {/* Status da Conta */}
@@ -142,7 +142,7 @@ export default function LinkedInPage() {
                 Com a automação LinkedIn, você pode importar leads de buscas,
                 enviar convites personalizados e acompanhar o progresso das suas campanhas.
               </p>
-              <LinkedInConnect />
+              <LinkedInSimpleConnect />
             </CardContent>
           </Card>
         )}

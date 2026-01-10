@@ -29,17 +29,17 @@ export default function LinkedInCallbackPage() {
           ? 'Você cancelou a autorização' 
           : 'Erro ao autorizar');
         setTimeout(() => {
-          window.location.href = '/linkedin';
-        }, 2500);
+          window.location.replace('/linkedin');
+        }, 3000);
         return;
       }
 
       if (!code || !state) {
         setStatus('error');
-        setError('Código ou state não encontrado');
+        setError('Código ou state não encontrado na URL');
         setTimeout(() => {
-          window.location.href = '/linkedin';
-        }, 2500);
+          window.location.replace('/linkedin');
+        }, 3000);
         return;
       }
 
@@ -50,78 +50,45 @@ export default function LinkedInCallbackPage() {
           setStatus('success');
           toast.success('LinkedIn conectado com sucesso!');
           
-          // ✅ OBTER COOKIE AUTOMATICAMENTE via popup do LinkedIn
-          // Após OAuth, o usuário está logado no LinkedIn - vamos extrair o cookie automaticamente
-          try {
-            console.log('[LinkedIn Callback] 🔄 Extraindo cookie automaticamente...');
-            
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              // ✅ ABRIR LINKEDIN EM POPUP E EXTRAIR COOKIE
-              // Como o usuário acabou de fazer OAuth, ele está logado no LinkedIn
-              // Vamos abrir LinkedIn em popup e usar postMessage para obter cookie
-              
-              const popup = window.open(
-                'https://www.linkedin.com/feed',
-                'linkedin-cookie-extractor',
-                'width=1,height=1,left=0,top=0'
-              );
-
-              if (popup) {
-                // Aguardar popup carregar
-                await new Promise(resolve => setTimeout(resolve, 3000));
-
-                try {
-                  // Tentar acessar cookies do popup (pode não funcionar por CORS)
-                  // Alternativa: usar Edge Function com browser automation
-                  
-                  const { data: cookieResult, error: cookieError } = await supabase.functions.invoke('linkedin-extract-cookie', {
-                    body: { user_id: user.id }
-                  });
-
-                  if (!cookieError && cookieResult?.success && cookieResult?.cookie) {
-                    console.log('[LinkedIn Callback] ✅ Cookie obtido automaticamente!');
-                    toast.success('Cookie obtido automaticamente! Sistema pronto.');
-                  } else if (cookieResult?.manual_required) {
-                    console.log('[LinkedIn Callback] ⚠️ Browser automation não configurado');
-                    // Não mostrar erro - sistema continuará funcionando
-                  }
-
-                  popup.close();
-                } catch (extractError) {
-                  popup.close();
-                  console.warn('[LinkedIn Callback] ⚠️ Erro ao extrair cookie:', extractError);
-                }
-              }
-            }
-          } catch (cookieError) {
-            console.warn('[LinkedIn Callback] ⚠️ Erro ao obter cookie automaticamente:', cookieError);
-            // Não bloquear - sistema continuará funcionando
-          }
-          
-          // ✅ INVALIDAR CACHE DO REACT QUERY PARA FORÇAR ATUALIZAÇÃO
+          // ✅ INVALIDAR CACHE DO REACT QUERY
           queryClient.invalidateQueries({ queryKey: ['linkedin-account'] });
           queryClient.invalidateQueries({ queryKey: ['linkedin-oauth-status'] });
           queryClient.invalidateQueries({ queryKey: ['linkedin'] });
-          console.log('[LinkedIn Callback] ✅ Cache invalidado após conexão');
           
-          // ✅ REDIRECIONAR PARA /linkedin (LinkedIn Automation) - USAR window.location.href PARA EVITAR LOOP
+          // ✅ TENTAR EXTRAIR COOKIE AUTOMATICAMENTE EM BACKGROUND (NÃO BLOQUEIA)
+          // Não aguardar resposta - sistema continua funcionando mesmo sem cookie
+          supabase.auth.getUser().then(async ({ data: { user } }) => {
+            if (user) {
+              try {
+                const { data: cookieResult } = await supabase.functions.invoke('linkedin-extract-cookie', {
+                  body: { user_id: user.id }
+                });
+                if (cookieResult?.success) {
+                  console.log('[LinkedIn Callback] ✅ Cookie obtido automaticamente em background!');
+                }
+              } catch {
+                // Silencioso - não importa se falhar
+              }
+            }
+          });
+          
+          // ✅ REDIRECIONAR PARA /linkedin - FORÇAR RELOAD PARA EVITAR LOOP
           setTimeout(() => {
-            window.location.href = '/linkedin';
-          }, 1500);
+            window.location.replace('/linkedin');
+          }, 2000);
         } else {
           setStatus('error');
           setError(result.error || 'Erro desconhecido');
           setTimeout(() => {
-            window.location.href = '/linkedin';
-          }, 2500);
+            window.location.replace('/linkedin');
+          }, 3000);
         }
       } catch (err: any) {
         setStatus('error');
         setError(err.message || 'Erro ao processar callback');
         setTimeout(() => {
-          window.location.href = '/linkedin';
-        }, 2500);
+          window.location.replace('/linkedin');
+        }, 3000);
       }
     };
 
