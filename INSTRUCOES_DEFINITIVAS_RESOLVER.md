@@ -52,3 +52,5 @@ Could not find the 'data_source' column of 'decision_makers' in the schema cache
 4. Execute `VERIFICAR_TODAS_REFERENCIAS.sql` para diagnosticar
 
 
+
+

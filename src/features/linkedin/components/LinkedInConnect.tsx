@@ -21,7 +21,7 @@ import { useLinkedInAccount } from "../hooks/useLinkedInAccount";
 import { toast } from "sonner";
 
 export function LinkedInConnect() {
-  const { account, isLoading } = useLinkedInAccount();
+  const { account, isLoading, refetch } = useLinkedInAccount();
   const [open, setOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [oauthStatus, setOauthStatus] = useState<{ connected: boolean; account?: any } | null>(null);
@@ -34,9 +34,19 @@ export function LinkedInConnect() {
 
   // ✅ VERIFICAR STATUS SEMPRE QUE O MODAL ABRIR (forçar consulta ao banco)
   const checkStatus = async () => {
-    // ✅ SEMPRE CONSULTAR O BANCO (sem usar cache)
-    const status = await checkLinkedInOAuthStatus();
-    setOauthStatus(status);
+    try {
+      // ✅ SEMPRE CONSULTAR O BANCO DIRETAMENTE (sem usar cache)
+      const status = await checkLinkedInOAuthStatus();
+      setOauthStatus(status);
+      
+      // ✅ INVALIDAR CACHE DO REACT QUERY PARA FORÇAR ATUALIZAÇÃO
+      if (refetch) {
+        refetch();
+      }
+    } catch (error) {
+      console.error('[LinkedIn Connect] Erro ao verificar status:', error);
+      setOauthStatus({ connected: false });
+    }
   };
 
   const handleConnect = async () => {

@@ -16,9 +16,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings, Linkedin, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { Loader2, Upload, Settings } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { LinkedInCredentialsDialog } from '@/components/icp/LinkedInCredentialsDialog';
 
 interface UserProfile {
   id: string;
@@ -65,84 +64,14 @@ export default function SettingsPage() {
   const [icps, setIcps] = useState<ICPMetadata[]>([]);
   const [icpsLoading, setIcpLoading] = useState(false);
   const [generatedIcpCount, setGeneratedIcpCount] = useState<number | null>(null);
-  const [linkedInAuthOpen, setLinkedInAuthOpen] = useState(false);
-  const [linkedInConnected, setLinkedInConnected] = useState(false);
-  const [isCheckingLinkedIn, setIsCheckingLinkedIn] = useState(false);
 
   useEffect(() => {
     loadProfile();
-    checkLinkedInStatus();
   }, [user]);
 
   useEffect(() => {
     loadIcpData();
   }, [tenant]);
-
-  // ✅ VERIFICAR STATUS SEMPRE QUE O MODAL FECHAR
-  useEffect(() => {
-    if (!linkedInAuthOpen) {
-      // Modal fechou, verificar status novamente
-      setTimeout(() => {
-        checkLinkedInStatus();
-      }, 500);
-    }
-  }, [linkedInAuthOpen]);
-
-  // ✅ VERIFICAR STATUS QUANDO A PÁGINA GANHA FOCO (usuário volta de outra aba)
-  useEffect(() => {
-    const handleFocus = () => {
-      checkLinkedInStatus();
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
-
-  const checkLinkedInStatus = async () => {
-    setIsCheckingLinkedIn(true);
-    try {
-      // ✅ CONSULTAR BANCO DIRETAMENTE (sem usar função que pode ter cache)
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setLinkedInConnected(false);
-        return;
-      }
-
-      // ✅ CONSULTA DIRETA AO BANCO - APENAS STATUS 'active'
-      const { data: account, error } = await supabase
-        .from('linkedin_accounts')
-        .select('id, status, linkedin_name, linkedin_email, auth_method')
-        .eq('user_id', user.id)
-        .eq('status', 'active') // ✅ APENAS ATIVAS
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        console.error('[Settings] ❌ Erro ao consultar banco:', error);
-        setLinkedInConnected(false);
-        return;
-      }
-
-      // ✅ SE NÃO TEM CONTA ATIVA, ESTÁ DESCONECTADO
-      const isConnected = !!account;
-      if (isConnected) {
-        console.log('[Settings] ✅ LinkedIn CONECTADO:', {
-          id: account.id,
-          status: account.status,
-          auth_method: account.auth_method,
-          name: account.linkedin_name
-        });
-      } else {
-        console.log('[Settings] ❌ LinkedIn DESCONECTADO - Nenhuma conta ativa encontrada');
-      }
-      setLinkedInConnected(isConnected);
-    } catch (error) {
-      console.error('[Settings] Erro ao verificar LinkedIn:', error);
-      setLinkedInConnected(false);
-    } finally {
-      setIsCheckingLinkedIn(false);
-    }
-  };
 
   const loadProfile = async () => {
     if (!user) return;
@@ -410,89 +339,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ✅ LinkedIn Connection Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Linkedin className="h-5 w-5 text-blue-600" />
-              Conexão LinkedIn
-            </CardTitle>
-            <CardDescription>
-              Conecte sua conta do LinkedIn para enviar conexões automaticamente (estilo Summitfy.ai)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isCheckingLinkedIn ? (
-              <div className="p-4 rounded-lg border bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-5 w-5 animate-spin text-gray-600" />
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
-                    Verificando status do LinkedIn...
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className={`p-4 rounded-lg border ${
-                linkedInConnected
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                  : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {linkedInConnected ? (
-                      <>
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
-                        <div>
-                          <p className="font-medium text-green-800 dark:text-green-200">
-                            LinkedIn Conectado ✅
-                          </p>
-                          <p className="text-sm text-green-700 dark:text-green-300">
-                            Sua conta está conectada e pronta para enviar conexões
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-5 w-5 text-yellow-600" />
-                        <div>
-                          <p className="font-medium text-yellow-800 dark:text-yellow-200">
-                            LinkedIn Não Conectado
-                          </p>
-                          <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                            Conecte sua conta para enviar conexões automaticamente
-                          </p>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={checkLinkedInStatus}
-                      variant="ghost"
-                      size="sm"
-                      disabled={isCheckingLinkedIn}
-                      title="Atualizar status"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${isCheckingLinkedIn ? 'animate-spin' : ''}`} />
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        // ✅ VERIFICAR STATUS ANTES DE ABRIR O MODAL
-                        checkLinkedInStatus();
-                        setLinkedInAuthOpen(true);
-                      }}
-                      variant={linkedInConnected ? 'outline' : 'default'}
-                      className={linkedInConnected ? '' : 'bg-blue-600 hover:bg-blue-700'}
-                    >
-                      <Linkedin className="h-4 w-4 mr-2" />
-                      {linkedInConnected ? 'Gerenciar Conexão' : 'Conectar LinkedIn'}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         {/* Contact Info */}
         <Card>
@@ -657,35 +503,6 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
-
-      {/* LinkedIn Auth Dialog */}
-      <LinkedInCredentialsDialog
-        open={linkedInAuthOpen}
-        onOpenChange={(open) => {
-          setLinkedInAuthOpen(open);
-          // ✅ SEMPRE VERIFICAR STATUS QUANDO O MODAL FECHAR
-          if (!open) {
-            // Aguardar um pouco para garantir que o banco foi atualizado
-            setTimeout(() => {
-              checkLinkedInStatus();
-            }, 800);
-            // ✅ VERIFICAR NOVAMENTE APÓS MAIS TEMPO (garantir que atualizou)
-            setTimeout(() => {
-              checkLinkedInStatus();
-            }, 2000);
-          }
-        }}
-        onAuthSuccess={() => {
-          // ✅ Atualizar status após conectar/desconectar
-          setTimeout(() => {
-            checkLinkedInStatus();
-          }, 800);
-          // ✅ VERIFICAR NOVAMENTE
-          setTimeout(() => {
-            checkLinkedInStatus();
-          }, 2000);
-        }}
-      />
     </AppLayout>
   );
 }

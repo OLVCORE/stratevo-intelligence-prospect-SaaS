@@ -95,31 +95,76 @@ export default function CommandCenter() {
     try {
       setLoading(true);
 
+      // ✅ FUNÇÃO AUXILIAR PARA TRATAR ERROS 400 (tabela não existe)
+      const safeQuery = async <T,>(
+        queryFn: () => Promise<{ data: T | null; error: any; count?: number | null }>,
+        defaultValue: T | null = null,
+        defaultCount: number = 0
+      ): Promise<{ data: T | null; count: number | null }> => {
+        try {
+          const result = await queryFn();
+          if (result.error) {
+            const errorCode = result.error.code || '';
+            const errorMessage = result.error.message || '';
+            // Se for erro de tabela não encontrada ou 400, retornar default
+            if (errorCode === 'PGRST116' || errorCode === '42P01' || errorCode === 'PGRST204' || 
+                errorMessage.includes('does not exist') || errorMessage.includes('relation') ||
+                errorCode.includes('400') || String(errorCode).includes('400')) {
+              console.warn('[CommandCenter] Tabela não encontrada ou erro 400, usando default');
+              return { data: defaultValue, count: defaultCount };
+            }
+            throw result.error;
+          }
+          return { data: result.data, count: result.count || defaultCount };
+        } catch (error: any) {
+          const errorCode = error?.code || '';
+          const errorMessage = error?.message || '';
+          if (errorCode === 'PGRST116' || errorCode === '42P01' || errorCode === 'PGRST204' || 
+              errorMessage.includes('does not exist') || errorMessage.includes('relation') ||
+              String(errorCode).includes('400') || String(errorMessage).includes('400')) {
+            console.warn('[CommandCenter] Erro tratado, usando default');
+            return { data: defaultValue, count: defaultCount };
+          }
+          throw error;
+        }
+      };
+
       // 🔥 CRÍTICO: Filtrar TODAS as queries por tenant_id
       // PARALLEL QUERIES PARA MÁXIMA PERFORMANCE
       const [
-        { count: totalImported },
-        { count: inQuarantine },
-        { count: approved },
-        { count: inPipeline },
-        { count: hotLeads },
-        { count: stcPending },
-        { data: dealsData },
-        { data: wonDeals },
-        { data: lostDeals },
-        { data: lastImportData },
+        totalImportedResult,
+        inQuarantineResult,
+        approvedResult,
+        inPipelineResult,
+        hotLeadsResult,
+        stcPendingResult,
+        dealsDataResult,
+        wonDealsResult,
+        lostDealsResult,
+        lastImportResult,
       ] = await Promise.all([
-        supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
-        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente').eq('tenant_id', tenantId),
-        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada').eq('tenant_id', tenantId),
-        supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId),
-        supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovado').eq('tenant_id', tenantId),
-        supabase.from('stc_verification_history').select('*', { count: 'exact', head: true }).eq('status', 'processing').eq('tenant_id', tenantId),
-        supabase.from('sdr_deals').select('deal_value, created_at').in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId),
-        supabase.from('sdr_deals').select('deal_value, created_at, won_date').eq('deal_stage', 'won').eq('tenant_id', tenantId).limit(10),
-        supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).eq('deal_stage', 'lost').eq('tenant_id', tenantId),
-        supabase.from('companies').select('created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(1).single(),
+        safeQuery(() => supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente').eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada').eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovada').eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('stc_verification_history').select('*', { count: 'exact', head: true }).eq('status', 'processing').eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('sdr_deals').select('deal_value, created_at').in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId), [] as any[], 0),
+        safeQuery(() => supabase.from('sdr_deals').select('deal_value, created_at, won_date').eq('deal_stage', 'won').eq('tenant_id', tenantId).limit(10), [] as any[], 0),
+        safeQuery(() => supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).eq('deal_stage', 'lost').eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('companies').select('created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(1).single(), null),
       ]);
+
+      const totalImported = totalImportedResult.count || 0;
+      const inQuarantine = inQuarantineResult.count || 0;
+      const approved = approvedResult.count || 0;
+      const inPipeline = inPipelineResult.count || 0;
+      const hotLeads = hotLeadsResult.count || 0;
+      const stcPending = stcPendingResult.count || 0;
+      const dealsData = dealsDataResult.data || [];
+      const wonDeals = wonDealsResult.data || [];
+      const lostDeals = lostDealsResult.count || 0;
+      const lastImportData = lastImportResult.data;
 
       // Calcular valor total do pipeline
       const dealsValue = dealsData?.reduce((sum, deal) => sum + (Number(deal.deal_value) || 0), 0) || 0;

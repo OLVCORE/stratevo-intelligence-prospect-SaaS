@@ -59,3 +59,5 @@ WHERE trigger_schema = 'public'
   AND event_object_table = 'decision_makers';
 
 
+
+

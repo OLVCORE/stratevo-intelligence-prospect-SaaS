@@ -57,3 +57,5 @@ O PostgREST (camada REST do Supabase) mantém um **cache interno** do schema do 
 4. Aguarde mais alguns minutos após o restart
 
 
+
+

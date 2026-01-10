@@ -2,7 +2,7 @@
 // Página de callback OAuth do LinkedIn
 
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
@@ -13,7 +13,6 @@ import { supabase } from "@/integrations/supabase/client";
 
 export default function LinkedInCallbackPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -29,14 +28,18 @@ export default function LinkedInCallbackPage() {
         setError(errorParam === 'access_denied' 
           ? 'Você cancelou a autorização' 
           : 'Erro ao autorizar');
-        setTimeout(() => navigate('/settings'), 3000);
+        setTimeout(() => {
+          window.location.href = '/linkedin';
+        }, 2500);
         return;
       }
 
       if (!code || !state) {
         setStatus('error');
         setError('Código ou state não encontrado');
-        setTimeout(() => navigate('/settings'), 3000);
+        setTimeout(() => {
+          window.location.href = '/linkedin';
+        }, 2500);
         return;
       }
 
@@ -102,22 +105,28 @@ export default function LinkedInCallbackPage() {
           queryClient.invalidateQueries({ queryKey: ['linkedin'] });
           console.log('[LinkedIn Callback] ✅ Cache invalidado após conexão');
           
-          // ✅ REDIRECIONAR PARA /settings (não /linkedin)
-          setTimeout(() => navigate('/settings'), 2000);
+          // ✅ REDIRECIONAR PARA /linkedin (LinkedIn Automation) - USAR window.location.href PARA EVITAR LOOP
+          setTimeout(() => {
+            window.location.href = '/linkedin';
+          }, 1500);
         } else {
           setStatus('error');
           setError(result.error || 'Erro desconhecido');
-          setTimeout(() => navigate('/settings'), 3000);
+          setTimeout(() => {
+            window.location.href = '/linkedin';
+          }, 2500);
         }
       } catch (err: any) {
         setStatus('error');
         setError(err.message || 'Erro ao processar callback');
-        setTimeout(() => navigate('/settings'), 3000);
+        setTimeout(() => {
+          window.location.href = '/linkedin';
+        }, 2500);
       }
     };
 
     processCallback();
-  }, [searchParams, navigate]);
+  }, [searchParams]);
 
   return (
     <AppLayout>
