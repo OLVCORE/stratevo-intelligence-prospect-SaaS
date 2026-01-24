@@ -10,6 +10,18 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 5173,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // ✅ MC2.5: Manter chunking automático do Vite, mas garantir que os arquivos sejam gerados corretamente
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]',
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+    sourcemap: false, // Desabilitar sourcemaps em produção para reduzir tamanho
+  },
   plugins: [
     react(), 
     mode === "development" && componentTagger(),
