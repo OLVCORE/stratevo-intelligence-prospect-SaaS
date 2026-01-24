@@ -1,12 +1,171 @@
 -- ==========================================
--- MICROCICLO MC2.2: RPC para Aprovação BASE → ACTIVE
+-- CORREÇÃO: Campo email não existe em companies
 -- ==========================================
 -- Data: 2026-01-24
--- Descrição: Função RPC transacional para aprovar empresa da Base para Leads Aprovados
--- Garante inserção REAL em icp_analysis_results com status='aprovada'
+-- Descrição: Corrige função sync_orphan_active_company para não usar campo email inexistente
 
 -- ==========================================
--- FUNÇÃO: Aprovar empresa da Base para Leads Aprovados
+-- FUNÇÃO: Sincronizar empresa ACTIVE órfã (CORRIGIDA)
+-- ==========================================
+CREATE OR REPLACE FUNCTION sync_orphan_active_company(
+  p_company_id UUID,
+  p_tenant_id UUID
+)
+RETURNS TABLE (
+  success BOOLEAN,
+  message TEXT,
+  icp_analysis_id UUID
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_company RECORD;
+  v_icp_analysis_id UUID;
+  v_normalized_data JSONB;
+BEGIN
+  -- 1. Buscar empresa ACTIVE
+  SELECT 
+    c.*,
+    COALESCE(c.canonical_status, 'BASE') as current_canonical_status
+  INTO v_company
+  FROM public.companies c
+  WHERE c.id = p_company_id
+    AND c.tenant_id = p_tenant_id
+    AND COALESCE(c.canonical_status, 'BASE') = 'ACTIVE';
+  
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT false, 'Empresa não encontrada ou não está em ACTIVE', NULL::UUID;
+    RETURN;
+  END IF;
+  
+  -- 2. Verificar se já existe registro em icp_analysis_results
+  SELECT id INTO v_icp_analysis_id
+  FROM public.icp_analysis_results
+  WHERE company_id = p_company_id
+    AND tenant_id = p_tenant_id
+  LIMIT 1;
+  
+  IF v_icp_analysis_id IS NOT NULL THEN
+    -- Já existe, apenas atualizar status se necessário
+    UPDATE public.icp_analysis_results
+    SET
+      status = 'aprovada',
+      updated_at = now()
+    WHERE id = v_icp_analysis_id
+      AND status != 'aprovada';
+    
+    RETURN QUERY SELECT true, 'Registro já existia, status atualizado', v_icp_analysis_id;
+    RETURN;
+  END IF;
+  
+  -- 3. Preparar dados normalizados para icp_analysis_results
+  -- ✅ CORRIGIDO: Não usar campos que não existem em companies
+  v_normalized_data := jsonb_build_object(
+    'company_id', v_company.id,
+    'tenant_id', p_tenant_id,
+    'cnpj', COALESCE(v_company.cnpj, ''),
+    'razao_social', COALESCE(v_company.company_name, v_company.name, 'N/A'),
+    'nome_fantasia', (v_company.location->>'name')::text,
+    'uf', (v_company.location->>'state')::text,
+    'municipio', (v_company.location->>'city')::text,
+    'porte', NULL,
+    'cnae_principal', NULL,
+    'website', v_company.website,
+    'email', NULL, -- ✅ Campo não existe em companies
+    'telefone', NULL,
+    'website_encontrado', v_company.website_encontrado,
+    'website_fit_score', COALESCE((v_company.website_fit_score)::numeric, 0),
+    'website_products_match', COALESCE(v_company.website_products_match, '[]'::jsonb),
+    'linkedin_url', v_company.linkedin_url,
+      'icp_score', 0, -- ✅ MC2.5: Removida dependência de v_company.icp_score (campo não existe)
+    'fit_score', NULL,
+    'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
+    'purchase_intent_type', COALESCE(v_company.purchase_intent_type, 'potencial'),
+    'status', 'aprovada',
+    'temperatura', COALESCE(v_company.temperatura, 'cold'),
+    'totvs_status', v_company.totvs_status,
+    'origem', COALESCE(v_company.origem, v_company.source_name, 'companies_base'),
+    'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
+    'raw_analysis', jsonb_build_object(
+      'migrated_from_companies', true,
+      'migrated_at', now(),
+      'sync_type', 'orphan_fix',
+      'canonical_status', 'ACTIVE'
+    )
+  );
+  
+  -- 4. Inserir registro em icp_analysis_results
+  INSERT INTO public.icp_analysis_results (
+    company_id,
+    tenant_id,
+    cnpj,
+    razao_social,
+    nome_fantasia,
+    uf,
+    municipio,
+    porte,
+    cnae_principal,
+    website,
+    email,
+    telefone,
+    website_encontrado,
+    website_fit_score,
+    website_products_match,
+    linkedin_url,
+    icp_score,
+    fit_score,
+    purchase_intent_score,
+    purchase_intent_type,
+    status,
+    temperatura,
+    totvs_status,
+    origem,
+    raw_data,
+    raw_analysis
+  )
+  VALUES (
+    (v_normalized_data->>'company_id')::UUID,
+    (v_normalized_data->>'tenant_id')::UUID,
+    v_normalized_data->>'cnpj',
+    v_normalized_data->>'razao_social',
+    NULLIF(v_normalized_data->>'nome_fantasia', ''),
+    NULLIF(v_normalized_data->>'uf', ''),
+    NULLIF(v_normalized_data->>'municipio', ''),
+    NULLIF(v_normalized_data->>'porte', ''),
+    NULLIF(v_normalized_data->>'cnae_principal', ''),
+    NULLIF(v_normalized_data->>'website', ''),
+    NULLIF(v_normalized_data->>'email', ''),
+    NULLIF(v_normalized_data->>'telefone', ''),
+    NULLIF(v_normalized_data->>'website_encontrado', ''),
+    (v_normalized_data->>'website_fit_score')::numeric,
+    (v_normalized_data->>'website_products_match')::jsonb,
+    NULLIF(v_normalized_data->>'linkedin_url', ''),
+    (v_normalized_data->>'icp_score')::numeric,
+    NULLIF(v_normalized_data->>'fit_score', '')::numeric,
+    (v_normalized_data->>'purchase_intent_score')::numeric,
+    (v_normalized_data->>'purchase_intent_type')::text,
+    v_normalized_data->>'status',
+    (v_normalized_data->>'temperatura')::text,
+    NULLIF(v_normalized_data->>'totvs_status', ''),
+    v_normalized_data->>'origem',
+    (v_normalized_data->>'raw_data')::jsonb,
+    (v_normalized_data->>'raw_analysis')::jsonb
+  )
+  RETURNING id INTO v_icp_analysis_id;
+  
+  RETURN QUERY SELECT true, 'Empresa órfã sincronizada com sucesso', v_icp_analysis_id;
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN QUERY SELECT false, 
+      format('Erro ao sincronizar empresa órfã: %s', SQLERRM),
+      NULL::UUID;
+END;
+$$;
+
+-- ==========================================
+-- CORRIGIR TAMBÉM A RPC DE APROVAÇÃO
 -- ==========================================
 CREATE OR REPLACE FUNCTION approve_company_to_leads(
   p_company_id UUID,
@@ -61,7 +220,7 @@ BEGIN
       AND tenant_id = p_tenant_id;
     
     -- 3.2. Preparar dados normalizados para icp_analysis_results
-    -- Usar dados da empresa para criar registro em icp_analysis_results
+    -- ✅ CORRIGIDO: Não usar campos que não existem em companies
     v_normalized_data := jsonb_build_object(
       'company_id', v_company.id,
       'tenant_id', p_tenant_id,
@@ -73,13 +232,13 @@ BEGIN
       'porte', NULL,
       'cnae_principal', NULL,
       'website', v_company.website,
-      'email', NULL, -- ✅ Campo não existe em companies, usar NULL
+      'email', NULL, -- ✅ Campo não existe em companies
       'telefone', NULL,
       'website_encontrado', v_company.website_encontrado,
       'website_fit_score', COALESCE((v_company.website_fit_score)::numeric, 0),
       'website_products_match', COALESCE(v_company.website_products_match, '[]'::jsonb),
       'linkedin_url', v_company.linkedin_url,
-      'icp_score', COALESCE((v_company.icp_score)::numeric, 0),
+      'icp_score', 0, -- ✅ MC2.5: Removida dependência de v_company.icp_score (campo não existe)
       'fit_score', NULL,
       'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
       'purchase_intent_type', COALESCE(v_company.purchase_intent_type, 'potencial'),
@@ -208,65 +367,9 @@ BEGIN
 END;
 $$;
 
--- ==========================================
--- FUNÇÃO: Aprovar empresas em massa
--- ==========================================
-CREATE OR REPLACE FUNCTION approve_companies_batch_to_leads(
-  p_company_ids UUID[],
-  p_tenant_id UUID
-)
-RETURNS TABLE (
-  approved_count INTEGER,
-  failed_count INTEGER,
-  results JSONB
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_company_id UUID;
-  v_result RECORD;
-  v_approved INTEGER := 0;
-  v_failed INTEGER := 0;
-  v_results JSONB := '[]'::jsonb;
-  v_result_item JSONB;
-BEGIN
-  -- Processar cada empresa
-  FOREACH v_company_id IN ARRAY p_company_ids
-  LOOP
-    -- Chamar função individual
-    SELECT * INTO v_result
-    FROM approve_company_to_leads(v_company_id, p_tenant_id);
-    
-    -- Adicionar resultado
-    v_result_item := jsonb_build_object(
-      'company_id', v_company_id,
-      'success', v_result.success,
-      'message', v_result.message,
-      'icp_analysis_id', v_result.icp_analysis_id
-    );
-    
-    v_results := v_results || v_result_item;
-    
-    -- Contar sucessos e falhas
-    IF v_result.success THEN
-      v_approved := v_approved + 1;
-    ELSE
-      v_failed := v_failed + 1;
-    END IF;
-  END LOOP;
-  
-  RETURN QUERY SELECT v_approved, v_failed, v_results;
-END;
-$$;
+-- Comentário
+COMMENT ON FUNCTION sync_orphan_active_company IS 
+'Sincroniza uma empresa ACTIVE que não tem registro em icp_analysis_results. Cria registro com status=''aprovada''. CORRIGIDO: não usa campo email inexistente.';
 
--- Comentários
 COMMENT ON FUNCTION approve_company_to_leads IS 
-'Aprova empresa da Base (BASE/POOL) para Leads Aprovados (ACTIVE). Atualiza canonical_status em companies e insere/atualiza registro em icp_analysis_results com status=''aprovada''. Transação atômica.';
-
-COMMENT ON FUNCTION approve_companies_batch_to_leads IS 
-'Aprova múltiplas empresas em lote. Retorna contagem de sucessos, falhas e resultados detalhados.';
-
--- Permissões
-GRANT EXECUTE ON FUNCTION approve_company_to_leads(UUID, UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION approve_companies_batch_to_leads(UUID[], UUID) TO authenticated;
+'Aprova empresa da Base (BASE/POOL) para Leads Aprovados (ACTIVE). Atualiza canonical_status em companies e insere/atualiza registro em icp_analysis_results com status=''aprovada''. Transação atômica. CORRIGIDO: não usa campo email inexistente.';

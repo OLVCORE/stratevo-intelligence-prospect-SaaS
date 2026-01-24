@@ -61,8 +61,60 @@ export function useCompanies(options?: {
       
       console.log('[useCompanies] ✅ Encontradas:', count || 0, 'empresas para tenant:', tenantId);
       
+      // ✅ ENRIQUECER com dados de icp_analysis_results (CNAE canônico)
+      const companies = (data as Company[]) || [];
+      if (companies.length > 0 && tenantId) {
+        const companyIds = companies.map(c => c.id).filter(Boolean);
+        
+        if (companyIds.length > 0) {
+          try {
+            // ✅ MC2.5: Removido filtro tenant_id (campo não existe em icp_analysis_results)
+            const { data: icpData } = await supabase
+              .from('icp_analysis_results')
+              .select('company_id, cnae_principal, cnae_descricao')
+              .in('company_id', companyIds);
+            
+            if (icpData && icpData.length > 0) {
+              // Criar mapa company_id -> icp_data
+              const icpMap = new Map(icpData.map(icp => [icp.company_id, icp]));
+              
+              // Enriquecer companies com dados de ICP
+              const enrichedCompanies = companies.map(company => {
+                const icpData = icpMap.get(company.id);
+                if (icpData) {
+                  return {
+                    ...company,
+                    // Adicionar campos de ICP ao objeto (sem alterar raw_data)
+                    cnae_principal: icpData.cnae_principal || (company as any).cnae_principal,
+                    analysis_cnae_principal: icpData.cnae_principal,
+                    raw_analysis: {
+                      ...((company as any).raw_analysis || {}),
+                      cnae_principal: icpData.cnae_principal,
+                      cnae_descricao: icpData.cnae_descricao,
+                      cnaes_secundarios: icpData.cnaes_secundarios,
+                    },
+                  } as any;
+                }
+                return company;
+              });
+              
+              return {
+                data: enrichedCompanies,
+                count: count || 0,
+                page,
+                pageSize,
+                totalPages: Math.ceil((count || 0) / pageSize)
+              };
+            }
+          } catch (enrichError) {
+            console.warn('[useCompanies] ⚠️ Erro ao enriquecer com ICP (continuando sem enriquecimento):', enrichError);
+            // Continuar sem enriquecimento se houver erro
+          }
+        }
+      }
+      
       return { 
-        data: data as Company[], 
+        data: companies, 
         count: count || 0,
         page,
         pageSize,

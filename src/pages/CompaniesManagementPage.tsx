@@ -63,11 +63,13 @@ import { ExpandedCompanyCard } from '@/components/companies/ExpandedCompanyCard'
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
 import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
 import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
-import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import LocationMap from '@/components/map/LocationMap';
 import { normalizeFromCompanies, prepareForICPInsertion } from '@/lib/utils/companyDataNormalizer';
 import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
+import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
+import { formatCNPJ } from '@/lib/utils/validators';
+import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
 
 
 export default function CompaniesManagementPage() {
@@ -88,12 +90,13 @@ export default function CompaniesManagementPage() {
   const [filterOrigin, setFilterOrigin] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterSector, setFilterSector] = useState<string[]>([]);
-  const [filterRegion, setFilterRegion] = useState<string[]>([]);
+  const [filterRegion, setFilterRegion] = useState<string[]>([]); // UF
+  const [filterCity, setFilterCity] = useState<string[]>([]); // Cidade (dependente da UF)
   const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
   const [filterEnrichment, setFilterEnrichment] = useState<string[]>([]); // ✅ NOVO: Filtro por enriquecimento
   const [filterICP, setFilterICP] = useState<string[]>([]);
-  const [filterFitScore, setFilterFitScore] = useState<string[]>([]);
   const [filterGrade, setFilterGrade] = useState<string[]>([]);
+  const [cnaeClassifications, setCnaeClassifications] = useState<Record<string, CNAEClassification>>({});
   
   // 🔥 DEBOUNCE: Só busca após 500ms de inatividade
   useEffect(() => {
@@ -113,6 +116,98 @@ export default function CompaniesManagementPage() {
   });
   
   const allCompanies = companiesResult?.data || [];
+
+  // 🔎 Helpers de localização e setor (CNAE)
+  const extractCompanyCNAE = (company: any): string | null => {
+    const rawData = (company as any).raw_data || {};
+    const fromCompany = (company as any).cnae_principal || (company as any).cnae || null;
+    const fromReceita =
+      rawData.cnae_fiscal ||
+      rawData.cnae_principal ||
+      rawData.atividade_principal?.[0]?.code ||
+      rawData.receita_federal?.atividade_principal?.[0]?.code ||
+      rawData.receita?.atividade_principal?.[0]?.code ||
+      null;
+
+    const cnae = fromCompany || fromReceita;
+    if (!cnae) return null;
+    return String(cnae);
+  };
+
+  const getCNAEClassificationForCompany = (company: any): CNAEClassification | null => {
+    const cnae = extractCompanyCNAE(company);
+    if (!cnae) return null;
+    const normalized = cnae.replace(/\./g, '').trim();
+    return (
+      cnaeClassifications[cnae] ||
+      cnaeClassifications[normalized] ||
+      null
+    );
+  };
+
+  const getCompanyUF = (company: any): string | null => {
+    const rawData = (company as any).raw_data || {};
+    const uf =
+      (company.location as any)?.state ||
+      rawData.receita?.uf ||
+      rawData.receita_federal?.uf ||
+      rawData.uf ||
+      null;
+    return uf ? String(uf).toUpperCase().trim() : null;
+  };
+
+  const getCompanyCity = (company: any): string | null => {
+    const rawData = (company as any).raw_data || {};
+    const city =
+      (company.location as any)?.city ||
+      rawData.receita?.municipio ||
+      rawData.receita?.cidade ||
+      rawData.receita_federal?.municipio ||
+      rawData.municipio ||
+      rawData.cidade ||
+      null;
+    return city ? String(city).trim() : null;
+  };
+
+  // 📊 Carregar classificação CNAE → Setor/Categoria para as empresas da página
+  useEffect(() => {
+    const codesSet = new Set<string>();
+
+    allCompanies.forEach((company) => {
+      const cnae = extractCompanyCNAE(company);
+      if (cnae) {
+        codesSet.add(cnae);
+      }
+    });
+
+    const codes = Array.from(codesSet);
+    if (codes.length === 0) {
+      setCnaeClassifications({});
+      return;
+    }
+
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        const map = await getCNAEClassifications(codes);
+        if (!map || isCancelled) return;
+
+        const result: Record<string, CNAEClassification> = {};
+        map.forEach((value, key) => {
+          result[key] = value;
+        });
+
+        setCnaeClassifications(result);
+      } catch (error) {
+        console.error('[CompaniesManagement] Erro ao carregar classificações CNAE:', error);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [allCompanies]);
   
   // 🔍 APLICAR FILTROS LOCALMENTE
   const companies = useMemo(() => {
@@ -139,7 +234,7 @@ export default function CompaniesManagementPage() {
         }
         
         if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-          return filterOrigin.includes('Legacy');
+          return filterOrigin.includes('Sem origem');
         }
         
         return filterOrigin.includes(origem.trim());
@@ -175,19 +270,28 @@ export default function CompaniesManagementPage() {
       });
     }
     
-    // Filtro por Setor
+    // Filtro por Setor (derivado de CNAE inteligente)
     if (filterSector.length > 0) {
       filtered = filtered.filter(c => {
-        const sector = c.industry || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A';
+        const classification = getCNAEClassificationForCompany(c);
+        const sector = classification?.setor_industria || 'Sem setor';
         return filterSector.includes(sector);
       });
     }
     
-    // Filtro por UF (apenas estado, sem cidade)
+    // Filtro por UF (apenas estado)
     if (filterRegion.length > 0) {
       filtered = filtered.filter(c => {
-        const uf = (c as any).raw_data?.uf || '';
-        return filterRegion.includes(uf);
+        const uf = getCompanyUF(c);
+        return uf ? filterRegion.includes(uf) : false;
+      });
+    }
+
+    // Filtro por Cidade (dependente da UF selecionada)
+    if (filterCity.length > 0) {
+      filtered = filtered.filter(c => {
+        const city = getCompanyCity(c);
+        return city ? filterCity.includes(city) : false;
       });
     }
     
@@ -220,14 +324,14 @@ export default function CompaniesManagementPage() {
         const hasReceita = !!(rawData.receita_federal || rawData.receita);
         const hasApollo = !!(rawData.apollo_organization || rawData.apollo);
         const has360 = !!(rawData.digital_intelligence || rawData.enrichment_360);
-        const hasTOTVS = !!(rawData.totvs_report);
+        const hasUsageVerification = !!(rawData.totvs_report);
         
         // Verificar se empresa tem os enriquecimentos filtrados
         const enrichments: Record<string, boolean> = {
           'Receita Federal': hasReceita,
           'Apollo': hasApollo,
           '360° Digital': has360,
-          'TOTVS Check': hasTOTVS,
+          'Verificação de Uso': hasUsageVerification,
         };
         
         return filterEnrichment.some(e => enrichments[e]);
@@ -243,19 +347,6 @@ export default function CompaniesManagementPage() {
       });
     }
     
-    // ✅ Filtro por Fit Score
-    if (filterFitScore.length > 0) {
-      filtered = filtered.filter(c => {
-        const rawData = (c as any).raw_data || {};
-        const fitScore = rawData.fit_score ?? (c as any).fit_score ?? (c as any).icp_score ?? 0;
-        if (fitScore >= 90) return filterFitScore.includes('90-100');
-        if (fitScore >= 75) return filterFitScore.includes('75-89');
-        if (fitScore >= 60) return filterFitScore.includes('60-74');
-        if (fitScore >= 40) return filterFitScore.includes('40-59');
-        return filterFitScore.includes('0-39');
-      });
-    }
-    
     // ✅ Filtro por Grade
     if (filterGrade.length > 0) {
       filtered = filtered.filter(c => {
@@ -267,7 +358,7 @@ export default function CompaniesManagementPage() {
     }
     
     return filtered;
-  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion, filterAnalysisStatus, filterEnrichment, filterICP, filterFitScore, filterGrade]);
+  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion, filterCity, filterAnalysisStatus, filterEnrichment, filterICP, filterGrade]);
   
   // 🔢 ALIASES PARA COMPATIBILIDADE COM QUARENTENA
   const filteredCompanies = companies;
@@ -725,16 +816,8 @@ export default function CompaniesManagementPage() {
     }
   };
 
+  // ✅ ENRIQUECIMENTO PERMITIDO NA BASE: Receita Federal (individual) + MC2.4 auto-aprovação
   const handleEnrichReceita = async (companyId: string) => {
-    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
-    const isSalesTarget = isInSalesTargetContext();
-    if (!isSalesTarget) {
-      toast.error('Enrichment Bloqueado', {
-        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
-      });
-      return;
-    }
-
     try {
       setEnrichingReceitaId(companyId);
       toast.info('Buscando dados da Receita Federal...');
@@ -786,6 +869,24 @@ export default function CompaniesManagementPage() {
       if (receita) {
         // Merge seguro preservando dados já existentes em raw_data
         const existingRaw = (company.raw_data && typeof company.raw_data === 'object') ? (company.raw_data as any) : {};
+
+        // Determinar status da Receita para MC2.4
+        const situacaoReceita: string | undefined =
+          (receita as any)?.situacao ||
+          (receita as any)?.descricao_situicao_cadastral ||
+          (receita as any)?.descricao_situacao_cadastral ||
+          (receita as any)?.situacao_cadastral;
+
+        const isReceitaAtiva =
+          typeof situacaoReceita === 'string' &&
+          situacaoReceita.toUpperCase().includes('ATIVA');
+
+        const canonicalStatus = (company as any).canonical_status || 'BASE';
+        const shouldAutoApprove =
+          isReceitaAtiva &&
+          canonicalStatus === 'BASE' &&
+          !!tenant?.id;
+
         const mergedRaw = {
           ...existingRaw,
           enriched_receita: true, // FLAG CRÍTICA DE GOVERNANÇA
@@ -803,7 +904,11 @@ export default function CompaniesManagementPage() {
           socios_administradores: receita.qsa || null,
           ...(existingRaw.apollo && { apollo: existingRaw.apollo }),
           ...(existingRaw.segment && { segment: existingRaw.segment }),
-          ...(existingRaw.refinamentos && { refinamentos: existingRaw.refinamentos })
+          ...(existingRaw.refinamentos && { refinamentos: existingRaw.refinamentos }),
+          ...(shouldAutoApprove ? {
+            auto_approved_by_receita: true,
+            auto_approved_at: new Date().toISOString(),
+          } : {})
         };
 
         const industryFromReceita = (receita as any)?.atividade_principal?.[0]?.text as string | undefined;
@@ -818,11 +923,46 @@ export default function CompaniesManagementPage() {
         if (updError) throw updError;
 
         toast.success('Dados da Receita Federal atualizados!');
-        
-        // DESABILITADO: Edge Functions com CORS bloqueado
-        // TODO: Corrigir CORS em calculate-maturity-score e generate-company-report
-        
-        await refetch();
+
+        // ✅ MC2.4: Auto-aprovação BASE → ACTIVE quando Receita estiver ATIVA
+        if (shouldAutoApprove) {
+          try {
+            const { data: approveData, error: approveError } = await supabase.rpc(
+              'approve_company_to_leads',
+              {
+                p_company_id: companyId,
+                p_tenant_id: tenant!.id,
+              }
+            );
+
+            if (approveError) {
+              console.error('[MC2.4] Erro ao auto-aprovar empresa via Receita:', approveError);
+              toast.error('Erro ao auto-aprovar empresa via Receita Federal', {
+                description: approveError.message,
+              });
+            } else {
+              const approveResult = approveData?.[0];
+              if (approveResult?.success) {
+                toast.success('✅ Empresa auto-aprovada via Receita Federal', {
+                  description: 'Status Receita ATIVA e empresa em BASE → aprovada automaticamente',
+                });
+                // Atualizar Base e Leads Aprovados
+                await refetch();
+                queryClient.invalidateQueries({ queryKey: ['approved-companies'] });
+              } else {
+                console.warn('[MC2.4] Auto-aprovação não aplicada:', approveResult?.message);
+              }
+            }
+          } catch (autoApproveError: any) {
+            console.error('[MC2.4] Exceção ao auto-aprovar empresa via Receita:', autoApproveError);
+            toast.error('Erro inesperado ao auto-aprovar via Receita Federal', {
+              description: autoApproveError.message,
+            });
+          }
+        } else {
+          // Apenas refetch para refletir novos dados da Receita
+          await refetch();
+        }
       } else {
         toast.error('Nenhum dado retornado', { description: 'Verifique o CNPJ' });
       }
@@ -833,6 +973,68 @@ export default function CompaniesManagementPage() {
       });
     } finally {
       setEnrichingReceitaId(null);
+    }
+  };
+
+  // ✅ ENRIQUECIMENTO EM MASSA: Receita Federal (Base de Empresas)
+  const handleBulkEnrichReceita = async () => {
+    if (selectedCompanies.length === 0) {
+      toast.error('Nenhuma empresa selecionada');
+      return;
+    }
+
+    setIsBatchEnriching(true);
+    try {
+      toast.info(`Iniciando Receita Federal para ${selectedCompanies.length} empresa(s)...`);
+
+      for (const companyId of selectedCompanies) {
+        await handleEnrichReceita(companyId);
+      }
+
+      // ✅ MC2.4: Resumo operacional (aprovadas / ignoradas / falhas)
+      if (tenant?.id) {
+        const { data: companiesAfter, error: summaryError } = await supabase
+          .from('companies')
+          .select('id, canonical_status, raw_data')
+          .in('id', selectedCompanies)
+          .eq('tenant_id', tenant.id);
+
+        if (!summaryError && companiesAfter) {
+          let aprovadas = 0;
+          let ignoradas = 0;
+          let falhas = 0;
+
+          for (const c of companiesAfter as any[]) {
+            const raw = (c.raw_data && typeof c.raw_data === 'object') ? c.raw_data as any : {};
+            const enriched = !!raw.enriched_receita;
+            const autoApproved = !!raw.auto_approved_by_receita;
+            const canonical = c.canonical_status || 'BASE';
+
+            if (autoApproved && canonical === 'ACTIVE') {
+              aprovadas++;
+            } else if (enriched) {
+              ignoradas++;
+            } else {
+              falhas++;
+            }
+          }
+
+          toast.success(`Receita Federal concluída. Aprovadas: ${aprovadas}, Ignoradas: ${ignoradas}, Falhas: ${falhas}`);
+        } else {
+          toast.success('Consulta à Receita Federal concluída para empresas selecionadas');
+        }
+      } else {
+        toast.success('Consulta à Receita Federal concluída para empresas selecionadas');
+      }
+
+      await refetch();
+    } catch (error) {
+      console.error('[BATCH RECEITA] Erro ao enriquecer em massa:', error);
+      toast.error('Erro ao executar Receita Federal em massa', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido'
+      });
+    } finally {
+      setIsBatchEnriching(false);
     }
   };
 
@@ -1536,7 +1738,7 @@ export default function CompaniesManagementPage() {
         'CNAE Principal Código', 'CNAE Principal Descrição',
         'CNAEs Secundários Quantidade', 'CNAEs Secundários',
         'Quadro Societário Quantidade', 'Sócios',
-        'Score Maturidade Digital', 'Score Fit TOTVS', 'Score Análise',
+        'Score Maturidade Digital', 'Score Fit Oferta', 'Score Análise',
         'Tech Stack', 'ERP Atual', 'CRM Atual',
         'Produto Principal', 'Marca', 'Link Produto/Marketplace', 'Categoria',
         'Decisores Quantidade', 'Decisor 1 Nome', 'Decisor 1 Cargo', 'Decisor 1 Email', 
@@ -1725,7 +1927,7 @@ export default function CompaniesManagementPage() {
           'Quadro Societário Quantidade': receitaData?.qsa?.length || 0,
           'Sócios': receitaData?.qsa?.map((s: any) => `${s.nome} (${s.qual})`).join('; ') || '',
           'Score Maturidade Digital': company.digital_maturity_score || '',
-          'Score Fit TOTVS': (company as any)?.fit_score || '',
+          'Score Fit Oferta': (company as any)?.fit_score || '',
           'Score Análise': (company as any)?.analysis_score || '',
           'Tech Stack': (company as any)?.tech_stack?.join(', ') || '',
           'ERP Atual': (company as any)?.current_erp || '',
@@ -2064,12 +2266,12 @@ export default function CompaniesManagementPage() {
                           {stats.totvs > 0 && (
                             <button
                               onClick={() => {
-                                const totvsFilter = filterEnrichment.includes('TOTVS Check') ? [] : ['TOTVS Check'];
-                                setFilterEnrichment(totvsFilter);
+                                const usageFilter = filterEnrichment.includes('Verificação de Uso') ? [] : ['Verificação de Uso'];
+                                setFilterEnrichment(usageFilter);
                               }}
                               className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 border border-purple-500/20 hover:bg-purple-500/20 cursor-pointer transition-colors"
                             >
-                              🟣 {stats.totvs} TOTVS {filterEnrichment.includes('TOTVS Check') && '✓'}
+                              🟣 {stats.totvs} Verificação de Uso {filterEnrichment.includes('Verificação de Uso') && '✓'}
                             </button>
                           )}
                         </>
@@ -2088,7 +2290,7 @@ export default function CompaniesManagementPage() {
                       context="companies"
                       selectedCount={selectedCompanies.length}
                       onApprove={handleApproveBatch}
-                      // 🚨 REMOVIDO: Todas as ações de enrichment - só permitidas em Leads Aprovados
+                      onEnrichReceita={handleBulkEnrichReceita}
                       onExportCSV={handleExportCSV}
                       onDelete={handleBulkDelete}
                       isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
@@ -2143,7 +2345,7 @@ export default function CompaniesManagementPage() {
                           onCheckedChange={toggleSelectAll}
                         />
                       </TableHead>
-                      <TableHead className="min-w-[200px] flex-1">
+                      <TableHead className="min-w-[320px] max-w-[420px] text-left">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2164,6 +2366,10 @@ export default function CompaniesManagementPage() {
                           CNPJ
                           <ArrowUpDown className="h-3 w-3" />
                         </Button>
+                      </TableHead>
+                      {/* ✅ NOVO: Coluna Status (Lead + Receita) */}
+                      <TableHead className="w-[160px] min-w-[140px] text-center">
+                        Status
                       </TableHead>
                       <TableHead className="w-[140px] min-w-[120px]">
                         <ColumnFilter
@@ -2189,7 +2395,7 @@ export default function CompaniesManagementPage() {
                             
                             // Verificar novamente se ainda é um batch ID após buscar de outros lugares
                             if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-                              return 'Legacy';
+                              return 'Sem origem';
                             }
                             
                             return origem.trim();
@@ -2230,11 +2436,22 @@ export default function CompaniesManagementPage() {
                           onSort={() => handleSort('cnpj_status')}
                         />
                       </TableHead>
+                      {/* CNAE (código + descrição) */}
+                      <TableHead className="min-w-[300px] max-w-[420px] text-left">
+                        CNAE
+                      </TableHead>
                       <TableHead className="min-w-[180px] flex-[1.5]">
                         <ColumnFilter
                           column="industry"
                           title="Setor"
-                          values={allCompanies.map(c => c.industry || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A')}
+                          values={Array.from(
+                            new Set(
+                              allCompanies.map(c => {
+                                const classification = getCNAEClassificationForCompany(c);
+                                return classification?.setor_industria || 'Sem setor';
+                              })
+                            )
+                          )}
                           selectedValues={filterSector}
                           onFilterChange={setFilterSector}
                           onSort={() => handleSort('industry')}
@@ -2242,11 +2459,38 @@ export default function CompaniesManagementPage() {
                       </TableHead>
                       <TableHead className="w-[60px] min-w-[50px]">
                         <ColumnFilter
-                          column="region"
+                          column="uf"
                           title="UF"
-                          values={allCompanies.map(c => (c as any).raw_data?.uf || '')}
+                          values={Array.from(
+                            new Set(
+                              allCompanies
+                                .map(c => getCompanyUF(c))
+                                .filter((uf): uf is string => !!uf)
+                            )
+                          )}
                           selectedValues={filterRegion}
                           onFilterChange={setFilterRegion}
+                        />
+                      </TableHead>
+                      <TableHead className="w-[120px] min-w-[100px]">
+                        <ColumnFilter
+                          column="cidade"
+                          title="Cidade"
+                          values={Array.from(
+                            new Set(
+                              (filterRegion.length > 0
+                                ? allCompanies.filter(c => {
+                                    const uf = getCompanyUF(c);
+                                    return uf ? filterRegion.includes(uf) : false;
+                                  })
+                                : allCompanies
+                              )
+                                .map(c => getCompanyCity(c))
+                                .filter((city): city is string => !!city)
+                            )
+                          )}
+                          selectedValues={filterCity}
+                          onFilterChange={setFilterCity}
                         />
                       </TableHead>
                       <TableHead className="w-[120px] min-w-[100px]">
@@ -2261,15 +2505,6 @@ export default function CompaniesManagementPage() {
                           onFilterChange={setFilterICP}
                         />
                       </TableHead>
-                      <TableHead className="w-[100px] min-w-[90px]">
-                        <ColumnFilter
-                          column="fit_score"
-                          title="Fit Score"
-                          values={['90-100', '75-89', '60-74', '40-59', '0-39']}
-                          selectedValues={filterFitScore}
-                          onFilterChange={setFilterFitScore}
-                        />
-                      </TableHead>
                       <TableHead className="w-[60px] min-w-[50px]">
                         <ColumnFilter
                           column="grade"
@@ -2279,10 +2514,6 @@ export default function CompaniesManagementPage() {
                           onFilterChange={setFilterGrade}
                         />
                       </TableHead>
-                      <TableHead className="w-[160px] min-w-[140px]">Intenção de Compra</TableHead>
-                      <TableHead className="min-w-[180px] flex-1">Website</TableHead>
-                      <TableHead className="w-[100px] min-w-[90px]">Website Fit</TableHead>
-                      <TableHead className="w-[100px] min-w-[90px]">LinkedIn</TableHead>
                       <TableHead className="w-20 min-w-[80px] text-center">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2317,22 +2548,24 @@ export default function CompaniesManagementPage() {
                           />
                         </div>
                       </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Building2 className="h-4 w-4 text-primary" />
-                          <div>
-                            <button
-                              onClick={() => navigate(`/company/${company.id}`)}
-                              className="font-medium hover:text-primary hover:underline"
+                      {/* Empresa: nome completo (sem CNPJ) */}
+                      <TableCell className="text-left">
+                        <button
+                          className="flex items-start gap-2 min-w-[320px] max-w-[420px] mx-auto cursor-pointer hover:text-primary transition-colors text-left"
+                          onClick={() => navigate(`/company/${company.id}`)}
+                        >
+                          <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+                          <div className="flex flex-col">
+                            <span
+                              className="text-sm font-semibold leading-snug break-words whitespace-normal"
+                              title={(company as any).razao_social || company.name || (company as any).nome_fantasia || 'Sem nome'}
                             >
                               {(company as any).razao_social || company.name || (company as any).nome_fantasia || 'Sem nome'}
-                            </button>
-                            {company.domain && (
-                              <p className="text-xs text-muted-foreground">{company.domain}</p>
-                            )}
+                            </span>
                           </div>
-                        </div>
+                        </button>
                       </TableCell>
+                      {/* CNPJ com cor dinâmica após enriquecimento */}
                       <TableCell className="text-center">
                         {editingCnpjId === company.id ? (
                           <div className="flex items-center gap-1">
@@ -2366,7 +2599,28 @@ export default function CompaniesManagementPage() {
                         ) : (
                           <div className="flex items-center gap-2">
                             {company.cnpj ? (
-                              <Badge variant="outline">{company.cnpj}</Badge>
+                              (() => {
+                                const rawData = (company as any).raw_data || {};
+                                const hasReceita = !!(rawData.receita_federal || rawData.receita);
+                                const baseClasses = 'font-mono text-xs whitespace-nowrap px-3 py-1';
+
+                                if (hasReceita) {
+                                  return (
+                                    <Badge
+                                      variant="secondary"
+                                      className={`bg-emerald-600/10 text-emerald-600 border-emerald-600/30 ${baseClasses}`}
+                                    >
+                                      {formatCNPJ(company.cnpj)}
+                                    </Badge>
+                                  );
+                                }
+
+                                return (
+                                  <Badge variant="outline" className={baseClasses}>
+                                    {formatCNPJ(company.cnpj)}
+                                  </Badge>
+                                );
+                              })()
                             ) : (
                               <span className="text-xs text-muted-foreground">N/A</span>
                             )}
@@ -2383,6 +2637,91 @@ export default function CompaniesManagementPage() {
                             </Button>
                           </div>
                         )}
+                      </TableCell>
+                      {/* ✅ NOVO: Coluna Status (Lead + Receita) */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          {/* Badge Lead */}
+                          {((company as any).canonical_status === 'ACTIVE') ? (
+                            <Badge 
+                              variant="secondary" 
+                              className="bg-green-600/10 text-green-600 border-green-600/30 text-[10px] px-2 py-0.5"
+                            >
+                              Lead aprovado
+                            </Badge>
+                          ) : (
+                            <Badge 
+                              variant="outline" 
+                              className="text-[10px] px-2 py-0.5"
+                            >
+                              Não aprovado
+                            </Badge>
+                          )}
+
+                          {/* Badge Receita */}
+                          {(() => {
+                            const rawData = (company as any).raw_data || {};
+                            const receita =
+                              rawData.receita_federal ||
+                              rawData.receita ||
+                              {};
+
+                            const situacaoRaw =
+                              (company as any).cnpj_status ||
+                              receita.situacao ||
+                              receita.descricao_situacao_cadastral ||
+                              receita.situacao_cadastral ||
+                              rawData.situacao ||
+                              null;
+
+                            let receitaStatus: 'ATIVA' | 'INATIVA' | 'PENDENTE' = 'PENDENTE';
+                            if (situacaoRaw) {
+                              const s = String(situacaoRaw).toUpperCase();
+                              if (s.includes('ATIVA')) {
+                                receitaStatus = 'ATIVA';
+                              } else if (
+                                s.includes('INAPTA') ||
+                                s.includes('BAIXADA') ||
+                                s.includes('SUSPENSA') ||
+                                s.includes('INATIVA') ||
+                                s.includes('NULA')
+                              ) {
+                                receitaStatus = 'INATIVA';
+                              }
+                            }
+
+                            if (receitaStatus === 'ATIVA') {
+                              return (
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-emerald-600/10 text-emerald-600 border-emerald-600/30 text-[10px] px-2 py-0.5"
+                                >
+                                  Receita: Ativa
+                                </Badge>
+                              );
+                            }
+
+                            if (receitaStatus === 'INATIVA') {
+                              return (
+                                <Badge
+                                  variant="destructive"
+                                  className="text-[10px] px-2 py-0.5"
+                                >
+                                  Receita: Inativa
+                                </Badge>
+                              );
+                            }
+
+                            return (
+                              <Badge
+                                variant="secondary"
+                                className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] px-2 py-0.5"
+                              >
+                                Receita: Pendente
+                              </Badge>
+                            );
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center">
@@ -2439,66 +2778,163 @@ export default function CompaniesManagementPage() {
                               );
                             }
                             
-                            // Se não encontrou, mostrar Legacy
+                            // Se não encontrou, mostrar origem genérica
                             return (
                               <Badge variant="outline" className="text-xs text-muted-foreground">
-                                Legacy
+                                Sem origem
                               </Badge>
                             );
                           })()}
                         </div>
                       </TableCell>
-                       <TableCell className="text-center">
-                        <div className="flex justify-center">
-                          {(() => {
-                            // ✅ USAR COMPONENTE IDÊNTICO À QUARENTENA
-                          const receitaData = (company as any).raw_data?.receita_federal || (company as any).raw_data?.receita;
-                          const situacao = receitaData?.situacao || 
-                                         receitaData?.descricao_situacao_cadastral || 
-                                         receitaData?.situacao_cadastral;
-                          
-                          // Normalizar status para o componente
-                          let cnpjStatus = 'pendente';
-                          if (situacao) {
-                            const sitUpper = situacao.toUpperCase();
-                            if (sitUpper.includes('ATIVA')) cnpjStatus = 'ativa';
-                            else if (sitUpper.includes('INAPTA') || sitUpper.includes('SUSPENSA') || sitUpper.includes('BAIXADA')) cnpjStatus = 'inativo';
-                            else if (sitUpper.includes('NULA')) cnpjStatus = 'inexistente';
-                          }
-                          
-                          return <QuarantineCNPJStatusBadge cnpj={company.cnpj || undefined} cnpjStatus={cnpjStatus} />;
-                        })()}
-                        </div>
-                      </TableCell>
+                      {/* Status CNPJ (badge) */}
                       <TableCell className="text-center">
                         <div className="flex justify-center">
                           {(() => {
-                            // ✅ PRIORIZAR APOLLO INDUSTRY > RECEITA FEDERAL
-                            const setor = (company as any).raw_data?.apollo_organization?.industry ||
-                                         company.industry || 
-                                         (company as any).raw_data?.receita_federal?.atividade_principal?.[0]?.text ||
-                                         (company as any).raw_data?.receita?.atividade_principal?.[0]?.text ||
-                                         (company as any).raw_data?.atividade_economica ||
-                                         (company as any).raw_data?.setor_amigavel;
-                            return setor ? (
-                              <span className="text-xs">{setor}</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Não identificado</span>
+                            const receitaData = (company as any).raw_data?.receita_federal || (company as any).raw_data?.receita;
+                            const situacao = receitaData?.situacao || 
+                                           receitaData?.descricao_situacao_cadastral || 
+                                           receitaData?.situacao_cadastral;
+                            
+                            // Normalizar status para o componente
+                            let cnpjStatus = 'pendente';
+                            if (situacao) {
+                              const sitUpper = situacao.toUpperCase();
+                              if (sitUpper.includes('ATIVA')) cnpjStatus = 'ativa';
+                              else if (sitUpper.includes('INAPTA') || sitUpper.includes('SUSPENSA') || sitUpper.includes('BAIXADA')) cnpjStatus = 'inativo';
+                              else if (sitUpper.includes('NULA')) cnpjStatus = 'inexistente';
+                            }
+                            
+                            return <QuarantineCNPJStatusBadge cnpj={company.cnpj || undefined} cnpjStatus={cnpjStatus} />;
+                          })()}
+                        </div>
+                      </TableCell>
+                      {/* CNAE: código + descrição (resolver canônico) */}
+                      <TableCell className="text-left align-top">
+                        {(() => {
+                          const cnaeResolution = resolveCompanyCNAE(company);
+                          const displayLabel = formatCNAEForDisplay(cnaeResolution);
+
+                          if (!displayLabel) {
+                            return (
+                              <span className="text-xs text-muted-foreground">
+                                Sem CNAE
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="min-w-[300px] max-w-[420px] mx-auto cursor-help">
+                                    <span className="text-xs leading-snug line-clamp-3">
+                                      {displayLabel}
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md">
+                                  <div className="space-y-2">
+                                    <div>
+                                      <p className="font-semibold text-sm">CNAE Principal:</p>
+                                      <p className="text-xs">
+                                        {cnaeResolution.principal.code || 'N/A'} - {cnaeResolution.principal.description || 'Sem descrição'}
+                                      </p>
+                                      <p className="text-[10px] text-muted-foreground mt-1">
+                                        Fonte: {cnaeResolution.fonte === 'icp_analysis' ? 'ICP (Análise)' : cnaeResolution.fonte === 'receita_federal' ? 'Receita Federal' : cnaeResolution.fonte === 'companies' ? 'Empresa' : 'N/A'}
+                                      </p>
+                                    </div>
+                                    {cnaeResolution.secundarios.length > 0 && (
+                                      <div>
+                                        <p className="font-semibold text-xs">CNAEs Secundários:</p>
+                                        <ul className="text-xs space-y-1 mt-1">
+                                          {cnaeResolution.secundarios.map((sec, idx) => (
+                                            <li key={idx}>
+                                              {sec.code} - {sec.description || 'Sem descrição'}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
+                      </TableCell>
+                      {/* Setor: mesma lógica de Leads Aprovados (CNAE canônico) */}
+                      <TableCell className="text-center max-w-[260px] px-2 overflow-hidden">
+                        {(() => {
+                          const cnaeResolution = resolveCompanyCNAE(company);
+                          const cnaeCode = cnaeResolution.principal.code;
+                          const classification = cnaeCode ? getCNAEClassificationForCompany({ ...company, cnae_principal: cnaeCode }) : null;
+                          const setor = classification?.setor_industria;
+
+                          if (setor) {
+                            return (
+                              <span
+                                className="text-sm leading-snug line-clamp-2"
+                                title={setor}
+                              >
+                                {setor}
+                              </span>
+                            );
+                          }
+
+                          if (cnaeCode) {
+                            return (
+                              <span className="text-xs text-muted-foreground">
+                                Sem classificação CNAE
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <span className="text-xs text-muted-foreground">
+                              Sem CNAE
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                      {/* UF: badge compacto, igual Leads Aprovados */}
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          {(() => {
+                            const uf = getCompanyUF(company);
+                            
+                            if (uf) {
+                              return (
+                                <Badge variant="secondary" className="w-fit">
+                                  {uf}
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <span className="text-xs text-muted-foreground">
+                                N/A
+                              </span>
                             );
                           })()}
                         </div>
                       </TableCell>
-                       <TableCell className="text-center">
-                        <div className="flex justify-center">
+                      {/* Cidade: largura controlada + ellipsis */}
+                      <TableCell className="text-center max-w-[200px] px-2 overflow-hidden text-ellipsis whitespace-nowrap">
+                        <div className="flex justify-center max-w-full">
                           {(() => {
-                            const uf = (company.location as any)?.state || 
-                                      (company as any).raw_data?.receita?.uf ||
-                                      (company as any).raw_data?.uf;
-                            
-                            if (uf) {
-                              return <Badge variant="outline">{uf}</Badge>;
-                            }
-                          return <span className="text-xs text-muted-foreground">N/A</span>;
+                            const city = getCompanyCity(company);
+                            return city ? (
+                              <span
+                                className="text-xs text-muted-foreground truncate"
+                                title={city}
+                              >
+                                {city}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                N/A
+                              </span>
+                            );
                           })()}
                         </div>
                       </TableCell>
@@ -2533,50 +2969,6 @@ export default function CompaniesManagementPage() {
                           })()}
                         </div>
                        </TableCell>
-                       {/* ✅ COLUNA FIT SCORE */}
-                       <TableCell className="text-center">
-                        <div className="flex justify-center">
-                         {(() => {
-                           const rawData = (company as any).raw_data || {};
-                           // ✅ LER fit_score de raw_data (onde foi salvo durante a migração)
-                           const fitScore = rawData.fit_score ?? (company as any).fit_score ?? (company as any).icp_score ?? 0;
-                           
-                           if (fitScore != null && fitScore > 0) {
-                             return (
-                               <TooltipProvider>
-                                 <Tooltip>
-                                   <TooltipTrigger asChild>
-                                     <div className="flex items-center gap-2 cursor-help group">
-                                       <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                       <span className="font-medium">{fitScore.toFixed(1)}%</span>
-                                       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                     </div>
-                                   </TooltipTrigger>
-                                   <TooltipContent side="left" className="max-w-sm p-4">
-                                     <div className="space-y-2">
-                                       <p className="font-semibold text-sm border-b pb-2">
-                                         Fit Score: {fitScore.toFixed(1)}%
-                                       </p>
-                                       <div className="text-xs space-y-1.5">
-                                         <p>Cálculo baseado em:</p>
-                                         <ul className="list-disc list-inside space-y-1">
-                                           <li>Setor (40%): Match com ICP</li>
-                                           <li>Localização (30%): UF/Cidade</li>
-                                           <li>Dados completos (20%): Qualidade dos dados</li>
-                                           <li>Website (5%): Presença digital</li>
-                                           <li>Contato (5%): Email/Telefone</li>
-                                         </ul>
-                                       </div>
-                                     </div>
-                                   </TooltipContent>
-                                 </Tooltip>
-                               </TooltipProvider>
-                             );
-                           }
-                           return <span className="text-xs text-muted-foreground">N/A</span>;
-                          })()}
-                        </div>
-                       </TableCell>
                        {/* ✅ COLUNA GRADE */}
                        <TableCell className="text-center">
                         <div className="flex justify-center">
@@ -2605,111 +2997,7 @@ export default function CompaniesManagementPage() {
                           })()}
                         </div>
                        </TableCell>
-                       {/* ✅ NOVA COLUNA: Purchase Intent */}
-                       <TableCell className="text-center">
-                        <div className="flex justify-center">
-                          <PurchaseIntentBadge 
-                           score={(company as any).purchase_intent_score} 
-                           intentType={(company as any).purchase_intent_type || 'potencial'}
-                           size="sm"
-                          />
-                        </div>
-                       </TableCell>
-                       {/* ✅ NOVA COLUNA: Website */}
-                       <TableCell className="text-center">
-                         {(() => {
-                           const websiteUrl = formatWebsiteUrl(company.website_encontrado || company.website);
-                           if (!websiteUrl) {
-                             return <span className="text-muted-foreground text-sm">-</span>;
-                           }
-                           return (
-                             <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <a
-                                     href={websiteUrl}
-                                     target="_blank"
-                                     rel="noopener noreferrer"
-                                     className="inline-flex items-center justify-center mx-auto text-primary hover:text-primary/80 transition-colors"
-                                     onClick={(e) => e.stopPropagation()}
-                                   >
-                                     <Globe className="h-4 w-4" />
-                                   </a>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p className="text-sm">{websiteUrl}</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
-                           );
-                         })()}
-                       </TableCell>
-                       {/* ✅ NOVA COLUNA: Website Fit Score */}
-                       <TableCell className="text-center">
-                         {company.website_fit_score != null && company.website_fit_score > 0 ? (
-                           <TooltipProvider>
-                             <Tooltip>
-                               <TooltipTrigger asChild>
-                                 <div className="inline-flex items-center justify-center mx-auto text-green-600 cursor-help">
-                                   <Target className="h-4 w-4" />
-                                 </div>
-                               </TooltipTrigger>
-                               <TooltipContent>
-                                 <div className="space-y-1">
-                                   <p className="font-semibold">Website Fit Score: +{company.website_fit_score} pontos</p>
-                                   {company.website_products_match && Array.isArray(company.website_products_match) && company.website_products_match.length > 0 && (
-                                     <div className="text-xs mt-2">
-                                       <p className="font-medium">Produtos compatíveis:</p>
-                                       <ul className="list-disc list-inside mt-1 space-y-0.5">
-                                         {company.website_products_match.slice(0, 3).map((match: any, idx: number) => (
-                                           <li key={idx}>
-                                             {match.tenant_product} ↔ {match.prospect_product}
-                                           </li>
-                                         ))}
-                                         {company.website_products_match.length > 3 && (
-                                           <li className="text-muted-foreground">+{company.website_products_match.length - 3} mais...</li>
-                                         )}
-                                       </ul>
-                                     </div>
-                                   )}
-                                 </div>
-                               </TooltipContent>
-                             </Tooltip>
-                           </TooltipProvider>
-                         ) : (
-                           <span className="text-muted-foreground text-sm">-</span>
-                         )}
-                       </TableCell>
-                       {/* ✅ NOVA COLUNA: LinkedIn */}
-                       <TableCell className="text-center">
-                         {(() => {
-                           const linkedinUrl = formatWebsiteUrl(company.linkedin_url);
-                           if (!linkedinUrl) {
-                             return <span className="text-muted-foreground text-sm">-</span>;
-                           }
-                           return (
-                             <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                   <a
-                                     href={linkedinUrl}
-                                     target="_blank"
-                                     rel="noopener noreferrer"
-                                     className="inline-flex items-center justify-center mx-auto text-[#0077B5] hover:text-[#0077B5]/80 transition-colors"
-                                     onClick={(e) => e.stopPropagation()}
-                                   >
-                                     <Linkedin className="h-4 w-4" />
-                                   </a>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p className="text-sm">{linkedinUrl}</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
-                           );
-                         })()}
-                       </TableCell>
-                       <TableCell className="text-center">
+                      <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
                           <STCAgent 
                             companyId={company.id}
@@ -2740,7 +3028,7 @@ export default function CompaniesManagementPage() {
                               setCnpjCompany(company); 
                               setCnpjDialogOpen(true); 
                             } : undefined}
-                            onEnrichWebsite={() => handleEnrichWebsite(company.id)}
+                            onEnrichReceita={() => handleEnrichReceita(company.id)}
                           />
                         </div>
                       </TableCell>

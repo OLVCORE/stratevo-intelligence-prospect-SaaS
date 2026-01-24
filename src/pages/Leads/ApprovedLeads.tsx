@@ -38,7 +38,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ExecutiveReportModal } from '@/components/reports/ExecutiveReportModal';
 import { consultarReceitaFederal } from '@/services/receitaFederal';
-import { searchApolloOrganizations, searchApolloPeople } from '@/services/apolloDirect';
 import { enrichment360Simplificado } from '@/services/enrichment360';
 import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
@@ -47,6 +46,9 @@ import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewMo
 import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
 import { useTenant } from '@/contexts/TenantContext';
 import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
+import { formatCNPJ } from '@/lib/utils/validators';
+import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
+import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -69,7 +71,6 @@ export default function ApprovedLeads() {
   const [tempFilter, setTempFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [apolloSearchQuery, setApolloSearchQuery] = useState(''); // 🆕 BUSCA APOLLO DECISORES/COLABORADORES
   const [pageSize, setPageSize] = useState(50); // 🔢 Paginação configurável
   
   // 🔍 FILTROS POR COLUNA (tipo Excel)
@@ -77,11 +78,13 @@ export default function ApprovedLeads() {
   const [filterCNPJStatus, setFilterCNPJStatus] = useState<string[]>([]);
   const [filterSector, setFilterSector] = useState<string[]>([]);
   const [filterUF, setFilterUF] = useState<string[]>([]);
+  const [filterCity, setFilterCity] = useState<string[]>([]);
   const [filterAnalysisStatus, setFilterAnalysisStatus] = useState<string[]>([]);
   const [filterVerificationStatus, setFilterVerificationStatus] = useState<string[]>([]); // 🆕 FILTRO STATUS VERIFICAÇÃO
   const [filterICP, setFilterICP] = useState<string[]>([]);
   const [filterFitScore, setFilterFitScore] = useState<string[]>([]);
   const [filterGrade, setFilterGrade] = useState<string[]>([]);
+  const [cnaeClassifications, setCnaeClassifications] = useState<Record<string, CNAEClassification>>({});
   
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCompany, setPreviewCompany] = useState<any>(null);
@@ -96,6 +99,93 @@ export default function ApprovedLeads() {
   const [rejectReason, setRejectReason] = useState<string>('');
   const [rejectCustomReason, setRejectCustomReason] = useState<string>('');
   const [showDiscardedModal, setShowDiscardedModal] = useState(false);
+
+  // 🔎 Helpers de CNAE, origem e localização
+  const extractCompanyCNAE = (company: any): string | null => {
+    const rawData = (company as any).raw_data || {};
+    const fromCompany = (company as any).cnae_principal || null;
+    const fromAnalysis = (company as any).analysis_cnae_principal || null;
+    const fromRaw =
+      rawData.cnae_fiscal ||
+      rawData.cnae_principal ||
+      rawData.atividade_principal?.[0]?.code ||
+      rawData.receita_federal?.atividade_principal?.[0]?.code ||
+      rawData.receita?.atividade_principal?.[0]?.code ||
+      null;
+    const cnae = fromCompany || fromAnalysis || fromRaw;
+    if (!cnae) return null;
+    return String(cnae).trim();
+  };
+
+  const getCNAEClassificationForCompany = (company: any): CNAEClassification | null => {
+    const cnae = extractCompanyCNAE(company);
+    if (!cnae) return null;
+    const normalized = cnae.replace(/\./g, '').trim();
+    return (
+      cnaeClassifications[cnae] ||
+      cnaeClassifications[normalized] ||
+      null
+    );
+  };
+
+  const getCompanyUF = (company: any): string | null => {
+    const rawData = (company as any).raw_data || {};
+    const uf =
+      (company as any).uf ||
+      rawData.receita_federal?.uf ||
+      rawData.receita?.uf ||
+      rawData.uf ||
+      null;
+    return uf ? String(uf).toUpperCase().trim() : null;
+  };
+
+  const getCompanyCity = (company: any): string | null => {
+    const rawData = (company as any).raw_data || {};
+    const cidade =
+      rawData.receita_federal?.municipio ||
+      rawData.receita?.municipio ||
+      rawData.municipio ||
+      rawData.cidade ||
+      null;
+    return cidade ? String(cidade).trim() : null;
+  };
+
+  const getCompanyOrigin = (company: any): string => {
+    const rawData = (company as any).raw_data || {};
+    const rawAnalysis = (company as any).raw_analysis || {};
+
+    const campaign =
+      rawAnalysis.source_metadata?.campaign ||
+      rawData.source_metadata?.campaign;
+    if (campaign && String(campaign).trim() !== '') {
+      return normalizeSourceName(String(campaign));
+    }
+
+    const directSource =
+      company.source_name ||
+      rawAnalysis.source_name ||
+      rawAnalysis.origem_original ||
+      rawData.source_name;
+    if (directSource && String(directSource).trim() !== '') {
+      return normalizeSourceName(String(directSource));
+    }
+
+    const fileName =
+      rawAnalysis.source_file_name ||
+      rawData.source_file_name;
+    if (fileName && String(fileName).trim() !== '') {
+      return normalizeSourceName(String(fileName));
+    }
+
+    const jobName =
+      (rawAnalysis as any).job_name ||
+      (rawData as any).job_name;
+    if (jobName && String(jobName).trim() !== '') {
+      return normalizeSourceName(String(jobName));
+    }
+
+    return 'Sem origem';
+  };
   
   // ✅ MODAL DE PROGRESSO EM TEMPO REAL
   const [enrichmentModalOpen, setEnrichmentModalOpen] = useState(false);
@@ -107,6 +197,44 @@ export default function ApprovedLeads() {
   const { data: companies = [], isLoading, refetch } = useApprovedCompanies({
     temperatura: tempFilter === 'all' ? undefined : (tempFilter as any),
   });
+
+  // 📊 Carregar classificações CNAE para as empresas aprovadas
+  useEffect(() => {
+    const codes = Array.from(
+      new Set(
+        companies
+          .map(c => extractCompanyCNAE(c))
+          .filter((code): code is string => !!code)
+      )
+    );
+
+    if (codes.length === 0) {
+      setCnaeClassifications({});
+      return;
+    }
+
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        const map = await getCNAEClassifications(codes);
+        if (!map || isCancelled) return;
+
+        const result: Record<string, CNAEClassification> = {};
+        map.forEach((value, key) => {
+          result[key] = value;
+        });
+
+        setCnaeClassifications(result);
+      } catch (error) {
+        console.error('[ApprovedLeads] Erro ao carregar classificações CNAE:', error);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [companies]);
 
   const { mutate: rejectCompany } = useRejectQuarantine();
   const { mutate: deleteBatch, isPending: isDeleting } = useDeleteQuarantineBatch();
@@ -710,13 +838,8 @@ export default function ApprovedLeads() {
       
       // Filtro por Origem (normalizado)
       if (filterOrigin.length > 0) {
-        // ✅ BUSCAR source_name em múltiplos lugares (igual renderização)
-        const sourceName = c.source_name || 
-                         (c as any).raw_analysis?.source_name ||
-                         (c as any).raw_analysis?.origem_original ||
-                         (c as any).raw_analysis?.source_file_name ||
-                         (c as any).raw_data?.source_name;
-        if (!filterOrigin.includes(normalizeSourceName(sourceName))) {
+        const normalizedOrigin = getCompanyOrigin(c);
+        if (!filterOrigin.includes(normalizedOrigin)) {
           return false;
         }
       }
@@ -747,16 +870,23 @@ export default function ApprovedLeads() {
       
       // Filtro por Setor
       if (filterSector.length > 0) {
-        const sector = c.segmento || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A';
+        const classification = getCNAEClassificationForCompany(c);
+        const sector = classification?.setor_industria || 'Sem setor';
         if (!filterSector.includes(sector)) return false;
       }
       
       // Filtro por UF (apenas empresas COM UF válido)
       if (filterUF.length > 0) {
-        const uf = c.uf || (c as any).raw_data?.uf || '';
+        const uf = getCompanyUF(c) || '';
         // ❌ Se UF está vazio/N/A, não incluir quando há filtro ativo
         if (!uf || uf === 'N/A' || uf === '') return false;
         if (!filterUF.includes(uf)) return false;
+      }
+
+      // Filtro por Cidade (dependente de UF)
+      if (filterCity.length > 0) {
+        const city = getCompanyCity(c);
+        if (!city || !filterCity.includes(city)) return false;
       }
       
       // Filtro por Status Análise
@@ -776,23 +906,6 @@ export default function ApprovedLeads() {
         else if (percentage > 25) statusLabel = '26-50%';
         
         if (!filterAnalysisStatus.includes(statusLabel)) return false;
-      }
-      
-      // 🆕 FILTRO APOLLO: Busca em decisores/colaboradores
-      if (apolloSearchQuery) {
-        const apolloQuery = apolloSearchQuery.toLowerCase();
-        const rawData = (c as any).raw_data || {};
-        const apolloData = rawData.apollo_organization || rawData.enrichment_360?.apollo || {};
-        const apolloPeople = apolloData.people || [];
-        
-        const matchesApolloPeople = apolloPeople.some((person: any) => {
-          return person.name?.toLowerCase().includes(apolloQuery) ||
-            person.title?.toLowerCase().includes(apolloQuery) ||
-            person.email?.toLowerCase().includes(apolloQuery) ||
-            person.departments?.some((dept: string) => dept.toLowerCase().includes(apolloQuery));
-        });
-        
-        if (!matchesApolloPeople) return false;
       }
       
       // 🆕 FILTRO STATUS VERIFICAÇÃO
@@ -2024,43 +2137,6 @@ export default function ApprovedLeads() {
         </CardContent>
       </Card>
 
-      {/* 👥 BUSCA APOLLO DECISORES (NOVA - ADICIONAL) */}
-      <Card className="border-cyan-500/30 bg-cyan-500/5">
-        <CardContent className="pt-4 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-cyan-400">
-              <Globe className="h-5 w-5" />
-              <span className="font-semibold text-sm">Buscar Decisores/Colaboradores Apollo:</span>
-            </div>
-            <div className="flex-1 max-w-xl relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-cyan-400" />
-              <Input
-                placeholder="👥 Digite: nome do decisor, cargo, departamento, email..."
-                value={apolloSearchQuery}
-                onChange={(e) => setApolloSearchQuery(e.target.value)}
-                className="pl-10 border-cyan-500/30 focus:border-cyan-500"
-              />
-            </div>
-            {apolloSearchQuery && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setApolloSearchQuery('')}
-                className="text-cyan-400 hover:text-cyan-300"
-              >
-                <XCircle className="h-4 w-4 mr-1" />
-                Limpar
-              </Button>
-            )}
-          </div>
-          {apolloSearchQuery && (
-            <p className="text-xs text-cyan-400/70 mt-2 ml-7">
-              🔍 Filtrando empresas que têm decisores com: "{apolloSearchQuery}"
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Table */}
       <Card>
         <CardContent className="p-0">
@@ -2076,7 +2152,7 @@ export default function ApprovedLeads() {
                         />
                       </div>
                     </TableHead>
-                    <TableHead className="min-w-[200px] flex-1 text-center">
+                    <TableHead className="min-w-[320px] max-w-[420px] text-left">
                       <div className="flex justify-center">
                         <Button
                           variant="ghost"
@@ -2107,22 +2183,20 @@ export default function ApprovedLeads() {
                         <ColumnFilter
                           column="source_name"
                           title="Origem"
-                          values={companies.map(c => {
-                            // ✅ BUSCAR source_name em múltiplos lugares (igual renderização)
-                            const sourceName = c.source_name || 
-                                             (c as any).raw_analysis?.source_name ||
-                                             (c as any).raw_analysis?.origem_original ||
-                                             (c as any).raw_analysis?.source_file_name ||
-                                             (c as any).raw_data?.source_name;
-                            return normalizeSourceName(sourceName);
-                          })}
+                          values={Array.from(
+                            new Set(
+                              companies
+                                .map(c => getCompanyOrigin(c))
+                                .filter(Boolean)
+                            )
+                          )}
                           selectedValues={filterOrigin}
                           onFilterChange={setFilterOrigin}
                           onSort={() => handleSort('source_name')}
                         />
                       </div>
                     </TableHead>
-                    <TableHead className="w-[100px] min-w-[90px]">
+                    <TableHead className="w-[96px] min-w-[80px]">
                       <ColumnFilter
                         column="cnpj_status"
                         title="Status CNPJ"
@@ -2156,11 +2230,21 @@ export default function ApprovedLeads() {
                       onSort={() => handleSort('cnpj_status')}
                     />
                   </TableHead>
+                    <TableHead className="min-w-[300px] max-w-[420px] text-left">
+                      CNAE
+                    </TableHead>
                       <TableHead className="min-w-[180px] flex-[1.5]">
                         <ColumnFilter
                           column="setor"
                           title="Setor"
-                      values={companies.map(c => c.segmento || (c as any).raw_data?.setor_amigavel || (c as any).raw_data?.atividade_economica || 'N/A')}
+                      values={Array.from(
+                        new Set(
+                          companies.map(c => {
+                            const classification = getCNAEClassificationForCompany(c);
+                            return classification?.setor_industria || 'Sem setor';
+                          })
+                        )
+                      )}
                       selectedValues={filterSector}
                       onFilterChange={setFilterSector}
                       onSort={() => handleSort('setor')}
@@ -2170,13 +2254,40 @@ export default function ApprovedLeads() {
                             <ColumnFilter
                               column="uf"
                               title="UF"
-                      values={companies.map(c => c.uf || (c as any).raw_data?.uf || '')}
+                      values={Array.from(
+                        new Set(
+                          companies
+                            .map(c => getCompanyUF(c))
+                            .filter((uf): uf is string => !!uf)
+                        )
+                      )}
                       selectedValues={filterUF}
                       onFilterChange={setFilterUF}
                       onSort={() => handleSort('uf')}
                     />
                   </TableHead>
-                              <TableHead className="w-[100px] min-w-[90px] text-center">
+                              <TableHead className="w-[140px] min-w-[120px]">
+                                <ColumnFilter
+                                  column="cidade"
+                                  title="Cidade"
+                      values={Array.from(
+                        new Set(
+                          (filterUF.length > 0
+                            ? companies.filter(c => {
+                                const uf = getCompanyUF(c);
+                                return uf ? filterUF.includes(uf) : false;
+                              })
+                            : companies
+                          )
+                            .map(c => getCompanyCity(c))
+                            .filter((city): city is string => !!city)
+                        )
+                      )}
+                      selectedValues={filterCity}
+                      onFilterChange={setFilterCity}
+                    />
+                  </TableHead>
+                              <TableHead className="w-[80px] min-w-[72px] text-center">
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -2187,7 +2298,7 @@ export default function ApprovedLeads() {
                                   <ArrowUpDown className={`h-4 w-4 transition-colors ${sortColumn === 'score' ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`} />
                                 </Button>
                               </TableHead>
-                              <TableHead className="w-[120px] min-w-[100px]">
+                              <TableHead className="w-[96px] min-w-[80px]">
                                 <ColumnFilter
                                   column="analysis_status"
                                   title="Status Análise"
@@ -2210,7 +2321,7 @@ export default function ApprovedLeads() {
                       onFilterChange={setFilterAnalysisStatus}
                     />
                   </TableHead>
-                                  <TableHead className="w-[120px] min-w-[100px]">
+                                  <TableHead className="w-[96px] min-w-[80px]">
                                     <ColumnFilter
                                       column="icp"
                                       title="ICP"
@@ -2222,7 +2333,7 @@ export default function ApprovedLeads() {
                       onFilterChange={setFilterICP}
                     />
                   </TableHead>
-                                      <TableHead className="w-[100px] min-w-[90px]">
+                                      <TableHead className="w-[80px] min-w-[72px]">
                                         <ColumnFilter
                                           column="fit_score"
                                           title="Fit Score"
@@ -2269,7 +2380,7 @@ export default function ApprovedLeads() {
                   
                   return (
                     <React.Fragment key={company.id}>
-                  <TableRow className={expandedRow === company.id ? 'bg-muted/30' : ''}>
+                  <TableRow className={expandedRow === company.id ? 'min-h-[56px] bg-muted/30' : 'min-h-[56px]'}>
                     <TableCell className="text-center">
                       <div className="flex justify-center">
                         <Button
@@ -2299,9 +2410,9 @@ export default function ApprovedLeads() {
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="text-center truncate">
-                      <div 
-                        className="flex flex-col items-center cursor-pointer hover:text-primary transition-colors"
+                    <TableCell className="text-left">
+                      <button 
+                        className="flex items-start gap-2 min-w-[320px] max-w-[420px] mx-auto cursor-pointer hover:text-primary transition-colors text-left"
                         onClick={() => {
                           // 🎯 NAVEGAR PARA RELATÓRIO COMPLETO (9 ABAS) DA EMPRESA
                           if (company.company_id) {
@@ -2313,20 +2424,28 @@ export default function ApprovedLeads() {
                           }
                         }}
                       >
-                        <span className="font-medium text-sm leading-snug line-clamp-2" title={company.razao_social}>
-                          {company.razao_social}
-                        </span>
-                        {rawData?.domain && (
-                          <span className="text-xs text-muted-foreground mt-0.5 truncate">{rawData.domain}</span>
-                        )}
-                      </div>
+                        <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+                        <div className="flex flex-col">
+                          <span
+                            className="text-sm font-semibold leading-snug break-words whitespace-normal"
+                            title={company.razao_social}
+                          >
+                            {company.razao_social}
+                          </span>
+                          {company.cnpj && (
+                            <span className="text-xs font-mono text-muted-foreground mt-0.5">
+                              {formatCNPJ(company.cnpj)}
+                            </span>
+                          )}
+                        </div>
+                      </button>
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center">
                         {company.cnpj ? (
                           <Badge 
-                            variant="outline" 
-                            className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors whitespace-nowrap"
+                            variant="secondary" 
+                            className="bg-emerald-600/10 text-emerald-600 border-emerald-600/30 font-mono text-sm cursor-pointer hover:bg-emerald-600/20 transition-colors whitespace-nowrap px-3 py-1"
                             onClick={() => {
                               if (company.company_id) {
                                 setExecutiveReportCompanyId(company.company_id);
@@ -2338,15 +2457,15 @@ export default function ApprovedLeads() {
                               }
                             }}
                           >
-                            {company.cnpj}
+                            {formatCNPJ(company.cnpj)}
                           </Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">N/A</span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-center truncate">
-                      <div className="flex justify-center">
+                    <TableCell className="text-center">
+                      <div className="flex justify-center max-w-[220px] mx-auto overflow-hidden text-ellipsis whitespace-nowrap">
                         {(() => {
                           // ✅ MESMA LÓGICA DA TABELA ESTOQUE DE EMPRESAS QUALIFICADAS E BASE DE EMPRESAS
                           // Buscar source_name em múltiplos lugares, priorizando qualified_prospects
@@ -2366,29 +2485,25 @@ export default function ApprovedLeads() {
                                     '';
                           }
                           
-                          // Se ainda for batch ID, tentar buscar de outros lugares (igual Base de Empresas)
-                          if ((!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-'))))) {
-                            origem = (company as any).raw_data?.import_batch_name ||
-                                    (company as any).raw_data?.batch_name ||
-                                    '';
-                          }
+                          // Usar helper canônico de origem (campanha/arquivo/job/etc.)
+                          const origemNormalizada = getCompanyOrigin(company);
                           
-                          // Se encontrou um nome válido (não batch ID), mostrar
-                          if (origem && typeof origem === 'string' && !origem.startsWith('batch-') && !origem.includes('batch-') && origem.trim() !== '') {
+                          if (origemNormalizada && origemNormalizada.trim() !== '') {
                             return (
                               <Badge 
                                 variant="secondary" 
-                                className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
+                                className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs max-w-full"
                               >
-                                {origem.trim()}
+                                <span className="truncate max-w-full">
+                                  {origemNormalizada.trim()}
+                                </span>
                               </Badge>
                             );
                           }
                           
-                          // Se não encontrou, mostrar Legacy
                           return (
                             <Badge variant="outline" className="text-xs text-muted-foreground">
-                              Legacy
+                              Sem origem
                             </Badge>
                           );
                         })()}
@@ -2414,34 +2529,118 @@ export default function ApprovedLeads() {
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="text-center truncate">
+                    {/* CNAE Principal */}
+                    <TableCell className="text-left align-top">
                       {(() => {
-                        const sector = company.segmento || company.setor || rawData?.setor_amigavel || rawData?.atividade_economica;
-                        return sector ? (
-                          <span className="text-sm truncate" title={sector}>
-                            {sector}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Não identificado</span>
+                        const cnaeResolution = resolveCompanyCNAE(company);
+                        const displayLabel = formatCNAEForDisplay(cnaeResolution);
+
+                        if (!displayLabel) {
+                          return (
+                            <span className="text-xs text-muted-foreground">
+                              Sem CNAE
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="min-w-[300px] max-w-[420px] mx-auto cursor-help">
+                                  <span className="text-xs leading-snug line-clamp-3">
+                                    {displayLabel}
+                                  </span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-md">
+                                <div className="space-y-2">
+                                  <div>
+                                    <p className="font-semibold text-sm">CNAE Principal:</p>
+                                    <p className="text-xs">
+                                      {cnaeResolution.principal.code || 'N/A'} - {cnaeResolution.principal.description || 'Sem descrição'}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                      Fonte: {cnaeResolution.fonte === 'icp_analysis' ? 'ICP (Análise)' : cnaeResolution.fonte === 'receita_federal' ? 'Receita Federal' : cnaeResolution.fonte === 'companies' ? 'Empresa' : 'N/A'}
+                                    </p>
+                                  </div>
+                                  {cnaeResolution.secundarios.length > 0 && (
+                                    <div>
+                                      <p className="font-semibold text-xs">CNAEs Secundários:</p>
+                                      <ul className="text-xs space-y-1 mt-1">
+                                        {cnaeResolution.secundarios.map((sec, idx) => (
+                                          <li key={idx}>
+                                            {sec.code} - {sec.description || 'Sem descrição'}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        {company.uf ? (
-                          <>
+                    <TableCell className="text-center max-w-[260px] px-2 overflow-hidden">
+                      {(() => {
+                        const cnaeResolution = resolveCompanyCNAE(company);
+                        const cnaeCode = cnaeResolution.principal.code;
+                        const classification = cnaeCode ? getCNAEClassificationForCompany({ ...company, cnae_principal: cnaeCode }) : null;
+                        const setor = classification?.setor_industria;
+
+                        if (setor) {
+                          return (
+                            <span className="text-sm leading-snug line-clamp-2" title={setor}>
+                              {setor}
+                            </span>
+                          );
+                        }
+
+                        if (cnaeCode) {
+                          return (
+                            <span className="text-xs text-muted-foreground">
+                              Sem classificação CNAE
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <span className="text-xs text-muted-foreground">
+                            Sem CNAE
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
+                    {/* UF */}
+                    <TableCell className="text-center whitespace-nowrap">
+                      <div className="flex justify-center">
+                        {(() => {
+                          const uf = getCompanyUF(company);
+                          return uf ? (
                             <Badge variant="secondary" className="w-fit">
-                              {company.uf}
+                              {uf}
                             </Badge>
-                            {company.municipio && (
-                              <span className="text-xs text-muted-foreground truncate" title={company.municipio}>
-                                {company.municipio}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">N/A</span>
-                        )}
+                          ) : (
+                            <span className="text-xs text-muted-foreground">N/A</span>
+                          );
+                        })()}
+                      </div>
+                    </TableCell>
+                    {/* Cidade */}
+                    <TableCell className="text-center max-w-[200px] px-2 overflow-hidden text-ellipsis whitespace-nowrap">
+                      <div className="flex justify-center max-w-full">
+                        {(() => {
+                          const city = getCompanyCity(company);
+                          return city ? (
+                            <span className="text-xs text-muted-foreground truncate" title={city}>
+                              {city}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">N/A</span>
+                          );
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -2449,8 +2648,8 @@ export default function ApprovedLeads() {
                         <ICPScoreTooltip
                           score={company.icp_score || 0}
                           porte={company.porte}
-                          setor={company.setor}
-                          uf={company.uf}
+                          setor={getCNAEClassificationForCompany(company)?.setor_industria || company.setor}
+                          uf={getCompanyUF(company) || company.uf}
                           is_cliente_totvs={company.is_cliente_totvs}
                           hasReceitaData={!!rawData?.receita_federal}
                           hasApolloData={!!rawData?.apollo || !!rawData?.enrichment_360}

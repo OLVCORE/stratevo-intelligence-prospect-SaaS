@@ -20,7 +20,8 @@ import {
   FileText,
   Globe,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -38,6 +39,7 @@ interface CompanyRowActionsProps {
   onDelete: () => void;
   onDiscoverCNPJ?: () => void;
   onEnrichWebsite?: () => void;
+  onEnrichReceita?: () => void;
   onApprove?: () => void; // ✅ NOVO: Aprovar para Leads Aprovados
 }
 
@@ -46,6 +48,7 @@ export function CompanyRowActions({
   onDelete,
   onDiscoverCNPJ,
   onEnrichWebsite,
+  onEnrichReceita,
   onApprove
 }: CompanyRowActionsProps) {
   const navigate = useNavigate();
@@ -131,11 +134,27 @@ export function CompanyRowActions({
 
         <DropdownMenuSeparator />
 
-        {/* ✅ Aprovar para Leads Aprovados */}
-        {onApprove && canApprove && (
+        {/* ✅ Consultar Receita Federal (Base de Empresas) */}
+        {onEnrichReceita && (
           <DropdownMenuItem
-            onClick={onApprove}
-            className="text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20 hover:border-l-4 hover:border-green-600 transition-all cursor-pointer"
+            onClick={onEnrichReceita}
+            disabled={!company.cnpj}
+            className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Consultar Receita Federal
+          </DropdownMenuItem>
+        )}
+
+        <DropdownMenuSeparator />
+
+        {/* ✅ Aprovar para Leads Aprovados */}
+        {onApprove && (
+          <DropdownMenuItem
+            onClick={canApprove ? onApprove : undefined}
+            disabled={!canApprove}
+            className="text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20 hover:border-l-4 hover:border-green-600 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            title={!canApprove && approveError ? approveError : undefined}
           >
             <CheckCircle2 className="h-4 w-4 mr-2" />
             Aprovar para Leads Aprovados

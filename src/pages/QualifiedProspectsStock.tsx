@@ -111,6 +111,8 @@ import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
 import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
 import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
+import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
+import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
 
 interface QualifiedProspect {
   id: string;
@@ -260,6 +262,81 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
   const [filterICP, setFilterICP] = useState<string[]>([]);
   const [filterFitScore, setFilterFitScore] = useState<string[]>([]);
   const [filterGrade, setFilterGrade] = useState<string[]>([]);
+  const [filterUF, setFilterUF] = useState<string[]>([]);
+  const [filterCity, setFilterCity] = useState<string[]>([]);
+  const [filterNomeFantasia, setFilterNomeFantasia] = useState<string[]>([]);
+  const [cnaeClassifications, setCnaeClassifications] = useState<Record<string, CNAEClassification>>({});
+
+  // 🔎 Helpers de CNAE e localização
+  const extractProspectCNAE = (prospect: QualifiedProspect): string | null => {
+    const fromEnrichment = prospect.enrichment?.cnae_principal || null;
+    const fromRaw =
+      (prospect.enrichment?.raw as any)?.cnae_fiscal ||
+      (prospect.enrichment?.raw as any)?.atividade_principal?.[0]?.code ||
+      null;
+    const cnae = fromEnrichment || fromRaw;
+    if (!cnae) return null;
+    return String(cnae).trim();
+  };
+
+  const getCNAEClassificationForProspect = (prospect: QualifiedProspect): CNAEClassification | null => {
+    const cnae = extractProspectCNAE(prospect);
+    if (!cnae) return null;
+    const normalized = cnae.replace(/\./g, '').trim();
+    return (
+      cnaeClassifications[cnae] ||
+      cnaeClassifications[normalized] ||
+      null
+    );
+  };
+
+  const getProspectUF = (prospect: QualifiedProspect): string | null => {
+    const uf = prospect.estado || (prospect.enrichment?.raw as any)?.uf || null;
+    return uf ? String(uf).toUpperCase().trim() : null;
+  };
+
+  const getProspectCity = (prospect: QualifiedProspect): string | null => {
+    const raw = (prospect.enrichment?.raw as any) || {};
+    const cidade =
+      prospect.cidade ||
+      raw.municipio ||
+      raw.cidade ||
+      null;
+    return cidade ? String(cidade).trim() : null;
+  };
+
+  const getProspectOrigin = (prospect: QualifiedProspect): string | null => {
+    // Prioridade: campanha > source_name > job.source_file_name > job.job_name > source_metadata
+    const campaign = prospect.source_metadata?.campaign;
+    if (campaign && String(campaign).trim() !== '') {
+      return String(campaign).trim();
+    }
+
+    if (prospect.source_name && prospect.source_name.trim() !== '') {
+      return prospect.source_name.trim();
+    }
+
+    const jobFile = prospect.job?.source_file_name;
+    if (jobFile && jobFile.trim() !== '') {
+      return jobFile.trim();
+    }
+
+    const jobName = prospect.job?.job_name;
+    if (jobName && jobName.trim() !== '') {
+      return jobName.trim();
+    }
+
+    if (prospect.source_metadata) {
+      const metaName =
+        (prospect.source_metadata as any).name ||
+        (prospect.source_metadata as any).source_name;
+      if (metaName && String(metaName).trim() !== '') {
+        return String(metaName).trim();
+      }
+    }
+
+    return null;
+  };
 
   // ✅ Usar useCallback para evitar recriação da função
   const loadProspects = useCallback(async () => {
@@ -435,7 +512,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       // Filtro por Origem
       if (filterOrigin.length > 0) {
         filteredProspects = filteredProspects.filter(p => {
-          const origem = p.source_name || p.job?.source_file_name || '';
+          const origem = getProspectOrigin(p) || 'Sem origem';
           return filterOrigin.includes(origem);
         });
       }
@@ -486,6 +563,33 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         });
       }
       
+      // ✅ Filtro por UF (estado)
+      if (filterUF.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const uf = getProspectUF(p);
+          return uf ? filterUF.includes(uf) : false;
+        });
+      }
+
+      // ✅ Filtro por Cidade (dependente de UF)
+      if (filterCity.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const city = getProspectCity(p);
+          return city ? filterCity.includes(city) : false;
+        });
+      }
+
+      // ✅ Filtro por Nome Fantasia
+      if (filterNomeFantasia.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const fantasia = p.enrichment?.fantasia || p.nome_fantasia || '';
+          if (!fantasia || fantasia.trim() === '' || fantasia === '-') {
+            return filterNomeFantasia.includes('Sem Nome Fantasia');
+          }
+          return filterNomeFantasia.includes(fantasia);
+        });
+      }
+      
       setProspects(filteredProspects as any);
     } catch (error: any) {
       console.error('Erro ao carregar prospects:', error);
@@ -497,7 +601,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
     } finally {
       setLoading(false);
     }
-  }, [tenantId, gradeFilter, sectorFilter, stateFilter, searchTerm, filterOrigin, filterStatusCNPJ, filterICP, filterFitScore, filterGrade]); // ✅ Dependências do useCallback
+  }, [tenantId, gradeFilter, sectorFilter, stateFilter, searchTerm, filterOrigin, filterStatusCNPJ, filterICP, filterFitScore, filterGrade, filterUF, filterCity, filterNomeFantasia]); // ✅ Dependências do useCallback
 
   // ✅ useEffect para carregar prospects quando dependências mudarem
   useEffect(() => {
@@ -1744,7 +1848,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
     }
   };
 
-  const handleBulkEnrichment = async () => {
+  // ✅ Enriquecimento Receita Federal em massa
+  const handleBulkEnrichReceita = async () => {
     const idsToEnrich = selectedIds.size > 0 
       ? Array.from(selectedIds) 
       : prospects.map(p => p.id);
@@ -2507,7 +2612,36 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
 
   // Estados únicos para filtro
   const uniqueStates = Array.from(new Set(prospects.map(p => p.estado).filter(Boolean))).sort();
-  const uniqueSectors = Array.from(new Set(prospects.map(p => p.setor).filter(Boolean))).sort();
+  const uniqueSectors = Array.from(
+    new Set(
+      prospects.map(p => {
+        const classification = getCNAEClassificationForProspect(p);
+        return classification?.setor_industria || 'Sem setor';
+      })
+    )
+  ).sort();
+  
+  // ✅ Valores únicos para filtros de Nome Fantasia, UF e Cidade
+  const uniqueNomeFantasia = Array.from(
+    new Set(
+      prospects.map(p => {
+        const fantasia = p.enrichment?.fantasia || p.nome_fantasia || '';
+        return fantasia && fantasia.trim() !== '' && fantasia !== '-' ? fantasia : 'Sem Nome Fantasia';
+      })
+    )
+  ).sort();
+  
+  const uniqueUFs = Array.from(
+    new Set(
+      prospects.map(p => getProspectUF(p)).filter(Boolean)
+    )
+  ).sort();
+  
+  const uniqueCities = Array.from(
+    new Set(
+      prospects.map(p => getProspectCity(p)).filter(Boolean)
+    )
+  ).sort();
 
   return (
     <div className="p-8 space-y-6">
@@ -2521,6 +2655,17 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           <p className="text-muted-foreground mt-1">
             Empresas que passaram pelo motor de qualificação
           </p>
+          {/* ✅ Contador de empresas no estoque */}
+          <div className="mt-3 flex items-center gap-4 text-sm">
+            <span className="font-semibold text-foreground">
+              {prospects.length} empresa(s) no estoque
+            </span>
+            {selectedIds.size > 0 && (
+              <span className="text-muted-foreground">
+                {selectedIds.size} selecionada(s) para envio
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <ExplainabilityButton
@@ -2701,6 +2846,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                 selectedCount={selectedIds.size}
                 totalCount={prospects.length}
                 onPromoteToCompanies={handlePromoteToCompanies}
+                onEnrichReceita={handleBulkEnrichReceita}
                 onExportCSV={handleExportSelected}
                 onDelete={handleBulkDelete}
                 onDeleteAll={handleDeleteAll}
@@ -2789,7 +2935,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                       <ColumnFilter
                         column="origem"
                         title="Origem"
-                        values={[...new Set(prospects.map(p => p.source_name || p.job?.source_file_name || '').filter(Boolean))]}
+                        values={Array.from(
+                          new Set(
+                            prospects
+                              .map(p => getProspectOrigin(p) || 'Sem origem')
+                              .filter(Boolean)
+                          )
+                        )}
                         selectedValues={filterOrigin}
                         onFilterChange={setFilterOrigin}
                         onSort={() => {}}
@@ -2805,8 +2957,54 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                         onSort={() => {}}
                       />
                     </TableHead>
-                    <TableHead className="w-[150px] min-w-[150px]">Nome Fantasia</TableHead>
-                    <TableHead className="w-[140px] min-w-[120px]">Cidade/UF</TableHead>
+                    {/* ✅ COLUNA CNAE (canônica) */}
+                    <TableHead className="min-w-[300px] max-w-[420px] text-left">
+                      <ColumnFilter
+                        column="cnae"
+                        title="CNAE"
+                        values={Array.from(
+                          new Set(
+                            prospects.map(p => {
+                              const cnaeRes = resolveCompanyCNAE(p);
+                              return cnaeRes.principal.code || 'Sem CNAE';
+                            }).filter(Boolean)
+                          )
+                        )}
+                        selectedValues={[]}
+                        onFilterChange={() => {}}
+                        onSort={() => {}}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[150px] min-w-[150px]">
+                      <ColumnFilter
+                        column="nome_fantasia"
+                        title="Nome Fantasia"
+                        values={uniqueNomeFantasia}
+                        selectedValues={filterNomeFantasia}
+                        onFilterChange={setFilterNomeFantasia}
+                        onSort={() => {}}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[80px] min-w-[70px]">
+                      <ColumnFilter
+                        column="uf"
+                        title="UF"
+                        values={uniqueUFs}
+                        selectedValues={filterUF}
+                        onFilterChange={setFilterUF}
+                        onSort={() => {}}
+                      />
+                    </TableHead>
+                    <TableHead className="w-[140px] min-w-[120px]">
+                      <ColumnFilter
+                        column="cidade"
+                        title="Cidade"
+                        values={uniqueCities}
+                        selectedValues={filterCity}
+                        onFilterChange={setFilterCity}
+                        onSort={() => {}}
+                      />
+                    </TableHead>
                     <TableHead className="min-w-[180px] flex-[1.5]">
                       <ColumnFilter
                         column="setor"
@@ -2828,15 +3026,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                     </TableHead>
                     <TableHead className="w-[100px] min-w-[90px]">
                       <ColumnFilter
-                        column="fit_score"
-                        title="Fit Score"
-                        values={['90-100', '75-89', '60-74', '40-59', '0-39']}
-                        selectedValues={filterFitScore}
-                        onFilterChange={setFilterFitScore}
-                      />
-                    </TableHead>
-                    <TableHead className="w-[60px] min-w-[50px]">
-                      <ColumnFilter
                         column="grade"
                         title="Grade"
                         values={['A+', 'A', 'B', 'C', 'D', 'Sem Grade']}
@@ -2844,10 +3033,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                         onFilterChange={setFilterGrade}
                       />
                     </TableHead>
-                    <TableHead className="w-[160px] min-w-[140px]">Intenção de Compra</TableHead>
-                    <TableHead className="min-w-[180px] flex-1">Website</TableHead>
-                    <TableHead className="w-[100px] min-w-[90px]">Website Fit</TableHead>
-                    <TableHead className="w-[100px] min-w-[90px]">LinkedIn</TableHead>
                     <TableHead className="w-20 min-w-[80px] text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2879,23 +3064,32 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                           </div>
                         </div>
                       </TableCell>
-                      {/* ✅ ORDEM CORRETA: 2. CNPJ */}
+                      {/* ✅ ORDEM CORRETA: 2. CNPJ (com badge verde se enriquecido) */}
                       <TableCell className="text-center">
                         <div className="flex justify-center">
-                          <Badge 
-                            variant="outline" 
-                            className="font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors"
-                            onClick={() => handleShowFullPreview(prospect.cnpj)}
-                          >
-                            {prospect.cnpj}
-                          </Badge>
+                          {(() => {
+                            const hasReceita = !!(prospect.enrichment?.raw?.receita_federal || prospect.enrichment?.raw?.receita || prospect.enrichment?.raw?.situacao);
+                            return (
+                              <Badge 
+                                variant={hasReceita ? "default" : "outline"}
+                                className={`font-mono text-xs cursor-pointer hover:bg-primary/10 transition-colors ${
+                                  hasReceita 
+                                    ? "bg-emerald-600/10 text-emerald-600 border-emerald-600/30" 
+                                    : ""
+                                }`}
+                                onClick={() => handleShowFullPreview(prospect.cnpj)}
+                              >
+                                {prospect.cnpj}
+                              </Badge>
+                            );
+                          })()}
                         </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 3. Origem */}
                       <TableCell className="text-center">
                         <div className="flex justify-center">
                           {(() => {
-                            const origem = prospect.source_name || prospect.job?.source_file_name || '';
+                            const origem = getProspectOrigin(prospect);
                             if (origem) {
                               return (
                                 <Badge 
@@ -2908,7 +3102,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                             }
                             return (
                               <Badge variant="outline" className="text-xs text-muted-foreground">
-                                Legacy
+                                Sem origem
                               </Badge>
                             );
                           })()}
@@ -2934,7 +3128,61 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                           })()}
                         </div>
                       </TableCell>
-                      {/* ✅ ORDEM CORRETA: 5. Nome Fantasia */}
+                      {/* ✅ ORDEM CORRETA: 5. CNAE (canônico) */}
+                      <TableCell className="text-left align-top">
+                        {(() => {
+                          const cnaeResolution = resolveCompanyCNAE(prospect);
+                          const displayLabel = formatCNAEForDisplay(cnaeResolution);
+
+                          if (!displayLabel) {
+                            return (
+                              <span className="text-xs text-muted-foreground">
+                                Sem CNAE
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="min-w-[300px] max-w-[420px] mx-auto cursor-help">
+                                    <span className="text-xs leading-snug line-clamp-3">
+                                      {displayLabel}
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-md">
+                                  <div className="space-y-2">
+                                    <div>
+                                      <p className="font-semibold text-sm">CNAE Principal:</p>
+                                      <p className="text-xs">
+                                        {cnaeResolution.principal.code || 'N/A'} - {cnaeResolution.principal.description || 'Sem descrição'}
+                                      </p>
+                                      <p className="text-[10px] text-muted-foreground mt-1">
+                                        Fonte: {cnaeResolution.fonte === 'icp_analysis' ? 'ICP (Análise)' : cnaeResolution.fonte === 'receita_federal' ? 'Receita Federal' : cnaeResolution.fonte === 'companies' ? 'Empresa' : 'N/A'}
+                                      </p>
+                                    </div>
+                                    {cnaeResolution.secundarios.length > 0 && (
+                                      <div>
+                                        <p className="font-semibold text-xs">CNAEs Secundários:</p>
+                                        <ul className="text-xs space-y-1 mt-1">
+                                          {cnaeResolution.secundarios.map((sec, idx) => (
+                                            <li key={idx}>
+                                              {sec.code} - {sec.description || 'Sem descrição'}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
+                      </TableCell>
+                      {/* ✅ ORDEM CORRETA: 6. Nome Fantasia */}
                       <TableCell className="text-center">
                         {(() => {
                           const fantasia = prospect.enrichment?.fantasia || prospect.nome_fantasia;
@@ -2946,21 +3194,31 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                           return '-';
                         })()}
                       </TableCell>
-                      {/* ✅ ORDEM CORRETA: 6. Cidade/UF */}
+                      {/* ✅ ORDEM CORRETA: 7. UF */}
                       <TableCell className="text-center">
                         <span>
-                          {prospect.cidade && prospect.estado
-                            ? `${prospect.cidade}/${prospect.estado}`
-                            : prospect.estado || '-'}
+                          {getProspectUF(prospect) || '-'}
                         </span>
                       </TableCell>
-                      {/* ✅ ORDEM CORRETA: 7. Setor */}
+                      {/* ✅ ORDEM CORRETA: 8. Cidade */}
                       <TableCell className="text-center">
-                        <span title={prospect.setor || '-'}>
-                          {prospect.setor || '-'}
+                        <span>
+                          {getProspectCity(prospect) || '-'}
                         </span>
                       </TableCell>
-                      {/* ✅ ORDEM CORRETA: 8. ICP */}
+                      {/* ✅ ORDEM CORRETA: 9. Setor */}
+                      <TableCell className="text-center">
+                        {(() => {
+                          const classification = getCNAEClassificationForProspect(prospect);
+                          const setor = classification?.setor_industria;
+                          return (
+                            <span title={setor || 'Sem setor'}>
+                              {setor || 'Sem setor'}
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                      {/* ✅ ORDEM CORRETA: 9. ICP */}
                       <TableCell className="text-center">
                         <div className="flex justify-center">
                           {prospect.icp?.nome ? (
@@ -2970,72 +3228,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                           ) : (
                             '-'
                           )}
-                        </div>
-                      </TableCell>
-                      {/* ✅ ORDEM CORRETA: 9. Fit Score */}
-                      <TableCell className="text-center">
-                        <div className="flex justify-center">
-                          {(() => {
-                            const fitScore = prospect.enrichment?.fit_score ?? prospect.fit_score;
-                            const matchBreakdown = prospect.match_breakdown;
-                            
-                            if (fitScore != null && fitScore > 0) {
-                              let breakdownText = '';
-                              if (matchBreakdown && Array.isArray(matchBreakdown)) {
-                                const breakdown = matchBreakdown.map((item: any) => 
-                                  `${item.label}: ${item.score.toFixed(1)}% (peso ${item.weight}%)`
-                                ).join('\n');
-                                breakdownText = `Breakdown do Fit Score:\n${breakdown}\n\nTotal: ${fitScore.toFixed(1)}%`;
-                              } else {
-                                breakdownText = `Fit Score: ${fitScore.toFixed(1)}%\n\nCálculo baseado em:\n• Setor (40%): Match com ICP\n• Localização (30%): UF/Cidade\n• Dados completos (20%): Qualidade dos dados\n• Website (5%): Presença digital\n• Contato (5%): Email/Telefone`;
-                              }
-                              
-                              return (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="flex items-center justify-center gap-2 cursor-help group">
-                                        <TrendingUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                        <span className="font-medium">{fitScore.toFixed(1)}%</span>
-                                        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="max-w-sm p-4">
-                                      <div className="space-y-2">
-                                        <p className="font-semibold text-sm border-b pb-2">
-                                          Por que esta empresa tem Fit Score {fitScore.toFixed(1)}%?
-                                        </p>
-                                        <div className="text-xs space-y-1.5 whitespace-pre-line">
-                                          {breakdownText}
-                                        </div>
-                                        {prospect.enrichment?.data_quality && (
-                                          <div className="pt-2 border-t mt-2">
-                                            <p className="text-xs font-medium">Qualidade dos Dados: {prospect.enrichment.data_quality}</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              );
-                            }
-                            return (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="text-muted-foreground text-sm cursor-help">
-                                      Não calculado
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="left" className="max-w-xs">
-                                    <p className="text-sm">
-                                      O Fit Score será calculado quando você executar o Motor de Qualificação para esta empresa.
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            );
-                          })()}
                         </div>
                       </TableCell>
                       {/* ✅ ORDEM CORRETA: 10. Grade */}
@@ -3314,35 +3506,16 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              {/* ✅ Consultar Receita Federal */}
                               <DropdownMenuItem
                                 onClick={() => handleIndividualEnrich(prospect.id)}
                                 disabled={enrichingIds.has(prospect.id)}
                               >
                                 <Sparkles className="w-4 h-4 mr-2" />
-                                Enriquecer Receita Federal
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleEnrichWebsite(prospect.id)}
-                                disabled={enrichingIds.has(prospect.id)}
-                              >
-                                <Globe className="w-4 h-4 mr-2" />
-                                Enriquecer Website & LinkedIn
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleCalculatePurchaseIntent(prospect.id)}
-                                disabled={enrichingIds.has(prospect.id)}
-                              >
-                                <Target className="w-4 h-4 mr-2" />
-                                Calcular Intenção de Compra
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleUpdateReceitaFederal(prospect.id)}
-                                disabled={enrichingIds.has(prospect.id)}
-                              >
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Atualizar Receita Federal
+                                Consultar Receita Federal
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
+                              {/* ✅ Enviar para Base de Empresas */}
                               <DropdownMenuItem
                                 onClick={() => handlePromoteIndividualToCompanies(prospect.id)}
                                 disabled={processing}
@@ -3350,9 +3523,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                                 <Database className="w-4 h-4 mr-2" />
                                 Enviar para Banco de Empresas
                               </DropdownMenuItem>
+                              {/* ✅ Exportar registro */}
                               <DropdownMenuItem
                                 onClick={() => {
-                                  // Exportar apenas esta empresa
                                   const previousSelected = new Set(selectedIds);
                                   setSelectedIds(new Set([prospect.id]));
                                   handleExportSelected();
@@ -3363,6 +3536,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                                 Exportar
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
+                              {/* ✅ Excluir com proteção */}
                               <DropdownMenuItem
                                 onClick={() => handleDeleteIndividual(prospect.id)}
                                 className="text-destructive"

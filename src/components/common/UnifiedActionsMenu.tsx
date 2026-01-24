@@ -295,6 +295,25 @@ export function UnifiedActionsMenu({
           </>
         )}
 
+        {/* RECEITA FEDERAL EM MASSA - BASE DE EMPRESAS */}
+        {context === 'companies' && onEnrichReceita && (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-xs font-semibold text-primary">
+                Validação
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={onEnrichReceita}
+                disabled={selectedCount === 0 || isProcessing}
+              >
+                <Building2 className="h-4 w-4 mr-2" />
+                Consultar Receita Federal (em massa)
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
+
         {/* EXPORT ACTIONS */}
         {(onExportCSV || onExportPDF || onPreview) && (
           <>

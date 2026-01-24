@@ -87,12 +87,6 @@ export default function CompanyDetailPage() {
   // ✅ MICROCICLO 2: Ativar Realtime para mudanças na empresa
   useRealtimeCompanyChanges(id);
 
-  // 🚨 MICROCICLO 4: Estado canônico da empresa
-  const companyState = useCanonicalState({ 
-    entity: company, 
-    entityType: 'company' 
-  });
-
   // Função para parsear colaboradores/decisores do formato da planilha
   const parseCollaborators = (cargosStr?: string, linkedinStr?: string) => {
     if (!cargosStr) return [];
@@ -254,6 +248,12 @@ export default function CompanyDetailPage() {
       } as any;
     },
     staleTime: 0,
+  });
+
+  // 🚨 MICROCICLO 4: Estado canônico da empresa
+  const companyState = useCanonicalState({ 
+    entity: company, 
+    entityType: 'company' 
   });
 
   if (isLoading) {

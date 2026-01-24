@@ -118,29 +118,11 @@ export function validateEnrichmentContext(params: {
 }): EnrichmentValidationResult {
   const context = determineEnrichmentContext(params);
 
-  // ✅ ÚNICO CONTEXTO PERMITIDO: SALES_TARGET
-  if (context === 'SALES_TARGET') {
-    return {
-      allowed: true,
-      context: 'SALES_TARGET',
-    };
-  }
-
-  // 🚫 TODOS OS OUTROS CONTEXTOS SÃO BLOQUEADOS
-  const blockedContexts: Record<EnrichmentContext, string> = {
-    LISTA: 'Enrichment não permitido durante upload ou busca. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
-    BASE_EMPRESAS: 'Enrichment não permitido na Base de Empresas. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
-    POOL_COMERCIAL: 'Enrichment não permitido no Pool Comercial (Quarentena). Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
-    PIPELINE_VENDAS: 'Enrichment não permitido no Pipeline de Vendas. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
-    SALES_TARGET: '', // Permitido
-    UNKNOWN: 'Contexto de enrichment não identificado. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
-  };
-
+  // ✅ MC2.5: Enriquecimento liberado em todos os contextos
+  // Enriquecimento é qualificação de dado, não ação comercial
   return {
-    allowed: false,
+    allowed: true,
     context,
-    reason: blockedContexts[context],
-    errorCode: 'NOT_SALES_TARGET',
   };
 }
 

@@ -72,7 +72,7 @@ BEGIN
     'porte', NULL,
     'cnae_principal', NULL,
     'website', v_company.website,
-    'email', v_company.email,
+    'email', NULL, -- ✅ Campo não existe em companies, usar NULL
     'telefone', NULL,
     'website_encontrado', v_company.website_encontrado,
     'website_fit_score', COALESCE((v_company.website_fit_score)::numeric, 0),
