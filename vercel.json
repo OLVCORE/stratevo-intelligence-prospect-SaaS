@@ -55,8 +55,8 @@
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/"
+      "source": "/((?!assets/).*)",
+      "destination": "/index.html"
     }
   ]
 }
