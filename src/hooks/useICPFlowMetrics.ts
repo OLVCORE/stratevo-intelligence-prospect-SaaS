@@ -22,7 +22,8 @@ export function useICPFlowMetrics() {
       try {
         // 🔥 CRÍTICO: Filtrar TODAS as queries por tenant_id
         const [r1, r2, r3] = await Promise.all([
-          supabase.from('icp_analysis_results').select('id', { count: 'exact', head: true }).eq('status', 'pendente').eq('tenant_id', tenantId),
+          // ✅ MC2.5: Removido filtro tenant_id (campo não existe em icp_analysis_results)
+          supabase.from('icp_analysis_results').select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
           supabase.from('leads_pool').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
           supabase.from('companies').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId)
         ]);

@@ -144,10 +144,12 @@ export default function CommandCenter() {
         lastImportResult,
       ] = await Promise.all([
         safeQuery(() => supabase.from('companies').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId), null),
-        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente').eq('tenant_id', tenantId), null),
-        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada').eq('tenant_id', tenantId), null),
+        // ✅ MC2.5: Removido filtro tenant_id (campo não existe em icp_analysis_results)
+        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente'), null),
+        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada'), null),
         safeQuery(() => supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId), null),
-        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovada').eq('tenant_id', tenantId), null),
+        // ✅ MC2.5: Removido filtro tenant_id (campo não existe em icp_analysis_results)
+        safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovada'), null),
         safeQuery(() => supabase.from('stc_verification_history').select('*', { count: 'exact', head: true }).eq('status', 'processing').eq('tenant_id', tenantId), null),
         safeQuery(() => supabase.from('sdr_deals').select('deal_value, created_at').in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId), [] as any[], 0),
         safeQuery(() => supabase.from('sdr_deals').select('deal_value, created_at, won_date').eq('deal_stage', 'won').eq('tenant_id', tenantId).limit(10), [] as any[], 0),
