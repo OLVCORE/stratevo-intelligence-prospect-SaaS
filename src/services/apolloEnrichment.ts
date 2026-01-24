@@ -1,5 +1,7 @@
 // 🔥 APOLLO ENRICHMENT DIRETO (sem Edge Function, evita CORS 401)
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
 import { supabase } from '@/integrations/supabase/client';
+import { validateEnrichmentContext, getCurrentRoutePath } from '@/lib/utils/enrichmentContextValidator';
 
 interface ApolloOrganizationData {
   id: string;
@@ -43,9 +45,36 @@ interface ApolloPersonData {
 export async function enrichCompanyWithApollo(
   companyId: string,
   companyName: string,
-  domain?: string
+  domain?: string,
+  context?: {
+    entityType?: 'company' | 'prospect' | 'lead' | 'deal' | 'quarantine';
+    tableName?: string;
+    leadId?: string;
+  }
 ): Promise<{ success: boolean; decisores?: any[]; error?: string }> {
+  // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+  const validation = validateEnrichmentContext({
+    entityType: context?.entityType,
+    tableName: context?.tableName,
+    routePath: getCurrentRoutePath(),
+    leadId: context?.leadId,
+    companyId,
+  });
+
+  if (!validation.allowed) {
+    console.error('[APOLLO] 🚫 ENRICHMENT BLOQUEADO:', {
+      context: validation.context,
+      reason: validation.reason,
+      errorCode: validation.errorCode,
+    });
+    return {
+      success: false,
+      error: validation.reason || 'Enrichment não permitido neste contexto. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
+    };
+  }
+
   try {
+    console.log('[APOLLO] ✅ Contexto validado:', validation.context);
     const apolloKey = import.meta.env.VITE_APOLLO_API_KEY;
     
     if (!apolloKey) {

@@ -1,5 +1,8 @@
 // ✅ Serviço de Enriquecimento 360° SIMPLIFICADO (sem Edge Function)
 // Calcula scores baseados nos dados já coletados
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
+
+import { validateEnrichmentContext, getCurrentRoutePath } from '@/lib/utils/enrichmentContextValidator';
 
 export interface Enrichment360Result {
   success: boolean;
@@ -27,8 +30,36 @@ export async function enrichment360Simplificado(data: {
   porte?: string;
   cnae?: string;
   raw_data?: any;
+  context?: {
+    entityType?: 'company' | 'prospect' | 'lead' | 'deal' | 'quarantine';
+    tableName?: string;
+    leadId?: string;
+    companyId?: string;
+  };
 }): Promise<Enrichment360Result> {
+  // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+  const validation = validateEnrichmentContext({
+    entityType: data.context?.entityType,
+    tableName: data.context?.tableName,
+    routePath: getCurrentRoutePath(),
+    leadId: data.context?.leadId,
+    companyId: data.context?.companyId,
+  });
+
+  if (!validation.allowed) {
+    console.error('[360°] 🚫 ENRICHMENT BLOQUEADO:', {
+      context: validation.context,
+      reason: validation.reason,
+      errorCode: validation.errorCode,
+    });
+    return {
+      success: false,
+      error: validation.reason || 'Enrichment não permitido neste contexto. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
+    };
+  }
+
   try {
+    console.log('[360°] ✅ Contexto validado:', validation.context);
     console.log('[360°] 🔍 Iniciando análise simplificada:', data.razao_social);
 
     const rawData = data.raw_data || {};

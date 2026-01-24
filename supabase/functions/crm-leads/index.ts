@@ -19,6 +19,48 @@ serve(async (req) => {
     if (req.method === 'POST' && action === 'create') {
       const body = await req.json();
       
+      // 🚨 MICROCICLO 3: BLOQUEIO - Leads só podem ser criados em ACTIVE
+      // Validar se há entidade origem e se está em ACTIVE
+      if (body.entity_type && body.entity_id) {
+        const { data: canCreate, error: validationError } = await ctx.supabase
+          .rpc('can_create_lead', {
+            p_entity_type: body.entity_type,
+            p_entity_id: body.entity_id,
+            p_tenant_id: ctx.tenantId
+          });
+
+        if (validationError) {
+          throw new Error(`Erro ao validar criação de lead: ${validationError.message}`);
+        }
+
+        if (!canCreate) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'LEAD_CREATION_BLOCKED',
+              message: 'Leads só podem ser criados quando a entidade origem está em estado ACTIVE (SALES TARGET). A entidade origem deve passar por POOL antes de criar lead.'
+            }),
+            {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          );
+        }
+      } else {
+        // Se não há entidade origem especificada, bloquear criação direta
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'LEAD_CREATION_BLOCKED',
+            message: 'Leads não podem ser criados diretamente. Devem ser criados a partir de entidades em estado ACTIVE (aprovadas da quarentena).'
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
       // Validar campos obrigatórios baseados no modelo de negócio
       const requiredFields = getRequiredFieldsForModel(ctx.tenantConfig.businessModel);
       validateLeadData(body, requiredFields);

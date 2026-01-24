@@ -1,4 +1,5 @@
 // ✅ Orquestrador de Enrichment 360° - coordena todas as fontes de dados
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
 import { logger } from '@/lib/utils/logger';
 import { fetchLinkedInCompanyData } from '@/lib/adapters/social/linkedinCompany';
 import { fetchJusBrasilData } from '@/lib/adapters/legal/jusbrasil';
@@ -8,6 +9,7 @@ import { detectMarketplacePresence } from '@/lib/adapters/marketplace/marketplac
 import { analyzeAdvancedTechStack } from '@/lib/adapters/tech/advancedTechStack';
 import type { MethodologyExplanation } from '@/lib/engines/intelligence/explainability';
 import { generateMethodologyExplanation, generateAIContextualAnalysis } from '@/lib/engines/intelligence/explainability';
+import { validateEnrichmentContext, getCurrentRoutePath } from '@/lib/utils/enrichmentContextValidator';
 
 export interface Company360Profile {
   // Identificação
@@ -105,15 +107,46 @@ export interface Company360Profile {
 /**
  * Executa enrichment 360° completo da empresa
  * Coordena busca em paralelo de todas as fontes
+ * 🚨 MICROCICLO 2: Bloqueado fora de SALES TARGET
  */
 export async function executeEnrichment360(
   companyName: string,
   cnpj?: string,
   domain?: string,
-  linkedinUrl?: string
+  linkedinUrl?: string,
+  context?: {
+    entityType?: 'company' | 'prospect' | 'lead' | 'deal' | 'quarantine';
+    tableName?: string;
+    leadId?: string;
+    companyId?: string;
+  }
 ): Promise<Company360Profile> {
+  // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+  const validation = validateEnrichmentContext({
+    entityType: context?.entityType,
+    tableName: context?.tableName,
+    routePath: getCurrentRoutePath(),
+    leadId: context?.leadId,
+    companyId: context?.companyId,
+  });
+
+  if (!validation.allowed) {
+    const errorMessage = validation.reason || 'Enrichment não permitido neste contexto. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.';
+    logger.error('ENRICHMENT_360', 'Enrichment blocked', {
+      context: validation.context,
+      reason: validation.reason,
+      errorCode: validation.errorCode,
+    });
+    throw new Error(errorMessage);
+  }
+
   const startTime = Date.now();
-  logger.info('ENRICHMENT_360', 'Starting full enrichment', { companyName, cnpj, domain });
+  logger.info('ENRICHMENT_360', 'Starting full enrichment', { 
+    companyName, 
+    cnpj, 
+    domain,
+    context: validation.context 
+  });
 
   try {
     // 🚀 Executa todas as buscas em PARALELO para máxima performance

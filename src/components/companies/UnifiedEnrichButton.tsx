@@ -1,3 +1,4 @@
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +17,7 @@ import {
   Loader2,
   Building2,
   Clock,
+  AlertCircle,
 } from 'lucide-react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 import {
@@ -24,6 +26,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
 
 interface UnifiedEnrichButtonProps {
   // Callbacks para enriquecimento
@@ -61,8 +64,17 @@ export function UnifiedEnrichButton({
 }: UnifiedEnrichButtonProps) {
   const [processingAction, setProcessingAction] = useState<string | null>(null);
 
+  // 🚨 MICROCICLO 2: Verificar se está em SALES TARGET
+  const isSalesTarget = isInSalesTargetContext();
+  const enrichmentBlocked = !isSalesTarget;
+
   const handleAction = async (action: string, fn?: () => Promise<void>) => {
-    if (!fn || isProcessing) return;
+    if (!fn || isProcessing || enrichmentBlocked) {
+      if (enrichmentBlocked) {
+        console.warn('[UnifiedEnrichButton] 🚫 Enrichment bloqueado - não está em SALES TARGET');
+      }
+      return;
+    }
     
     try {
       setProcessingAction(action);
@@ -85,28 +97,55 @@ export function UnifiedEnrichButton({
               <Button
                 variant={variant}
                 size={size}
-                disabled={isLoading}
+                disabled={isLoading || enrichmentBlocked}
                 className="gap-2"
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
+                ) : enrichmentBlocked ? (
+                  <AlertCircle className="h-4 w-4" />
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                Atualizar Dados
+                {enrichmentBlocked ? 'Enrichment Bloqueado' : 'Atualizar Dados'}
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
           <TooltipContent>
             <p className="max-w-xs text-sm">
-              <strong>Fluxo de Enriquecimento:</strong> 1) Receita Federal (sempre) → 2) Relatório STC → Aba TOTVS → 3) Se GO → Apollo (Decisores)
+              {enrichmentBlocked ? (
+                <>
+                  <strong>🚫 Enrichment Bloqueado</strong>
+                  <br />
+                  Disponível apenas para Leads Aprovados (Sales Target)
+                </>
+              ) : (
+                <>
+                  <strong>Fluxo de Enriquecimento:</strong> 1) Receita Federal (sempre) → 2) Relatório STC → Aba TOTVS → 3) Se GO → Apollo (Decisores)
+                </>
+              )}
             </p>
           </TooltipContent>
         </Tooltip>
 
         <DropdownMenuContent align="end" className="w-72 z-[100] bg-popover">
+          {enrichmentBlocked && (
+            <>
+              <div className="px-2 py-3 bg-destructive/10 border-b border-destructive/20">
+                <div className="flex items-center gap-2 text-destructive text-sm font-semibold">
+                  <AlertCircle className="h-4 w-4" />
+                  Enrichment Bloqueado
+                </div>
+                <p className="text-xs text-destructive/80 mt-1">
+                  Disponível apenas para Leads Aprovados (Sales Target)
+                </p>
+              </div>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Escolha o tipo de atualização
+            {enrichmentBlocked ? 'Ações não disponíveis' : 'Escolha o tipo de atualização'}
           </DropdownMenuLabel>
           
           <DropdownMenuSeparator />
@@ -117,8 +156,8 @@ export function UnifiedEnrichButton({
             {onQuickRefresh && (
               <DropdownMenuItem
                 onClick={() => handleAction('Quick Refresh', onQuickRefresh)}
-                disabled={isLoading}
-                className="cursor-pointer hover:bg-accent hover:border-l-4 hover:border-blue-500 transition-all"
+                disabled={isLoading || enrichmentBlocked}
+                className={enrichmentBlocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent hover:border-l-4 hover:border-blue-500 transition-all"}
               >
                 {processingAction === 'Quick Refresh' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-blue-500" />
@@ -138,8 +177,8 @@ export function UnifiedEnrichButton({
             {onFullEnrich && (
               <DropdownMenuItem
                 onClick={() => handleAction('Full Enrich', onFullEnrich)}
-                disabled={isLoading || !hasCNPJ}
-                className="cursor-pointer hover:bg-accent hover:border-l-4 hover:border-primary transition-all"
+                disabled={isLoading || !hasCNPJ || enrichmentBlocked}
+                className={enrichmentBlocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent hover:border-l-4 hover:border-primary transition-all"}
               >
                 {processingAction === 'Full Enrich' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-primary" />
@@ -159,8 +198,8 @@ export function UnifiedEnrichButton({
             {onAutoEnrich && (
               <DropdownMenuItem
                 onClick={() => handleAction('Auto-Enrich', onAutoEnrich)}
-                disabled={isLoading}
-                className="cursor-pointer hover:bg-accent hover:border-l-4 hover:border-green-500 transition-all"
+                disabled={isLoading || enrichmentBlocked}
+                className={enrichmentBlocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent hover:border-l-4 hover:border-green-500 transition-all"}
               >
                 {processingAction === 'Auto-Enrich' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin text-green-500" />
@@ -189,8 +228,8 @@ export function UnifiedEnrichButton({
                 {onReceita && (
                   <DropdownMenuItem
                     onClick={() => handleAction('Receita', onReceita)}
-                    disabled={isLoading || !hasCNPJ}
-                    className="cursor-pointer hover:bg-accent"
+                    disabled={isLoading || !hasCNPJ || enrichmentBlocked}
+                    className={enrichmentBlocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent"}
                   >
                     {processingAction === 'Receita' ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -207,8 +246,8 @@ export function UnifiedEnrichButton({
                 {onApollo && (
                   <DropdownMenuItem
                     onClick={() => handleAction('Apollo', onApollo)}
-                    disabled={isLoading}
-                    className="cursor-pointer hover:bg-accent"
+                    disabled={isLoading || enrichmentBlocked}
+                    className={enrichmentBlocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent"}
                   >
                     {processingAction === 'Apollo' ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -222,8 +261,8 @@ export function UnifiedEnrichButton({
                 {on360 && (
                   <DropdownMenuItem
                     onClick={() => handleAction('360°', on360)}
-                    disabled={isLoading}
-                    className="cursor-pointer hover:bg-accent"
+                    disabled={isLoading || enrichmentBlocked}
+                    className={enrichmentBlocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent"}
                   >
                     {processingAction === '360°' ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />

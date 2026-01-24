@@ -172,7 +172,7 @@ export function UnifiedActionsMenu({
                   className="text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  Aprovar
+                  {context === 'companies' ? 'Aprovar para Leads Aprovados' : 'Aprovar'}
                 </DropdownMenuItem>
               )}
 
@@ -213,8 +213,8 @@ export function UnifiedActionsMenu({
           </>
         )}
 
-        {/* ENRICHMENT ACTIONS */}
-        {(onEnrichReceita || onEnrichApollo || onEnrich360 || onEnrichWebsite || onDiscoverCNPJ || onVerification || onCalculatePurchaseIntent) && (
+        {/* ENRICHMENT ACTIONS - APENAS EM LEADS APROVADOS */}
+        {context === 'approved' && (onEnrichReceita || onEnrichApollo || onEnrich360 || onEnrichWebsite || onDiscoverCNPJ || onVerification || onCalculatePurchaseIntent) && (
           <>
             <DropdownMenuGroup>
               <DropdownMenuLabel className="text-xs font-semibold text-primary">

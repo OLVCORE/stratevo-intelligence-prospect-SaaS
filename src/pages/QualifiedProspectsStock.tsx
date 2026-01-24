@@ -907,12 +907,29 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
   };
 
   // ✅ FLUXO OFICIAL: Única ação permitida - "Enviar para Banco de Empresas"
+  // 🚨 MICROCICLO 4: Validar estados canônicos
   const handlePromoteToCompanies = async () => {
     if (selectedIds.size === 0) {
       toast({
         title: 'Atenção',
         description: 'Selecione pelo menos uma empresa para enviar ao Banco de Empresas',
         variant: 'destructive',
+      });
+      return;
+    }
+
+    // 🚨 MICROCICLO 4: Validar que prospects estão em BASE
+    const { getCanonicalState } = await import('@/lib/utils/stateTransitionValidator');
+    const selectedProspects = prospects.filter(p => selectedIds.has(p.id));
+    
+    const invalidStates = selectedProspects.filter((prospect: any) => {
+      const state = getCanonicalState(prospect, 'qualified_prospect');
+      return state !== 'BASE';
+    });
+
+    if (invalidStates.length > 0) {
+      toast.error('Ação não permitida', {
+        description: `${invalidStates.length} prospect(s) não estão em BASE. Apenas prospects qualificados (BASE) podem ser enviados para Banco de Empresas.`
       });
       return;
     }
@@ -2684,10 +2701,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                 selectedCount={selectedIds.size}
                 totalCount={prospects.length}
                 onPromoteToCompanies={handlePromoteToCompanies}
-                onEnrichReceita={handleBulkEnrichment}
-                onEnrichApollo={handleBulkEnrichApollo}
-                onEnrichWebsite={handleBulkEnrichWebsite}
-                onCalculatePurchaseIntent={handleBulkCalculatePurchaseIntent}
                 onExportCSV={handleExportSelected}
                 onDelete={handleBulkDelete}
                 onDeleteAll={handleDeleteAll}

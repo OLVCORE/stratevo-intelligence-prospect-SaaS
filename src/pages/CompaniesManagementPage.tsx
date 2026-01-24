@@ -6,7 +6,6 @@ import { logger } from '@/lib/utils/logger';
 // ❌ REMOVIDO: Upload agora é APENAS no Motor de Qualificação (SearchPage)
 // import { BulkUploadDialog } from '@/components/companies/BulkUploadDialog';
 import { ApolloImportDialog } from '@/components/companies/ApolloImportDialog';
-import { BulkActionsToolbar } from '@/components/companies/BulkActionsToolbar';
 import { CompanyRowActions } from '@/components/companies/CompanyRowActions';
 import { HeaderActionsMenu } from '@/components/companies/HeaderActionsMenu';
 import { UnifiedActionsMenu } from '@/components/common/UnifiedActionsMenu';
@@ -68,6 +67,7 @@ import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBad
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import LocationMap from '@/components/map/LocationMap';
 import { normalizeFromCompanies, prepareForICPInsertion } from '@/lib/utils/companyDataNormalizer';
+import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
 
 
 export default function CompaniesManagementPage() {
@@ -549,7 +549,162 @@ export default function CompaniesManagementPage() {
     );
   };
 
+  // ✅ NOVO: Aprovar empresa individual (BASE → ACTIVE)
+  const handleApproveIndividual = async (companyId: string) => {
+    try {
+      if (!tenant?.id) {
+        toast.error('Tenant não encontrado');
+        return;
+      }
+
+      const company = companies.find((c: any) => c.id === companyId);
+      if (!company) {
+        toast.error('Empresa não encontrada');
+        return;
+      }
+
+      // Validar estado canônico
+      const { getCanonicalState } = await import('@/lib/utils/stateTransitionValidator');
+      const currentState = getCanonicalState(company, 'company');
+      
+      if (currentState !== 'BASE' && currentState !== 'POOL') {
+        toast.error('Aprovação não permitida', {
+          description: `Empresa deve estar em BASE para aprovar. Estado atual: ${currentState}`
+        });
+        return;
+      }
+
+      // ✅ USAR RPC TRANSAcional: Atualiza companies E insere em icp_analysis_results
+      const { data, error } = await supabase.rpc('approve_company_to_leads', {
+        p_company_id: companyId,
+        p_tenant_id: tenant.id
+      });
+
+      if (error) {
+        console.error('[APPROVE] Erro ao aprovar empresa:', error);
+        toast.error('Erro ao aprovar empresa', { description: error.message });
+        return;
+      }
+
+      const result = data?.[0];
+      if (!result?.success) {
+        console.error('[APPROVE] Falha na aprovação:', result?.message);
+        toast.error('Erro ao aprovar empresa', { description: result?.message || 'Erro desconhecido' });
+        return;
+      }
+
+      console.log('[APPROVE] ✅ Empresa aprovada com sucesso:', {
+        companyId,
+        icpAnalysisId: result.icp_analysis_id
+      });
+
+      toast.success('✅ Empresa aprovada para Leads Aprovados!', {
+        description: 'A empresa foi inserida na tabela de leads aprovados e está disponível para enrichment',
+        action: {
+          label: 'Ver Leads Aprovados →',
+          onClick: () => navigate('/leads/approved')
+        }
+      });
+
+      await refetch();
+    } catch (error: any) {
+      console.error('[APPROVE] Erro ao aprovar empresa:', error);
+      toast.error('Erro ao aprovar empresa', { description: error.message });
+    }
+  };
+
+  // ✅ NOVO: Aprovar empresas em massa (BASE → ACTIVE)
+  const handleApproveBatch = async () => {
+    if (selectedCompanies.length === 0) {
+      toast.error('Nenhuma empresa selecionada');
+      return;
+    }
+
+    if (!tenant?.id) {
+      toast.error('Tenant não encontrado');
+      return;
+    }
+
+    try {
+      // Validar que todas estão em BASE
+      const { getCanonicalState } = await import('@/lib/utils/stateTransitionValidator');
+      const companiesToApprove = companies.filter((c: any) => selectedCompanies.includes(c.id));
+      
+      const invalidStates = companiesToApprove.filter((c: any) => {
+        const state = getCanonicalState(c, 'company');
+        return state !== 'BASE' && state !== 'POOL';
+      });
+
+      if (invalidStates.length > 0) {
+        toast.error('Aprovação bloqueada', {
+          description: `${invalidStates.length} empresa(s) não estão em BASE. Aprove apenas empresas em BASE.`
+        });
+        return;
+      }
+
+      // ✅ USAR RPC TRANSAcional em massa: Atualiza companies E insere em icp_analysis_results
+      const { data, error } = await supabase.rpc('approve_companies_batch_to_leads', {
+        p_company_ids: selectedCompanies,
+        p_tenant_id: tenant.id
+      });
+
+      if (error) {
+        console.error('[APPROVE BATCH] Erro ao aprovar empresas:', error);
+        toast.error('Erro ao aprovar empresas', { description: error.message });
+        return;
+      }
+
+      const result = data?.[0];
+      const approvedCount = result?.approved_count || 0;
+      const failedCount = result?.failed_count || 0;
+
+      console.log('[APPROVE BATCH] Resultado:', {
+        approved: approvedCount,
+        failed: failedCount,
+        results: result?.results
+      });
+
+      if (approvedCount === 0) {
+        toast.error('Nenhuma empresa foi aprovada', {
+          description: failedCount > 0 ? `${failedCount} empresa(s) falharam na aprovação` : 'Erro desconhecido'
+        });
+        return;
+      }
+
+      if (failedCount > 0) {
+        toast.warning(`${approvedCount} empresa(s) aprovada(s), ${failedCount} falharam`, {
+          description: 'Algumas empresas não puderam ser aprovadas. Verifique os logs.',
+          duration: 6000
+        });
+      } else {
+        toast.success(`✅ ${approvedCount} empresa(s) aprovada(s) para Leads Aprovados!`, {
+          description: 'As empresas foram inseridas na tabela de leads aprovados e estão disponíveis para enrichment',
+          action: {
+            label: 'Ver Leads Aprovados →',
+            onClick: () => navigate('/leads/approved')
+          },
+          duration: 6000
+        });
+      }
+
+      setSelectedCompanies([]);
+      await refetch();
+    } catch (error: any) {
+      console.error('[APPROVE BATCH] Erro ao aprovar empresas:', error);
+      toast.error('Erro ao aprovar empresas', { description: error.message });
+    }
+  };
+
   const handleEnrich = async (companyId: string) => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     try {
       setEnrichingId(companyId);
       toast.info('Iniciando análise 360°...');
@@ -571,6 +726,15 @@ export default function CompaniesManagementPage() {
   };
 
   const handleEnrichReceita = async (companyId: string) => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     try {
       setEnrichingReceitaId(companyId);
       toast.info('Buscando dados da Receita Federal...');
@@ -674,6 +838,15 @@ export default function CompaniesManagementPage() {
 
   // ✅ NOVO: Enriquecimento de Website & LinkedIn (individual)
   const handleEnrichWebsite = async (companyId: string) => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     try {
       setIsEnrichingWebsite(true);
       const company = companies.find((c: any) => c.id === companyId);
@@ -1029,6 +1202,15 @@ export default function CompaniesManagementPage() {
   };
 
   const handleBatchEnrichReceitaWS = async () => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     try {
       setIsBatchEnriching(true);
       
@@ -1134,6 +1316,15 @@ export default function CompaniesManagementPage() {
   };
 
   const handleBatchEnrich360 = async () => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     try {
       setIsBatchEnriching360(true);
       
@@ -1196,6 +1387,15 @@ export default function CompaniesManagementPage() {
   const [partnerSearchOpen, setPartnerSearchOpen] = useState(false);
 
   const handleBatchEnrichApollo = async () => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     try {
       setIsBatchEnrichingApollo(true);
       setCancelEnrichment(false);
@@ -1696,54 +1896,12 @@ export default function CompaniesManagementPage() {
               Gerenciar Empresas
             </h1>
             <p className="text-muted-foreground mt-1">
-              Visualize, edite, exclua e enriqueça empresas cadastradas
+              Visualize, edite, classifique e aprove empresas para Leads Aprovados
             </p>
           </div>
           
           <div className="flex items-center gap-2">
-            {/* UnifiedEnrichButton - Visível para enriquecimento */}
-            {selectedCompanies.length === 1 && (() => {
-              const selectedCompany = companies.find(c => c.id === selectedCompanies[0]);
-              if (!selectedCompany) return null;
-              
-              const totvsStatus = (selectedCompany as any)?.totvs_status;
-              const isGO = totvsStatus === 'go' || totvsStatus === 'GO';
-              
-              return (
-                <UnifiedEnrichButton
-                  onQuickRefresh={async () => {
-                    const companyId = selectedCompanies[0];
-                    await handleEnrichReceita(companyId);
-                  }}
-                  onFullEnrich={async () => {
-                    const companyId = selectedCompanies[0];
-                    // ✅ FLUXO CORRETO: Sempre enriquecer Receita primeiro (sem verificar GO/NO-GO)
-                    // Depois o usuário vai para Relatório STC → Aba TOTVS → Define GO/NO-GO
-                    // Só então pode enriquecer Apollo se for GO
-                    await handleEnrichReceita(companyId);
-                    toast.info('✅ Receita Federal atualizada! Agora abra o Relatório STC → Aba TOTVS para verificar GO/NO-GO. Se GO, você poderá enriquecer Apollo.');
-                  }}
-                  onReceita={async () => {
-                    const companyId = selectedCompanies[0];
-                    await handleEnrichReceita(companyId);
-                  }}
-                  onApollo={isGO ? async () => {
-                    // Apollo enriquecimento individual (só se GO)
-                    // handleBatchEnrichApollo já usa selectedCompanies, que tem apenas 1 empresa aqui
-                    await handleBatchEnrichApollo();
-                  } : undefined}
-                  on360={async () => {
-                    const companyId = selectedCompanies[0];
-                    await handleEnrich(companyId);
-                  }}
-                  isProcessing={isBatchEnriching || isBatchEnriching360 || !!enrichingReceitaId}
-                  hasCNPJ={!!selectedCompany?.cnpj}
-                  hasApolloId={!!(selectedCompany as any)?.apollo_organization_id}
-                  variant="default"
-                  size="sm"
-                />
-              );
-            })()}
+            {/* 🚨 REMOVIDO: UnifiedEnrichButton - Enrichment só em Leads Aprovados */}
             
             <HeaderActionsMenu
               onUploadClick={() => {
@@ -1757,189 +1915,8 @@ export default function CompaniesManagementPage() {
                   duration: 6000
                 });
               }}
-              onBatchEnrichReceita={handleBatchEnrichReceitaWS}
-              onBatchEnrich360={handleBatchEnrich360}
-              onBatchEnrichApollo={handleBatchEnrichApollo}
-              onBatchEnrichWebsite={handleBulkEnrichWebsite}
-              onSendToQuarantine={async () => {
-                try {
-                  // 🎯 USAR EMPRESAS SELECIONADAS OU FILTRADAS
-                  const companiesToSend = selectedCompanies.length > 0
-                    ? companies.filter(c => selectedCompanies.includes(c.id))
-                    : companies; // Se nenhuma selecionada, usar todas as filtradas
-                  
-                  // ✅ CONFIRMAÇÃO ANTES DE ENVIAR
-                  const confirmMessage = selectedCompanies.length > 0
-                    ? `Enviar ${selectedCompanies.length} empresas SELECIONADAS para Quarentena ICP?`
-                    : `Enviar TODAS as ${companiesToSend.length} empresas FILTRADAS para Quarentena ICP?\n\nFiltros ativos:\n${filterOrigin.length > 0 ? `• Origem: ${filterOrigin.join(', ')}\n` : ''}${filterStatus.length > 0 ? `• Status: ${filterStatus.join(', ')}\n` : ''}${filterSector.length > 0 ? `• Setor: ${filterSector.join(', ')}\n` : ''}${filterRegion.length > 0 ? `• UF: ${filterRegion.join(', ')}` : ''}`;
-                  
-                  if (!confirm(confirmMessage)) {
-                    toast.info('Envio cancelado pelo usuário');
-                    return;
-                  }
-                  
-                  toast.info(`🎯 Movendo ${companiesToSend.length} empresas para Quarentena ICP...`, {
-                    description: 'Todos os dados enriquecidos serão mantidos · Powered by OLV Internacional'
-                  });
-
-                  let sent = 0;
-                  let skipped = 0;
-                  let errors = 0;
-
-                  for (const company of companiesToSend) {
-                      try {
-                        // 🔧 BUSCAR DADOS COMPLETOS DA EMPRESA (com CNPJ)
-                        const { data: fullCompany, error: fetchError } = await supabase
-                          .from('companies')
-                          .select('*')
-                          .eq('id', company.id)
-                          .single();
-
-                        if (fetchError || !fullCompany) {
-                          console.error(`❌ Erro ao buscar empresa completa:`, fetchError);
-                          errors++;
-                          continue;
-                        }
-
-                        if (!fullCompany.cnpj) {
-                          console.warn(`⚠️ Empresa ${fullCompany.company_name} sem CNPJ - pulando`);
-                          skipped++;
-                          continue;
-                        }
-
-                        // ✅ Verifica se já existe no ICP usando CNPJ (constraint UNIQUE)
-                        const { data: existing, error: checkError } = await supabase
-                          .from('icp_analysis_results')
-                          .select('id, cnpj')
-                          .eq('cnpj', fullCompany.cnpj)
-                          .maybeSingle();
-
-                        if (checkError) {
-                          console.error(`❌ Erro ao verificar empresa ${fullCompany.company_name}:`, checkError);
-                          errors++;
-                          continue;
-                        }
-
-                        if (existing) {
-                          console.log(`✓ Empresa ${fullCompany.company_name} (CNPJ: ${fullCompany.cnpj}) já está no ICP`);
-                          skipped++;
-                          continue;
-                        }
-
-                        // ✅ NORMALIZAR DADOS USANDO O NORMALIZADOR UNIVERSAL (garante preservação de TODOS os dados enriquecidos)
-                        const normalized = normalizeFromCompanies(fullCompany);
-                        
-                        // ✅ PREPARAR DADOS PARA INSERÇÃO usando o normalizador (preserva TODOS os enriquecimentos)
-                        const insertData = prepareForICPInsertion(normalized, tenant?.id || fullCompany.tenant_id);
-                        
-                        // ✅ ORIGEM: Priorizar origem do fullCompany, depois source_name, depois raw_data, depois default
-                        // ⚠️ IMPORTANTE: icp_analysis_results.origem tem CHECK constraint que só permite:
-                        // 'upload_massa', 'icp_individual', 'icp_massa'
-                        // Se vier nome de arquivo ou outro valor, usar 'upload_massa'
-                        const origemRaw = fullCompany.origem || 
-                                         fullCompany.source_name || 
-                                         (fullCompany.raw_data as any)?.origem || 
-                                         (fullCompany.raw_data as any)?.source_name || 
-                                         'upload_massa';
-                        // Mapear para valores permitidos no CHECK constraint
-                        const origem = (origemRaw === 'icp_individual' || origemRaw === 'icp_massa') 
-                          ? origemRaw 
-                          : 'upload_massa'; // Qualquer outro valor (incluindo nomes de arquivo) → 'upload_massa'
-                        
-                        // ✅ ADICIONAR METADADOS DE MIGRAÇÃO ao raw_analysis (PRESERVAR TUDO)
-                        insertData.raw_analysis = {
-                          ...insertData.raw_analysis,
-                          // ✅ PRESERVAR ORIGEM ORIGINAL (nome do arquivo/API/Legacy) em raw_analysis
-                          // ⚠️ NOTA: origem no campo direto deve ser 'upload_massa' (CHECK constraint)
-                          // Mas preservamos a origem REAL em raw_analysis para exibição
-                          origem_original: origemRaw, // ✅ ORIGEM REAL (nome do arquivo, etc.)
-                          origem: origemRaw, // ✅ ORIGEM REAL também aqui para compatibilidade
-                          source_name: origemRaw, // ✅ Nome do arquivo/API/Legacy
-                          source_type: fullCompany.source_type || 'manual',
-                          source_file_name: (fullCompany.raw_data as any)?.source_file_name || null,
-                          job_name: (fullCompany.raw_data as any)?.job_name || null,
-                          import_batch_id: fullCompany.import_batch_id || null,
-                          migrated_from_companies: true,
-                          migrated_at: new Date().toISOString(),
-                          // ✅ PRESERVAR TODOS OS DADOS DE ENRIQUECIMENTO
-                          website_enrichment: normalized.website_encontrado ? {
-                            website_encontrado: normalized.website_encontrado,
-                            website_fit_score: normalized.website_fit_score,
-                            website_products_match: normalized.website_products_match,
-                            linkedin_url: normalized.linkedin_url,
-                          } : undefined,
-                        };
-                        
-                        // ✅ GARANTIR QUE ORIGEM ESTEJA NO CAMPO DIRETO (valor permitido pelo CHECK constraint)
-                        insertData.origem = origem; // 'upload_massa' ou 'icp_individual' ou 'icp_massa'
-                        
-                        // 🔥 DEBUG: Log do payload antes de inserir
-                        console.log(`[ICP Integration] 📦 Inserindo ${normalized.razao_social}:`, {
-                          cnpj: insertData.cnpj,
-                          company_id: insertData.company_id,
-                          tenant_id: insertData.tenant_id,
-                          website_encontrado: insertData.website_encontrado,
-                          website_fit_score: insertData.website_fit_score,
-                          website_products_match: insertData.website_products_match?.length || 0,
-                          linkedin_url: insertData.linkedin_url,
-                          purchase_intent_score: insertData.purchase_intent_score,
-                          fit_score: insertData.fit_score,
-                          grade: insertData.raw_analysis?.grade,
-                          status: insertData.status,
-                          origem: insertData.origem,
-                          has_raw_data: !!insertData.raw_data,
-                          has_raw_analysis: !!insertData.raw_analysis
-                        });
-
-                        // Integra ao ICP com TODOS os campos necessários (incluindo TODOS os dados enriquecidos)
-                        const { error: insertError } = await supabase
-                          .from('icp_analysis_results')
-                          .insert(insertData);
-
-                        if (insertError) {
-                          console.error(`❌ Erro ao inserir ${fullCompany.company_name} no ICP:`, insertError);
-                          console.error(`   Detalhes do erro:`, {
-                            message: insertError.message,
-                            details: insertError.details,
-                            hint: insertError.hint,
-                            code: insertError.code
-                          });
-                          errors++;
-                          continue; // ✅ Continuar com próxima empresa ao invés de quebrar tudo
-                        }
-                        
-                        console.log(`✅ ${fullCompany.company_name} integrada ao ICP!`);
-                        sent++;
-                      } catch (e: any) {
-                        console.error(`❌ Error integrating to ICP:`, e);
-                        console.error(`   Stack trace:`, e.stack);
-                        errors++;
-                      }
-                  }
-
-                  toast.success(
-                    `✅ ${sent} empresas movidas para Quarentena ICP!`,
-                    { 
-                      description: `${skipped} já estavam na quarentena · ${errors} erros · Acesse "4. Quarentena ICP" para revisar`,
-                      action: {
-                        label: 'Ver Quarentena →',
-                        onClick: () => navigate('/leads/icp-quarantine')
-                      },
-                      duration: 6000
-                    }
-                  );
-
-                  // Limpar seleção após enviar
-                  if (selectedCompanies.length > 0) {
-                    setSelectedCompanies([]);
-                  }
-
-                  refetch();
-                } catch (error) {
-                  console.error('Error integrating to ICP:', error);
-                  toast.error('Erro ao integrar ao ICP');
-                }
-              }}
+              // 🚨 REMOVIDO: Todas as ações de enrichment - só permitidas em Leads Aprovados
+              // 🚨 REMOVIDO: onSendToQuarantine - Quarentena não faz mais parte do fluxo
               onApolloImport={() => setIsApolloImportOpen(true)}
               onSearchCompanies={() => navigate('/search')}
               onPartnerSearch={() => setPartnerSearchOpen(true)}
@@ -2103,227 +2080,15 @@ export default function CompaniesManagementPage() {
 
                 {/* RIGHT: Ações */}
                 <div className="flex items-center gap-2">
-                  {/* 🎯 Mover para Quarentena ICP (apenas se tiver seleção) */}
-                  {selectedCompanies.length > 0 && (
-                    <Button
-                      onClick={async () => {
-                  try {
-                    toast.info('🎯 Movendo empresas para Quarentena ICP...', {
-                      description: 'Todos os dados enriquecidos serão mantidos · Powered by OLV Internacional'
-                    });
-
-                    const selectedComps = selectedCompanies.length > 0
-                      ? companies.filter(c => selectedCompanies.includes(c.id))
-                      : companies;
-
-                    if (selectedComps.length === 0) {
-                      toast.error('Nenhuma empresa selecionada');
-                      return;
-                    }
-
-                    let sent = 0;
-                    let skipped = 0;
-                    let errors = 0;
-
-                    for (const company of selectedComps) {
-                      try {
-                        // 🔧 BUSCAR DADOS COMPLETOS DA EMPRESA (necessário para ter CNPJ)
-                        const { data: fullCompany, error: fetchError } = await supabase
-                          .from('companies')
-                          .select('*')
-                          .eq('id', company.id)
-                          .single();
-
-                        if (fetchError || !fullCompany) {
-                          console.error(`❌ Erro ao buscar empresa completa:`, fetchError);
-                          errors++;
-                          continue;
-                        }
-
-                        if (!fullCompany.cnpj) {
-                          console.warn(`⚠️ Empresa ${fullCompany.company_name} sem CNPJ - pulando`);
-                          skipped++;
-                          continue;
-                        }
-
-                        // ✅ Verifica se já existe no ICP usando CNPJ (constraint UNIQUE)
-                        const { data: existing, error: checkError } = await supabase
-                          .from('icp_analysis_results')
-                          .select('id, cnpj')
-                          .eq('cnpj', fullCompany.cnpj)
-                          .maybeSingle();
-
-                        if (checkError) {
-                          console.error(`❌ Erro ao verificar empresa ${fullCompany.company_name}:`, checkError);
-                          errors++;
-                          continue;
-                        }
-
-                        if (existing) {
-                          console.log(`✓ Empresa ${fullCompany.company_name} (CNPJ: ${fullCompany.cnpj}) já está no ICP`);
-                          skipped++;
-                          continue;
-                        }
-
-                        // 🔧 NORMALIZAR DADOS USANDO NORMALIZADOR UNIVERSAL
-                        const normalized = normalizeFromCompanies(fullCompany);
-                        const insertPayload = prepareForICPInsertion(normalized, tenant?.id || fullCompany.tenant_id);
-                        
-                        // ✅ CORRIGIDO: Garantir que origem use job_name se disponível (nome do arquivo)
-                        const rawData = (fullCompany.raw_data && typeof fullCompany.raw_data === 'object' && !Array.isArray(fullCompany.raw_data))
-                          ? fullCompany.raw_data as Record<string, any>
-                          : {};
-                        if (rawData.job_name) {
-                          insertPayload.origem = rawData.job_name;
-                          // Também preservar em raw_data e raw_analysis
-                          if (insertPayload.raw_data) {
-                            insertPayload.raw_data.job_name = rawData.job_name;
-                            insertPayload.raw_data.source_file_name = rawData.source_file_name || rawData.job_name;
-                          }
-                          if (insertPayload.raw_analysis) {
-                            insertPayload.raw_analysis.job_name = rawData.job_name;
-                            insertPayload.raw_analysis.source_file_name = rawData.source_file_name || rawData.job_name;
-                            insertPayload.raw_analysis.origem = rawData.job_name;
-                          }
-                        }
-                        
-                        // 🔥 REMOVER raw_analysis se a coluna não existir (será detectado pelo erro)
-                        // Por enquanto, vamos tentar inserir. Se falhar, vamos remover e tentar novamente
-                        
-                        // 🔥 DEBUG: Log do payload antes de inserir
-                        console.log(`[ICP Integration] 📦 Inserindo ${fullCompany.company_name}:`, {
-                          cnpj: insertPayload.cnpj,
-                          company_id: insertPayload.company_id,
-                          status: insertPayload.status,
-                          origem: insertPayload.origem,
-                          has_raw_data: !!insertPayload.raw_data,
-                          has_raw_analysis: !!insertPayload.raw_analysis
-                        });
-                        
-                        // 🔥 DEBUG: Log completo do payload
-                        console.log(`[ICP Integration] 🔍 PAYLOAD COMPLETO:`, {
-                          tenant_id: insertPayload.tenant_id,
-                          company_id: insertPayload.company_id,
-                          cnpj: insertPayload.cnpj,
-                          razao_social: insertPayload.razao_social,
-                          status: insertPayload.status,
-                          origem: insertPayload.origem,
-                          has_tenant_id: !!insertPayload.tenant_id,
-                          tenant_id_type: typeof insertPayload.tenant_id
-                        });
-                        
-                        // 🔥 TENTAR INSERIR COM raw_analysis
-                        let { error: insertError } = await supabase
-                          .from('icp_analysis_results')
-                          .insert(insertPayload);
-
-                        // 🔥 SE ERRO FOR POR COLUNA raw_analysis NÃO EXISTIR OU icp_id NO TRIGGER, REMOVER E TENTAR NOVAMENTE
-                        if (insertError && (insertError.message?.includes('raw_analysis') || insertError.message?.includes('icp_id'))) {
-                          console.warn(`⚠️ Coluna raw_analysis não existe. Removendo do payload e tentando novamente...`);
-                          const { raw_analysis, ...payloadWithoutRawAnalysis } = insertPayload;
-                          // Usar analysis_data como alternativa (se existir)
-                          const fallbackPayload = {
-                            ...payloadWithoutRawAnalysis,
-                            analysis_data: rawAnalysis // Usar analysis_data ao invés de raw_analysis
-                          };
-                          
-                          const { error: retryError } = await supabase
-                            .from('icp_analysis_results')
-                            .insert(fallbackPayload);
-                          
-                          if (retryError) {
-                            insertError = retryError;
-                          } else {
-                            insertError = null; // Sucesso na segunda tentativa
-                            console.log(`✅ Inserido com sucesso usando analysis_data ao invés de raw_analysis`);
-                          }
-                        }
-
-                        if (insertError) {
-                          console.error(`❌ Erro ao inserir ${fullCompany.company_name} no ICP:`, insertError);
-                          console.error(`   Detalhes do erro:`, {
-                            message: insertError.message,
-                            details: insertError.details,
-                            hint: insertError.hint,
-                            code: insertError.code
-                          });
-                          console.error(`   🔍 PAYLOAD ENVIADO:`, JSON.stringify(insertPayload, null, 2));
-                          console.error(`   🔍 TENANT_ID:`, insertPayload.tenant_id, `(tipo: ${typeof insertPayload.tenant_id})`);
-                          console.error(`   🔍 TENANT DO CONTEXTO:`, tenant?.id);
-                          console.error(`   🔍 TENANT_ID DA COMPANY:`, fullCompany.tenant_id);
-                          
-                          // ✅ VERIFICAR SE ERRO É DE COLUNA NÃO ENCONTRADA (PGRST204)
-                          if (insertError.code === 'PGRST204' || insertError.message?.includes('column') || insertError.message?.includes('schema cache') || insertError.message?.includes('Could not find')) {
-                            console.error(`⚠️⚠️⚠️ ERRO DE SCHEMA: Coluna não encontrada na tabela icp_analysis_results!`, {
-                              error_code: insertError.code,
-                              error_message: insertError.message,
-                              error_hint: insertError.hint,
-                              error_details: insertError.details,
-                              campos_no_payload: Object.keys(insertPayload),
-                              acao_necessaria: 'Aplicar migration 20250225000006_ensure_all_columns_icp_analysis_results.sql',
-                            });
-                            
-                            // 🚨 TOAST ESPECÍFICO PARA ERRO DE SCHEMA
-                            toast.error(`⚠️ Erro de Schema ao mover ${fullCompany.company_name}`, {
-                              description: `Coluna não encontrada na tabela. Aplique a migration 20250225000006. Detalhes: ${insertError.message || insertError.hint || 'Erro desconhecido'}`,
-                              duration: 15000
-                            });
-                          } else {
-                            // 🚨 ERRO CRÍTICO: Mostrar toast com detalhes
-                            toast.error(`Erro ao mover ${fullCompany.company_name} para Quarentena`, {
-                              description: insertError.message || insertError.details || 'Erro desconhecido. Verifique o console para detalhes.',
-                              duration: 10000
-                            });
-                          }
-                          
-                          errors++;
-                          continue; // ✅ Continuar com próxima empresa ao invés de quebrar tudo
-                        }
-                        
-                        console.log(`✅ ${fullCompany.company_name} integrada ao ICP!`);
-                        sent++;
-                      } catch (e: any) {
-                        console.error(`❌ Error integrating to ICP:`, e);
-                        console.error(`   Stack trace:`, e.stack);
-                        errors++;
-                      }
-                    }
-
-                    toast.success(
-                      `✅ ${sent} empresas movidas para Quarentena ICP!`,
-                      { 
-                        description: `${skipped} já estavam na quarentena · ${errors} erros · Acesse "4. Quarentena ICP" para revisar`,
-                        action: {
-                          label: 'Ver Quarentena →',
-                          onClick: () => navigate('/leads/icp-quarantine')
-                        },
-                        duration: 6000
-                      }
-                    );
-
-                    refetch();
-                    setSelectedCompanies([]);
-                  } catch (error) {
-                    console.error('Error integrating to ICP:', error);
-                    toast.error('Erro ao integrar empresas ao ICP');
-                  }
-                      }}
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white h-8"
-                    >
-                      <Target className="h-3.5 w-3.5 mr-1.5" />
-                      🎯 Mover para Quarentena ICP ({selectedCompanies.length})
-                    </Button>
-                  )}
-
-                  {/* Dropdown de Ações em Massa - SÓ APARECE COM SELEÇÃO */}
+                  {/* 🚨 REMOVIDO: Botão "Mover para Quarentena ICP" - Quarentena não faz mais parte do fluxo */}
+                  
+                  {/* ✅ ÚNICO botão de Ações em Massa - SÓ APARECE COM SELEÇÃO */}
                   {selectedCompanies.length > 0 && (
                     <UnifiedActionsMenu
                       context="companies"
                       selectedCount={selectedCompanies.length}
-                      onEnrichReceita={handleBatchEnrichReceitaWS}
-                      onEnrichApollo={handleBatchEnrichApollo}
-                      onEnrich360={handleBatchEnrich360}
+                      onApprove={handleApproveBatch}
+                      // 🚨 REMOVIDO: Todas as ações de enrichment - só permitidas em Leads Aprovados
                       onExportCSV={handleExportCSV}
                       onDelete={handleBulkDelete}
                       isProcessing={isBatchEnriching || isBatchEnriching360 || isBatchEnrichingApollo}
@@ -2966,6 +2731,7 @@ export default function CompaniesManagementPage() {
                           </Button>
                           <CompanyRowActions 
                             company={company}
+                            onApprove={() => handleApproveIndividual(company.id)}
                             onDelete={() => {
                               setCompanyToDelete(company);
                               setDeleteDialogOpen(true);

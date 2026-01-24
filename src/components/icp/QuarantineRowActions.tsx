@@ -1,6 +1,8 @@
-import { Settings, CheckCircle, XCircle, Eye, Trash2, RefreshCw, Target, Edit, Search, Building2, Sparkles, Zap, ExternalLink, Loader2, FileText, Undo2, Globe } from 'lucide-react';
+// 🚨 MICROCICLO 4: Validação de estados canônicos
+import { Settings, CheckCircle, XCircle, Eye, Trash2, RefreshCw, Target, Edit, Search, Building2, Sparkles, Zap, ExternalLink, Loader2, FileText, Undo2, Globe, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { useCanonicalState } from '@/hooks/useCanonicalState';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,7 +72,22 @@ export function QuarantineRowActions({
   const [isRestoring, setIsRestoring] = useState(false);
   const navigate = useNavigate();
 
+  // 🚨 MICROCICLO 4: Validar estado canônico da quarentena
+  const stateValidation = useCanonicalState({ 
+    entity: company, 
+    entityType: 'quarantine' 
+  });
+
+  const canApprove = stateValidation.isActionAllowed('approve');
+  const approveError = stateValidation.getActionError('approve');
+
   const handleApprove = () => {
+    if (!canApprove) {
+      toast.error('Aprovação não permitida', {
+        description: approveError || 'Lead deve estar em POOL (pending) para ser aprovado.'
+      });
+      return;
+    }
     onApprove(company.id);
     setIsOpen(false);
   };
@@ -412,19 +429,39 @@ export function QuarantineRowActions({
               <DropdownMenuSeparator />
               
               {/* Aprovar */}
+              {/* 🚨 MICROCICLO 4: Validar estado antes de permitir aprovação */}
               <Tooltip delayDuration={100}>
                 <TooltipTrigger asChild>
-                  <DropdownMenuItem 
-                    onClick={handleApprove}
-                    className="hover:bg-green-50 dark:hover:bg-green-950/20 hover:border-l-4 hover:border-green-500 transition-all cursor-pointer"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-                    Aprovar e Mover para Pool
-                  </DropdownMenuItem>
+                  <div>
+                    <DropdownMenuItem 
+                      onClick={canApprove ? handleApprove : undefined}
+                      disabled={!canApprove}
+                      className={!canApprove 
+                        ? "opacity-50 cursor-not-allowed" 
+                        : "hover:bg-green-50 dark:hover:bg-green-950/20 hover:border-l-4 hover:border-green-500 transition-all cursor-pointer"
+                      }
+                    >
+                      {canApprove ? (
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 mr-2 text-yellow-600" />
+                      )}
+                      {canApprove ? 'Aprovar e Mover para Pool' : 'Aprovação Bloqueada'}
+                    </DropdownMenuItem>
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="max-w-xs">
-                  <p className="font-semibold text-sm">Aprovar Lead Qualificado</p>
-                  <p className="text-xs text-muted-foreground mt-1">Move empresa aprovada da quarentena para o pool ativo de leads, disponível para equipe de vendas trabalhar na prospecção</p>
+                  {canApprove ? (
+                    <>
+                      <p className="font-semibold text-sm">Aprovar Lead Qualificado</p>
+                      <p className="text-xs text-muted-foreground mt-1">Move empresa aprovada da quarentena (POOL) para ACTIVE (Sales Target), criando lead e deal automaticamente</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-sm text-destructive">Aprovação Não Permitida</p>
+                      <p className="text-xs text-muted-foreground mt-1">{approveError || 'Lead deve estar em POOL (validation_status: pending) para ser aprovado.'}</p>
+                    </>
+                  )}
                 </TooltipContent>
               </Tooltip>
 

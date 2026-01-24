@@ -1,6 +1,8 @@
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
 
 export interface EnrichmentProgress {
   layer: string;
@@ -15,6 +17,17 @@ export function useMultiLayerEnrichment() {
   const [progress, setProgress] = useState<EnrichmentProgress[]>([]);
 
   const enrichCompany = async (companyId: string, cnpj: string, forcePremium = false) => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      const errorMessage = 'Enrichment bloqueado. Disponível apenas para Leads Aprovados (Sales Target).';
+      console.error('[MultiLayer] 🚫 BLOQUEADO:', errorMessage);
+      toast.error('Enrichment Bloqueado', {
+        description: errorMessage,
+      });
+      return { success: false, error: errorMessage };
+    }
+
     setIsEnriching(true);
     setProgress([
       { layer: 'layer_1', source: 'empresaqui', status: 'pending' },
@@ -24,6 +37,7 @@ export function useMultiLayerEnrichment() {
     ]);
 
     try {
+      console.log('[MultiLayer] ✅ Contexto validado - SALES TARGET');
       console.log('[MultiLayer] 🚀 Iniciando enriquecimento:', { companyId, cnpj, forcePremium });
 
       const { data, error } = await supabase.functions.invoke('enrich-multi-layer', {

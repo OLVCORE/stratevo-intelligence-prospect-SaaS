@@ -10,26 +10,18 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Upload,
-  Building2,
-  Sparkles,
   Search,
-  Database,
   Loader2,
   MoreHorizontal,
-  Target,
   Users,
-  Globe
 } from 'lucide-react';
-import { useState } from 'react';
 import apolloIcon from '@/assets/logos/apollo-icon.ico';
 
 interface HeaderActionsMenuProps {
   onUploadClick: () => void;
-  onBatchEnrichReceita: () => Promise<void>;
-  onBatchEnrich360: () => Promise<void>;
-  onBatchEnrichApollo: () => Promise<void>;
-  onBatchEnrichWebsite?: () => Promise<void>; // ✅ NOVO: Enriquecer Website e LinkedIn
-  onSendToQuarantine?: () => Promise<void>; // 🆕 NOVO
+  // 🚨 REMOVIDO: onBatchEnrichReceita, onBatchEnrich360, onBatchEnrichApollo, onBatchEnrichWebsite
+  // Enrichment só permitido em Leads Aprovados (ACTIVE)
+  // onSendToQuarantine?: () => Promise<void>; // 🚨 REMOVIDO: Quarentena não faz mais parte do fluxo
   onApolloImport: () => void;
   onSearchCompanies: () => void;
   onPartnerSearch?: () => void; // ✅ NOVO: Buscar por Sócios
@@ -38,31 +30,12 @@ interface HeaderActionsMenuProps {
 
 export function HeaderActionsMenu({
   onUploadClick,
-  onBatchEnrichReceita,
-  onBatchEnrich360,
-  onBatchEnrichApollo,
-  onBatchEnrichWebsite, // ✅ NOVO
-  onSendToQuarantine, // 🆕 NOVO
+  // 🚨 REMOVIDO: Todas as props de enrichment
   onApolloImport,
   onSearchCompanies,
   onPartnerSearch, // ✅ NOVO
   isProcessing = false
 }: HeaderActionsMenuProps) {
-  const [isEnriching, setIsEnriching] = useState(false);
-  const [enrichingAction, setEnrichingAction] = useState<string | null>(null);
-
-  const handleEnrich = async (action: string, fn: () => Promise<void>) => {
-    try {
-      setIsEnriching(true);
-      setEnrichingAction(action);
-      await fn();
-    } catch (error) {
-      console.error(`Error executing ${action}:`, error);
-    } finally {
-      setIsEnriching(false);
-      setEnrichingAction(null);
-    }
-  };
 
   return (
     <DropdownMenu>
@@ -70,12 +43,12 @@ export function HeaderActionsMenu({
         <Button
           variant="default"
           size="default"
-          disabled={isProcessing || isEnriching}
+          disabled={isProcessing}
           data-testid="header-actions-menu"
           aria-label="Menu de ações em massa"
           className="gap-2"
         >
-          {isProcessing || isEnriching ? (
+          {isProcessing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <MoreHorizontal className="h-4 w-4" />
@@ -92,7 +65,7 @@ export function HeaderActionsMenu({
         <DropdownMenuGroup>
           <DropdownMenuItem 
             onClick={onUploadClick}
-            disabled={isEnriching}
+            disabled={isProcessing}
             data-testid="action-upload-bulk"
             className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
           >
@@ -102,7 +75,7 @@ export function HeaderActionsMenu({
 
           <DropdownMenuItem 
             onClick={onApolloImport}
-            disabled={isEnriching}
+            disabled={isProcessing}
             data-testid="action-apollo-import"
             className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
           >
@@ -112,7 +85,7 @@ export function HeaderActionsMenu({
 
           <DropdownMenuItem 
             onClick={onSearchCompanies}
-            disabled={isEnriching}
+            disabled={isProcessing}
             data-testid="action-search-companies"
             className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
           >
@@ -124,7 +97,7 @@ export function HeaderActionsMenu({
           {onPartnerSearch && (
             <DropdownMenuItem 
               onClick={onPartnerSearch}
-              disabled={isEnriching}
+              disabled={isProcessing}
               className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
             >
               <Users className="h-4 w-4 mr-2 text-purple-600" />
@@ -135,96 +108,9 @@ export function HeaderActionsMenu({
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Enriquecimento em Lote</DropdownMenuLabel>
-        
-        <DropdownMenuGroup>
-          <DropdownMenuItem
-            onClick={() => handleEnrich('Receita Federal', onBatchEnrichReceita)}
-            disabled={isEnriching}
-            data-testid="action-batch-receita"
-            className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
-          >
-            {enrichingAction === 'Receita Federal' ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Building2 className="h-4 w-4 mr-2" />
-            )}
-            Receita Federal (Lote)
-            <span className="ml-auto text-xs text-muted-foreground">Apenas sem dados</span>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onClick={() => handleEnrich('Apollo', onBatchEnrichApollo)}
-            disabled={isEnriching}
-            data-testid="action-batch-apollo"
-            className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
-          >
-            {enrichingAction === 'Apollo' ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <img src={apolloIcon} alt="Apollo" className="h-4 w-4 mr-2" />
-            )}
-            Apollo (Decisores & Contatos)
-          </DropdownMenuItem>
-
-          {/* ✅ NOVO: Enriquecer Website e LinkedIn */}
-          {onBatchEnrichWebsite && (
-            <DropdownMenuItem
-              onClick={() => handleEnrich('Website e LinkedIn', onBatchEnrichWebsite)}
-              disabled={isEnriching}
-              data-testid="action-batch-website-linkedin"
-              className="transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
-            >
-              {enrichingAction === 'Website e LinkedIn' ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Globe className="h-4 w-4 mr-2" />
-              )}
-              Enriquecer Website & LinkedIn
-            </DropdownMenuItem>
-          )}
-
-          <DropdownMenuSeparator />
-
-          <DropdownMenuItem
-            onClick={() => handleEnrich('360° Completo', onBatchEnrich360)}
-            disabled={isEnriching}
-            data-testid="action-batch-360"
-            className="font-medium transition-all duration-200 cursor-pointer hover:bg-accent hover:shadow-md hover:border-l-2 hover:border-primary"
-          >
-            {enrichingAction === '360° Completo' ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4 mr-2" />
-            )}
-            360° Completo + IA
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-
-        {/* 🆕 AÇÕES DE FLUXO ICP */}
-        {onSendToQuarantine && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Fluxo ICP
-            </DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={onSendToQuarantine}
-                disabled={isEnriching}
-                className="text-blue-600 font-bold hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-all duration-200 cursor-pointer hover:bg-blue-500/10 hover:shadow-md hover:border-l-4 hover:border-blue-600"
-              >
-                <Target className="h-4 w-4 mr-2" />
-                🎯 Mover para Quarentena ICP
-                <span className="ml-auto text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                  FLUXO
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        )}
+        {/* 🚨 REMOVIDO: Seção completa de Enriquecimento em Lote */}
+        {/* Enrichment só permitido em Leads Aprovados (ACTIVE) */}
+        {/* 🚨 REMOVIDO: Ações de Fluxo ICP - Quarentena não faz mais parte do fluxo */}
       </DropdownMenuContent>
     </DropdownMenu>
   );

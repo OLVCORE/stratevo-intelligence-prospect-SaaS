@@ -1,6 +1,8 @@
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
 import { useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
 
 interface Company {
   id: string;
@@ -41,6 +43,15 @@ export function useAutoEnrichCompany(company?: Company | null) {
   });
 
   useEffect(() => {
+    // 🚨 MICROCICLO 2: BLOQUEIO AUTOMÁTICO - Auto-enrichment desativado
+    // Enrichment só é permitido em SALES TARGET (Leads Aprovados)
+    const isSalesTarget = isInSalesTargetContext();
+    
+    if (!isSalesTarget) {
+      console.log('[useAutoEnrichCompany] 🚫 Auto-enrichment bloqueado - não está em SALES TARGET');
+      return;
+    }
+
     // Verificar se precisa enriquecer
     if (!company?.id) return;
     if (enrichMutation.isPending) return;
@@ -52,8 +63,9 @@ export function useAutoEnrichCompany(company?: Company | null) {
 
     const hasCNPJ = !!company.cnpj;
 
-    // Se precisa enriquecer e tem CNPJ, executar automaticamente
+    // Se precisa enriquecer e tem CNPJ, executar automaticamente (apenas em SALES TARGET)
     if (needsEnrichment && hasCNPJ) {
+      console.log('[useAutoEnrichCompany] ✅ Contexto validado - SALES TARGET');
       console.log('🔄 Iniciando enriquecimento automático da empresa (Estado/Município)...');
       enrichMutation.mutate(company.id);
     }

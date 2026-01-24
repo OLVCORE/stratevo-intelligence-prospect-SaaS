@@ -61,6 +61,9 @@ import { useRealtimeCompanyChanges } from '@/hooks/useRealtimeCompanyChanges';
 import { CompanyActionsMenu } from '@/components/companies/CompanyActionsMenu';
 import { DecisionMakersTab } from '@/components/companies/DecisionMakersTab';
 import { DecisionMakerSearchDialog } from '@/components/companies/DecisionMakerSearchDialog';
+import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
+import { CanonicalStateBadge } from '@/components/companies/CanonicalStateBadge';
+import { useCanonicalState } from '@/hooks/useCanonicalState';
 
 export default function CompanyDetailPage() {
   const { id } = useParams();
@@ -83,6 +86,12 @@ export default function CompanyDetailPage() {
 
   // ✅ MICROCICLO 2: Ativar Realtime para mudanças na empresa
   useRealtimeCompanyChanges(id);
+
+  // 🚨 MICROCICLO 4: Estado canônico da empresa
+  const companyState = useCanonicalState({ 
+    entity: company, 
+    entityType: 'company' 
+  });
 
   // Função para parsear colaboradores/decisores do formato da planilha
   const parseCollaborators = (cargosStr?: string, linkedinStr?: string) => {
@@ -315,13 +324,28 @@ export default function CompanyDetailPage() {
   }
 
   const handleSmartRefresh = async () => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     setIsSmartRefreshing(true);
     try {
       toast.info('Executando atualização inteligente...');
       
       // ✅ UNIFICADO: Usar consultarReceitaFederal direto (mesmo do EM MASSA)
       if (company.cnpj) {
-        const receitaResult = await consultarReceitaFederal(company.cnpj);
+        const receitaResult = await consultarReceitaFederal(company.cnpj, {
+          context: {
+            entityType: 'lead',
+            leadId: id,
+            companyId: id,
+          }
+        });
         if (receitaResult.success && receitaResult.data) {
           const rawData = (company.raw_data && typeof company.raw_data === 'object') 
             ? company.raw_data as Record<string, any> 
@@ -355,6 +379,15 @@ export default function CompanyDetailPage() {
   };
 
   const handleEnrichReceita = async (companyId: string) => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     setIsEnrichingReceita(true);
     try {
       await supabase.functions.invoke('enrich-receitaws', {
@@ -371,6 +404,15 @@ export default function CompanyDetailPage() {
   };
 
   const handleFullEnrichment = async () => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     setIsEnriching(true);
     try {
       toast.info('Executando análise 360° completa...');
@@ -552,6 +594,15 @@ export default function CompanyDetailPage() {
   };
 
   const handleTestApollo = async () => {
+    // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+    const isSalesTarget = isInSalesTargetContext();
+    if (!isSalesTarget) {
+      toast.error('Enrichment Bloqueado', {
+        description: 'Disponível apenas para Leads Aprovados (Sales Target)'
+      });
+      return;
+    }
+
     setIsTestingApollo(true);
     try {
       const searchName = company.name;
@@ -682,6 +733,13 @@ export default function CompanyDetailPage() {
               <CardTitle className="text-3xl flex items-center gap-3">
                 <Building2 className="h-8 w-8 text-blue-600 dark:text-lime-400" />
                 <span className="text-blue-700 dark:text-lime-300">{company.name}</span>
+                {/* 🚨 MICROCICLO 4: Badge de Estado Canônico */}
+                {company && (
+                  <CanonicalStateBadge 
+                    state={companyState.currentState}
+                    showTooltip={true}
+                  />
+                )}
               </CardTitle>
               {receitaData?.fantasia && receitaData.fantasia !== company.name && (
                 <p className="text-lg text-muted-foreground">Nome Fantasia: {receitaData.fantasia}</p>
@@ -1927,19 +1985,31 @@ export default function CompanyDetailPage() {
                 <CardDescription>Buscar decisores e enriquecer informações</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* UNIFICADO: Um único botão com dropdown inteligente */}
-                <UnifiedEnrichButton
-                  onQuickRefresh={handleSmartRefresh}
-                  onFullEnrich={handleFullEnrichment}
-                  onReceita={() => handleEnrichReceita(id!)}
-                  onApollo={handleTestApollo}
-                  on360={handleFullEnrichment}
-                  isProcessing={isSmartRefreshing || isEnriching || isEnrichingReceita || isTestingApollo}
-                  hasCNPJ={!!company.cnpj}
-                  hasApolloId={!!company.apollo_id}
-                  variant="default"
-                  size="default"
-                />
+                {/* 🚨 REMOVIDO: UnifiedEnrichButton - Enrichment só permitido em Leads Aprovados (ACTIVE) */}
+                {/* Botão não existe se empresa não estiver em ACTIVE */}
+                {companyState.isActionAllowed('enrich') ? (
+                  <>
+                    <UnifiedEnrichButton
+                      onQuickRefresh={handleSmartRefresh}
+                      onFullEnrich={handleFullEnrichment}
+                      onReceita={() => handleEnrichReceita(id!)}
+                      onApollo={handleTestApollo}
+                      on360={handleFullEnrichment}
+                      isProcessing={isSmartRefreshing || isEnriching || isEnrichingReceita || isTestingApollo}
+                      hasCNPJ={!!company.cnpj}
+                      hasApolloId={!!company.apollo_id}
+                      variant="default"
+                      size="default"
+                    />
+                    <Separator />
+                  </>
+                ) : (
+                  <div className="text-sm text-muted-foreground p-4 border rounded-lg bg-muted/50">
+                    <p className="font-medium mb-1">Enrichment não disponível</p>
+                    <p className="text-xs">Enrichment só é permitido para empresas em ACTIVE (Leads Aprovados).</p>
+                    <p className="text-xs mt-1">Estado atual: <strong>{companyState.currentState}</strong></p>
+                  </div>
+                )}
 
                 {/* Botões de decisores mantidos abaixo */}
                 <Separator />
@@ -2021,21 +2091,26 @@ export default function CompanyDetailPage() {
                 </div>
                 
                 <div className="flex gap-2">
-                  <UpdateNowButton
-                    companyId={id!}
-                    companyName={company.name}
-                    companyDomain={company.domain || company.website}
-                    apolloOrganizationId={company.apollo_organization_id}
-                    city={receitaData?.municipio || rawData?.receita_federal?.municipio || company.city}
-                    state={receitaData?.uf || rawData?.receita_federal?.uf || company.state}
-                    cep={receitaData?.cep || rawData?.receita_federal?.cep || rawData?.cep || (company as any).zip_code}
-                    fantasia={receitaData?.fantasia || rawData?.receita_federal?.fantasia || rawData?.nome_fantasia || (company as any).fantasy_name}
-                    onSuccess={() => {
-                      queryClient.invalidateQueries({ queryKey: ['company-detail', id] });
-                      queryClient.invalidateQueries({ queryKey: ['decision_makers', id] });
-                    }}
-                  />
-                  <AutoEnrichButton />
+                  {companyState.isActionAllowed('enrich') && (
+                    <>
+                      <UpdateNowButton
+                        companyId={id!}
+                        companyName={company.name}
+                        companyDomain={company.domain || company.website}
+                        apolloOrganizationId={company.apollo_organization_id}
+                        city={receitaData?.municipio || rawData?.receita_federal?.municipio || company.city}
+                        state={receitaData?.uf || rawData?.receita_federal?.uf || company.state}
+                        cep={receitaData?.cep || rawData?.receita_federal?.cep || rawData?.cep || (company as any).zip_code}
+                        fantasia={receitaData?.fantasia || rawData?.receita_federal?.fantasia || rawData?.nome_fantasia || (company as any).fantasy_name}
+                        onSuccess={() => {
+                          queryClient.invalidateQueries({ queryKey: ['company-detail', id] });
+                          queryClient.invalidateQueries({ queryKey: ['decision_makers', id] });
+                        }}
+                      />
+                      <AutoEnrichButton />
+                    </>
+                  )}
+                  {/* 🚨 REMOVIDO: AutoEnrichButton quando não estiver em ACTIVE */}
                 </div>
               </div>
             </CardHeader>

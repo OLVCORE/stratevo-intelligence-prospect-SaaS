@@ -1,6 +1,7 @@
 // ✅ Serviço para consultar Receita Federal SEM Edge Function
 // Funciona diretamente no frontend
 // ⚠️ ReceitaWS desabilitada temporariamente (CORS) - usando apenas BrasilAPI
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
 
 import { 
   saveQualifiedEnrichment, 
@@ -9,6 +10,7 @@ import {
   calculateBasicFitScore, 
   calculateGrade 
 } from './qualifiedEnrichment.service';
+import { validateEnrichmentContext, getCurrentRoutePath } from '@/lib/utils/enrichmentContextValidator';
 
 interface ReceitaWSResponse {
   status: string;
@@ -44,6 +46,12 @@ export async function consultarReceitaFederal(
     stockId?: string;
     tenantId?: string;
     saveEnrichment?: boolean;
+    context?: {
+      entityType?: 'company' | 'prospect' | 'lead' | 'deal' | 'quarantine';
+      tableName?: string;
+      leadId?: string;
+      companyId?: string;
+    };
   }
 ): Promise<{
   success: boolean;
@@ -51,6 +59,28 @@ export async function consultarReceitaFederal(
   source?: 'receitaws' | 'brasilapi';
   error?: string;
 }> {
+  // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+  const validation = validateEnrichmentContext({
+    entityType: options?.context?.entityType,
+    tableName: options?.context?.tableName,
+    routePath: getCurrentRoutePath(),
+    leadId: options?.context?.leadId,
+    companyId: options?.context?.companyId,
+  });
+
+  if (!validation.allowed) {
+    console.error('[ReceitaFederal] 🚫 ENRICHMENT BLOQUEADO:', {
+      context: validation.context,
+      reason: validation.reason,
+      errorCode: validation.errorCode,
+    });
+    return {
+      success: false,
+      error: validation.reason || 'Enrichment não permitido neste contexto. Apenas Leads Aprovados (Sales Target) podem ser enriquecidos.',
+    };
+  }
+
+  console.log('[ReceitaFederal] ✅ Contexto validado:', validation.context);
   const cnpjClean = cnpj.replace(/\D/g, '');
   
   if (cnpjClean.length !== 14) {

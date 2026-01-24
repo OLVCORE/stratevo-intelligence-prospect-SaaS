@@ -11,6 +11,32 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 🚨 MICROCICLO 2: BLOQUEIO GLOBAL DE AUTO-ENRICHMENT
+    // Auto-enrichment está DESATIVADO conforme fluxo canônico
+    // Enrichment só é permitido em SALES TARGET (Leads Aprovados)
+    console.error('[Auto-Enrich] 🚫 BLOQUEADO - Auto-enrichment desativado');
+    console.error('[Auto-Enrich] Enrichment só é permitido em SALES TARGET (Leads Aprovados)');
+    
+    return new Response(
+      JSON.stringify({
+        success: false,
+        blocked: true,
+        error: 'LEGACY_BLOCKED',
+        message: 'Auto-enrichment está desativado. Enrichment só é permitido para Leads Aprovados (Sales Target).',
+        companies_processed: 0,
+      }),
+      { 
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+
+    /* 
+     * CÓDIGO LEGACY - MANTIDO PARA REFERÊNCIA MAS NUNCA EXECUTADO
+     * Todo o código abaixo está comentado e nunca será executado
+     * devido ao return acima
+     */
+    /*
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     

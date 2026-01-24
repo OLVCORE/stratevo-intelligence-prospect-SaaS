@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, XCircle, Flame, Thermometer, Snowflake, Download, Filter, Search, RefreshCw, FileText, Globe, ArrowUpDown, Loader2, AlertCircle, ChevronDown, ChevronUp, Rocket, TrendingUp, HelpCircle, CheckCircle2, Building2, Maximize, Minimize, ChevronLeft, ChevronRight, Target, Linkedin } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -44,6 +44,7 @@ import { ColumnFilter } from '@/components/companies/ColumnFilter';
 import { UnifiedEnrichButton } from '@/components/companies/UnifiedEnrichButton';
 import { PurchaseIntentBadge } from '@/components/intelligence/PurchaseIntentBadge';
 import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewModal';
+import { WebsiteFitAnalysisCard } from '@/components/qualification/WebsiteFitAnalysisCard';
 import { useTenant } from '@/contexts/TenantContext';
 import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
 
@@ -116,11 +117,31 @@ export default function ApprovedLeads() {
   const queryClient = useQueryClient();
 
   // 🚀 NOVA FUNÇÃO: Enviar para Pipeline (em vez de Aprovar)
+  // 🚨 MICROCICLO 4: Validação de estados canônicos
   const [isSendingToPipeline, setIsSendingToPipeline] = useState(false);
   
   const handleSendToPipeline = async (analysisIds: string[]) => {
     if (analysisIds.length === 0) {
       toast.error('Selecione pelo menos uma empresa');
+      return;
+    }
+
+    // 🚨 MICROCICLO 4: Validar que empresas estão em ACTIVE antes de criar deal
+    const { getCanonicalState } = await import('@/lib/utils/stateTransitionValidator');
+    const selectedCompanies = companies.filter(c => analysisIds.includes(c.id));
+    
+    const invalidStates = selectedCompanies.filter((company: any) => {
+      // Verificar se company tem canonical_status ou determinar pelo contexto
+      const state = company.canonical_status 
+        ? company.canonical_status 
+        : getCanonicalState(company, 'company');
+      return state !== 'ACTIVE';
+    });
+
+    if (invalidStates.length > 0) {
+      toast.error('Ação não permitida', {
+        description: `${invalidStates.length} empresa(s) não estão em ACTIVE (Sales Target). Apenas leads aprovados podem criar deals.`
+      });
       return;
     }
 
@@ -2247,8 +2268,8 @@ export default function ApprovedLeads() {
                     : {};
                   
                   return (
-                    <>
-                  <TableRow key={company.id} className={expandedRow === company.id ? 'bg-muted/30' : ''}>
+                    <React.Fragment key={company.id}>
+                  <TableRow className={expandedRow === company.id ? 'bg-muted/30' : ''}>
                     <TableCell className="text-center">
                       <div className="flex justify-center">
                         <Button
@@ -2275,7 +2296,6 @@ export default function ApprovedLeads() {
                           onCheckedChange={(checked) => 
                             handleSelectOne(company.id, checked as boolean)
                           }
-                          disabled={company.status !== 'pendente'}
                         />
                       </div>
                     </TableCell>
@@ -2606,7 +2626,7 @@ export default function ApprovedLeads() {
                                     <p className="font-medium">Produtos compatíveis:</p>
                                     <ul className="list-disc list-inside mt-1 space-y-0.5">
                                       {company.website_products_match.slice(0, 3).map((match: any, idx: number) => (
-                                        <li key={idx}>
+                                        <li key={`${company.id}-match-${idx}-${match.tenant_product || ''}-${match.prospect_product || ''}`}>
                                           {match.tenant_product} ↔ {match.prospect_product}
                                         </li>
                                       ))}
@@ -2750,13 +2770,13 @@ export default function ApprovedLeads() {
                   
                   {/* 🎨 LINHA EXPANDIDA COM CARD COMPLETO */}
                   {expandedRow === company.id && (
-                    <TableRow>
+                    <TableRow key={`${company.id}-expanded`}>
                       <TableCell colSpan={15} className="bg-muted/20 p-0 border-t-0">
                         <ExpandedCompanyCard company={company} />
                       </TableCell>
                     </TableRow>
                   )}
-                  </>
+                  </React.Fragment>
                 );
                 })
               )}
@@ -2867,7 +2887,7 @@ export default function ApprovedLeads() {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {criterios.map((criterio: string, idx: number) => (
-                          <div key={idx} className="flex items-start gap-2 bg-muted/50 p-3 rounded-lg">
+                          <div key={`${company.id}-criterio-${idx}-${criterio}`} className="flex items-start gap-2 bg-muted/50 p-3 rounded-lg">
                             <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                             <span className="text-sm">{criterio}</span>
                           </div>
@@ -2893,7 +2913,7 @@ export default function ApprovedLeads() {
                       </div>
                       <div className="space-y-3">
                         {sinais.map((sinal: any, idx: number) => (
-                          <div key={idx} className="bg-orange-500/5 border-l-4 border-orange-500 p-4 rounded">
+                          <div key={`${company.id}-sinal-${idx}-${sinal?.tipo || ''}-${sinal?.descricao || ''}`} className="bg-orange-500/5 border-l-4 border-orange-500 p-4 rounded">
                             <p className="font-medium text-sm mb-1">{sinal?.tipo || 'Sinal Identificado'}</p>
                             <p className="text-sm text-muted-foreground">{sinal?.descricao || sinal?.texto || sinal}</p>
                             {sinal?.fonte && (
@@ -2931,7 +2951,7 @@ export default function ApprovedLeads() {
                       </div>
                       <div className="space-y-3">
                         {evidencias.map((ev: any, idx: number) => (
-                          <div key={idx} className="bg-muted/30 p-4 rounded-lg border">
+                          <div key={`${company.id}-evidencia-${idx}-${ev?.criterio || ''}-${ev?.fonte_nome || ''}`} className="bg-muted/30 p-4 rounded-lg border">
                             <div className="flex items-start justify-between mb-2">
                               <p className="font-semibold text-sm">{ev?.criterio || ev?.fonte_nome || 'Evidência'}</p>
                               {ev?.relevancia && (
@@ -2975,7 +2995,7 @@ export default function ApprovedLeads() {
                       <div className="bg-blue-500/5 border border-blue-500/20 p-4 rounded-lg">
                         <div className="flex flex-wrap gap-2">
                           {tecnologias.map((tech: string, idx: number) => (
-                            <Badge key={idx} variant="secondary">
+                            <Badge key={`${company.id}-tech-${idx}-${tech}`} variant="secondary">
                               {tech}
                             </Badge>
                           ))}
@@ -3001,7 +3021,7 @@ export default function ApprovedLeads() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {fontes.map((fonte: string, idx: number) => (
-                          <Badge key={idx} variant="outline" className="text-xs">
+                          <Badge key={`${company.id}-fonte-${idx}-${fonte}`} variant="outline" className="text-xs">
                             {fonte}
                           </Badge>
                         ))}
@@ -3081,7 +3101,7 @@ export default function ApprovedLeads() {
                     websiteFitScore={company.website_fit_score}
                     websiteProductsMatch={company.website_products_match}
                     linkedinUrl={company.linkedin_url}
-                    isModalFullscreen={isModalFullscreen}
+                    isModalFullscreen={false}
                   />
                 )}
 
@@ -3092,7 +3112,7 @@ export default function ApprovedLeads() {
                     <div className="space-y-2">
                       {(company as any).match_breakdown.map((item: any, idx: number) => (
                         <div 
-                          key={idx} 
+                          key={`${company.id}-match-breakdown-${idx}-${item?.criterio || ''}-${item?.matched ? 'matched' : 'unmatched'}`} 
                           className={`flex items-center justify-between p-2 rounded ${
                             item.matched ? 'bg-green-50 dark:bg-green-950/20' : 'bg-gray-50 dark:bg-gray-900/20'
                           }`}

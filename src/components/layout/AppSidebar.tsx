@@ -160,21 +160,14 @@ const menuGroups: MenuGroup[] = [
         icon: Database,
         url: "/companies",
         highlighted: true,
-        description: "Gerenciar empresas cadastradas - visualizar, editar, enriquecer"
+        description: "Gerenciar empresas cadastradas - visualizar, editar, classificar, aprovar"
       },
       {
-        title: "4. Quarentena ICP",
-        icon: Inbox,
-        url: "/leads/icp-quarantine",
-        highlighted: true,
-        description: "Enriquecimento profundo e análise manual antes do CRM"
-      },
-      {
-        title: "5. Leads Aprovados",
+        title: "4. Leads Aprovados",
         icon: CheckCircle2,
         url: "/leads/approved",
         highlighted: true,
-        description: "100% enriquecidos, prontos para Pipeline"
+        description: "Enriquecimento e criação de deals - único local de enrichment"
       },
       {
         title: "6. Pipeline de Vendas",

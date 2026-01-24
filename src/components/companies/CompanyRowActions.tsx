@@ -1,3 +1,5 @@
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
+// 🚨 MICROCICLO 4: Validação baseada em estado canônico
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -16,27 +18,46 @@ import {
   Trash2,
   ExternalLink,
   FileText,
-  Globe
+  Globe,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ExecutiveReportModal } from '@/components/reports/ExecutiveReportModal';
+import { useCanonicalState } from '@/hooks/useCanonicalState';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface CompanyRowActionsProps {
   company: any;
   onDelete: () => void;
   onDiscoverCNPJ?: () => void;
   onEnrichWebsite?: () => void;
+  onApprove?: () => void; // ✅ NOVO: Aprovar para Leads Aprovados
 }
 
 export function CompanyRowActions({
   company,
   onDelete,
   onDiscoverCNPJ,
-  onEnrichWebsite
+  onEnrichWebsite,
+  onApprove
 }: CompanyRowActionsProps) {
   const navigate = useNavigate();
   const [showReport, setShowReport] = useState(false);
+
+  // 🚨 MICROCICLO 4: Validar estado canônico
+  const stateValidation = useCanonicalState({ 
+    entity: company, 
+    entityType: 'company' 
+  });
+  const canApprove = stateValidation.isActionAllowed('approve');
+  const approveError = stateValidation.getActionError('approve');
 
   return (
     <DropdownMenu>
@@ -110,6 +131,17 @@ export function CompanyRowActions({
 
         <DropdownMenuSeparator />
 
+        {/* ✅ Aprovar para Leads Aprovados */}
+        {onApprove && canApprove && (
+          <DropdownMenuItem
+            onClick={onApprove}
+            className="text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20 hover:border-l-4 hover:border-green-600 transition-all cursor-pointer"
+          >
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            Aprovar para Leads Aprovados
+          </DropdownMenuItem>
+        )}
+
         {/* Links Externos */}
         {company.website && (
           <DropdownMenuItem asChild>
@@ -125,16 +157,8 @@ export function CompanyRowActions({
           </DropdownMenuItem>
         )}
 
-        {/* Enriquecer Website & LinkedIn */}
-        {onEnrichWebsite && (
-          <DropdownMenuItem 
-            onClick={onEnrichWebsite}
-            className="hover:bg-primary/10 hover:border-l-4 hover:border-primary transition-all cursor-pointer"
-          >
-            <Globe className="h-4 w-4 mr-2" />
-            Enriquecer Website & LinkedIn
-          </DropdownMenuItem>
-        )}
+        {/* 🚨 REMOVIDO: Enriquecer Website & LinkedIn - Enrichment só permitido em Leads Aprovados (ACTIVE) */}
+        {/* Botão não existe se não estiver em ACTIVE */}
 
         <DropdownMenuSeparator />
 

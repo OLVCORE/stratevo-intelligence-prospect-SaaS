@@ -77,7 +77,16 @@ BEGIN
     updated_at = now()
   RETURNING id INTO v_empresa_id;
   
+  -- 🚨 MICROCICLO 3: Validar que quarentena está em POOL antes de criar lead
+  -- Quarentena em POOL pode transicionar para ACTIVE (criando lead)
+  IF v_quarantine.validation_status != 'pending' THEN
+    RETURN QUERY SELECT NULL::UUID, NULL::UUID, NULL::UUID, false, 
+      'Lead da quarentena não está em estado POOL (pending). Apenas leads em POOL podem ser aprovados para ACTIVE.';
+    RETURN;
+  END IF;
+  
   -- 2. Criar lead (se houver email ou telefone)
+  -- 🚨 MICROCICLO 3: Lead só pode ser criado quando quarentena transiciona de POOL → ACTIVE
   IF v_quarantine.email IS NOT NULL OR v_quarantine.phone IS NOT NULL THEN
     INSERT INTO public.leads (
       tenant_id,
@@ -209,6 +218,6 @@ GRANT EXECUTE ON FUNCTION approve_quarantine_to_crm(UUID, UUID) TO authenticated
 
 -- Comentário atualizado
 COMMENT ON FUNCTION approve_quarantine_to_crm IS 
-'Aprova lead da quarentena e cria registros em empresas, leads e deals no CRM. Agora cria deal SEMPRE, mesmo sem lead, vinculando diretamente à empresa.';
+'🚨 MICROCICLO 3: Aprova lead da quarentena (POOL → ACTIVE) e cria registros em empresas, leads e deals no CRM. Valida que quarentena está em POOL antes de criar lead. Empresas criadas/atualizadas recebem canonical_status = ACTIVE.';
 
 

@@ -1,6 +1,8 @@
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
 
 export interface AutoEnrichResult {
   total: number;
@@ -16,6 +18,15 @@ export interface AutoEnrichResult {
 export function useAutoEnrich() {
   return useMutation({
     mutationFn: async () => {
+      // 🚨 MICROCICLO 2: VALIDAÇÃO DE CONTEXTO OBRIGATÓRIA
+      const isSalesTarget = isInSalesTargetContext();
+      if (!isSalesTarget) {
+        const errorMessage = 'Auto-Enrich bloqueado. Disponível apenas para Leads Aprovados (Sales Target).';
+        console.error('[Auto-Enrich] 🚫 BLOQUEADO:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      console.log('[Auto-Enrich] ✅ Contexto validado - SALES TARGET');
       console.log('[Auto-Enrich] Iniciando processo manual');
       
       const { data, error } = await supabase.functions.invoke('auto-enrich-companies', {

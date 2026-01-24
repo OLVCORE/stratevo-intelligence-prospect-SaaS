@@ -1,3 +1,5 @@
+// 🚨 MICROCICLO 2: Bloqueio global de enrichment fora de SALES TARGET
+// 🚨 MICROCICLO 4: Validação de estados canônicos
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -13,8 +15,12 @@ import {
   MoreHorizontal,
   Target,
   Search,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
+import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
+import { useCanonicalState, getStateLabel } from '@/hooks/useCanonicalState';
+import { CanonicalState } from '@/lib/utils/stateTransitionValidator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,10 +40,17 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
   totalCount: number;
+  selectedCompanies?: any[]; // 🚨 MICROCICLO 4: Empresas selecionadas para validação de estado
   onSelectAll: () => void;
   onClearSelection: () => void;
   onBulkDelete: () => Promise<void>;
@@ -55,6 +68,7 @@ interface BulkActionsToolbarProps {
 export function BulkActionsToolbar({
   selectedCount,
   totalCount,
+  selectedCompanies = [], // 🚨 MICROCICLO 4: Empresas selecionadas
   onSelectAll,
   onClearSelection,
   onBulkDelete,
@@ -70,6 +84,64 @@ export function BulkActionsToolbar({
 }: BulkActionsToolbarProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // 🚨 MICROCICLO 2: Verificar se está em SALES TARGET
+  const isSalesTarget = isInSalesTargetContext();
+  const enrichmentBlocked = !isSalesTarget;
+
+  // 🚨 MICROCICLO 4: Validar estados canônicos das empresas selecionadas
+  // Helper para verificar se ação é permitida (sem usar hook dentro de função)
+  const checkActionAllowed = (company: any, action: 'move_to_pool' | 'approve'): boolean => {
+    if (!company) return false;
+    const { getCanonicalState } = require('@/lib/utils/stateTransitionValidator');
+    const currentState = getCanonicalState(company, 'company');
+    
+    if (action === 'move_to_pool') {
+      // BASE → POOL
+      return currentState === 'BASE';
+    }
+    if (action === 'approve') {
+      // POOL → ACTIVE (mas isso é para quarentena, não companies)
+      // Para companies, "aprovar" significa mover para POOL (BASE → POOL)
+      return currentState === 'BASE';
+    }
+    return false;
+  };
+
+  const canMoveToPool = selectedCompanies.length > 0 && selectedCompanies.every((company: any) => 
+    checkActionAllowed(company, 'move_to_pool')
+  );
+
+  const canApprove = selectedCompanies.length > 0 && selectedCompanies.every((company: any) => 
+    checkActionAllowed(company, 'approve')
+  );
+
+  // Obter mensagens de erro para ações bloqueadas
+  const getMoveToPoolError = (): string | null => {
+    if (selectedCompanies.length === 0 || canMoveToPool) return null;
+    const firstCompany = selectedCompanies[0];
+    if (!firstCompany) return null;
+    const { getCanonicalState } = require('@/lib/utils/stateTransitionValidator');
+    const currentState = getCanonicalState(firstCompany, 'company');
+    
+    if (currentState !== 'BASE') {
+      return `Ação não permitida. Empresas devem estar em BASE para mover para POOL. Estado atual: ${getStateLabel(currentState)}`;
+    }
+    return 'Ação não permitida neste estado.';
+  };
+
+  const getApproveError = (): string | null => {
+    if (selectedCompanies.length === 0 || canApprove) return null;
+    const firstCompany = selectedCompanies[0];
+    if (!firstCompany) return null;
+    const { getCanonicalState } = require('@/lib/utils/stateTransitionValidator');
+    const currentState = getCanonicalState(firstCompany, 'company');
+    
+    if (currentState !== 'BASE') {
+      return `Ação não permitida. Empresas devem estar em BASE para aprovar. Estado atual: ${getStateLabel(currentState)}`;
+    }
+    return 'Ação não permitida neste estado.';
+  };
 
   const handleDelete = async () => {
     try {
@@ -120,72 +192,8 @@ export function BulkActionsToolbar({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Enriquecer em Lote */}
-          {hasSelection && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={isProcessing}
-                  data-testid="bulk-enrich-dropdown"
-                  aria-label="Enriquecer empresas selecionadas"
-                >
-                  {isProcessing ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 mr-2" />
-                  )}
-                  Enriquecer
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {onBulkDiscoverCNPJ && (
-                  <>
-                    <DropdownMenuItem 
-                      onClick={onBulkDiscoverCNPJ}
-                      disabled={isProcessing}
-                    >
-                      <Search className="h-4 w-4 mr-2" />
-                      Descobrir CNPJ
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
-                )}
-                <DropdownMenuItem 
-                  onClick={onBulkEnrichReceita}
-                  disabled={isProcessing}
-                >
-                  <Building2 className="h-4 w-4 mr-2" />
-                  Receita Federal
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={onBulkEnrichApollo}
-                  disabled={isProcessing}
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Apollo (Decisores)
-                </DropdownMenuItem>
-                {onBulkEnrichTotvsCheck && (
-                  <DropdownMenuItem 
-                    onClick={onBulkEnrichTotvsCheck}
-                    disabled={isProcessing}
-                  >
-                    <Target className="h-4 w-4 mr-2" />
-                    TOTVS Check
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={onBulkEnrich360}
-                  disabled={isProcessing}
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  360° Completo
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {/* 🚨 REMOVIDO: Enriquecer em Lote - Enrichment só permitido em Leads Aprovados (ACTIVE) */}
+          {/* Botão não existe se não estiver em ACTIVE */}
 
           {/* Exportar Selecionadas */}
           {hasSelection && (
@@ -219,27 +227,56 @@ export function BulkActionsToolbar({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {onBulkSendToQuarantine && (
-                  <>
-                    <DropdownMenuItem 
-                      onClick={onBulkSendToQuarantine} 
-                      disabled={isProcessing}
-                      className="text-blue-600 font-semibold hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                    >
-                      <Target className="h-4 w-4 mr-2" />
-                      🎯 Integrar para ICP
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <DropdownMenuItem 
+                            onClick={canMoveToPool ? onBulkSendToQuarantine : undefined} 
+                            disabled={isProcessing || !canMoveToPool}
+                            className={!canMoveToPool 
+                              ? "opacity-50 cursor-not-allowed" 
+                              : "text-blue-600 font-semibold hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                            }
+                          >
+                            <Target className="h-4 w-4 mr-2" />
+                            🎯 Integrar para ICP
+                          </DropdownMenuItem>
+                        </div>
+                      </TooltipTrigger>
+                      {!canMoveToPool && getMoveToPoolError() && (
+                        <TooltipContent>
+                          <p className="max-w-xs text-sm">{getMoveToPoolError()}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
+                {onBulkSendToQuarantine && canMoveToPool && <DropdownMenuSeparator />}
                 {onBulkApprove && (
-                  <>
-                    <DropdownMenuItem onClick={onBulkApprove} disabled={isProcessing}>
-                      <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-                      Aprovar e Mover para Pool
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <DropdownMenuItem 
+                            onClick={canApprove ? onBulkApprove : undefined} 
+                            disabled={isProcessing || !canApprove}
+                            className={!canApprove ? "opacity-50 cursor-not-allowed" : ""}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                            Aprovar e Mover para Pool
+                          </DropdownMenuItem>
+                        </div>
+                      </TooltipTrigger>
+                      {!canApprove && getApproveError() && (
+                        <TooltipContent>
+                          <p className="max-w-xs text-sm">{getApproveError()}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
+                {onBulkApprove && canApprove && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={onExportSelected} disabled={isProcessing}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Exportar CSV
