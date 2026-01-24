@@ -213,8 +213,8 @@ export function UnifiedActionsMenu({
           </>
         )}
 
-        {/* ENRICHMENT ACTIONS - APENAS EM LEADS APROVADOS */}
-        {context === 'approved' && (onEnrichReceita || onEnrichApollo || onEnrich360 || onEnrichWebsite || onDiscoverCNPJ || onVerification || onCalculatePurchaseIntent) && (
+        {/* ENRICHMENT ACTIONS - ESTOQUE QUALIFICADO E LEADS APROVADOS */}
+        {(context === 'approved' || context === 'stock') && (onEnrichReceita || onEnrichApollo || onEnrich360 || onEnrichWebsite || onDiscoverCNPJ || onVerification || onCalculatePurchaseIntent) && (
           <>
             <DropdownMenuGroup>
               <DropdownMenuLabel className="text-xs font-semibold text-primary">
@@ -227,7 +227,7 @@ export function UnifiedActionsMenu({
                   disabled={selectedCount === 0 || isProcessing}
                 >
                   <Building2 className="h-4 w-4 mr-2" />
-                  Receita Federal
+                  Enriquecimento da Receita Federal
                 </DropdownMenuItem>
               )}
 

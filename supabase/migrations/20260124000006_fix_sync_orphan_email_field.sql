@@ -81,7 +81,7 @@ BEGIN
       'icp_score', 0, -- ✅ MC2.5: Removida dependência de v_company.icp_score (campo não existe)
     'fit_score', NULL,
     'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
-    'purchase_intent_type', COALESCE(v_company.purchase_intent_type, 'potencial'),
+    'purchase_intent_type', 'potencial', -- ✅ MC2.5: Removida dependência de v_company.purchase_intent_type (campo não existe)
     'status', 'aprovada',
     'temperatura', COALESCE(v_company.temperatura, 'cold'),
     'totvs_status', v_company.totvs_status,
@@ -241,7 +241,7 @@ BEGIN
       'icp_score', 0, -- ✅ MC2.5: Removida dependência de v_company.icp_score (campo não existe)
       'fit_score', NULL,
       'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
-      'purchase_intent_type', COALESCE(v_company.purchase_intent_type, 'potencial'),
+      'purchase_intent_type', 'potencial', -- ✅ MC2.5: Removida dependência de v_company.purchase_intent_type (campo não existe)
       'status', 'aprovada', -- ✅ STATUS CRÍTICO: 'aprovada' para aparecer em Leads Aprovados
       'temperatura', COALESCE(v_company.temperatura, 'cold'),
       'totvs_status', v_company.totvs_status,
