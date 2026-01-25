@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, Loader2, StopCircle } from "lucide-react";
@@ -41,6 +41,9 @@ export function EnrichmentProgressModal({
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Modal de progresso do enriquecimento de empresas
+          </DialogDescription>
         </DialogHeader>
 
         {/* Progress Summary */}
@@ -142,7 +145,6 @@ export function EnrichmentProgressModal({
             </Button>
           )}
         </div>
-      </div>
       </DialogContent>
     </Dialog>
   );
