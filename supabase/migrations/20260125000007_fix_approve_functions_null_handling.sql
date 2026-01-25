@@ -134,7 +134,7 @@ BEGIN
       'uf', (v_company.location->>'state')::text,
       'municipio', (v_company.location->>'city')::text,
       'porte', NULL,
-      'cnae_principal', v_cnae_code,
+      'cnae_principal', COALESCE(v_cnae_code, v_raw_cnae), -- ✅ Salvar código original se normalizado não existir
       'website', v_company.website,
       'email', NULL,
       'telefone', NULL,
@@ -252,7 +252,7 @@ BEGIN
         NULLIF(v_normalized_data->>'uf', ''),
         NULLIF(v_normalized_data->>'municipio', ''),
         NULLIF(v_normalized_data->>'porte', ''),
-        NULLIF(v_normalized_data->>'cnae_principal', ''),
+        COALESCE(NULLIF(v_normalized_data->>'cnae_principal', ''), NULLIF(v_raw_cnae, '')),
         NULLIF(v_normalized_data->>'website', ''),
         NULLIF(v_normalized_data->>'email', ''),
         NULLIF(v_normalized_data->>'telefone', ''),

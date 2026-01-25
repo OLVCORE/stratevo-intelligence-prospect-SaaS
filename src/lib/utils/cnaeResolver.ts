@@ -61,6 +61,9 @@ export function resolveCompanyCNAE(company: any): CNAEResolution {
       (company as any).cnae_descricao ||
       rawAnalysis.cnae_descricao ||
       rawData.cnae_principal_descricao ||
+      rawData.receita_federal?.atividade_principal?.[0]?.text || // ✅ CRÍTICO: Buscar de raw_data também
+      rawData.receita?.atividade_principal?.[0]?.text || // ✅ CRÍTICO: Buscar de raw_data também
+      rawData.atividade_principal?.[0]?.text || // ✅ CRÍTICO: Buscar de raw_data também
       enrichmentRaw.receita_federal?.atividade_principal?.[0]?.text || // ✅ MC2.4: qualified_prospects
       enrichmentRaw.receita?.atividade_principal?.[0]?.text || // ✅ MC2.4: qualified_prospects
       enrichmentRaw.atividade_principal?.[0]?.text || // ✅ MC2.4: qualified_prospects
