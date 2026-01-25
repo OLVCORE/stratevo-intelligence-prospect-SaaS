@@ -85,7 +85,7 @@ BEGIN
       'purchase_intent_type', 'potencial', -- ✅ MC2.6.1: Campo não existe em companies
       'status', 'aprovada', -- ✅ STATUS CRÍTICO: 'aprovada' para aparecer em Leads Aprovados
       'temperatura', 'cold', -- ✅ MC2.6.1: Campo não existe em companies, usar valor padrão
-      'totvs_status', v_company.totvs_status,
+      'totvs_status', NULL, -- ✅ MC2.6.1: Campo não existe em companies
       'origem', COALESCE(v_company.origem, v_company.source_name, 'companies_base'),
       'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
       'raw_analysis', jsonb_build_object(
