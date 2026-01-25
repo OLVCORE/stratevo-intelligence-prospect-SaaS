@@ -224,8 +224,8 @@ BEGIN
     v_normalized_data := jsonb_build_object(
       'company_id', v_company.id,
       'tenant_id', p_tenant_id,
-      'cnpj', COALESCE(v_company.cnpj, ''),
-      'razao_social', COALESCE(v_company.company_name, v_company.name, 'N/A'),
+      'cnpj', COALESCE(v_company.cnpj, ''), -- ✅ NOT NULL: sempre terá valor
+      'razao_social', COALESCE(v_company.company_name, v_company.name, 'N/A'), -- ✅ NOT NULL: sempre terá valor
       'nome_fantasia', (v_company.location->>'name')::text,
       'uf', (v_company.location->>'state')::text,
       'municipio', (v_company.location->>'city')::text,
@@ -245,7 +245,7 @@ BEGIN
       'status', 'aprovada', -- ✅ STATUS CRÍTICO: 'aprovada' para aparecer em Leads Aprovados
       'temperatura', COALESCE(v_company.temperatura, 'cold'),
       'totvs_status', v_company.totvs_status,
-      'origem', COALESCE(v_company.origem, v_company.source_name, 'companies_base'),
+      'origem', COALESCE(v_company.origem, v_company.source_name, 'icp_individual'), -- ✅ MC2.5: Usar valor válido do CHECK constraint
       'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
       'raw_analysis', jsonb_build_object(
         'migrated_from_companies', true,
