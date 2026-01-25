@@ -175,7 +175,47 @@ export function resolveCompanyCNAE(company: any): CNAEResolution {
 }
 
 /**
- * Formata CNAE para exibição: "CODIGO - DESCRIÇÃO"
+ * Formata código CNAE no padrão oficial IBGE: "28.69-1/00"
+ * Formato: NN.NN-N/NN (7 dígitos: 2 seção + 2 divisão + 1 grupo + 2 classe)
+ * 
+ * @param cnaeCode - Código CNAE (pode vir com ou sem formatação)
+ * @returns Código formatado no padrão IBGE ou o código original se não puder formatar
+ */
+export function formatCNAECodeIBGE(cnaeCode: string | null): string | null {
+  if (!cnaeCode) return null;
+  
+  const codeStr = String(cnaeCode).trim();
+  
+  // Se já está no formato IBGE (tem ponto, hífen e barra), retornar como está
+  if (codeStr.includes('.') && codeStr.includes('-') && codeStr.includes('/')) {
+    return codeStr;
+  }
+  
+  // Remover todos os caracteres não numéricos
+  const digitsOnly = codeStr.replace(/\D/g, '');
+  
+  // CNAE deve ter 7 dígitos no formato IBGE
+  if (digitsOnly.length === 7) {
+    // Formato: NN.NN-N/NN
+    // Ex: "2869100" -> "28.69-1/00"
+    return `${digitsOnly.substring(0, 2)}.${digitsOnly.substring(2, 4)}-${digitsOnly.substring(4, 5)}/${digitsOnly.substring(5, 7)}`;
+  }
+  
+  // Se tem formato parcial (ex: "2869-1/00"), tentar completar
+  if (codeStr.includes('-') && codeStr.includes('/')) {
+    const match = codeStr.match(/(\d{2})(\d{2})-(\d)\/(\d{2})/);
+    if (match) {
+      return `${match[1]}.${match[2]}-${match[3]}/${match[4]}`;
+    }
+  }
+  
+  // Se não conseguir formatar, retornar original (pode ser que já esteja formatado de outra forma)
+  return codeStr;
+}
+
+/**
+ * Formata CNAE para exibição: "CÓDIGO IBGE - DESCRIÇÃO"
+ * Formato oficial IBGE: "28.69-1/00 - Fabricação de..."
  * 
  * @param resolution - Resolução canônica do CNAE
  * @returns String formatada ou null
@@ -187,8 +227,11 @@ export function formatCNAEForDisplay(resolution: CNAEResolution): string | null 
     return null;
   }
   
+  // ✅ FORMATAR CÓDIGO NO PADRÃO OFICIAL IBGE
+  const formattedCode = formatCNAECodeIBGE(code);
+  
   const parts: string[] = [];
-  if (code) parts.push(code);
+  if (formattedCode) parts.push(formattedCode);
   if (description) parts.push(description);
   
   return parts.length > 0 ? parts.join(' - ') : null;

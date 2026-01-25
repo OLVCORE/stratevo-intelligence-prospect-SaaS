@@ -113,6 +113,7 @@ import { CompanyPreviewModal } from '@/components/qualification/CompanyPreviewMo
 import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
 import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
 import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
+import { formatCNPJ } from '@/lib/utils/validators';
 
 interface QualifiedProspect {
   id: string;
@@ -3089,7 +3090,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                                 }`}
                                 onClick={() => handleShowFullPreview(prospect.cnpj)}
                               >
-                                {prospect.cnpj}
+                                {formatCNPJ(prospect.cnpj)}
                               </Badge>
                             );
                           })()}
