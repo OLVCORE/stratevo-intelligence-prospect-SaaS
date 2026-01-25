@@ -93,29 +93,59 @@ export function resolveCompanyCNAE(company: any): CNAEResolution {
   // ========== PRIORIDADE 2: raw_data (Receita Federal / APIs) ==========
   // ✅ MC2.4: Buscar também de enrichment.raw se raw_data não tiver
   const enrichmentRaw = (company as any).enrichment?.raw || {};
+  
+  // ✅ CRÍTICO: Buscar CNAE em TODAS as estruturas possíveis de raw_data
+  // Estruturas comuns: receita_federal, receita, atividade_principal (array ou objeto)
   const fromReceitaPrincipal =
+    // Estrutura padrão Receita Federal (array)
     rawData.receita_federal?.atividade_principal?.[0]?.code ||
     rawData.receita?.atividade_principal?.[0]?.code ||
     rawData.atividade_principal?.[0]?.code ||
+    // Estrutura alternativa (objeto direto)
+    rawData.receita_federal?.atividade_principal?.code ||
+    rawData.receita?.atividade_principal?.code ||
+    rawData.atividade_principal?.code ||
+    // Campos diretos
     rawData.cnae_fiscal ||
     rawData.cnae_principal ||
-    enrichmentRaw.receita_federal?.atividade_principal?.[0]?.code || // ✅ MC2.4: qualified_prospects
-    enrichmentRaw.receita?.atividade_principal?.[0]?.code || // ✅ MC2.4: qualified_prospects
-    enrichmentRaw.atividade_principal?.[0]?.code || // ✅ MC2.4: qualified_prospects
-    enrichmentRaw.cnae_fiscal || // ✅ MC2.4: qualified_prospects
-    enrichmentRaw.cnae_principal || // ✅ MC2.4: qualified_prospects
+    rawData.cnae ||
+    // ✅ MC2.4: qualified_prospects (enrichment.raw)
+    enrichmentRaw.receita_federal?.atividade_principal?.[0]?.code ||
+    enrichmentRaw.receita?.atividade_principal?.[0]?.code ||
+    enrichmentRaw.atividade_principal?.[0]?.code ||
+    enrichmentRaw.receita_federal?.atividade_principal?.code ||
+    enrichmentRaw.receita?.atividade_principal?.code ||
+    enrichmentRaw.atividade_principal?.code ||
+    enrichmentRaw.cnae_fiscal ||
+    enrichmentRaw.cnae_principal ||
+    enrichmentRaw.cnae ||
     null;
   
   if (fromReceitaPrincipal) {
+    // ✅ CRÍTICO: Buscar descrição em TODAS as estruturas possíveis
     const receitaDescription =
+      // Estrutura padrão Receita Federal (array)
       rawData.receita_federal?.atividade_principal?.[0]?.text ||
       rawData.receita?.atividade_principal?.[0]?.text ||
       rawData.atividade_principal?.[0]?.text ||
+      // Estrutura alternativa (objeto direto)
+      rawData.receita_federal?.atividade_principal?.text ||
+      rawData.receita?.atividade_principal?.text ||
+      rawData.atividade_principal?.text ||
+      // Campos diretos
       rawData.cnae_principal_descricao ||
-      enrichmentRaw.receita_federal?.atividade_principal?.[0]?.text || // ✅ MC2.4: qualified_prospects
-      enrichmentRaw.receita?.atividade_principal?.[0]?.text || // ✅ MC2.4: qualified_prospects
-      enrichmentRaw.atividade_principal?.[0]?.text || // ✅ MC2.4: qualified_prospects
-      enrichmentRaw.cnae_principal_descricao || // ✅ MC2.4: qualified_prospects
+      rawData.cnae_descricao ||
+      rawData.descricao ||
+      // ✅ MC2.4: qualified_prospects (enrichment.raw)
+      enrichmentRaw.receita_federal?.atividade_principal?.[0]?.text ||
+      enrichmentRaw.receita?.atividade_principal?.[0]?.text ||
+      enrichmentRaw.atividade_principal?.[0]?.text ||
+      enrichmentRaw.receita_federal?.atividade_principal?.text ||
+      enrichmentRaw.receita?.atividade_principal?.text ||
+      enrichmentRaw.atividade_principal?.text ||
+      enrichmentRaw.cnae_principal_descricao ||
+      enrichmentRaw.cnae_descricao ||
+      enrichmentRaw.descricao ||
       null;
     
     // CNAEs secundários de raw_data (se existir)
