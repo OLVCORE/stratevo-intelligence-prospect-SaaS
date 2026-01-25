@@ -124,22 +124,16 @@ BEGIN
   FOR v_company IN 
     SELECT 
       id,
-      cnae_principal,
       raw_data,
       sector_name
     FROM public.companies
     WHERE sector_name IS NULL OR sector_name = ''
   LOOP
-    -- Extrair CNAE
+    -- Extrair CNAE apenas de raw_data (cnae_principal não existe em companies)
     v_cnae_code := NULL;
     
-    -- Prioridade 1: cnae_principal direto
-    IF v_company.cnae_principal IS NOT NULL AND v_company.cnae_principal != '' THEN
-      v_cnae_code := normalize_cnae_code(v_company.cnae_principal);
-    END IF;
-    
-    -- Prioridade 2: raw_data
-    IF v_cnae_code IS NULL AND v_company.raw_data IS NOT NULL THEN
+    -- Extrair de raw_data
+    IF v_company.raw_data IS NOT NULL THEN
       v_cnae_code := extract_cnae_from_raw_data(v_company.raw_data);
     END IF;
     
@@ -194,7 +188,7 @@ BEGIN
     -- Extrair CNAE
     v_cnae_code := NULL;
     
-    -- Prioridade 1: cnae_principal direto
+    -- Prioridade 1: cnae_principal direto (se existir)
     IF v_prospect.cnae_principal IS NOT NULL AND v_prospect.cnae_principal != '' THEN
       v_cnae_code := normalize_cnae_code(v_prospect.cnae_principal);
     END IF;
