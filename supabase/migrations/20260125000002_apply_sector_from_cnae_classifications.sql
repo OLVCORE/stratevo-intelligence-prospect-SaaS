@@ -225,6 +225,9 @@ $$;
 -- ==========================================
 -- 4. FUNÇÃO: Atualizar setor em prospecting_candidates baseado em CNAE
 -- ==========================================
+-- NOTA: A tabela prospecting_candidates não possui raw_data nem cnae_principal.
+-- Esta função tenta buscar CNAE de outras tabelas relacionadas (companies, icp_analysis_results)
+-- via CNPJ, ou retorna skipped se não encontrar dados de CNAE.
 CREATE OR REPLACE FUNCTION update_prospecting_candidates_sector_from_cnae()
 RETURNS TABLE (
   updated_count INTEGER,
@@ -243,19 +246,36 @@ BEGIN
   FOR v_candidate IN 
     SELECT 
       id,
-      raw_data
+      cnpj
     FROM public.prospecting_candidates
     WHERE sector IS NULL OR sector = ''
+      AND cnpj IS NOT NULL
+      AND cnpj != ''
   LOOP
-    -- Extrair CNAE de raw_data
+    -- Extrair CNAE de outras tabelas relacionadas via CNPJ
     v_cnae_code := NULL;
     
-    IF v_candidate.raw_data IS NOT NULL THEN
-      v_cnae_code := extract_cnae_from_raw_data(v_candidate.raw_data);
+    -- Prioridade 1: Buscar CNAE de icp_analysis_results (via CNPJ)
+    IF v_cnae_code IS NULL THEN
+      SELECT cnae_principal INTO v_cnae_code
+      FROM public.icp_analysis_results
+      WHERE cnpj = v_candidate.cnpj
+        AND cnae_principal IS NOT NULL
+        AND cnae_principal != ''
+      LIMIT 1;
+    END IF;
+    
+    -- Prioridade 2: Buscar CNAE de companies (via CNPJ e raw_data)
+    IF v_cnae_code IS NULL THEN
+      SELECT extract_cnae_from_raw_data(raw_data) INTO v_cnae_code
+      FROM public.companies
+      WHERE cnpj = v_candidate.cnpj
+        AND raw_data IS NOT NULL
+      LIMIT 1;
     END IF;
     
     -- Buscar setor
-    IF v_cnae_code IS NOT NULL THEN
+    IF v_cnae_code IS NOT NULL AND v_cnae_code != '' THEN
       v_setor := get_sector_from_cnae(v_cnae_code);
       
       IF v_setor IS NOT NULL THEN
@@ -387,7 +407,7 @@ COMMENT ON FUNCTION update_qualified_prospects_sector_from_cnae IS
 'Atualiza setor em qualified_prospects baseado no CNAE usando cnae_classifications';
 
 COMMENT ON FUNCTION update_prospecting_candidates_sector_from_cnae IS 
-'Atualiza sector em prospecting_candidates baseado no CNAE usando cnae_classifications';
+'Atualiza sector em prospecting_candidates baseado no CNAE usando cnae_classifications. Busca CNAE de icp_analysis_results ou companies via CNPJ, já que prospecting_candidates não possui raw_data';
 
 COMMENT ON FUNCTION update_icp_analysis_results_sector_from_cnae IS 
 'Atualiza setor em icp_analysis_results baseado no CNAE usando cnae_classifications';
