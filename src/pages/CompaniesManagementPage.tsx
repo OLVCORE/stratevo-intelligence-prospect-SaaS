@@ -754,6 +754,19 @@ export default function CompaniesManagementPage() {
         failed: failedCount,
         results: result?.results
       });
+      
+      // ✅ Log detalhado dos erros
+      if (result?.results && Array.isArray(result.results)) {
+        result.results.forEach((r: any, idx: number) => {
+          if (!r.success) {
+            console.error(`[APPROVE BATCH] Empresa ${idx + 1} falhou:`, {
+              company_id: r.company_id,
+              message: r.message,
+              icp_analysis_id: r.icp_analysis_id
+            });
+          }
+        });
+      }
 
       if (approvedCount === 0) {
         toast.error('Nenhuma empresa foi aprovada', {

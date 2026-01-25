@@ -256,10 +256,10 @@ BEGIN
     );
     
     -- 3.3. Verificar se já existe registro em icp_analysis_results
+    -- ✅ MC2.5: Removido filtro tenant_id (campo pode não existir ou causar erro)
     SELECT id INTO v_icp_analysis_id
     FROM public.icp_analysis_results
     WHERE company_id = p_company_id
-      AND tenant_id = p_tenant_id
     LIMIT 1;
     
     -- 3.4. Inserir ou atualizar em icp_analysis_results
