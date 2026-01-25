@@ -3206,14 +3206,25 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                           {getProspectCity(prospect) || '-'}
                         </span>
                       </TableCell>
-                      {/* ✅ ORDEM CORRETA: 9. Setor */}
+                      {/* ✅ ORDEM CORRETA: 9. Setor (Setor + Categoria) */}
                       <TableCell className="text-center">
                         {(() => {
                           const classification = getCNAEClassificationForProspect(prospect);
                           const setor = classification?.setor_industria;
+                          const categoria = classification?.categoria;
+                          
+                          if (setor) {
+                            const displayText = categoria ? `${setor} - ${categoria}` : setor;
+                            return (
+                              <span title={displayText}>
+                                {displayText}
+                              </span>
+                            );
+                          }
+                          
                           return (
-                            <span title={setor || 'Sem setor'}>
-                              {setor || 'Sem setor'}
+                            <span title="Sem setor">
+                              Sem setor
                             </span>
                           );
                         })()}

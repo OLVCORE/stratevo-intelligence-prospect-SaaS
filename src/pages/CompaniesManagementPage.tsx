@@ -2876,21 +2876,23 @@ export default function CompaniesManagementPage() {
                           );
                         })()}
                       </TableCell>
-                      {/* Setor: mesma lógica de Leads Aprovados (CNAE canônico) */}
+                      {/* Setor: Setor + Categoria (ex: "Agricultura - Produtor") */}
                       <TableCell className="text-center max-w-[260px] px-2 overflow-hidden">
                         {(() => {
                           const cnaeResolution = resolveCompanyCNAE(company);
                           const cnaeCode = cnaeResolution.principal.code;
                           const classification = cnaeCode ? getCNAEClassificationForCompany({ ...company, cnae_principal: cnaeCode }) : null;
                           const setor = classification?.setor_industria;
+                          const categoria = classification?.categoria;
 
                           if (setor) {
+                            const displayText = categoria ? `${setor} - ${categoria}` : setor;
                             return (
                               <span
                                 className="text-sm leading-snug line-clamp-2"
-                                title={setor}
+                                title={displayText}
                               >
-                                {setor}
+                                {displayText}
                               </span>
                             );
                           }

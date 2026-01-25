@@ -2589,11 +2589,13 @@ export default function ApprovedLeads() {
                         const cnaeCode = cnaeResolution.principal.code;
                         const classification = cnaeCode ? getCNAEClassificationForCompany({ ...company, cnae_principal: cnaeCode }) : null;
                         const setor = classification?.setor_industria;
+                        const categoria = classification?.categoria;
 
                         if (setor) {
+                          const displayText = categoria ? `${setor} - ${categoria}` : setor;
                           return (
-                            <span className="text-sm leading-snug line-clamp-2" title={setor}>
-                              {setor}
+                            <span className="text-sm leading-snug line-clamp-2" title={displayText}>
+                              {displayText}
                             </span>
                           );
                         }
