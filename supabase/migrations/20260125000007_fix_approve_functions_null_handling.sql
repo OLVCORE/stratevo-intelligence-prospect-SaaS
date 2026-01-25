@@ -53,12 +53,11 @@ BEGIN
   END IF;
   
   -- 2.1. Extrair CNAE e buscar setor da tabela cnae_classifications
+  -- ✅ CRÍTICO: companies não tem coluna cnae_principal, apenas raw_data
   v_cnae_code := NULL;
   
-  -- Tentar extrair CNAE de múltiplas fontes
-  IF v_company.cnae_principal IS NOT NULL AND v_company.cnae_principal != '' THEN
-    v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(v_company.cnae_principal), '.', ''), ' ', ''));
-  ELSIF v_company.raw_data IS NOT NULL THEN
+  -- Tentar extrair CNAE APENAS de raw_data (companies não tem cnae_principal como coluna)
+  IF v_company.raw_data IS NOT NULL THEN
     v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(
       COALESCE(
         (v_company.raw_data->'receita_federal'->'atividade_principal'->0->>'code'),
