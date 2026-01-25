@@ -40,7 +40,28 @@ BEGIN
     -- Prioridade 1: cnae_principal direto
     IF v_result.cnae_principal IS NOT NULL AND v_result.cnae_principal != '' THEN
       BEGIN
-        v_cnae_code := normalize_cnae_code(v_result.cnae_principal);
+        -- ✅ CRÍTICO: Se o código é apenas numérico (ex: "2833000"), converter para formato "28.33-0/00"
+        DECLARE
+          v_cnae_clean TEXT;
+          v_cnae_formatted TEXT;
+        BEGIN
+          v_cnae_clean := REPLACE(REPLACE(REPLACE(REPLACE(TRIM(v_result.cnae_principal), '.', ''), '-', ''), '/', ''), ' ', '');
+          
+          -- Se é apenas números (7 dígitos), formatar: NN.NN-N/NN
+          IF LENGTH(v_cnae_clean) = 7 AND v_cnae_clean ~ '^[0-9]+$' THEN
+            v_cnae_formatted := SUBSTRING(v_cnae_clean, 1, 2) || '.' || 
+                               SUBSTRING(v_cnae_clean, 3, 2) || '-' || 
+                               SUBSTRING(v_cnae_clean, 5, 1) || '/' || 
+                               SUBSTRING(v_cnae_clean, 6, 2);
+            v_cnae_code := normalize_cnae_code(v_cnae_formatted);
+          ELSE
+            v_cnae_code := normalize_cnae_code(v_result.cnae_principal);
+          END IF;
+        EXCEPTION
+          WHEN OTHERS THEN
+            -- Fallback: tentar normalizar direto
+            v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(v_result.cnae_principal), '.', ''), ' ', ''));
+        END;
       EXCEPTION
         WHEN OTHERS THEN
           v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(v_result.cnae_principal), '.', ''), ' ', ''));
@@ -105,12 +126,14 @@ END;
 $$;
 
 -- ==========================================
--- 2. ATUALIZAR CNAE_principal COM CÓDIGO ORIGINAL (se estiver vazio ou normalizado)
+-- 2. ATUALIZAR CNAE_principal COM CÓDIGO FORMATADO (se estiver apenas numérico)
 -- ==========================================
 DO $$
 DECLARE
   v_result RECORD;
   v_raw_cnae TEXT;
+  v_cnae_clean TEXT;
+  v_cnae_formatted TEXT;
   v_updated INTEGER := 0;
 BEGIN
   FOR v_result IN 
@@ -119,22 +142,42 @@ BEGIN
       cnae_principal,
       raw_data
     FROM public.icp_analysis_results
-    WHERE cnae_principal IS NULL 
-       OR cnae_principal = ''
-       OR cnae_principal NOT LIKE '%.%' -- Código sem pontos (normalizado)
+    WHERE (cnae_principal IS NULL OR cnae_principal = '')
+       OR (cnae_principal ~ '^[0-9]{7}$') -- Código apenas numérico (7 dígitos)
   LOOP
-    -- Extrair código CNAE original de raw_data
+    -- Extrair código CNAE de raw_data ou usar o existente
     IF v_result.raw_data IS NOT NULL THEN
       v_raw_cnae := COALESCE(
         (v_result.raw_data->'receita_federal'->'atividade_principal'->0->>'code'),
         (v_result.raw_data->'receita'->'atividade_principal'->0->>'code'),
         (v_result.raw_data->'atividade_principal'->0->>'code'),
         (v_result.raw_data->>'cnae_fiscal'),
-        (v_result.raw_data->>'cnae_principal')
+        (v_result.raw_data->>'cnae_principal'),
+        v_result.cnae_principal
       );
+    ELSE
+      v_raw_cnae := v_result.cnae_principal;
+    END IF;
+    
+    -- Se encontrou código, formatar se necessário
+    IF v_raw_cnae IS NOT NULL AND v_raw_cnae != '' THEN
+      v_cnae_clean := REPLACE(REPLACE(REPLACE(REPLACE(TRIM(v_raw_cnae), '.', ''), '-', ''), '/', ''), ' ', '');
       
-      -- Atualizar se encontrou código original
-      IF v_raw_cnae IS NOT NULL AND v_raw_cnae != '' THEN
+      -- Se é apenas números (7 dígitos), formatar: NN.NN-N/NN
+      IF LENGTH(v_cnae_clean) = 7 AND v_cnae_clean ~ '^[0-9]+$' THEN
+        v_cnae_formatted := SUBSTRING(v_cnae_clean, 1, 2) || '.' || 
+                           SUBSTRING(v_cnae_clean, 3, 2) || '-' || 
+                           SUBSTRING(v_cnae_clean, 5, 1) || '/' || 
+                           SUBSTRING(v_cnae_clean, 6, 2);
+        
+        -- Atualizar com código formatado
+        UPDATE public.icp_analysis_results
+        SET cnae_principal = v_cnae_formatted
+        WHERE id = v_result.id;
+        
+        v_updated := v_updated + 1;
+      ELSIF v_result.cnae_principal IS NULL OR v_result.cnae_principal = '' THEN
+        -- Se estava vazio, atualizar com o código encontrado
         UPDATE public.icp_analysis_results
         SET cnae_principal = v_raw_cnae
         WHERE id = v_result.id;
@@ -144,7 +187,7 @@ BEGIN
     END IF;
   END LOOP;
   
-  RAISE NOTICE 'Atualizados % registros com código CNAE original', v_updated;
+  RAISE NOTICE 'Atualizados % registros com código CNAE formatado', v_updated;
 END $$;
 
 -- Comentário
