@@ -49,6 +49,7 @@ import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
 import { formatCNPJ } from '@/lib/utils/validators';
 import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
 import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
+import { getCompanyOrigin, getCompanyOriginString } from '@/lib/utils/originResolver';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -2467,35 +2468,17 @@ export default function ApprovedLeads() {
                     <TableCell className="text-center">
                       <div className="flex justify-center max-w-[220px] mx-auto overflow-hidden text-ellipsis whitespace-nowrap">
                         {(() => {
-                          // ✅ MESMA LÓGICA DA TABELA ESTOQUE DE EMPRESAS QUALIFICADAS E BASE DE EMPRESAS
-                          // Buscar source_name em múltiplos lugares, priorizando qualified_prospects
-                          let origem = company.source_name || '';
+                          // ✅ PADRONIZADO: Usar mesma lógica da tabela Estoque de Empresas Qualificadas
+                          const origem = getCompanyOrigin(company);
                           
-                          // Se source_name é um batch ID ou vazio, buscar de outros lugares (prioridade)
-                          if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-                            // Prioridade: raw_analysis > raw_data > outros campos (EXATAMENTE IGUAL BASE DE EMPRESAS)
-                            origem = (company as any).raw_analysis?.source_name ||
-                                    (company as any).raw_analysis?.origem_original ||
-                                    (company as any).raw_analysis?.source_file_name ||
-                                    (company as any).raw_data?.source_name ||
-                                    (company as any).raw_data?.origem ||
-                                    (company as any).raw_data?.origem_original ||
-                                    (company as any).raw_data?.source_file_name ||
-                                    (company as any).raw_data?.source ||
-                                    '';
-                          }
-                          
-                          // Usar helper canônico de origem (campanha/arquivo/job/etc.)
-                          const origemNormalizada = getCompanyOrigin(company);
-                          
-                          if (origemNormalizada && origemNormalizada.trim() !== '') {
+                          if (origem) {
                             return (
                               <Badge 
                                 variant="secondary" 
                                 className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs max-w-full"
                               >
                                 <span className="truncate max-w-full">
-                                  {origemNormalizada.trim()}
+                                  {origem}
                                 </span>
                               </Badge>
                             );

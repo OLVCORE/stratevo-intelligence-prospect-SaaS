@@ -45,13 +45,15 @@ BEGIN
     RETURN NULL;
   END IF;
   
-  -- Tentar múltiplas estruturas possíveis
-  v_cnae := 
-    p_raw_data->'receita_federal'->'atividade_principal'->0->>'code' OR
-    p_raw_data->'receita'->'atividade_principal'->0->>'code' OR
-    p_raw_data->'atividade_principal'->0->>'code' OR
-    p_raw_data->>'cnae_fiscal' OR
-    p_raw_data->>'cnae_principal';
+  -- ✅ CORRIGIDO: Usar COALESCE em vez de OR (OR só funciona com boolean)
+  -- Tentar múltiplas estruturas possíveis, retornando o primeiro não-nulo
+  v_cnae := COALESCE(
+    NULLIF(p_raw_data->'receita_federal'->'atividade_principal'->0->>'code', ''),
+    NULLIF(p_raw_data->'receita'->'atividade_principal'->0->>'code', ''),
+    NULLIF(p_raw_data->'atividade_principal'->0->>'code', ''),
+    NULLIF(p_raw_data->>'cnae_fiscal', ''),
+    NULLIF(p_raw_data->>'cnae_principal', '')
+  );
   
   RETURN normalize_cnae_code(v_cnae);
 END;

@@ -5,6 +5,36 @@
 -- Descrição: Força recriação da função update_companies_sector_from_cnae()
 --            removendo referência a cnae_principal que não existe em companies
 --            A função deve extrair CNAE apenas de raw_data
+--            CORRIGE: Erro SQL na função extract_cnae_from_raw_data (OR com text)
+
+-- ==========================================
+-- CORRIGIR FUNÇÃO: extract_cnae_from_raw_data (CORRIGIDA - usa COALESCE)
+-- ==========================================
+CREATE OR REPLACE FUNCTION extract_cnae_from_raw_data(p_raw_data JSONB)
+RETURNS TEXT
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  v_cnae TEXT;
+BEGIN
+  IF p_raw_data IS NULL THEN
+    RETURN NULL;
+  END IF;
+  
+  -- ✅ CORRIGIDO: Usar COALESCE em vez de OR (OR só funciona com boolean)
+  -- Tentar múltiplas estruturas possíveis, retornando o primeiro não-nulo
+  v_cnae := COALESCE(
+    NULLIF(p_raw_data->'receita_federal'->'atividade_principal'->0->>'code', ''),
+    NULLIF(p_raw_data->'receita'->'atividade_principal'->0->>'code', ''),
+    NULLIF(p_raw_data->'atividade_principal'->0->>'code', ''),
+    NULLIF(p_raw_data->>'cnae_fiscal', ''),
+    NULLIF(p_raw_data->>'cnae_principal', '')
+  );
+  
+  RETURN normalize_cnae_code(v_cnae);
+END;
+$$;
 
 -- ==========================================
 -- RECRIAR FUNÇÃO: update_companies_sector_from_cnae (CORRIGIDA)

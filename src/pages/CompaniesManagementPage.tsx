@@ -70,6 +70,7 @@ import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
 import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
 import { formatCNPJ } from '@/lib/utils/validators';
 import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
+import { getCompanyOrigin } from '@/lib/utils/originResolver';
 
 
 export default function CompaniesManagementPage() {
@@ -2739,59 +2740,20 @@ export default function CompaniesManagementPage() {
                       <TableCell className="text-center">
                         <div className="flex justify-center">
                           {(() => {
-                            // ✅ MESMA LÓGICA DA TABELA ESTOQUE DE EMPRESAS QUALIFICADAS
-                            // Buscar origem em múltiplos lugares, priorizando coluna direta
-                            let origem = (company as any).origem || (company as any).source_name || '';
+                            // ✅ PADRONIZADO: Usar mesma lógica da tabela Estoque de Empresas Qualificadas
+                            const origem = getCompanyOrigin(company);
                             
-                            // Se origem/source_name é um batch ID ou vazio, buscar de outros lugares (prioridade)
-                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-                              // Prioridade: coluna direta > source_metadata > raw_data > outros campos
-                              origem = (company as any).origem ||
-                                      (company as any).source_name ||
-                                      (company as any).source_metadata?.source_name ||
-                                      (company as any).source_metadata?.campaign ||
-                                      (company as any).raw_data?.origem ||
-                                      (company as any).raw_data?.source_name ||
-                                      (company as any).raw_data?.origem_original ||
-                                      (company as any).raw_data?.source_file_name ||
-                                      (company as any).raw_data?.source ||
-                                      '';
-                            }
-                            
-                            // Se ainda for batch ID, tentar buscar do import_batch_id relacionado
-                            if ((!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) && (company as any).import_batch_id) {
-                              // Se tem import_batch_id, pode ter sido salvo em outro lugar
-                              origem = (company as any).raw_data?.import_batch_name ||
-                                      (company as any).raw_data?.batch_name ||
-                                      '';
-                            }
-                            
-                            // ✅ NOVO: Se ainda não encontrou, buscar de qualified_prospects (via relacionamento)
-                            // Nota: Isso será resolvido pela migração SQL, mas mantemos como fallback
-                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-                              // Tentar buscar de qualified_prospects relacionado (se disponível no objeto)
-                              const qualifiedProspect = (company as any).qualified_prospect;
-                              if (qualifiedProspect) {
-                                origem = qualifiedProspect.source_name ||
-                                        qualifiedProspect.job?.source_file_name ||
-                                        qualifiedProspect.job?.job_name ||
-                                        '';
-                              }
-                            }
-                            
-                            // Se encontrou um nome válido (não batch ID), mostrar
-                            if (origem && typeof origem === 'string' && !origem.startsWith('batch-') && !origem.includes('batch-') && origem.trim() !== '') {
+                            if (origem) {
                               return (
                                 <Badge 
                                   variant="secondary" 
                                   className="bg-blue-600/10 text-blue-600 border-blue-600/30 text-xs"
                                 >
-                                  {origem.trim()}
+                                  {origem}
                                 </Badge>
                               );
                             }
                             
-                            // Se não encontrou, mostrar origem genérica
                             return (
                               <Badge variant="outline" className="text-xs text-muted-foreground">
                                 Sem origem
