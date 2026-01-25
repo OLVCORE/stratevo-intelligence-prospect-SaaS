@@ -30,6 +30,7 @@ DECLARE
   v_setor_industria TEXT;
   v_categoria TEXT;
   v_raw_cnae TEXT;
+  v_cnae_description TEXT;
 BEGIN
   -- 1. Buscar empresa e validar estado
   SELECT 
@@ -58,6 +59,7 @@ BEGIN
   -- 2.1. Extrair CNAE e buscar setor da tabela cnae_classifications
   -- ✅ CRÍTICO: companies não tem coluna cnae_principal, apenas raw_data
   v_cnae_code := NULL;
+  v_cnae_description := NULL;
   
   -- Tentar extrair CNAE APENAS de raw_data (companies não tem cnae_principal como coluna)
   IF v_company.raw_data IS NOT NULL THEN
@@ -68,6 +70,15 @@ BEGIN
       (v_company.raw_data->'atividade_principal'->0->>'code'),
       (v_company.raw_data->>'cnae_fiscal'),
       (v_company.raw_data->>'cnae_principal')
+    );
+    
+    -- ✅ CRÍTICO: Extrair também a DESCRIÇÃO do CNAE
+    v_cnae_description := COALESCE(
+      (v_company.raw_data->'receita_federal'->'atividade_principal'->0->>'text'),
+      (v_company.raw_data->'receita'->'atividade_principal'->0->>'text'),
+      (v_company.raw_data->'atividade_principal'->0->>'text'),
+      (v_company.raw_data->>'cnae_principal_descricao'),
+      (v_company.raw_data->>'cnae_descricao')
     );
     
     -- Normalizar para formato da tabela cnae_classifications: "6203-1/00" (sem pontos)
@@ -180,12 +191,23 @@ BEGIN
         origem = COALESCE(v_normalized_data->>'origem', origem, 'icp_individual'),
         setor = COALESCE(v_normalized_data->>'setor', setor),
         raw_data = COALESCE((v_normalized_data->>'raw_data')::jsonb, raw_data, '{}'::jsonb),
-        raw_analysis = jsonb_build_object(
-          'migrated_from_companies', true,
-          'migrated_at', now(),
-          'canonical_status_previous', v_current_state,
-          'canonical_status_new', 'ACTIVE',
-          'approved_at', now()
+        raw_analysis = COALESCE(
+          (raw_analysis || jsonb_build_object(
+            'migrated_from_companies', true,
+            'migrated_at', now(),
+            'canonical_status_previous', v_current_state,
+            'canonical_status_new', 'ACTIVE',
+            'approved_at', now(),
+            'cnae_descricao', v_cnae_description
+          )),
+          jsonb_build_object(
+            'migrated_from_companies', true,
+            'migrated_at', now(),
+            'canonical_status_previous', v_current_state,
+            'canonical_status_new', 'ACTIVE',
+            'approved_at', now(),
+            'cnae_descricao', v_cnae_description
+          )
         ),
         updated_at = now()
       WHERE id = v_icp_analysis_id;
