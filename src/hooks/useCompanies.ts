@@ -90,7 +90,7 @@ export function useCompanies(options?: {
                     raw_analysis: {
                       ...((company as any).raw_analysis || {}),
                       cnae_principal: icpData.cnae_principal,
-                      cnae_descricao: icpData.cnae_descricao,
+                      // ✅ MC2.5: cnae_descricao não existe em icp_analysis_results
                       cnaes_secundarios: icpData.cnaes_secundarios,
                     },
                   } as any;
