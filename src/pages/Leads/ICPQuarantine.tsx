@@ -298,17 +298,38 @@ export default function ICPQuarantine() {
         ? analysis.raw_data as Record<string, any>
         : {};
 
+      // ✅ CRÍTICO: Preservar cnae_principal existente se já estiver no formato correto (com pontos)
+      // Se não existir ou estiver vazio, usar o código (code) da Receita Federal, NÃO a descrição (text)
+      const existingCnae = analysis.cnae_principal;
+      const receitaCnaeCode = result.data?.atividade_principal?.[0]?.code;
+      const receitaCnaeDescription = result.data?.atividade_principal?.[0]?.text;
+      
+      // Preservar código existente se já estiver formatado (tem pontos), senão usar código da Receita
+      const finalCnaePrincipal = (existingCnae && existingCnae.includes('.')) 
+        ? existingCnae 
+        : (receitaCnaeCode || existingCnae);
+      
+      // Atualizar raw_analysis com descrição do CNAE
+      const existingRawAnalysis = (analysis.raw_analysis && typeof analysis.raw_analysis === 'object' && !Array.isArray(analysis.raw_analysis))
+        ? analysis.raw_analysis as Record<string, any>
+        : {};
+      
       const { error: updateError } = await supabase
         .from('icp_analysis_results')
         .update({
           uf: result.data?.uf || analysis.uf,
           municipio: result.data?.municipio || analysis.municipio,
           porte: result.data?.porte || analysis.porte,
-          cnae_principal: result.data?.atividade_principal?.[0]?.text || analysis.cnae_principal,
+          cnae_principal: finalCnaePrincipal, // ✅ Preservar código formatado existente
           raw_data: {
             ...rawData,
             receita_federal: result.data,
             receita_source: result.source,
+          },
+          raw_analysis: {
+            ...existingRawAnalysis,
+            cnae_descricao: receitaCnaeDescription || existingRawAnalysis.cnae_descricao, // ✅ Salvar descrição aqui
+            enriched_receita_at: new Date().toISOString(),
           },
         })
         .eq('id', analysisId);
