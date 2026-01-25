@@ -26,6 +26,8 @@ DECLARE
   v_current_state TEXT;
   v_icp_analysis_id UUID;
   v_normalized_data JSONB;
+  v_cnae_code TEXT;
+  v_setor TEXT;
 BEGIN
   -- 1. Buscar empresa e validar estado
   SELECT 
@@ -51,6 +53,33 @@ BEGIN
     RETURN;
   END IF;
   
+  -- 2.1. Extrair CNAE e buscar setor da tabela cnae_classifications
+  -- ✅ MC2.6.2: Buscar setor automaticamente do CNAE
+  v_cnae_code := NULL;
+  
+  -- Tentar extrair CNAE de múltiplas fontes
+  IF v_company.cnae_principal IS NOT NULL AND v_company.cnae_principal != '' THEN
+    v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(v_company.cnae_principal), '.', ''), ' ', ''));
+  ELSIF v_company.raw_data IS NOT NULL THEN
+    v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(
+      COALESCE(
+        (v_company.raw_data->'receita_federal'->'atividade_principal'->0->>'code'),
+        (v_company.raw_data->'receita'->'atividade_principal'->0->>'code'),
+        (v_company.raw_data->'atividade_principal'->0->>'code'),
+        (v_company.raw_data->>'cnae_fiscal'),
+        (v_company.raw_data->>'cnae_principal')
+      )
+    ), '.', ''), ' ', ''));
+  END IF;
+  
+  -- Buscar setor_industria na tabela cnae_classifications
+  IF v_cnae_code IS NOT NULL AND v_cnae_code != '' THEN
+    SELECT setor_industria INTO v_setor
+    FROM public.cnae_classifications
+    WHERE cnae_code = v_cnae_code
+    LIMIT 1;
+  END IF;
+  
   -- 3. TRANSACAO: Atualizar canonical_status e inserir em icp_analysis_results
   BEGIN
     -- 3.1. Atualizar canonical_status para ACTIVE
@@ -63,6 +92,7 @@ BEGIN
     
     -- 3.2. Preparar dados normalizados para icp_analysis_results
     -- ✅ MC2.6.1: NÃO usar campos que não existem em companies
+    -- ✅ MC2.6.2: Incluir setor obtido de cnae_classifications
     v_normalized_data := jsonb_build_object(
       'company_id', v_company.id,
       'tenant_id', p_tenant_id,
@@ -88,12 +118,15 @@ BEGIN
       'temperatura', 'cold', -- ✅ MC2.6.1: Campo não existe em companies, usar valor padrão
       'totvs_status', NULL, -- ✅ MC2.6.1: Campo não existe em companies
       'origem', COALESCE(v_company.origem, v_company.source_name, 'icp_individual'), -- ✅ MC2.6.1: Usar valor válido
+      'setor', v_setor, -- ✅ MC2.6.2: Setor obtido de cnae_classifications
       'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
       'raw_analysis', jsonb_build_object(
         'migrated_from_companies', true,
         'migrated_at', now(),
         'canonical_status_previous', v_current_state,
-        'canonical_status_new', 'ACTIVE'
+        'canonical_status_new', 'ACTIVE',
+        'cnae_code', v_cnae_code,
+        'setor_source', 'cnae_classifications'
       )
     );
     
@@ -125,6 +158,7 @@ BEGIN
         purchase_intent_type = COALESCE((v_normalized_data->>'purchase_intent_type')::text, purchase_intent_type),
         temperatura = COALESCE((v_normalized_data->>'temperatura')::text, temperatura),
         origem = COALESCE(v_normalized_data->>'origem', origem),
+        setor = COALESCE(v_normalized_data->>'setor', setor), -- ✅ MC2.6.2: Atualizar setor
         raw_data = COALESCE((v_normalized_data->>'raw_data')::jsonb, raw_data),
         raw_analysis = jsonb_build_object(
           'migrated_from_companies', true,
@@ -162,6 +196,7 @@ BEGIN
         temperatura,
         totvs_status,
         origem,
+        setor, -- ✅ MC2.6.2: Incluir setor
         raw_data,
         raw_analysis
       )
@@ -190,6 +225,7 @@ BEGIN
         (v_normalized_data->>'temperatura')::text,
         NULLIF(v_normalized_data->>'totvs_status', ''),
         v_normalized_data->>'origem',
+        v_normalized_data->>'setor', -- ✅ MC2.6.2: Incluir setor
         (v_normalized_data->>'raw_data')::jsonb,
         (v_normalized_data->>'raw_analysis')::jsonb
       )
