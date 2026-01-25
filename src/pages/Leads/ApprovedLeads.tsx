@@ -839,7 +839,7 @@ export default function ApprovedLeads() {
       
       // Filtro por Origem (normalizado)
       if (filterOrigin.length > 0) {
-        const normalizedOrigin = getCompanyOrigin(c);
+        const normalizedOrigin = getCompanyOriginString(c);
         if (!filterOrigin.includes(normalizedOrigin)) {
           return false;
         }
@@ -2469,7 +2469,7 @@ export default function ApprovedLeads() {
                       <div className="flex justify-center max-w-[220px] mx-auto overflow-hidden text-ellipsis whitespace-nowrap">
                         {(() => {
                           // ✅ PADRONIZADO: Usar mesma lógica da tabela Estoque de Empresas Qualificadas
-                          const origem = getCompanyOrigin(company);
+                          const origem = getCompanyOriginString(company);
                           
                           if (origem) {
                             return (
