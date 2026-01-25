@@ -102,7 +102,7 @@ BEGIN
       'uf', (v_company.location->>'state')::text,
       'municipio', (v_company.location->>'city')::text,
       'porte', NULL,
-      'cnae_principal', NULL,
+      'cnae_principal', v_cnae_code, -- ✅ MC2.6.2: Usar CNAE extraído
       'website', v_company.website,
       'email', NULL, -- ✅ Campo não existe em companies
       'telefone', NULL,
