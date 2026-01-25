@@ -68,10 +68,10 @@ export function useCompanies(options?: {
         
         if (companyIds.length > 0) {
           try {
-            // ✅ MC2.5: Removido filtro tenant_id (campo não existe em icp_analysis_results)
+            // ✅ MC2.5: Removido filtro tenant_id e cnae_descricao (campos não existem em icp_analysis_results)
             const { data: icpData } = await supabase
               .from('icp_analysis_results')
-              .select('company_id, cnae_principal, cnae_descricao')
+              .select('company_id, cnae_principal')
               .in('company_id', companyIds);
             
             if (icpData && icpData.length > 0) {
