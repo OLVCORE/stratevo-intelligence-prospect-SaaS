@@ -28,6 +28,7 @@ BEGIN
   FOR v_prospect IN 
     SELECT 
       id,
+      cnpj,
       cnae_principal,
       enrichment_data,
       setor
@@ -148,10 +149,8 @@ BEGIN
         DECLARE
           v_cnpj_prospect TEXT;
         BEGIN
-          -- Buscar CNPJ do prospect
-          SELECT cnpj INTO v_cnpj_prospect
-          FROM public.qualified_prospects
-          WHERE id = v_prospect.id;
+          -- Usar CNPJ do prospect (já está no SELECT)
+          v_cnpj_prospect := v_prospect.cnpj;
           
           -- Tentar buscar de icp_analysis_results
           IF v_cnpj_prospect IS NOT NULL THEN
@@ -161,6 +160,45 @@ BEGIN
               AND cnae_principal IS NOT NULL
               AND cnae_principal != ''
             LIMIT 1;
+            
+            -- Se não encontrou, tentar buscar de companies via raw_data
+            IF v_cnae_code IS NULL THEN
+              BEGIN
+                DECLARE
+                  v_raw_data_companies JSONB;
+                BEGIN
+                  SELECT raw_data INTO v_raw_data_companies
+                  FROM public.companies
+                  WHERE cnpj = v_cnpj_prospect
+                    AND raw_data IS NOT NULL
+                  LIMIT 1;
+                  
+                  IF v_raw_data_companies IS NOT NULL THEN
+                    BEGIN
+                      v_cnae_code := extract_cnae_from_raw_data(v_raw_data_companies);
+                    EXCEPTION
+                      WHEN OTHERS THEN
+                        -- Fallback manual
+                        v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(
+                          COALESCE(
+                            (v_raw_data_companies->'receita_federal'->'atividade_principal'->0->>'code'),
+                            (v_raw_data_companies->'receita'->'atividade_principal'->0->>'code'),
+                            (v_raw_data_companies->'atividade_principal'->0->>'code'),
+                            (v_raw_data_companies->>'cnae_fiscal'),
+                            (v_raw_data_companies->>'cnae_principal')
+                          )
+                        ), '.', ''), ' ', '')));
+                    END;
+                  END IF;
+                EXCEPTION
+                  WHEN OTHERS THEN
+                    NULL;
+                END;
+              EXCEPTION
+                WHEN OTHERS THEN
+                  NULL;
+              END;
+            END IF;
             
             -- Se encontrou, normalizar
             IF v_cnae_code IS NOT NULL AND v_cnae_code != '' THEN
