@@ -211,12 +211,44 @@ BEGIN
         NULLIF(v_normalized_data->>'email', ''),
         NULLIF(v_normalized_data->>'telefone', ''),
         NULLIF(v_normalized_data->>'website_encontrado', ''),
-        COALESCE((v_normalized_data->>'website_fit_score')::numeric, 0),
-        COALESCE((v_normalized_data->>'website_products_match')::jsonb, '[]'::jsonb),
+        COALESCE(
+          CASE 
+            WHEN v_normalized_data->>'website_fit_score' IS NULL OR v_normalized_data->>'website_fit_score' = '' 
+            THEN NULL 
+            ELSE (v_normalized_data->>'website_fit_score')::numeric 
+          END, 
+          0
+        ),
+        COALESCE(
+          CASE 
+            WHEN v_normalized_data->>'website_products_match' IS NULL 
+            THEN '[]'::jsonb 
+            ELSE (v_normalized_data->>'website_products_match')::jsonb 
+          END, 
+          '[]'::jsonb
+        ),
         NULLIF(v_normalized_data->>'linkedin_url', ''),
-        COALESCE((v_normalized_data->>'icp_score')::numeric, 0),
-        NULLIF((v_normalized_data->>'fit_score')::text, '')::numeric,
-        COALESCE((v_normalized_data->>'purchase_intent_score')::numeric, 0),
+        COALESCE(
+          CASE 
+            WHEN v_normalized_data->>'icp_score' IS NULL OR v_normalized_data->>'icp_score' = '' 
+            THEN NULL 
+            ELSE (v_normalized_data->>'icp_score')::numeric 
+          END, 
+          0
+        ),
+        CASE 
+          WHEN v_normalized_data->>'fit_score' IS NULL OR v_normalized_data->>'fit_score' = '' 
+          THEN NULL 
+          ELSE (v_normalized_data->>'fit_score')::numeric 
+        END,
+        COALESCE(
+          CASE 
+            WHEN v_normalized_data->>'purchase_intent_score' IS NULL OR v_normalized_data->>'purchase_intent_score' = '' 
+            THEN NULL 
+            ELSE (v_normalized_data->>'purchase_intent_score')::numeric 
+          END, 
+          0
+        ),
         COALESCE((v_normalized_data->>'purchase_intent_type')::text, 'potencial'),
         COALESCE(v_normalized_data->>'status', 'aprovada'), -- ✅ 'aprovada'
         COALESCE((v_normalized_data->>'temperatura')::text, 'cold'),

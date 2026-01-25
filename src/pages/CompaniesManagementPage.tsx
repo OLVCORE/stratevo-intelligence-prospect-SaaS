@@ -752,7 +752,15 @@ export default function CompaniesManagementPage() {
 
       if (error) {
         console.error('[APPROVE BATCH] Erro ao aprovar empresas:', error);
-        toast.error('Erro ao aprovar empresas', { description: error.message });
+        console.error('[APPROVE BATCH] Detalhes do erro:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        toast.error('Erro ao aprovar empresas', { 
+          description: error.message || error.details || 'Erro desconhecido ao aprovar empresas'
+        });
         return;
       }
 
