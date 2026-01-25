@@ -134,7 +134,7 @@ BEGIN
       'uf', (v_company.location->>'state')::text,
       'municipio', (v_company.location->>'city')::text,
       'porte', NULL,
-      'cnae_principal', COALESCE(v_cnae_code, v_raw_cnae), -- ✅ Salvar código original se normalizado não existir
+      'cnae_principal', COALESCE(v_raw_cnae, v_cnae_code), -- ✅ CRÍTICO: Salvar código ORIGINAL (com pontos) para exibição
       'website', v_company.website,
       'email', NULL,
       'telefone', NULL,
@@ -158,6 +158,8 @@ BEGIN
         'canonical_status_previous', v_current_state,
         'canonical_status_new', 'ACTIVE',
         'cnae_code', v_cnae_code,
+        'cnae_code_original', v_raw_cnae, -- ✅ Salvar código original também
+        'cnae_descricao', v_cnae_description, -- ✅ Salvar descrição
         'setor_source', 'cnae_classifications'
       )
     );
@@ -252,7 +254,7 @@ BEGIN
         NULLIF(v_normalized_data->>'uf', ''),
         NULLIF(v_normalized_data->>'municipio', ''),
         NULLIF(v_normalized_data->>'porte', ''),
-        COALESCE(NULLIF(v_normalized_data->>'cnae_principal', ''), NULLIF(v_raw_cnae, '')),
+        NULLIF(v_normalized_data->>'cnae_principal', ''),
         NULLIF(v_normalized_data->>'website', ''),
         NULLIF(v_normalized_data->>'email', ''),
         NULLIF(v_normalized_data->>'telefone', ''),
