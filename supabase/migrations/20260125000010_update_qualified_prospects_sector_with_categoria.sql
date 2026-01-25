@@ -187,7 +187,7 @@ BEGIN
                             (v_raw_data_companies->>'cnae_fiscal'),
                             (v_raw_data_companies->>'cnae_principal')
                           )
-                        ), '.', ''), ' ', '')));
+                        ), '.', ''), ' ', ''));
                     END;
                   END IF;
                 EXCEPTION
@@ -298,3 +298,116 @@ $$;
 -- Comentário
 COMMENT ON FUNCTION update_qualified_prospects_sector_from_cnae IS 
 'MC2.6.20: Atualiza setor em qualified_prospects com formato "Setor - Categoria" baseado em cnae_classifications. Suporta códigos numéricos e formatados.';
+
+-- ==========================================
+-- TRIGGER: Atualizar setor automaticamente ao inserir/atualizar qualified_prospects
+-- ==========================================
+-- ✅ CRÍTICO: Garantir que TODAS as empresas futuras sejam atualizadas automaticamente
+
+-- Função do trigger (executa para cada registro)
+CREATE OR REPLACE FUNCTION trigger_update_qualified_prospect_sector()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_cnae_code TEXT;
+  v_setor_industria TEXT;
+  v_categoria TEXT;
+  v_setor_formatted TEXT;
+BEGIN
+  -- Só processar se setor estiver null, vazio ou não no formato "Setor - Categoria"
+  IF NEW.setor IS NULL OR NEW.setor = '' OR NEW.setor NOT LIKE '%-%' THEN
+    -- Extrair CNAE usando a mesma lógica da função principal
+    v_cnae_code := NULL;
+    
+    -- Prioridade 1: cnae_principal
+    IF NEW.cnae_principal IS NOT NULL AND NEW.cnae_principal != '' THEN
+      BEGIN
+        DECLARE
+          v_cnae_clean TEXT;
+          v_cnae_formatted TEXT;
+        BEGIN
+          v_cnae_clean := REPLACE(REPLACE(REPLACE(REPLACE(TRIM(NEW.cnae_principal), '.', ''), '-', ''), '/', ''), ' ', '');
+          IF LENGTH(v_cnae_clean) = 7 AND v_cnae_clean ~ '^[0-9]+$' THEN
+            v_cnae_formatted := SUBSTRING(v_cnae_clean, 1, 2) || '.' || 
+                               SUBSTRING(v_cnae_clean, 3, 2) || '-' || 
+                               SUBSTRING(v_cnae_clean, 5, 1) || '/' || 
+                               SUBSTRING(v_cnae_clean, 6, 2);
+            v_cnae_code := normalize_cnae_code(v_cnae_formatted);
+          ELSE
+            v_cnae_code := normalize_cnae_code(NEW.cnae_principal);
+          END IF;
+        EXCEPTION
+          WHEN OTHERS THEN
+            v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(NEW.cnae_principal), '.', ''), ' ', ''));
+        END;
+      EXCEPTION
+        WHEN OTHERS THEN
+          v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(NEW.cnae_principal), '.', ''), ' ', ''));
+      END;
+    END IF;
+    
+    -- Prioridade 2: enrichment_data
+    IF v_cnae_code IS NULL AND NEW.enrichment_data IS NOT NULL THEN
+      BEGIN
+        v_cnae_code := extract_cnae_from_raw_data(NEW.enrichment_data);
+      EXCEPTION
+        WHEN OTHERS THEN
+          v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(
+            COALESCE(
+              (NEW.enrichment_data->'receita_federal'->'atividade_principal'->0->>'code'),
+              (NEW.enrichment_data->'receita'->'atividade_principal'->0->>'code'),
+              (NEW.enrichment_data->'atividade_principal'->0->>'code'),
+              (NEW.enrichment_data->>'cnae_fiscal'),
+              (NEW.enrichment_data->>'cnae_principal')
+            )
+          ), '.', ''), ' ', ''));
+      END;
+    END IF;
+    
+    -- Buscar setor e categoria
+    IF v_cnae_code IS NOT NULL AND v_cnae_code != '' THEN
+      SELECT setor_industria, categoria 
+      INTO v_setor_industria, v_categoria
+      FROM public.cnae_classifications
+      WHERE cnae_code = v_cnae_code
+      LIMIT 1;
+      
+      -- Formatar como "Setor - Categoria"
+      IF v_setor_industria IS NOT NULL THEN
+        IF v_categoria IS NOT NULL THEN
+          v_setor_formatted := v_setor_industria || ' - ' || v_categoria;
+        ELSE
+          v_setor_formatted := v_setor_industria;
+        END IF;
+        
+        -- Atualizar NEW antes de salvar
+        NEW.setor := v_setor_formatted;
+        
+        -- Atualizar cnae_principal se estiver null
+        IF NEW.cnae_principal IS NULL THEN
+          IF v_cnae_code LIKE '%-%' THEN
+            NEW.cnae_principal := SUBSTRING(v_cnae_code, 1, 2) || '.' || SUBSTRING(v_cnae_code, 3);
+          ELSE
+            NEW.cnae_principal := v_cnae_code;
+          END IF;
+        END IF;
+      END IF;
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Criar trigger BEFORE INSERT OR UPDATE
+DROP TRIGGER IF EXISTS trigger_qualified_prospects_update_sector ON public.qualified_prospects;
+CREATE TRIGGER trigger_qualified_prospects_update_sector
+  BEFORE INSERT OR UPDATE ON public.qualified_prospects
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_update_qualified_prospect_sector();
+
+-- Comentário
+COMMENT ON FUNCTION trigger_update_qualified_prospect_sector IS 
+'MC2.6.24: Trigger automático que atualiza setor e cnae_principal ao inserir/atualizar qualified_prospects. Garante que TODAS as empresas futuras sejam processadas automaticamente.';
