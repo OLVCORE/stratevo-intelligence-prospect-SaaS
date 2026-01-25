@@ -1956,8 +1956,15 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             
             if (cnaeCode) {
               try {
-                // Normalizar código CNAE para buscar na tabela
-                const normalizedCnae = cnaeCode.replace(/\./g, '').replace(/\s/g, '').toUpperCase();
+                // Normalizar código CNAE para buscar na tabela (formato: "6203-1/00" sem pontos)
+                let normalizedCnae = cnaeCode.replace(/\./g, '').replace(/\s/g, '').toUpperCase();
+                
+                // Se é apenas numérico (7 dígitos), formatar primeiro: "2833000" -> "28.33-0/00" -> "2833-0/00"
+                const cleanCode = normalizedCnae.replace(/[^0-9]/g, '');
+                if (cleanCode.length === 7 && /^[0-9]+$/.test(cleanCode)) {
+                  const formatted = `${cleanCode.substring(0, 2)}.${cleanCode.substring(2, 4)}-${cleanCode.substring(4, 5)}/${cleanCode.substring(5, 7)}`;
+                  normalizedCnae = formatted.replace(/\./g, ''); // Remover pontos para formato do banco
+                }
                 
                 // Buscar setor e categoria da tabela cnae_classifications
                 const { data: classification, error: classError } = await supabase
@@ -1973,6 +1980,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                   } else {
                     setorFormatted = classification.setor_industria;
                   }
+                } else {
+                  // Fallback: usar descrição da Receita se não encontrar classificação
+                  setorFormatted = data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor;
                 }
               } catch (err) {
                 console.warn('[Bulk Enrichment] Erro ao buscar classificação CNAE:', err);
