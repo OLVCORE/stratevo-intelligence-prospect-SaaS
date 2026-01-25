@@ -162,7 +162,7 @@ END;
 $$;
 
 -- ==========================================
--- 3. FUNÇÃO: Atualizar setor em qualified_prospects_stock baseado em CNAE
+-- 3. FUNÇÃO: Atualizar setor em qualified_prospects baseado em CNAE
 -- ==========================================
 CREATE OR REPLACE FUNCTION update_qualified_prospects_sector_from_cnae()
 RETURNS TABLE (
@@ -183,8 +183,8 @@ BEGIN
     SELECT 
       id,
       cnae_principal,
-      enrichment
-    FROM public.qualified_prospects_stock
+      enrichment_data
+    FROM public.qualified_prospects
     WHERE setor IS NULL OR setor = ''
   LOOP
     -- Extrair CNAE
@@ -195,9 +195,9 @@ BEGIN
       v_cnae_code := normalize_cnae_code(v_prospect.cnae_principal);
     END IF;
     
-    -- Prioridade 2: enrichment.raw (estrutura do estoque)
-    IF v_cnae_code IS NULL AND v_prospect.enrichment IS NOT NULL THEN
-      v_cnae_code := extract_cnae_from_raw_data(v_prospect.enrichment->'raw');
+    -- Prioridade 2: enrichment_data (estrutura do qualified_prospects)
+    IF v_cnae_code IS NULL AND v_prospect.enrichment_data IS NOT NULL THEN
+      v_cnae_code := extract_cnae_from_raw_data(v_prospect.enrichment_data);
     END IF;
     
     -- Buscar setor
@@ -205,7 +205,7 @@ BEGIN
       v_setor := get_sector_from_cnae(v_cnae_code);
       
       IF v_setor IS NOT NULL THEN
-        UPDATE public.qualified_prospects_stock
+        UPDATE public.qualified_prospects
         SET setor = v_setor
         WHERE id = v_prospect.id;
         
@@ -384,7 +384,7 @@ COMMENT ON FUNCTION update_companies_sector_from_cnae IS
 'Atualiza sector_name em companies baseado no CNAE usando cnae_classifications';
 
 COMMENT ON FUNCTION update_qualified_prospects_sector_from_cnae IS 
-'Atualiza setor em qualified_prospects_stock baseado no CNAE usando cnae_classifications';
+'Atualiza setor em qualified_prospects baseado no CNAE usando cnae_classifications';
 
 COMMENT ON FUNCTION update_prospecting_candidates_sector_from_cnae IS 
 'Atualiza sector em prospecting_candidates baseado no CNAE usando cnae_classifications';
