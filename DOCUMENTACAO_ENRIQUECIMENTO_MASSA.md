@@ -40,6 +40,7 @@ Este documento detalha todas as funções de enriquecimento em massa disponívei
 - Busca **decisores** (decision makers) no Apollo.io para empresas selecionadas
 - Identifica pessoas-chave (executivos, gerentes, diretores) da empresa
 - Mostra modal de progresso em tempo real
+- Processa empresas **sequencialmente** com delay de 1 segundo entre cada uma
 
 ### 🔄 **Dados atualizados em `icp_analysis_results`:**
 - `raw_data.apollo_organization` - Dados da organização no Apollo
@@ -49,16 +50,27 @@ Este documento detalha todas as funções de enriquecimento em massa disponívei
 
 ### ⚙️ **Função utilizada:**
 - `enrichApolloMutation` → Edge Function `enrich-apollo-decisores`
+- **Parâmetros enviados:**
+  - `company_id` - ID da empresa (obrigatório)
+  - `company_name` - Nome da empresa
+  - `domain` - Domínio/website
+  - `modes: ['people', 'company']` - Busca pessoas e dados da empresa
+  - `city`, `state`, `industry`, `cep`, `fantasia` - Dados adicionais para melhor matching
 
 ### 💾 **Onde salva:**
-- Tabela: `icp_analysis_results`
+- Tabela: `icp_analysis_results` (via Edge Function que atualiza internamente)
 
 ### 🎨 **Interface:**
 - Modal de progresso (`EnrichmentProgressModal`) com:
-  - Barra de progresso
-  - Cards individuais por empresa
+  - Barra de progresso (percentual)
+  - Cards individuais por empresa com status visual
   - Status: pending → processing → success/error
-  - Botão de cancelamento
+  - Botão de cancelamento (interrompe processamento)
+  - Mensagens: "Buscando decisores no Apollo..." / "Decisores identificados!" / "Falha ao buscar decisores"
+
+### ⏱️ **Tempo:**
+- ~5-10 segundos por empresa
+- Delay de 1 segundo entre empresas
 
 ---
 
@@ -69,6 +81,7 @@ Este documento detalha todas as funções de enriquecimento em massa disponívei
 - Calcula **Website Fit Score** (compatibilidade com produtos do tenant)
 - Identifica **produtos compatíveis** no website
 - Busca **URL do LinkedIn** da empresa
+- Processa empresas **sequencialmente** (sem delay explícito)
 
 ### 🔄 **Dados atualizados em `icp_analysis_results`:**
 - `website_encontrado` - URL do website oficial encontrado
@@ -78,14 +91,21 @@ Este documento detalha todas as funções de enriquecimento em massa disponívei
 
 ### ⚙️ **Funções utilizadas:**
 - `handleEnrichWebsite()` → Edge Functions:
-  1. `find-prospect-website` - Busca website
-  2. `scan-prospect-website` - Escaneia e calcula fit score
+  1. `find-prospect-website` - Busca website via `fetch()` direto
+     - **Parâmetros:** `razao_social`, `cnpj`, `tenant_id`
+  2. `scan-prospect-website` - Escaneia e calcula fit score via `supabase.functions.invoke()`
+     - **Parâmetros:** `tenant_id`, `company_id`, `cnpj`, `website_url`, `razao_social`
 
 ### 💾 **Onde salva:**
 - Tabela: `icp_analysis_results`
 
 ### ⚠️ **Erros conhecidos:**
-- CORS error ao chamar `scan-prospect-website` (precisa usar `supabase.functions.invoke()`)
+- **CORS error** ao chamar `scan-prospect-website` via `fetch()` direto
+- **Solução:** Já corrigido no código (linha 1265 usa `supabase.functions.invoke()`)
+- Se ainda ocorrer, verificar configuração CORS na Edge Function
+
+### ⏱️ **Tempo:**
+- ~10-15 segundos por empresa (busca + escaneamento)
 
 ---
 
@@ -96,6 +116,7 @@ Este documento detalha todas as funções de enriquecimento em massa disponívei
   - **Presença Digital** - Website, redes sociais, SEO
   - **Maturidade** - Tempo de mercado, estrutura
   - **Saúde Financeira** - Indicadores financeiros
+- Processa empresas **sequencialmente** (sem delay explícito)
 
 ### 🔄 **Dados atualizados em `icp_analysis_results`:**
 - `raw_data.enrichment_360.scores` - Objeto com todos os scores calculados
@@ -104,25 +125,42 @@ Este documento detalha todas as funções de enriquecimento em massa disponívei
 
 ### ⚙️ **Função utilizada:**
 - `enrich360Mutation` → `enrichment360Simplificado()`
+- **Parâmetros:**
+  - `razao_social` - Nome da empresa
+  - `website`, `domain` - Website/domínio
+  - `uf`, `municipio`, `porte` - Localização e porte
+  - `cnae` - Código CNAE
+  - `raw_data` - Dados brutos existentes
 
 ### 💾 **Onde salva:**
 - Tabela: `icp_analysis_results`
 
 ### 📊 **Scores calculados:**
-- Presença Digital Score
-- Maturidade Score
-- Saúde Financeira Score
+- **Presença Digital Score** - Baseado em website, redes sociais, SEO
+- **Maturidade Score** - Baseado em tempo de mercado, estrutura
+- **Saúde Financeira Score** - Baseado em indicadores financeiros disponíveis
+
+### ⏱️ **Tempo:**
+- ~2-5 segundos por empresa (cálculo local, sem API externa)
 
 ---
 
 ## 5️⃣ **Verificação em Massa** (`handleBulkVerification`)
 
 ### 📍 **O que faz:**
-- **Processamento completo em lote** que executa 4 etapas:
+- **Processamento completo em lote** que executa 4 etapas automaticamente:
   1. ✅ **Verificação de Uso (GO/NO-GO)** - Detecta se empresa usa TOTVS
+     - Busca evidências em múltiplas fontes
+     - Calcula score de confiança
+     - Classifica como "go" ou "no-go"
   2. ✅ **Decisores Apollo** - Busca decisores (sempre, GO ou NO-GO)
+     - Usa dados da Receita Federal para melhor matching
+     - Busca pessoas-chave da empresa
   3. ✅ **Digital Intelligence** - Descobre website/LinkedIn (se disponível)
+     - Extrai website e LinkedIn dos dados dos decisores
   4. ✅ **Salva Relatório Completo** - Persiste tudo em `stc_verification_history`
+     - Relatório completo com todas as etapas
+     - Metadados de processamento
 
 ### 🔄 **Dados atualizados em `stc_verification_history`:**
 - `company_id` - ID da empresa
@@ -146,18 +184,46 @@ Este documento detalha todas as funções de enriquecimento em massa disponívei
 
 ### ⚙️ **Edge Functions utilizadas:**
 1. `usage-verification` - Verifica uso de TOTVS
+   - **Parâmetros:** `company_name`, `cnpj`, `domain`, `company_id`
+   - **Retorna:** `status` (go/no-go), `confidence`, `evidences`, `methodology`
 2. `enrich-apollo-decisores` - Busca decisores
+   - **Parâmetros:** `companyName`, `company_id`, `linkedinUrl`, `modes`, `domain`, `city`, `state`, `cep`, `fantasia`
+   - **Retorna:** `decisores` (array), `companyData` (website, linkedinUrl)
 
 ### 💾 **Onde salva:**
 - Tabela: `stc_verification_history` (novo registro para cada empresa)
+- **Estrutura do `full_report`:**
+  ```json
+  {
+    "detection_report": { /* resultado verificação */ },
+    "decisors_report": { /* dados decisores */ },
+    "keywords_seo_report": { /* presença digital */ },
+    "__status": {
+      "detection": { "status": "completed" },
+      "decisors": { "status": "completed" },
+      "keywords": { "status": "completed" }
+    },
+    "__meta": {
+      "saved_at": "timestamp",
+      "batch_processing": true,
+      "version": "2.0",
+      "company": "nome empresa"
+    }
+  }
+  ```
 
 ### ⏱️ **Tempo estimado:**
-- ~35 segundos por empresa
+- ~35 segundos por empresa (verificação + decisores + digital)
 - Delay de 2 segundos entre empresas (evita rate limit)
 
 ### 💰 **Custo estimado:**
 - ~150 créditos por empresa
 - ~R$ 1,00 por empresa
+
+### 📊 **Resultados:**
+- Contabiliza GO/NO-GO (mas **não auto-descarta** empresas NO-GO)
+- Empresas NO-GO ficam na quarentena para **revisão manual**
+- Usuário decide se descarta ou não (pode haver falsos positivos)
 
 ---
 
