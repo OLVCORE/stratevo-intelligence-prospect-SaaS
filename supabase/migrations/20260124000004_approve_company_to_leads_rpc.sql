@@ -79,12 +79,12 @@ BEGIN
       'website_fit_score', COALESCE((v_company.website_fit_score)::numeric, 0),
       'website_products_match', COALESCE(v_company.website_products_match, '[]'::jsonb),
       'linkedin_url', v_company.linkedin_url,
-      'icp_score', COALESCE((v_company.icp_score)::numeric, 0),
+      'icp_score', 0, -- ✅ MC2.6.1: Campo não existe em companies
       'fit_score', NULL,
       'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
-      'purchase_intent_type', COALESCE(v_company.purchase_intent_type, 'potencial'),
+      'purchase_intent_type', 'potencial', -- ✅ MC2.6.1: Campo não existe em companies
       'status', 'aprovada', -- ✅ STATUS CRÍTICO: 'aprovada' para aparecer em Leads Aprovados
-      'temperatura', COALESCE(v_company.temperatura, 'cold'),
+      'temperatura', 'cold', -- ✅ MC2.6.1: Campo não existe em companies, usar valor padrão
       'totvs_status', v_company.totvs_status,
       'origem', COALESCE(v_company.origem, v_company.source_name, 'companies_base'),
       'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
@@ -97,10 +97,10 @@ BEGIN
     );
     
     -- 3.3. Verificar se já existe registro em icp_analysis_results
+    -- ✅ MC2.6.1: Removido filtro tenant_id (campo pode não existir ou causar erro)
     SELECT id INTO v_icp_analysis_id
     FROM public.icp_analysis_results
     WHERE company_id = p_company_id
-      AND tenant_id = p_tenant_id
     LIMIT 1;
     
     -- 3.4. Inserir ou atualizar em icp_analysis_results

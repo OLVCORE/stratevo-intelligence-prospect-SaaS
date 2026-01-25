@@ -78,12 +78,12 @@ BEGIN
     'website_fit_score', COALESCE((v_company.website_fit_score)::numeric, 0),
     'website_products_match', COALESCE(v_company.website_products_match, '[]'::jsonb),
     'linkedin_url', v_company.linkedin_url,
-    'icp_score', COALESCE((v_company.icp_score)::numeric, 0),
+    'icp_score', 0, -- ✅ MC2.6.1: Campo não existe em companies
     'fit_score', NULL,
     'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
-    'purchase_intent_type', COALESCE(v_company.purchase_intent_type, 'potencial'),
+    'purchase_intent_type', 'potencial', -- ✅ MC2.6.1: Campo não existe em companies
     'status', 'aprovada',
-    'temperatura', COALESCE(v_company.temperatura, 'cold'),
+    'temperatura', 'cold', -- ✅ MC2.6.1: Campo não existe em companies, usar valor padrão
     'totvs_status', v_company.totvs_status,
     'origem', COALESCE(v_company.origem, v_company.source_name, 'companies_base'),
     'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
