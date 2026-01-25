@@ -40,10 +40,15 @@ export function resolveCompanyCNAE(company: any): CNAEResolution {
   // ✅ MC2.4: Verificar também enrichment.cnae_principal (qualified_prospects)
   const enrichmentCNAE = (company as any).enrichment?.cnae_principal || null;
   
+  // ✅ CRÍTICO: Tentar extrair CNAE de companies.cnae_principal diretamente (fallback adicional)
+  const directCNAE = (company as any).cnae_principal || null;
+  
   // ========== PRIORIDADE 1: icp_analysis_results ==========
   // Se o objeto vem de icp_analysis_results, usar cnae_principal diretamente
   // Também verifica analysis_cnae_principal (adicionado pelo hook useCompanies)
+  // ✅ CRÍTICO: Incluir directCNAE como primeira opção para garantir que código seja encontrado
   const fromICP = 
+    directCNAE || // ✅ CRÍTICO: Verificar direto primeiro
     (company as any).cnae_principal || 
     (company as any).analysis_cnae_principal ||
     rawAnalysis.cnae_principal ||
@@ -146,11 +151,21 @@ export function resolveCompanyCNAE(company: any): CNAEResolution {
   }
   
   // ========== PRIORIDADE 3: companies (fallback direto) ==========
-  const fromCompany = (company as any).cnae_principal || (company as any).cnae || null;
+  // ✅ CRÍTICO: Verificar múltiplas variações do campo CNAE
+  const fromCompany = 
+    directCNAE ||
+    (company as any).cnae_principal || 
+    (company as any).cnae || 
+    (company as any).cnae_fiscal ||
+    rawData.cnae_fiscal ||
+    rawData.cnae_principal ||
+    null;
+    
   if (fromCompany) {
     const companyDescription =
       (company as any).cnae_descricao ||
       rawData.cnae_descricao ||
+      rawData.cnae_principal_descricao ||
       null;
     
     return {
@@ -217,22 +232,34 @@ export function formatCNAECodeIBGE(cnaeCode: string | null): string | null {
  * Formata CNAE para exibição: "CÓDIGO IBGE - DESCRIÇÃO"
  * Formato oficial IBGE: "28.69-1/00 - Fabricação de..."
  * 
+ * ✅ CRÍTICO: SEMPRE mostrar o código quando disponível, mesmo que descrição esteja ausente
+ * 
  * @param resolution - Resolução canônica do CNAE
  * @returns String formatada ou null
  */
 export function formatCNAEForDisplay(resolution: CNAEResolution): string | null {
   const { code, description } = resolution.principal;
   
+  // ✅ PRIORIDADE 1: Se não tem código E não tem descrição, retornar null
   if (!code && !description) {
     return null;
   }
   
-  // ✅ FORMATAR CÓDIGO NO PADRÃO OFICIAL IBGE
+  // ✅ PRIORIDADE 2: FORMATAR CÓDIGO NO PADRÃO OFICIAL IBGE (sempre que existir)
   const formattedCode = formatCNAECodeIBGE(code);
   
+  // ✅ CRÍTICO: Se tem código formatado, SEMPRE incluí-lo (mesmo sem descrição)
   const parts: string[] = [];
-  if (formattedCode) parts.push(formattedCode);
-  if (description) parts.push(description);
+  if (formattedCode) {
+    parts.push(formattedCode);
+  }
+  if (description) {
+    parts.push(description);
+  }
+  
+  // ✅ Se tem código mas não tem descrição, mostrar só o código
+  // ✅ Se tem descrição mas não tem código, mostrar só a descrição (com aviso?)
+  // ✅ Se tem ambos, mostrar "CÓDIGO - DESCRIÇÃO"
   
   return parts.length > 0 ? parts.join(' - ') : null;
 }
