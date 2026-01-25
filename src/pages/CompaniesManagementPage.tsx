@@ -2873,41 +2873,56 @@ export default function CompaniesManagementPage() {
                           );
                         })()}
                       </TableCell>
-                      {/* Setor: Setor + Categoria (ex: "Agricultura - Produtor") */}
+                      {/* Setor: Setor + Categoria com BADGES (azul e roxo) */}
                       <TableCell className="text-center max-w-[260px] px-2 overflow-hidden">
-                        {(() => {
-                          const cnaeResolution = resolveCompanyCNAE(company);
-                          const cnaeCode = cnaeResolution.principal.code;
-                          const classification = cnaeCode ? getCNAEClassificationForCompany({ ...company, cnae_principal: cnaeCode }) : null;
-                          const setor = classification?.setor_industria;
-                          const categoria = classification?.categoria;
+                        <div className="flex justify-center items-center gap-1 flex-wrap">
+                          {(() => {
+                            const cnaeResolution = resolveCompanyCNAE(company);
+                            const cnaeCode = cnaeResolution.principal.code;
+                            const classification = cnaeCode ? getCNAEClassificationForCompany({ ...company, cnae_principal: cnaeCode }) : null;
+                            const setor = classification?.setor_industria;
+                            const categoria = classification?.categoria;
 
-                          if (setor) {
-                            const displayText = categoria ? `${setor} - ${categoria}` : setor;
+                            if (setor) {
+                              return (
+                                <>
+                                  {/* ✅ Badge de Setor (azul) - mesmo estilo do onboarding Step 3 */}
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700"
+                                    title={setor}
+                                  >
+                                    {setor}
+                                  </Badge>
+                                  {/* ✅ Badge de Categoria/Segmento (roxo) - mesmo estilo do onboarding Step 3 */}
+                                  {categoria && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-700"
+                                      title={categoria}
+                                    >
+                                      {categoria}
+                                    </Badge>
+                                  )}
+                                </>
+                              );
+                            }
+
+                            if (cnaeCode) {
+                              return (
+                                <span className="text-xs text-muted-foreground" title="Sem classificação CNAE">
+                                  Sem classificação CNAE
+                                </span>
+                              );
+                            }
+
                             return (
-                              <span
-                                className="text-sm leading-snug line-clamp-2"
-                                title={displayText}
-                              >
-                                {displayText}
+                              <span className="text-xs text-muted-foreground" title="Sem CNAE">
+                                Sem CNAE
                               </span>
                             );
-                          }
-
-                          if (cnaeCode) {
-                            return (
-                              <span className="text-xs text-muted-foreground">
-                                Sem classificação CNAE
-                              </span>
-                            );
-                          }
-
-                          return (
-                            <span className="text-xs text-muted-foreground">
-                              Sem CNAE
-                            </span>
-                          );
-                        })()}
+                          })()}
+                        </div>
                       </TableCell>
                       {/* UF: badge compacto, igual Leads Aprovados */}
                       <TableCell className="text-center">
