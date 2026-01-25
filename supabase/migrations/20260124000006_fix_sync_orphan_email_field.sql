@@ -83,7 +83,7 @@ BEGIN
     'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
     'purchase_intent_type', 'potencial', -- ✅ MC2.5: Removida dependência de v_company.purchase_intent_type (campo não existe)
     'status', 'aprovada',
-    'temperatura', COALESCE(v_company.temperatura, 'cold'),
+    'temperatura', 'cold', -- ✅ MC2.5: Campo não existe em companies, usar valor padrão
     'totvs_status', v_company.totvs_status,
     'origem', COALESCE(v_company.origem, v_company.source_name, 'companies_base'),
     'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
@@ -243,7 +243,7 @@ BEGIN
       'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
       'purchase_intent_type', 'potencial', -- ✅ MC2.5: Removida dependência de v_company.purchase_intent_type (campo não existe)
       'status', 'aprovada', -- ✅ STATUS CRÍTICO: 'aprovada' para aparecer em Leads Aprovados
-      'temperatura', COALESCE(v_company.temperatura, 'cold'),
+      'temperatura', 'cold', -- ✅ MC2.5: Campo não existe em companies, usar valor padrão
       'totvs_status', v_company.totvs_status,
       'origem', COALESCE(v_company.origem, v_company.source_name, 'icp_individual'), -- ✅ MC2.5: Usar valor válido do CHECK constraint
       'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
