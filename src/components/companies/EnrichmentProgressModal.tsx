@@ -38,13 +38,13 @@ export function EnrichmentProgressModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh]">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         {/* Progress Summary */}
-        <div className="space-y-4">
+        <div className="space-y-4 flex-shrink-0">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Progresso</span>
@@ -56,7 +56,7 @@ export function EnrichmentProgressModal({
           </div>
 
           {/* Stats */}
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-4 text-sm flex-wrap">
             <div className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-green-600" />
               <span>{success} sucesso</span>
@@ -68,14 +68,16 @@ export function EnrichmentProgressModal({
             {processing && (
               <div className="flex items-center gap-2 text-blue-600">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Processando: {processing.companyName}</span>
+                <span className="truncate max-w-[300px]">Processando: {processing.companyName}</span>
               </div>
             )}
           </div>
+        </div>
 
-          {/* Company List */}
-          <ScrollArea className="h-[400px] border rounded-md p-4">
-            <div className="space-y-2">
+        {/* Company List - ScrollArea com altura fixa e overflow controlado */}
+        <div className="flex-1 min-h-0 border rounded-md overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="space-y-2 p-4">
               {companies.map((company) => (
                 <div
                   key={company.companyId}
@@ -88,7 +90,7 @@ export function EnrichmentProgressModal({
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     {company.status === 'pending' && (
-                      <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30" />
+                      <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
                     )}
                     {company.status === 'processing' && (
                       <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
@@ -111,10 +113,11 @@ export function EnrichmentProgressModal({
               ))}
             </div>
           </ScrollArea>
+        </div>
 
-          {/* Cancel Button */}
-          {onCancel && completed < total && (
-            <div className="flex justify-end gap-2 pt-2">
+          {/* Cancel/Close Buttons - fixo no rodapé */}
+          <div className="flex justify-end gap-2 pt-2 flex-shrink-0 border-t">
+            {onCancel && completed < total && (
               <Button
                 variant="destructive"
                 onClick={onCancel}
@@ -132,17 +135,13 @@ export function EnrichmentProgressModal({
                   </>
                 )}
               </Button>
-            </div>
-          )}
-
-          {/* Close Button (apenas quando completo) */}
-          {completed === total && (
-            <div className="flex justify-end pt-2">
+            )}
+            {completed === total && (
               <Button onClick={() => onOpenChange(false)}>
                 Fechar
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
