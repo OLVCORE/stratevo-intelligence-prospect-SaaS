@@ -115,34 +115,34 @@ export function EnrichmentProgressModal({
           </ScrollArea>
         </div>
 
-          {/* Cancel/Close Buttons - fixo no rodapé */}
-          <div className="flex justify-end gap-2 pt-2 flex-shrink-0 border-t">
-            {onCancel && completed < total && (
-              <Button
-                variant="destructive"
-                onClick={onCancel}
-                disabled={isCancelling}
-              >
-                {isCancelling ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Cancelando...
-                  </>
-                ) : (
-                  <>
-                    <StopCircle className="h-4 w-4 mr-2" />
-                    Cancelar Processo
-                  </>
-                )}
-              </Button>
-            )}
-            {completed === total && (
-              <Button onClick={() => onOpenChange(false)}>
-                Fechar
-              </Button>
-            )}
-          </div>
+        {/* Cancel/Close Buttons - fixo no rodapé */}
+        <div className="flex justify-end gap-2 pt-2 flex-shrink-0 border-t">
+          {onCancel && completed < total && (
+            <Button
+              variant="destructive"
+              onClick={onCancel}
+              disabled={isCancelling}
+            >
+              {isCancelling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Cancelando...
+                </>
+              ) : (
+                <>
+                  <StopCircle className="h-4 w-4 mr-2" />
+                  Cancelar Processo
+                </>
+              )}
+            </Button>
+          )}
+          {completed === total && (
+            <Button onClick={() => onOpenChange(false)}>
+              Fechar
+            </Button>
+          )}
         </div>
+      </div>
       </DialogContent>
     </Dialog>
   );
