@@ -270,15 +270,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
   const [cnaeClassifications, setCnaeClassifications] = useState<Record<string, CNAEClassification>>({});
 
   // 🔎 Helpers de CNAE e localização
+  // ✅ USAR resolveCompanyCNAE para garantir resolução correta (igual ApprovedLeads)
   const extractProspectCNAE = (prospect: QualifiedProspect): string | null => {
-    const fromEnrichment = prospect.enrichment?.cnae_principal || null;
-    const fromRaw =
-      (prospect.enrichment?.raw as any)?.cnae_fiscal ||
-      (prospect.enrichment?.raw as any)?.atividade_principal?.[0]?.code ||
-      null;
-    const cnae = fromEnrichment || fromRaw;
-    if (!cnae) return null;
-    return String(cnae).trim();
+    // ✅ USAR resolveCompanyCNAE que já faz toda a resolução correta
+    const cnaeResolution = resolveCompanyCNAE(prospect);
+    const cnaeCode = cnaeResolution.principal.code;
+    if (!cnaeCode) return null;
+    return String(cnaeCode).trim();
   };
 
   const getCNAEClassificationForProspect = (prospect: QualifiedProspect): CNAEClassification | null => {
@@ -613,6 +611,46 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       setLoading(false);
     }
   }, [tenantId, gradeFilter, sectorFilter, stateFilter, searchTerm, filterOrigin, filterStatusCNPJ, filterICP, filterFitScore, filterGrade, filterUF, filterCity, filterNomeFantasia]); // ✅ Dependências do useCallback
+
+  // 📊 Carregar classificações CNAE → Setor/Categoria para os prospects da página
+  useEffect(() => {
+    const codesSet = new Set<string>();
+
+    prospects.forEach((prospect) => {
+      const cnae = extractProspectCNAE(prospect);
+      if (cnae) {
+        codesSet.add(cnae);
+      }
+    });
+
+    const codes = Array.from(codesSet);
+    if (codes.length === 0) {
+      setCnaeClassifications({});
+      return;
+    }
+
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        const map = await getCNAEClassifications(codes);
+        if (!map || isCancelled) return;
+
+        const result: Record<string, CNAEClassification> = {};
+        map.forEach((value, key) => {
+          result[key] = value;
+        });
+
+        setCnaeClassifications(result);
+      } catch (error) {
+        console.error('[QualifiedProspectsStock] Erro ao carregar classificações CNAE:', error);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [prospects]);
 
   // ✅ useEffect para carregar prospects quando dependências mudarem
   useEffect(() => {
@@ -1912,12 +1950,44 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             const data = enriched.data as any;
             const nomeFantasia = data.fantasia || data.nome_fantasia || null;
             
+            // ✅ CRÍTICO: Buscar setor e categoria da tabela cnae_classifications baseado no CNAE
+            let setorFormatted = prospect.setor; // Preservar setor existente
+            const cnaeCode = data.atividade_principal?.[0]?.code || data.cnae_fiscal || null;
+            
+            if (cnaeCode) {
+              try {
+                // Normalizar código CNAE para buscar na tabela
+                const normalizedCnae = cnaeCode.replace(/\./g, '').replace(/\s/g, '').toUpperCase();
+                
+                // Buscar setor e categoria da tabela cnae_classifications
+                const { data: classification, error: classError } = await supabase
+                  .from('cnae_classifications')
+                  .select('setor_industria, categoria')
+                  .eq('cnae_code', normalizedCnae)
+                  .maybeSingle();
+                
+                if (!classError && classification) {
+                  // Formatar como "Setor - Categoria" (igual outras tabelas)
+                  if (classification.categoria) {
+                    setorFormatted = `${classification.setor_industria} - ${classification.categoria}`;
+                  } else {
+                    setorFormatted = classification.setor_industria;
+                  }
+                }
+              } catch (err) {
+                console.warn('[Bulk Enrichment] Erro ao buscar classificação CNAE:', err);
+                // Fallback: usar descrição da Receita se não encontrar classificação
+                setorFormatted = data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor;
+              }
+            }
+            
             const updateData: any = {
               razao_social: data.nome || data.razao_social || prospect.razao_social,
               nome_fantasia: nomeFantasia || prospect.nome_fantasia,
               cidade: data.municipio || prospect.cidade,
               estado: data.uf || prospect.estado,
-              setor: data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor,
+              setor: setorFormatted, // ✅ Setor formatado "Setor - Categoria" da tabela cnae_classifications
+              cnae_principal: cnaeCode || prospect.cnae_principal, // ✅ Salvar código CNAE também
               website: data.website || prospect.website,
               updated_at: new Date().toISOString(),
             };
