@@ -298,21 +298,41 @@ export default function ICPQuarantine() {
         ? analysis.raw_data as Record<string, any>
         : {};
 
-      // ✅ CRÍTICO: Preservar cnae_principal existente se já estiver no formato correto (com pontos)
-      // Se não existir ou estiver vazio, usar o código (code) da Receita Federal, NÃO a descrição (text)
+      // ✅ CRÍTICO: PRESERVAR CÓDIGO CNAE FORMATADO E DESCRIÇÃO JUNTOS
+      // 1. Preservar código formatado existente (ex: "28.33-0/00") se já existir
+      // 2. Se não existir, usar código da Receita Federal
+      // 3. SEMPRE preservar/atualizar a descrição em raw_analysis.cnae_descricao
       const existingCnae = analysis.cnae_principal;
       const receitaCnaeCode = result.data?.atividade_principal?.[0]?.code;
       const receitaCnaeDescription = result.data?.atividade_principal?.[0]?.text;
       
-      // Preservar código existente se já estiver formatado (tem pontos), senão usar código da Receita
-      const finalCnaePrincipal = (existingCnae && existingCnae.includes('.')) 
-        ? existingCnae 
-        : (receitaCnaeCode || existingCnae);
+      // Preservar código formatado existente (com pontos), senão formatar código da Receita
+      let finalCnaePrincipal = existingCnae;
+      if (!finalCnaePrincipal || !finalCnaePrincipal.includes('.')) {
+        // Se não tem código formatado, usar código da Receita e formatar se necessário
+        if (receitaCnaeCode) {
+          // Se código da Receita já está formatado, usar direto
+          if (receitaCnaeCode.includes('.')) {
+            finalCnaePrincipal = receitaCnaeCode;
+          } else {
+            // Formatar código numérico para formato IBGE: "2833000" -> "28.33-0/00"
+            const cleanCode = receitaCnaeCode.replace(/[^0-9]/g, '');
+            if (cleanCode.length === 7) {
+              finalCnaePrincipal = `${cleanCode.substring(0, 2)}.${cleanCode.substring(2, 4)}-${cleanCode.substring(4, 5)}/${cleanCode.substring(5, 7)}`;
+            } else {
+              finalCnaePrincipal = receitaCnaeCode;
+            }
+          }
+        }
+      }
       
-      // Atualizar raw_analysis com descrição do CNAE
+      // Atualizar raw_analysis preservando descrição existente OU usando nova da Receita
       const existingRawAnalysis = (analysis.raw_analysis && typeof analysis.raw_analysis === 'object' && !Array.isArray(analysis.raw_analysis))
         ? analysis.raw_analysis as Record<string, any>
         : {};
+      
+      // ✅ PRESERVAR descrição existente OU usar nova da Receita Federal
+      const finalCnaeDescription = receitaCnaeDescription || existingRawAnalysis.cnae_descricao || null;
       
       const { error: updateError } = await supabase
         .from('icp_analysis_results')
@@ -320,7 +340,7 @@ export default function ICPQuarantine() {
           uf: result.data?.uf || analysis.uf,
           municipio: result.data?.municipio || analysis.municipio,
           porte: result.data?.porte || analysis.porte,
-          cnae_principal: finalCnaePrincipal, // ✅ Preservar código formatado existente
+          cnae_principal: finalCnaePrincipal, // ✅ CÓDIGO FORMATADO PRESERVADO
           raw_data: {
             ...rawData,
             receita_federal: result.data,
@@ -328,7 +348,7 @@ export default function ICPQuarantine() {
           },
           raw_analysis: {
             ...existingRawAnalysis,
-            cnae_descricao: receitaCnaeDescription || existingRawAnalysis.cnae_descricao, // ✅ Salvar descrição aqui
+            cnae_descricao: finalCnaeDescription, // ✅ DESCRIÇÃO PRESERVADA/ATUALIZADA
             enriched_receita_at: new Date().toISOString(),
           },
         })
