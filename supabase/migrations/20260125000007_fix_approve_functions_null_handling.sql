@@ -27,6 +27,8 @@ DECLARE
   v_normalized_data JSONB;
   v_cnae_code TEXT;
   v_setor TEXT;
+  v_setor_industria TEXT;
+  v_categoria TEXT;
 BEGIN
   -- 1. Buscar empresa e validar estado
   SELECT 
@@ -69,12 +71,23 @@ BEGIN
     ), '.', ''), ' ', ''));
   END IF;
   
-  -- Buscar setor_industria na tabela cnae_classifications
+  -- Buscar setor_industria E categoria na tabela cnae_classifications
+  -- ✅ FORMATO: "Setor - Categoria" (ex: "Manufatura - Fabricante")
   IF v_cnae_code IS NOT NULL AND v_cnae_code != '' THEN
-    SELECT setor_industria INTO v_setor
+    SELECT setor_industria, categoria 
+    INTO v_setor_industria, v_categoria
     FROM public.cnae_classifications
     WHERE cnae_code = v_cnae_code
     LIMIT 1;
+    
+    -- Formatar como "Setor - Categoria" se ambos existirem
+    IF v_setor_industria IS NOT NULL THEN
+      IF v_categoria IS NOT NULL THEN
+        v_setor := v_setor_industria || ' - ' || v_categoria;
+      ELSE
+        v_setor := v_setor_industria;
+      END IF;
+    END IF;
   END IF;
   
   -- 3. TRANSACAO: Atualizar canonical_status e inserir em icp_analysis_results

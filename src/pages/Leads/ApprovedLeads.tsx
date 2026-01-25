@@ -103,20 +103,13 @@ export default function ApprovedLeads() {
   const [showDiscardedModal, setShowDiscardedModal] = useState(false);
 
   // 🔎 Helpers de CNAE, origem e localização
+  // ✅ USAR resolveCompanyCNAE em vez de extractCompanyCNAE para garantir formato correto
   const extractCompanyCNAE = (company: any): string | null => {
-    const rawData = (company as any).raw_data || {};
-    const fromCompany = (company as any).cnae_principal || null;
-    const fromAnalysis = (company as any).analysis_cnae_principal || null;
-    const fromRaw =
-      rawData.cnae_fiscal ||
-      rawData.cnae_principal ||
-      rawData.atividade_principal?.[0]?.code ||
-      rawData.receita_federal?.atividade_principal?.[0]?.code ||
-      rawData.receita?.atividade_principal?.[0]?.code ||
-      null;
-    const cnae = fromCompany || fromAnalysis || fromRaw;
-    if (!cnae) return null;
-    return String(cnae).trim();
+    // ✅ USAR resolveCompanyCNAE que já faz toda a resolução correta
+    const cnaeResolution = resolveCompanyCNAE(company);
+    const cnaeCode = cnaeResolution.principal.code;
+    if (!cnaeCode) return null;
+    return String(cnaeCode).trim();
   };
 
   const getCNAEClassificationForCompany = (company: any): CNAEClassification | null => {
