@@ -1,13 +1,12 @@
 -- ==========================================
--- MC-2.6.1: CORREÇÃO DEFINITIVA DAS FUNÇÕES DE APROVAÇÃO
+-- MC-2.6.5: CORREÇÃO DE TRATAMENTO DE NULLs NA FUNÇÃO DE APROVAÇÃO
 -- ==========================================
 -- Data: 2026-01-25
--- Descrição: Força recriação de todas as funções de aprovação removendo TODAS as dependências
---            de campos inexistentes em companies (temperatura, icp_score, purchase_intent_type)
---            Esta migration garante que NENHUMA função tente acessar campos que não existem.
+-- Descrição: Corrige tratamento de valores NULL e conversões numéricas na função approve_company_to_leads
+--            para evitar erros 400 ao aprovar empresas
 
 -- ==========================================
--- FUNÇÃO: Aprovar empresa da Base para Leads Aprovados (DEFINITIVA)
+-- FUNÇÃO: Aprovar empresa da Base para Leads Aprovados (CORRIGIDA)
 -- ==========================================
 CREATE OR REPLACE FUNCTION approve_company_to_leads(
   p_company_id UUID,
@@ -54,7 +53,6 @@ BEGIN
   END IF;
   
   -- 2.1. Extrair CNAE e buscar setor da tabela cnae_classifications
-  -- ✅ MC2.6.2: Buscar setor automaticamente do CNAE
   v_cnae_code := NULL;
   
   -- Tentar extrair CNAE de múltiplas fontes
@@ -91,8 +89,7 @@ BEGIN
       AND tenant_id = p_tenant_id;
     
     -- 3.2. Preparar dados normalizados para icp_analysis_results
-    -- ✅ MC2.6.1: NÃO usar campos que não existem em companies
-    -- ✅ MC2.6.2: Incluir setor obtido de cnae_classifications
+    -- ✅ MC2.6.5: Garantir que todos os valores numéricos tenham defaults seguros
     v_normalized_data := jsonb_build_object(
       'company_id', v_company.id,
       'tenant_id', p_tenant_id,
@@ -102,23 +99,23 @@ BEGIN
       'uf', (v_company.location->>'state')::text,
       'municipio', (v_company.location->>'city')::text,
       'porte', NULL,
-      'cnae_principal', v_cnae_code, -- ✅ MC2.6.2: Usar CNAE extraído
+      'cnae_principal', v_cnae_code,
       'website', v_company.website,
-      'email', NULL, -- ✅ Campo não existe em companies
+      'email', NULL,
       'telefone', NULL,
       'website_encontrado', v_company.website_encontrado,
       'website_fit_score', COALESCE((v_company.website_fit_score)::numeric, 0),
       'website_products_match', COALESCE(v_company.website_products_match, '[]'::jsonb),
       'linkedin_url', v_company.linkedin_url,
-      'icp_score', 0, -- ✅ MC2.6.1: Campo não existe em companies
+      'icp_score', 0,
       'fit_score', NULL,
       'purchase_intent_score', COALESCE((v_company.purchase_intent_score)::numeric, 0),
-      'purchase_intent_type', 'potencial', -- ✅ MC2.6.1: Campo não existe em companies
+      'purchase_intent_type', 'potencial',
       'status', 'aprovada', -- ✅ STATUS CRÍTICO: 'aprovada' para aparecer em Leads Aprovados
-      'temperatura', 'cold', -- ✅ MC2.6.1: Campo não existe em companies, usar valor padrão
-      'totvs_status', NULL, -- ✅ MC2.6.1: Campo não existe em companies
-      'origem', COALESCE(v_company.origem, v_company.source_name, 'icp_individual'), -- ✅ MC2.6.1: Usar valor válido
-      'setor', v_setor, -- ✅ MC2.6.2: Setor obtido de cnae_classifications
+      'temperatura', 'cold',
+      'totvs_status', NULL,
+      'origem', COALESCE(v_company.origem, v_company.source_name, 'icp_individual'),
+      'setor', v_setor,
       'raw_data', COALESCE(v_company.raw_data, '{}'::jsonb),
       'raw_analysis', jsonb_build_object(
         'migrated_from_companies', true,
@@ -131,7 +128,6 @@ BEGIN
     );
     
     -- 3.3. Verificar se já existe registro em icp_analysis_results
-    -- ✅ MC2.6.1: Removido filtro tenant_id (campo pode não existir ou causar erro)
     SELECT id INTO v_icp_analysis_id
     FROM public.icp_analysis_results
     WHERE company_id = p_company_id
@@ -150,16 +146,16 @@ BEGIN
         municipio = COALESCE(NULLIF(v_normalized_data->>'municipio', ''), municipio),
         website = COALESCE(NULLIF(v_normalized_data->>'website', ''), website),
         website_encontrado = COALESCE(NULLIF(v_normalized_data->>'website_encontrado', ''), website_encontrado),
-        website_fit_score = COALESCE((v_normalized_data->>'website_fit_score')::numeric, website_fit_score),
-        website_products_match = COALESCE((v_normalized_data->>'website_products_match')::jsonb, website_products_match),
+        website_fit_score = COALESCE((v_normalized_data->>'website_fit_score')::numeric, website_fit_score, 0),
+        website_products_match = COALESCE((v_normalized_data->>'website_products_match')::jsonb, website_products_match, '[]'::jsonb),
         linkedin_url = COALESCE(NULLIF(v_normalized_data->>'linkedin_url', ''), linkedin_url),
-        icp_score = COALESCE((v_normalized_data->>'icp_score')::numeric, icp_score),
-        purchase_intent_score = COALESCE((v_normalized_data->>'purchase_intent_score')::numeric, purchase_intent_score),
-        purchase_intent_type = COALESCE((v_normalized_data->>'purchase_intent_type')::text, purchase_intent_type),
-        temperatura = COALESCE((v_normalized_data->>'temperatura')::text, temperatura),
-        origem = COALESCE(v_normalized_data->>'origem', origem),
-        setor = COALESCE(v_normalized_data->>'setor', setor), -- ✅ MC2.6.2: Atualizar setor
-        raw_data = COALESCE((v_normalized_data->>'raw_data')::jsonb, raw_data),
+        icp_score = COALESCE((v_normalized_data->>'icp_score')::numeric, icp_score, 0),
+        purchase_intent_score = COALESCE((v_normalized_data->>'purchase_intent_score')::numeric, purchase_intent_score, 0),
+        purchase_intent_type = COALESCE((v_normalized_data->>'purchase_intent_type')::text, purchase_intent_type, 'potencial'),
+        temperatura = COALESCE((v_normalized_data->>'temperatura')::text, temperatura, 'cold'),
+        origem = COALESCE(v_normalized_data->>'origem', origem, 'icp_individual'),
+        setor = COALESCE(v_normalized_data->>'setor', setor),
+        raw_data = COALESCE((v_normalized_data->>'raw_data')::jsonb, raw_data, '{}'::jsonb),
         raw_analysis = jsonb_build_object(
           'migrated_from_companies', true,
           'migrated_at', now(),
@@ -171,6 +167,7 @@ BEGIN
       WHERE id = v_icp_analysis_id;
     ELSE
       -- Inserir novo registro
+      -- ✅ MC2.6.5: Garantir que todos os valores numéricos tenham COALESCE com defaults
       INSERT INTO public.icp_analysis_results (
         company_id,
         tenant_id,
@@ -196,15 +193,15 @@ BEGIN
         temperatura,
         totvs_status,
         origem,
-        setor, -- ✅ MC2.6.2: Incluir setor
+        setor,
         raw_data,
         raw_analysis
       )
       VALUES (
         (v_normalized_data->>'company_id')::UUID,
         (v_normalized_data->>'tenant_id')::UUID,
-        v_normalized_data->>'cnpj',
-        v_normalized_data->>'razao_social',
+        COALESCE(v_normalized_data->>'cnpj', ''),
+        COALESCE(v_normalized_data->>'razao_social', 'N/A'),
         NULLIF(v_normalized_data->>'nome_fantasia', ''),
         NULLIF(v_normalized_data->>'uf', ''),
         NULLIF(v_normalized_data->>'municipio', ''),
@@ -220,14 +217,14 @@ BEGIN
         COALESCE((v_normalized_data->>'icp_score')::numeric, 0),
         NULLIF((v_normalized_data->>'fit_score')::text, '')::numeric,
         COALESCE((v_normalized_data->>'purchase_intent_score')::numeric, 0),
-        (v_normalized_data->>'purchase_intent_type')::text,
-        v_normalized_data->>'status', -- ✅ 'aprovada'
-        (v_normalized_data->>'temperatura')::text,
+        COALESCE((v_normalized_data->>'purchase_intent_type')::text, 'potencial'),
+        COALESCE(v_normalized_data->>'status', 'aprovada'), -- ✅ 'aprovada'
+        COALESCE((v_normalized_data->>'temperatura')::text, 'cold'),
         NULLIF(v_normalized_data->>'totvs_status', ''),
-        v_normalized_data->>'origem',
-        v_normalized_data->>'setor', -- ✅ MC2.6.2: Incluir setor
-        (v_normalized_data->>'raw_data')::jsonb,
-        (v_normalized_data->>'raw_analysis')::jsonb
+        COALESCE(v_normalized_data->>'origem', 'icp_individual'),
+        v_normalized_data->>'setor',
+        COALESCE((v_normalized_data->>'raw_data')::jsonb, '{}'::jsonb),
+        COALESCE((v_normalized_data->>'raw_analysis')::jsonb, '{}'::jsonb)
       )
       RETURNING id INTO v_icp_analysis_id;
     END IF;
@@ -245,61 +242,6 @@ BEGIN
 END;
 $$;
 
--- ==========================================
--- FUNÇÃO: Aprovar empresas em massa (DEFINITIVA)
--- ==========================================
-CREATE OR REPLACE FUNCTION approve_companies_batch_to_leads(
-  p_company_ids UUID[],
-  p_tenant_id UUID
-)
-RETURNS TABLE (
-  approved_count INTEGER,
-  failed_count INTEGER,
-  results JSONB
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_company_id UUID;
-  v_result RECORD;
-  v_approved INTEGER := 0;
-  v_failed INTEGER := 0;
-  v_results JSONB := '[]'::jsonb;
-  v_result_item JSONB;
-BEGIN
-  -- Processar cada empresa
-  FOREACH v_company_id IN ARRAY p_company_ids
-  LOOP
-    -- Chamar função individual
-    SELECT * INTO v_result
-    FROM approve_company_to_leads(v_company_id, p_tenant_id);
-    
-    -- Adicionar resultado
-    v_result_item := jsonb_build_object(
-      'company_id', v_company_id,
-      'success', v_result.success,
-      'message', v_result.message,
-      'icp_analysis_id', v_result.icp_analysis_id
-    );
-    
-    v_results := v_results || v_result_item;
-    
-    -- Contar sucessos e falhas
-    IF v_result.success THEN
-      v_approved := v_approved + 1;
-    ELSE
-      v_failed := v_failed + 1;
-    END IF;
-  END LOOP;
-  
-  RETURN QUERY SELECT v_approved, v_failed, v_results;
-END;
-$$;
-
 -- Comentários
 COMMENT ON FUNCTION approve_company_to_leads IS 
-'MC2.6.1: Aprova empresa da Base (BASE/POOL) para Leads Aprovados (ACTIVE). Atualiza canonical_status em companies e insere/atualiza registro em icp_analysis_results com status=''aprovada''. Transação atômica. CORRIGIDO: não usa campos inexistentes (temperatura, icp_score, purchase_intent_type).';
-
-COMMENT ON FUNCTION approve_companies_batch_to_leads IS 
-'MC2.6.1: Aprova múltiplas empresas em lote. Retorna contagem de sucessos, falhas e resultados detalhados.';
+'MC2.6.5: Aprova empresa da Base (BASE/POOL) para Leads Aprovados (ACTIVE). Corrigido tratamento de NULLs e conversões numéricas para evitar erros 400.';
