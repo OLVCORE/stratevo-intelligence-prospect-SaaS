@@ -881,22 +881,60 @@ serve(async (req) => {
         .update(updateData)
         .eq('id', companyId);
       
-      // ✅ ATUALIZAR TAMBÉM icp_analysis_results.raw_analysis (para o badge funcionar!)
+      // ✅ ATUALIZAR TAMBÉM icp_analysis_results (para o badge funcionar e dados aparecerem!)
       const { data: companyRecord } = await supabaseClient
         .from('companies')
-        .select('cnpj, raw_data')
+        .select('cnpj, raw_data, linkedin_url, apollo_id, industry, description')
         .eq('id', companyId)
         .single();
       
       if (companyRecord?.cnpj) {
-        await supabaseClient
+        // ✅ ATUALIZAR raw_analysis COM DADOS COMPLETOS DO APOLLO
+        const existingRawAnalysis = await supabaseClient
           .from('icp_analysis_results')
-          .update({
-            raw_analysis: companyRecord.raw_data
-          })
+          .select('raw_analysis')
+          .eq('cnpj', companyRecord.cnpj)
+          .single();
+        
+        const currentRawAnalysis = existingRawAnalysis.data?.raw_analysis || {};
+        
+        const updateIcpData: any = {
+          raw_analysis: {
+            ...currentRawAnalysis,
+            ...companyRecord.raw_data, // ✅ Dados completos do Apollo
+            apollo_enriched_at: new Date().toISOString(),
+          }
+        };
+        
+        // ✅ ATUALIZAR CAMPOS DIRETOS TAMBÉM (se disponíveis)
+        if (companyRecord.linkedin_url) {
+          updateIcpData.linkedin_url = companyRecord.linkedin_url;
+        }
+        
+        if (companyRecord.apollo_id) {
+          updateIcpData.apollo_id = companyRecord.apollo_id;
+        }
+        
+        // ✅ ATUALIZAR decision_makers_count
+        const decisoresCount = companyRecord.raw_data?.apollo_decisores_count || 0;
+        if (decisoresCount > 0) {
+          updateIcpData.decision_makers_count = decisoresCount;
+        }
+        
+        const { error: updateIcpError } = await supabaseClient
+          .from('icp_analysis_results')
+          .update(updateIcpData)
           .eq('cnpj', companyRecord.cnpj);
         
-        console.log('[ENRICH-APOLLO] ✅ Badge atualizado em icp_analysis_results');
+        if (updateIcpError) {
+          console.error('[ENRICH-APOLLO] ❌ Erro ao atualizar icp_analysis_results:', updateIcpError);
+        } else {
+          console.log('[ENRICH-APOLLO] ✅ Dados atualizados em icp_analysis_results:', {
+            linkedin_url: updateIcpData.linkedin_url || 'N/A',
+            decisores_count: decisoresCount,
+            apollo_id: updateIcpData.apollo_id || 'N/A'
+          });
+        }
       }
       
       console.log('[ENRICH-APOLLO] ✅', decisores.length, 'decisores salvos em decision_makers');

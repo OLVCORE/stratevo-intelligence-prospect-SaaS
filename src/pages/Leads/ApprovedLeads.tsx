@@ -659,7 +659,10 @@ export default function ApprovedLeads() {
     },
     onSuccess: () => {
       toast.success('✅ Apollo atualizado - Website e decisores adicionados');
+      // ✅ INVALIDAR TODAS AS QUERIES RELEVANTES
+      queryClient.invalidateQueries({ queryKey: ['approved-companies'] });
       queryClient.invalidateQueries({ queryKey: ['icp-quarantine'] });
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
     },
     onError: (error: any) => {
       toast.error('Erro ao enriquecer com Apollo', {
@@ -1556,6 +1559,11 @@ export default function ApprovedLeads() {
     toast.success(`✅ Enriquecimento concluído!`, {
       description: `${success} sucesso, ${errors} erro(s)`
     });
+    
+    // ✅ FORÇAR ATUALIZAÇÃO DOS DADOS
+    queryClient.invalidateQueries({ queryKey: ['approved-companies'] });
+    queryClient.invalidateQueries({ queryKey: ['icp-quarantine'] });
+    refetch(); // Refetch manual para atualizar cards
   };
 
   // ✅ NOVO: Enriquecer Website & LinkedIn em massa
