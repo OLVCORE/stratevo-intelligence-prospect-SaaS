@@ -29,6 +29,7 @@ DECLARE
   v_setor TEXT;
   v_setor_industria TEXT;
   v_categoria TEXT;
+  v_raw_cnae TEXT;
 BEGIN
   -- 1. Buscar empresa e validar estado
   SELECT 
@@ -60,15 +61,26 @@ BEGIN
   
   -- Tentar extrair CNAE APENAS de raw_data (companies não tem cnae_principal como coluna)
   IF v_company.raw_data IS NOT NULL THEN
-    v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(
-      COALESCE(
-        (v_company.raw_data->'receita_federal'->'atividade_principal'->0->>'code'),
-        (v_company.raw_data->'receita'->'atividade_principal'->0->>'code'),
-        (v_company.raw_data->'atividade_principal'->0->>'code'),
-        (v_company.raw_data->>'cnae_fiscal'),
-        (v_company.raw_data->>'cnae_principal')
-      )
-    ), '.', ''), ' ', ''));
+    -- Extrair código CNAE bruto
+    v_raw_cnae := COALESCE(
+      (v_company.raw_data->'receita_federal'->'atividade_principal'->0->>'code'),
+      (v_company.raw_data->'receita'->'atividade_principal'->0->>'code'),
+      (v_company.raw_data->'atividade_principal'->0->>'code'),
+      (v_company.raw_data->>'cnae_fiscal'),
+      (v_company.raw_data->>'cnae_principal')
+    );
+    
+    -- Normalizar para formato da tabela cnae_classifications: "6203-1/00" (sem pontos)
+    IF v_raw_cnae IS NOT NULL THEN
+      -- Usar função normalize_cnae_code se existir, senão normalizar manualmente
+      BEGIN
+        v_cnae_code := normalize_cnae_code(v_raw_cnae);
+      EXCEPTION
+        WHEN OTHERS THEN
+          -- Fallback: normalizar manualmente (remover pontos, manter traços e barras)
+          v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(v_raw_cnae), '.', ''), ' ', ''));
+      END;
+    END IF;
   END IF;
   
   -- Buscar setor_industria E categoria na tabela cnae_classifications
