@@ -97,6 +97,7 @@ export default function CompaniesManagementPage() {
   const [filterEnrichment, setFilterEnrichment] = useState<string[]>([]); // ✅ NOVO: Filtro por enriquecimento
   const [filterICP, setFilterICP] = useState<string[]>([]);
   const [filterGrade, setFilterGrade] = useState<string[]>([]);
+  const [filterCNAE, setFilterCNAE] = useState<string[]>([]); // ✅ NOVO: Filtro por CNAE
   const [cnaeClassifications, setCnaeClassifications] = useState<Record<string, CNAEClassification>>({});
   
   // 🔥 DEBOUNCE: Só busca após 500ms de inatividade
@@ -357,9 +358,18 @@ export default function CompaniesManagementPage() {
         return filterGrade.includes(grade);
       });
     }
+
+    // ✅ Filtro por CNAE (código)
+    if (filterCNAE.length > 0) {
+      filtered = filtered.filter(c => {
+        const cnaeRes = resolveCompanyCNAE(c);
+        const cnaeCode = cnaeRes.principal.code || 'Sem CNAE';
+        return filterCNAE.includes(cnaeCode);
+      });
+    }
     
     return filtered;
-  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion, filterCity, filterAnalysisStatus, filterEnrichment, filterICP, filterGrade]);
+  }, [allCompanies, filterOrigin, filterStatus, filterSector, filterRegion, filterCity, filterAnalysisStatus, filterEnrichment, filterICP, filterGrade, filterCNAE]);
   
   // 🔢 ALIASES PARA COMPATIBILIDADE COM QUARENTENA
   const filteredCompanies = companies;
@@ -2452,7 +2462,21 @@ export default function CompaniesManagementPage() {
                       </TableHead>
                       {/* CNAE (código + descrição) */}
                       <TableHead className="min-w-[300px] max-w-[420px] text-left">
-                        CNAE
+                        <ColumnFilter
+                          column="cnae"
+                          title="CNAE"
+                          values={Array.from(
+                            new Set(
+                              allCompanies.map(c => {
+                                const cnaeRes = resolveCompanyCNAE(c);
+                                return cnaeRes.principal.code || 'Sem CNAE';
+                              }).filter(Boolean)
+                            )
+                          )}
+                          selectedValues={filterCNAE}
+                          onFilterChange={setFilterCNAE}
+                          onSort={() => {}}
+                        />
                       </TableHead>
                       <TableHead className="min-w-[180px] flex-[1.5]">
                         <ColumnFilter
@@ -2797,6 +2821,9 @@ export default function CompaniesManagementPage() {
                               </span>
                             );
                           }
+
+                          // ✅ GARANTIR: Mostrar número + hífen + descrição
+                          // formatCNAEForDisplay já retorna "CÓDIGO - DESCRIÇÃO" se ambos existirem
 
                           return (
                             <TooltipProvider>

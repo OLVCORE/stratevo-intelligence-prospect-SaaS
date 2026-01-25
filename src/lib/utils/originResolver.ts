@@ -118,3 +118,12 @@ export function getCompanyOrigin(company: any): string | null {
 
   return null;
 }
+
+/**
+ * Resolve origem de uma empresa retornando string (nunca null)
+ * Retorna 'Sem origem' se não encontrar
+ */
+export function getCompanyOriginString(company: any): string {
+  const origem = getCompanyOrigin(company);
+  return origem || 'Sem origem';
+}

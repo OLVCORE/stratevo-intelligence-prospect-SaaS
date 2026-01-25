@@ -265,6 +265,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
   const [filterUF, setFilterUF] = useState<string[]>([]);
   const [filterCity, setFilterCity] = useState<string[]>([]);
   const [filterNomeFantasia, setFilterNomeFantasia] = useState<string[]>([]);
+  const [filterCNAE, setFilterCNAE] = useState<string[]>([]); // ✅ NOVO: Filtro de CNAE
   const [cnaeClassifications, setCnaeClassifications] = useState<Record<string, CNAEClassification>>({});
 
   // 🔎 Helpers de CNAE e localização
@@ -587,6 +588,15 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             return filterNomeFantasia.includes('Sem Nome Fantasia');
           }
           return filterNomeFantasia.includes(fantasia);
+        });
+      }
+
+      // ✅ Filtro por CNAE (código)
+      if (filterCNAE.length > 0) {
+        filteredProspects = filteredProspects.filter(p => {
+          const cnaeRes = resolveCompanyCNAE(p);
+          const cnaeCode = cnaeRes.principal.code || 'Sem CNAE';
+          return filterCNAE.includes(cnaeCode);
         });
       }
       
@@ -2970,8 +2980,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                             }).filter(Boolean)
                           )
                         )}
-                        selectedValues={[]}
-                        onFilterChange={() => {}}
+                        selectedValues={filterCNAE}
+                        onFilterChange={setFilterCNAE}
                         onSort={() => {}}
                       />
                     </TableHead>

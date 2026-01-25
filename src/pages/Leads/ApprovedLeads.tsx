@@ -85,6 +85,7 @@ export default function ApprovedLeads() {
   const [filterICP, setFilterICP] = useState<string[]>([]);
   const [filterFitScore, setFilterFitScore] = useState<string[]>([]);
   const [filterGrade, setFilterGrade] = useState<string[]>([]);
+  const [filterCNAE, setFilterCNAE] = useState<string[]>([]); // ✅ NOVO: Filtro por CNAE
   const [cnaeClassifications, setCnaeClassifications] = useState<Record<string, CNAEClassification>>({});
   
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -948,6 +949,13 @@ export default function ApprovedLeads() {
         } else {
           if (!filterGrade.includes(grade)) return false;
         }
+      }
+
+      // ✅ Filtro por CNAE (código)
+      if (filterCNAE.length > 0) {
+        const cnaeRes = resolveCompanyCNAE(c);
+        const cnaeCode = cnaeRes.principal.code || 'Sem CNAE';
+        if (!filterCNAE.includes(cnaeCode)) return false;
       }
       
       return true;
@@ -2232,7 +2240,21 @@ export default function ApprovedLeads() {
                     />
                   </TableHead>
                     <TableHead className="min-w-[300px] max-w-[420px] text-left">
-                      CNAE
+                      <ColumnFilter
+                        column="cnae"
+                        title="CNAE"
+                        values={Array.from(
+                          new Set(
+                            companies.map(c => {
+                              const cnaeRes = resolveCompanyCNAE(c);
+                              return cnaeRes.principal.code || 'Sem CNAE';
+                            }).filter(Boolean)
+                          )
+                        )}
+                        selectedValues={filterCNAE}
+                        onFilterChange={setFilterCNAE}
+                        onSort={() => {}}
+                      />
                     </TableHead>
                       <TableHead className="min-w-[180px] flex-[1.5]">
                         <ColumnFilter
