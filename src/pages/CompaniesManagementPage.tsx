@@ -2886,7 +2886,7 @@ export default function CompaniesManagementPage() {
                             if (setor) {
                               return (
                                 <>
-                                  {/* ✅ Badge de Setor (azul) - mesmo estilo do onboarding Step 3 */}
+                                  {/* ✅ Badge de Setor (azul) - mesmo estilo do onboarding Step 3 - Vercel Deploy Trigger */}
                                   <Badge
                                     variant="secondary"
                                     className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700"
@@ -2894,7 +2894,7 @@ export default function CompaniesManagementPage() {
                                   >
                                     {setor}
                                   </Badge>
-                                  {/* ✅ Badge de Categoria/Segmento (roxo) - mesmo estilo do onboarding Step 3 */}
+                                  {/* ✅ Badge de Categoria/Segmento (roxo) - mesmo estilo do onboarding Step 3 - Vercel Deploy Trigger */}
                                   {categoria && (
                                     <Badge
                                       variant="secondary"
