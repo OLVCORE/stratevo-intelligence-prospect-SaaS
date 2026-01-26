@@ -1,3 +1,4 @@
 # Trigger file para forçar deploy na Vercel
-# Última atualização: 2026-01-24
+# Última atualização: 2026-01-24 23:59:00
 # Este arquivo força o Vercel a detectar mudanças e fazer deploy
+# Commit completo: todas atualizações últimas 24h - badges, enriquecimento, migrations, edge functions
