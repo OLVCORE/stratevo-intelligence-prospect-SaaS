@@ -2004,46 +2004,9 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             const data = enriched.data as any;
             const nomeFantasia = data.fantasia || data.nome_fantasia || null;
             
-            // ✅ CRÍTICO: Buscar setor e categoria da tabela cnae_classifications baseado no CNAE
-            let setorFormatted = prospect.setor; // Preservar setor existente
+            // ✅ CRÍTICO: Extrair CNAE para salvar em cnae_principal e enrichment_data
+            // O TRIGGER vai calcular o setor automaticamente baseado no CNAE
             const cnaeCode = data.atividade_principal?.[0]?.code || data.cnae_fiscal || null;
-            
-            if (cnaeCode) {
-              try {
-                // Normalizar código CNAE para buscar na tabela (formato: "6203-1/00" sem pontos)
-                let normalizedCnae = cnaeCode.replace(/\./g, '').replace(/\s/g, '').toUpperCase();
-                
-                // Se é apenas numérico (7 dígitos), formatar primeiro: "2833000" -> "28.33-0/00" -> "2833-0/00"
-                const cleanCode = normalizedCnae.replace(/[^0-9]/g, '');
-                if (cleanCode.length === 7 && /^[0-9]+$/.test(cleanCode)) {
-                  const formatted = `${cleanCode.substring(0, 2)}.${cleanCode.substring(2, 4)}-${cleanCode.substring(4, 5)}/${cleanCode.substring(5, 7)}`;
-                  normalizedCnae = formatted.replace(/\./g, ''); // Remover pontos para formato do banco
-                }
-                
-            // Buscar setor e categoria da tabela cnae_classifications
-            const { data: classification, error: classError } = await (supabase as any)
-              .from('cnae_classifications')
-              .select('setor_industria, categoria')
-              .eq('cnae_code', normalizedCnae)
-              .maybeSingle();
-                
-                if (!classError && classification) {
-                  // Formatar como "Setor - Categoria" (igual outras tabelas)
-                  if (classification.categoria) {
-                    setorFormatted = `${classification.setor_industria} - ${classification.categoria}`;
-                  } else {
-                    setorFormatted = classification.setor_industria;
-                  }
-                } else {
-                  // Fallback: usar descrição da Receita se não encontrar classificação
-                  setorFormatted = data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor;
-                }
-              } catch (err) {
-                console.warn('[Bulk Enrichment] Erro ao buscar classificação CNAE:', err);
-                // Fallback: usar descrição da Receita se não encontrar classificação
-                setorFormatted = data.atividade_principal?.[0]?.text || data.cnae_fiscal_descricao || prospect.setor;
-              }
-            }
             
             // ✅ CRÍTICO: Preparar enrichment_data para trigger funcionar automaticamente
             const existingEnrichmentData = prospect.enrichment_data || {};
@@ -2056,13 +2019,15 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               enriched_at: new Date().toISOString(),
             };
             
+            // ✅ CRÍTICO: NÃO passar setor no updateData - deixar o TRIGGER calcular automaticamente
+            // O trigger vai detectar a mudança em enrichment_data e calcular o setor corretamente
             const updateData: any = {
               razao_social: data.nome || data.razao_social || prospect.razao_social,
               nome_fantasia: nomeFantasia || prospect.nome_fantasia,
               cidade: data.municipio || prospect.cidade,
               estado: data.uf || prospect.estado,
-              setor: setorFormatted, // ✅ Setor formatado "Setor - Categoria" da tabela cnae_classifications
-              cnae_principal: cnaeCode || prospect.cnae_principal, // ✅ Salvar código CNAE também
+              // setor: NÃO PASSAR - trigger vai calcular
+              cnae_principal: cnaeCode || prospect.cnae_principal, // ✅ Salvar código CNAE para trigger usar
               website: data.website || prospect.website,
               enrichment_data: enrichmentData, // ✅ CRÍTICO: Salvar em enrichment_data para trigger funcionar
               updated_at: new Date().toISOString(),
@@ -2076,11 +2041,11 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
 
             if (error) throw error;
             
-            // ✅ DEBUG: Log para verificar se setor foi atualizado
+            // ✅ DEBUG: Log para verificar se dados foram salvos (trigger vai calcular setor)
             console.log(`[Bulk Enrichment] ✅ Prospect ${prospectId} atualizado:`, {
-              setor: setorFormatted,
               cnae_principal: cnaeCode,
-              hasEnrichmentData: !!enrichmentData.receita_federal
+              hasEnrichmentData: !!enrichmentData.receita_federal,
+              note: 'Trigger vai calcular setor automaticamente'
             });
             
             enrichedCount++;
@@ -2527,11 +2492,11 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
 
         if (error) throw error;
 
-        // ✅ DEBUG: Log para verificar se setor foi atualizado
+        // ✅ DEBUG: Log para verificar se dados foram salvos (trigger vai calcular setor)
         console.log(`[Individual Enrichment] ✅ Prospect ${prospectId} atualizado:`, {
-          setor: setorFormatted,
           cnae_principal: cnaeCode,
-          hasEnrichmentData: !!enrichmentData.receita_federal
+          hasEnrichmentData: !!enrichmentData.receita_federal,
+          note: 'Trigger vai calcular setor automaticamente'
         });
 
         toast({
