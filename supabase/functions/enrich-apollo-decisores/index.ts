@@ -156,6 +156,67 @@ serve(async (req) => {
     console.log('[ENRICH-APOLLO-DECISORES] Buscando decisores para:', companyName);
     console.log('[ENRICH-APOLLO-DECISORES] Apollo Org ID fornecido:', apollo_org_id || 'N/A');
 
+    // ✅ MC2: IDEMPOTÊNCIA - Verificar se pode rodar enrichment
+    if (companyId) {
+      // Verificar Apollo Org
+      const { data: canRunApolloOrg, error: checkError } = await supabaseClient
+        .rpc('can_run_enrichment', {
+          p_company_id: companyId,
+          p_enrichment_type: 'apollo_org'
+        });
+      
+      if (checkError) {
+        console.warn('[ENRICH-APOLLO] ⚠️ Erro ao verificar estado:', checkError);
+      } else if (canRunApolloOrg && !canRunApolloOrg.can_run) {
+        console.log('[ENRICH-APOLLO] ⏭️ SKIPPED (idempotency):', canRunApolloOrg.reason, '-', canRunApolloOrg.message);
+        
+        // Verificar Decision Makers também
+        const { data: canRunDecisores } = await supabaseClient
+          .rpc('can_run_enrichment', {
+            p_company_id: companyId,
+            p_enrichment_type: 'decision_makers'
+          });
+        
+        if (canRunDecisores && !canRunDecisores.can_run) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              skipped: true,
+              reason: 'already_enriched',
+              message: 'Apollo org and decision makers already enriched',
+              apollo_org: canRunApolloOrg,
+              decision_makers: canRunDecisores
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Se Apollo Org já existe mas decisores não, continuar apenas para decisores
+        console.log('[ENRICH-APOLLO] ⚠️ Apollo Org já existe, mas buscando decisores...');
+      }
+      
+      // Verificar Decision Makers
+      const { data: canRunDecisores } = await supabaseClient
+        .rpc('can_run_enrichment', {
+          p_company_id: companyId,
+          p_enrichment_type: 'decision_makers'
+        });
+      
+      if (canRunDecisores && !canRunDecisores.can_run) {
+        console.log('[ENRICH-APOLLO] ⏭️ SKIPPED (idempotency): Decision makers already exist');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            skipped: true,
+            reason: 'already_enriched',
+            message: 'Decision makers already exist',
+            decision_makers: canRunDecisores
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     const apolloKey = Deno.env.get('APOLLO_API_KEY');
     
     if (!apolloKey) {
@@ -888,6 +949,33 @@ serve(async (req) => {
         .from('companies')
         .update(updateData)
         .eq('id', companyId);
+      
+      // ✅ MC2: MARCAR ENRICHMENT COMO CONCLUÍDO
+      if (companyId) {
+        // Marcar Apollo Org como enriquecido
+        if (organizationData?.id) {
+          await supabaseClient.rpc('mark_enrichment_done', {
+            p_company_id: companyId,
+            p_enrichment_type: 'apollo_org',
+            p_metadata: {
+              apollo_organization_id: organizationData.id,
+              organization_name: organizationData.name
+            }
+          });
+        }
+        
+        // Marcar Decision Makers como enriquecido
+        if (decisores.length > 0) {
+          await supabaseClient.rpc('mark_enrichment_done', {
+            p_company_id: companyId,
+            p_enrichment_type: 'decision_makers',
+            p_metadata: {
+              decision_makers_count: decisores.length,
+              enriched_via: 'apollo'
+            }
+          });
+        }
+      }
       
       // ✅ MC1: SINCRONIZAR icp_analysis_results usando função canônica sync_company
       // Prioridade: analysis_id > company_id > cnpj (fallback apenas se necessário)

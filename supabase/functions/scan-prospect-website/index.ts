@@ -122,6 +122,67 @@ serve(async (req) => {
 
     console.log('[ScanProspect] ✅ Usando qualified_prospect_id:', qualified_prospect_id);
 
+    // ✅ MC2: IDEMPOTÊNCIA - Verificar se pode rodar enrichment
+    if (company_id) {
+      // Verificar Website/Products
+      const { data: canRunWebsite, error: checkError } = await supabase
+        .rpc('can_run_enrichment', {
+          p_company_id: company_id,
+          p_enrichment_type: 'website'
+        });
+      
+      if (checkError) {
+        console.warn('[ScanProspect] ⚠️ Erro ao verificar estado:', checkError);
+      } else if (canRunWebsite && !canRunWebsite.can_run) {
+        console.log('[ScanProspect] ⏭️ SKIPPED (idempotency):', canRunWebsite.reason, '-', canRunWebsite.message);
+        
+        // Verificar Products também
+        const { data: canRunProducts } = await supabase
+          .rpc('can_run_enrichment', {
+            p_company_id: company_id,
+            p_enrichment_type: 'products'
+          });
+        
+        if (canRunProducts && !canRunProducts.can_run) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              skipped: true,
+              reason: 'already_enriched',
+              message: 'Website and products already enriched',
+              website: canRunWebsite,
+              products: canRunProducts
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Se website já foi escaneado mas produtos não, continuar apenas para produtos
+        console.log('[ScanProspect] ⚠️ Website já escaneado, mas extraindo produtos...');
+      }
+      
+      // Verificar Products
+      const { data: canRunProducts } = await supabase
+        .rpc('can_run_enrichment', {
+          p_company_id: company_id,
+          p_enrichment_type: 'products'
+        });
+      
+      if (canRunProducts && !canRunProducts.can_run) {
+        console.log('[ScanProspect] ⏭️ SKIPPED (idempotency): Products already extracted');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            skipped: true,
+            reason: 'already_enriched',
+            message: 'Products already extracted',
+            products: canRunProducts
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // 2. Extrair domínio do website
     const domain = website_url.replace(/^https?:\/\//, '').split('/')[0];
     const baseUrl = website_url.startsWith('http') ? website_url : `https://${website_url}`;
@@ -773,6 +834,34 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
                 website: companiesUpdatePayload.website || 'N/A',
                 linkedin_url: companiesUpdatePayload.linkedin_url || 'N/A',
               });
+              
+              // ✅ MC2: MARCAR ENRICHMENT COMO CONCLUÍDO
+              if (companyIdToSync) {
+                // Marcar Website como escaneado
+                if (updatePayload.website_encontrado || updatePayload.linkedin_url) {
+                  await supabase.rpc('mark_enrichment_done', {
+                    p_company_id: companyIdToSync,
+                    p_enrichment_type: 'website',
+                    p_metadata: {
+                      website: updatePayload.website_encontrado,
+                      linkedin_url: updatePayload.linkedin_url,
+                      enriched_via: 'scan-prospect-website'
+                    }
+                  });
+                }
+                
+                // Marcar Products como extraídos
+                if (insertedCount > 0) {
+                  await supabase.rpc('mark_enrichment_done', {
+                    p_company_id: companyIdToSync,
+                    p_enrichment_type: 'products',
+                    p_metadata: {
+                      products_count: insertedCount,
+                      enriched_via: 'openai-extraction'
+                    }
+                  });
+                }
+              }
             }
           } else {
             // ✅ TENTAR ENCONTRAR company_id PELO CNPJ (se não tiver company_id direto)
