@@ -178,11 +178,20 @@ serve(async (req) => {
           });
         
         if (canRunDecisores && !canRunDecisores.can_run) {
+          // ✅ MC3: Buscar count total para resposta padronizada
+          const { count: totalCount } = await supabaseClient
+            .from('decision_makers')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', companyId);
+          
           return new Response(
             JSON.stringify({
-              success: true,
+              executed: false,
               skipped: true,
               reason: 'already_enriched',
+              success: true,
+              decision_makers_inserted: 0,
+              decision_makers_total: totalCount || 0,
               message: 'Apollo org and decision makers already enriched',
               apollo_org: canRunApolloOrg,
               decision_makers: canRunDecisores
@@ -202,13 +211,23 @@ serve(async (req) => {
           p_enrichment_type: 'decision_makers'
         });
       
-      if (canRunDecisores && !canRunDecisores.can_run) {
+        if (canRunDecisores && !canRunDecisores.can_run) {
         console.log('[ENRICH-APOLLO] ⏭️ SKIPPED (idempotency): Decision makers already exist');
+        
+        // ✅ MC3: Buscar count total para resposta padronizada
+        const { count: totalCount } = await supabaseClient
+          .from('decision_makers')
+          .select('*', { count: 'exact', head: true })
+          .eq('company_id', companyId);
+        
         return new Response(
           JSON.stringify({
-            success: true,
+            executed: false,
             skipped: true,
             reason: 'already_enriched',
+            success: true,
+            decision_makers_inserted: 0,
+            decision_makers_total: totalCount || 0,
             message: 'Decision makers already exist',
             decision_makers: canRunDecisores
           }),
@@ -668,8 +687,23 @@ serve(async (req) => {
       d.title?.toLowerCase().includes('cio')
     );
 
+    // ✅ MC3: Garantir que companyId existe antes de salvar decisores
+    if (!companyId) {
+      console.error('[ENRICH-APOLLO] ❌ MC3: Cannot save decision makers without company_id');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          executed: false,
+          skipped: false,
+          reason: 'missing_company_id',
+          error: 'company_id is required to save decision makers'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Salvar decisores na tabela decision_makers
-    if (companyId && decisores.length > 0) {
+    if (decisores.length > 0) {
       // ✅ NÃO DELETAR: A função RPC usa ON CONFLICT UPDATE
       // Isso evita usar PostgREST que tem cache desatualizado
       // A função SQL insert_decision_makers_batch já faz UPDATE em caso de conflito
@@ -938,11 +972,15 @@ serve(async (req) => {
       updateData.enrichment_source = 'manual';
       updateData.enriched_at = new Date().toISOString();
 
+      // ✅ MC3: Remover duplicação - não salvar decision_makers em raw_data
+      // decision_makers está na tabela dedicada, não precisa duplicar em raw_data
+      delete updateData.raw_data.decision_makers;
+      
       console.log('[ENRICH-APOLLO] 💾 Salvando em companies:', {
         linkedin_url: updateData.linkedin_url || 'N/A',
         description: updateData.description ? 'SIM' : 'NÃO',
         apollo_id: updateData.apollo_id || 'N/A',
-        decision_makers_count: updateData.raw_data.decision_makers?.length || 0
+        note: 'decision_makers saved in dedicated table (not in raw_data)'
       });
 
       await supabaseClient
@@ -1007,12 +1045,8 @@ serve(async (req) => {
             .single();
           
           if (companyRecord) {
-            // MC1: Buscar decision_makers_count REAL (não de raw_data)
-            const { count: realDecisoresCount } = await supabaseClient
-              .from('decision_makers')
-              .select('*', { count: 'exact', head: true })
-              .eq('company_id', companyId);
-            
+            // ✅ MC3: decision_makers_count é atualizado automaticamente pelo trigger
+            // Não precisamos calcular manualmente - o trigger faz isso após INSERT/DELETE
             const existingRawAnalysis = await supabaseClient
               .from('icp_analysis_results')
               .select('raw_analysis')
@@ -1037,10 +1071,8 @@ serve(async (req) => {
               updateIcpData.apollo_id = companyRecord.apollo_organization_id;
             }
             
-            // MC1: Usar COUNT real de decision_makers
-            if (realDecisoresCount !== null && realDecisoresCount > 0) {
-              updateIcpData.decision_makers_count = realDecisoresCount;
-            }
+            // MC3: decision_makers_count será atualizado pelo trigger automaticamente
+            // Não precisamos setar manualmente aqui
             
             // MC1: Atualizar por ID (não por CNPJ!)
             const { error: updateIcpError } = await supabaseClient
@@ -1054,8 +1086,8 @@ serve(async (req) => {
               console.log('[ENRICH-APOLLO] ✅ Dados atualizados em icp_analysis_results (por ID):', {
                 analysis_id: analysisId,
                 linkedin_url: updateIcpData.linkedin_url || 'N/A',
-                decisores_count: realDecisoresCount || 0,
-                apollo_id: updateIcpData.apollo_id || 'N/A'
+                apollo_id: updateIcpData.apollo_id || 'N/A',
+                note: 'decision_makers_count atualizado automaticamente pelo trigger'
               });
             }
           }
@@ -1124,11 +1156,25 @@ serve(async (req) => {
       console.log('[ENRICH-APOLLO] ✅ Dados salvos em qualified_prospects');
     }
 
+    // ✅ MC3: Padronizar resposta Apollo
+    // Buscar count total após inserção (trigger já atualizou)
+    let decisionMakersTotal = 0;
+    if (companyId) {
+      const { count } = await supabaseClient
+        .from('decision_makers')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId);
+      decisionMakersTotal = count || 0;
+    }
+    
     return new Response(
       JSON.stringify({
+        executed: true,
+        skipped: false,
+        reason: 'ok',
         success: true,
-        decisores,
-        decisores_salvos: decisores.length,
+        decision_makers_inserted: decisores.length,
+        decision_makers_total: decisionMakersTotal,
         organization: organizationData ? {
           name: organizationData.name,
           linkedin_url: organizationData.linkedin_url,
@@ -1142,7 +1188,7 @@ serve(async (req) => {
           users: users.length
         },
         main_decision_maker: mainDecisionMaker || null,
-        message: `${decisores.length} decisores encontrados e salvos`
+        message: `${decisores.length} decisores encontrados e salvos (total: ${decisionMakersTotal})`
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1154,7 +1200,12 @@ serve(async (req) => {
     console.error('[ENRICH-APOLLO] Erro:', error);
     return new Response(
       JSON.stringify({
+        executed: false,
+        skipped: false,
+        reason: 'error',
         success: false,
+        decision_makers_inserted: 0,
+        decision_makers_total: 0,
         error: error.message || 'Erro ao buscar decisores no Apollo'
       }),
       {
