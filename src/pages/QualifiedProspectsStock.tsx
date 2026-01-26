@@ -881,7 +881,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
 
       // Usar a mesma lógica de handlePromoteToCompanies, mas para uma empresa apenas
       let promotedCount = 0;
-      let updatedCount = 0;
       const errors: string[] = [];
 
       console.log('[Qualified → Companies] 📤 Enviando prospect individual para Banco de Empresas', {
@@ -1059,7 +1058,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             .eq('id', existingCompany.id);
 
           if (updateError) throw updateError;
-          updatedCount++;
+          promotedCount++;
           console.log('[Qualified → Companies] ✅ Empresa atualizada', existingCompany.id);
         } else {
           // Criar nova empresa
@@ -1090,13 +1089,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       if (errors.length > 0) {
         toast({
           title: '⚠️ Envio parcial',
-          description: `${promotedCount + updatedCount} empresa(s) processada(s). ${errors.length} erro(s).`,
+          description: `${promotedCount} empresa(s) processada(s). ${errors.length} erro(s).`,
           variant: 'destructive',
         });
       } else {
         toast({
           title: '✅ Empresa enviada com sucesso!',
-          description: `A empresa foi ${promotedCount > 0 ? 'criada' : 'atualizada'} no Banco de Empresas.`,
+          description: `A empresa foi processada no Banco de Empresas.`,
         });
       }
 
@@ -1159,7 +1158,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
     try {
       const selectedProspects = prospects.filter(p => selectedIds.has(p.id));
       let promotedCount = 0;
-      let updatedCount = 0;
       const errors: string[] = [];
       
       // ✅ Declarar jobData fora do loop para reutilizar entre prospects do mesmo job
@@ -1231,423 +1229,161 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             continue;
           }
 
-          // Buscar se já existe empresa com mesmo CNPJ (usando CNPJ normalizado)
-          const { data: existingCompany, error: existingError } = await ((supabase as any).from('companies'))
-            .select('id, company_name, cnpj')
-            .eq('cnpj', normalizedCnpj)
-            .eq('tenant_id', tenantId)
-            .maybeSingle();
+          // ✅ MC-CANON-2B: Preparar payload único para UPSERT atômico
+          // Buscar dados do job para origem (se necessário)
+          if (prospect.job_id && (!jobData || jobData.id !== prospect.job_id)) {
+            try {
+              const { data: job } = await ((supabase as any).from('prospect_qualification_jobs'))
+                .select('id, job_name, source_file_name, source_type')
+                .eq('id', prospect.job_id)
+                .maybeSingle();
+              if (job) {
+                jobData = job;
+              }
+            } catch (jobError) {
+              console.warn('[Qualified → Companies] ⚠️ Erro ao buscar job:', jobError);
+            }
+          }
 
-          if (existingError && existingError.code !== 'PGRST116') {
-            console.error('[Qualified → Companies] ❌ Erro ao buscar empresa existente', {
-              error: existingError,
+          // Calcular origem
+          const origem = jobData?.source_file_name || 
+                        jobData?.job_name || 
+                        prospect.source_name || 
+                        (jobData?.source_type === 'upload_csv' ? 'CSV Upload' :
+                         jobData?.source_type === 'upload_excel' ? 'Excel Upload' :
+                         jobData?.source_type === 'google_sheets' ? 'Google Sheets' :
+                         jobData?.source_type === 'api_empresas_aqui' ? 'API Empresas Aqui' :
+                         'Qualification Engine');
+
+          // ✅ MC-CANON-2B: Payload único para UPSERT (funciona para INSERT e UPDATE)
+          const upsertPayload: any = {
+            tenant_id: tenantId,
+            cnpj: normalizedCnpj,
+            company_name: companyName || 'Empresa Sem Nome',
+            name: companyName || 'Empresa Sem Nome',
+            origem: origem,
+            source_name: origem,
+            updated_at: new Date().toISOString(),
+          };
+
+          // Campos opcionais
+          if (city) upsertPayload.headquarters_city = city;
+          if (state) upsertPayload.headquarters_state = state;
+          if (sector) upsertPayload.industry = sector;
+          if (website && website.trim() && !website.includes('exemplo.com')) {
+            upsertPayload.website = website;
+          }
+
+          // Dados de enriquecimento (colunas diretas)
+          if (prospect.website_encontrado) {
+            upsertPayload.website_encontrado = prospect.website_encontrado;
+          }
+          if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
+            upsertPayload.website_fit_score = Number(prospect.website_fit_score);
+          }
+          if (prospect.website_products_match) {
+            upsertPayload.website_products_match = prospect.website_products_match;
+          }
+          if (prospect.linkedin_url) {
+            upsertPayload.linkedin_url = prospect.linkedin_url;
+          }
+
+          // Raw data (preservar existente + adicionar novos)
+          const rawData: any = {
+            origem: origem,
+            source_name: origem,
+            source_file_name: jobData?.source_file_name || null,
+            job_name: jobData?.job_name || null,
+            source_type: jobData?.source_type || null,
+          };
+
+          if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
+            rawData.fit_score = Number(prospect.fit_score);
+          }
+          if (prospect.grade && prospect.grade !== '-' && prospect.grade !== 'null') {
+            rawData.grade = String(prospect.grade);
+          }
+          if (prospect.icp_id) {
+            rawData.icp_id = prospect.icp_id;
+          }
+          if (prospect.website_encontrado) {
+            rawData.website_encontrado = prospect.website_encontrado;
+          }
+          if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
+            rawData.website_fit_score = Number(prospect.website_fit_score);
+          }
+          if (prospect.website_products_match) {
+            rawData.website_products_match = prospect.website_products_match;
+          }
+          if (prospect.linkedin_url) {
+            rawData.linkedin_url = prospect.linkedin_url;
+          }
+          if (prospect.enrichment?.raw) {
+            rawData.receita_federal = prospect.enrichment.raw;
+          }
+          if (prospect.enrichment?.fantasia) {
+            rawData.nome_fantasia = prospect.enrichment.fantasia;
+          }
+          if (prospect.enrichment?.apollo) {
+            rawData.apollo = prospect.enrichment.apollo;
+          }
+
+          if (Object.keys(rawData).length > 0) {
+            upsertPayload.raw_data = JSON.parse(JSON.stringify(rawData));
+          }
+
+          // ✅ MC-CANON-2B: UPSERT atômico com retorno de ID
+          const { data: upsertedCompany, error: upsertError } = await ((supabase as any).from('companies'))
+            .upsert(upsertPayload, { onConflict: 'tenant_id,cnpj' })
+            .select('id, company_name, cnpj')
+            .single();
+
+          if (upsertError) {
+            console.error('[Qualified → Companies] ❌ Erro no UPSERT', {
+              error: upsertError,
+              error_code: upsertError.code,
+              error_message: upsertError.message,
               cnpj: prospect.cnpj,
             });
-            errors.push(`CNPJ ${prospect.cnpj}: ${existingError.message}`);
+            errors.push(`CNPJ ${prospect.cnpj}: ${upsertError.message}`);
             continue;
           }
 
-          if (existingCompany?.id) {
-            // ✅ Atualizar empresa existente
-            console.log('[Qualified → Companies] 🔄 Atualizando empresa existente', {
-              company_id: existingCompany.id,
+          if (!upsertedCompany?.id) {
+            console.error('[Qualified → Companies] ❌ UPSERT retornou sem ID', {
+              upsertedCompany,
               cnpj: prospect.cnpj,
             });
-
-            // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo) - se ainda não foi buscado
-            if (!jobData && prospect.job_id) {
-              try {
-                const { data: job } = await ((supabase as any).from('prospect_qualification_jobs'))
-                  .select('job_name, source_file_name, source_type')
-                  .eq('id', prospect.job_id)
-                  .maybeSingle();
-                if (job) {
-                  jobData = job;
-                }
-              } catch (jobError) {
-                console.warn('[Qualified → Companies] ⚠️ Erro ao buscar job:', jobError);
-              }
-            }
-
-            // ✅ ORIGEM: Priorizar source_file_name (nome do arquivo), depois job_name, depois source_name, depois default
-            const origemUpdate = jobData?.source_file_name || 
-                                jobData?.job_name || 
-                                prospect.source_name || 
-                                (jobData?.source_type === 'upload_csv' ? 'CSV Upload' :
-                                 jobData?.source_type === 'upload_excel' ? 'Excel Upload' :
-                                 jobData?.source_type === 'google_sheets' ? 'Google Sheets' :
-                                 jobData?.source_type === 'api_empresas_aqui' ? 'API Empresas Aqui' :
-                                 'Qualification Engine');
-
-            // ✅ Payload de update simplificado e seguro - apenas campos que EXISTEM na tabela
-            const updatePayload: any = {
-              company_name: companyName || existingCompany.company_name || 'Empresa Sem Nome',
-              name: companyName || existingCompany.name || 'Empresa Sem Nome', // Campo obrigatório
-              origem: origemUpdate, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
-              source_name: origemUpdate, // ✅ PRESERVAR source_name também
-              updated_at: new Date().toISOString(),
-            };
-
-            // Adicionar campos opcionais apenas se tiverem valores válidos
-            if (city) {
-              updatePayload.headquarters_city = city;
-            }
-            if (state) {
-              updatePayload.headquarters_state = state;
-            }
-            if (sector) {
-              updatePayload.industry = sector;
-            }
-            if (website && website.trim() && !website.includes('exemplo.com')) {
-              updatePayload.website = website;
-            }
-            
-            // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS: Copiar dados de qualified_prospects para companies
-            const existingRawData = (existingCompany as any).raw_data || {};
-            const parsedExisting = typeof existingRawData === 'string' 
-              ? JSON.parse(existingRawData) 
-              : existingRawData;
-            
-            const rawData: any = { ...parsedExisting };
-            
-            // ✅ DADOS DE QUALIFICAÇÃO - USAR origemUpdate (já calculado acima)
-            rawData.origem = origemUpdate; // ✅ PRESERVAR ORIGEM NO raw_data
-            rawData.source_name = origemUpdate; // ✅ PRESERVAR source_name também
-            rawData.source_file_name = jobData?.source_file_name || null;
-            rawData.job_name = jobData?.job_name || null;
-            rawData.source_type = jobData?.source_type || null;
-            if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
-              rawData.fit_score = Number(prospect.fit_score);
-            }
-            if (prospect.grade && prospect.grade !== '-' && prospect.grade !== 'null') {
-              rawData.grade = String(prospect.grade);
-            }
-            if (prospect.icp_id) {
-              rawData.icp_id = prospect.icp_id;
-            }
-            
-            // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
-            // ✅ CORRIGIDO: Salvar nas colunas diretas E em raw_data (colunas existem na tabela companies)
-            if (prospect.website_encontrado) {
-              updatePayload.website_encontrado = prospect.website_encontrado;
-              rawData.website_encontrado = prospect.website_encontrado;
-            }
-            if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
-              updatePayload.website_fit_score = Number(prospect.website_fit_score);
-              rawData.website_fit_score = Number(prospect.website_fit_score);
-            }
-            if (prospect.website_products_match) {
-              updatePayload.website_products_match = prospect.website_products_match;
-              rawData.website_products_match = prospect.website_products_match;
-            }
-            if (prospect.linkedin_url) {
-              updatePayload.linkedin_url = prospect.linkedin_url;
-              rawData.linkedin_url = prospect.linkedin_url;
-            }
-            
-            // ✅ DADOS DE ENRIQUECIMENTO DA RECEITA FEDERAL (preservar se já existir, adicionar se vier do prospect)
-            if (prospect.enrichment?.raw) {
-              rawData.receita_federal = prospect.enrichment.raw;
-            }
-            if (prospect.enrichment?.fantasia) {
-              rawData.nome_fantasia = prospect.enrichment.fantasia;
-            }
-            
-            // ✅ DADOS DE ENRIQUECIMENTO DO APOLLO (preservar se já existir)
-            if (prospect.enrichment?.apollo) {
-              rawData.apollo = prospect.enrichment.apollo;
-            }
-            
-            // ✅ Garantir que raw_data seja um objeto válido
-            if (Object.keys(rawData).length > 0) {
-              updatePayload.raw_data = JSON.parse(JSON.stringify(rawData));
-            }
-
-            const { error: updateError } = await ((supabase as any).from('companies'))
-              .update(updatePayload)
-              .eq('id', existingCompany.id);
-
-            if (updateError) {
-              console.error('[Qualified → Companies] ❌ Erro Supabase ao atualizar empresa', {
-                error: updateError,
-                payload: updatePayload,
-                company_id: existingCompany.id,
-              });
-              errors.push(`CNPJ ${prospect.cnpj}: ${updateError.message}`);
-              continue;
-            }
-
-            console.log('[Qualified → Companies] ✅ Empresa atualizada em companies', {
-              company_id: existingCompany.id,
-              cnpj: prospect.cnpj,
-            });
-
-            // ✅ DELETAR de qualified_prospects (não apenas atualizar status)
-            const { error: deleteErrorUpdate } = await ((supabase as any).from('qualified_prospects'))
-              .delete()
-              .eq('id', prospect.id);
-
-            if (deleteErrorUpdate) {
-              console.error('[Qualified → Companies] ❌ Erro ao deletar de qualified_prospects', {
-                error: deleteErrorUpdate,
-                prospect_id: prospect.id,
-              });
-            } else {
-              console.log('[Qualified → Companies] ✅ Removido de qualified_prospects', {
-                prospect_id: prospect.id,
-                cnpj: prospect.cnpj,
-              });
-            }
-
-            updatedCount++;
-          } else {
-            // ✅ Criar nova empresa
-            console.log('[Qualified → Companies] ➕ Criando nova empresa', {
-              cnpj: prospect.cnpj,
-              company_name: companyName,
-            });
-
-            // ✅ BUSCAR DADOS DO JOB PARA PEGAR ORIGEM (nome do arquivo) - se ainda não foi buscado
-            // Buscar apenas se o job_id mudou ou se ainda não foi buscado
-            if (prospect.job_id && (!jobData || jobData.id !== prospect.job_id)) {
-              try {
-                const { data: job } = await ((supabase as any).from('prospect_qualification_jobs'))
-                  .select('id, job_name, source_file_name, source_type')
-                  .eq('id', prospect.job_id)
-                  .maybeSingle();
-                if (job) {
-                  jobData = job;
-                  console.log('[Qualified → Companies] ✅ Job data carregado', {
-                    job_id: prospect.job_id,
-                    source_file_name: job.source_file_name,
-                    job_name: job.job_name,
-                  });
-                }
-              } catch (jobError) {
-                console.warn('[Qualified → Companies] ⚠️ Erro ao buscar job:', jobError);
-                // Continuar sem jobData, usar fallback
-              }
-            }
-
-            // ✅ ORIGEM: Priorizar source_file_name (nome do arquivo), depois job_name, depois source_name, depois default
-            const origemInsert = jobData?.source_file_name || 
-                                jobData?.job_name || 
-                                prospect.source_name || 
-                                (jobData?.source_type === 'upload_csv' ? 'CSV Upload' :
-                                 jobData?.source_type === 'upload_excel' ? 'Excel Upload' :
-                                 jobData?.source_type === 'google_sheets' ? 'Google Sheets' :
-                                 jobData?.source_type === 'api_empresas_aqui' ? 'API Empresas Aqui' :
-                                 'Qualification Engine');
-
-            // ✅ Payload simplificado e seguro - apenas campos que EXISTEM na tabela companies
-            const insertPayload: any = {
-              tenant_id: tenantId,
-              cnpj: normalizedCnpj, // Usar CNPJ já normalizado
-              company_name: companyName || 'Empresa Sem Nome', // Garantir que não seja null
-              name: companyName || 'Empresa Sem Nome', // Campo obrigatório
-              origem: origemInsert, // ✅ PRESERVAR ORIGEM NO CAMPO DIRETO
-              source_name: origemInsert, // ✅ PRESERVAR source_name também
-            };
-
-            // Adicionar campos opcionais apenas se tiverem valores válidos
-            if (city) {
-              insertPayload.headquarters_city = city;
-            }
-            if (state) {
-              insertPayload.headquarters_state = state;
-            }
-            if (sector) {
-              insertPayload.industry = sector;
-            }
-            if (website && website.trim() && !website.includes('exemplo.com')) {
-              insertPayload.website = website;
-            }
-            
-            // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS: Copiar dados de qualified_prospects para companies
-            const rawData: any = {
-              origem: origemInsert, // ✅ PRESERVAR ORIGEM
-              source_name: origemInsert, // ✅ PRESERVAR source_name também
-              source_file_name: jobData?.source_file_name || null,
-              job_name: jobData?.job_name || null,
-              source_type: jobData?.source_type || null,
-            };
-            
-            // ✅ DADOS DE QUALIFICAÇÃO
-            if (prospect.fit_score !== undefined && prospect.fit_score !== null) {
-              rawData.fit_score = Number(prospect.fit_score);
-            }
-            if (prospect.grade && prospect.grade !== '-' && prospect.grade !== 'null') {
-              rawData.grade = String(prospect.grade);
-            }
-            if (prospect.icp_id) {
-              rawData.icp_id = prospect.icp_id;
-            }
-            
-            // ✅ DADOS DE ENRIQUECIMENTO (Website, LinkedIn, Fit Score)
-            // ✅ CORRIGIDO: Salvar nas colunas diretas E em raw_data (colunas existem na tabela companies)
-            if (prospect.website_encontrado) {
-              insertPayload.website_encontrado = prospect.website_encontrado;
-              rawData.website_encontrado = prospect.website_encontrado;
-            }
-            if (prospect.website_fit_score !== undefined && prospect.website_fit_score !== null) {
-              insertPayload.website_fit_score = Number(prospect.website_fit_score);
-              rawData.website_fit_score = Number(prospect.website_fit_score);
-            }
-            if (prospect.website_products_match) {
-              insertPayload.website_products_match = prospect.website_products_match;
-              rawData.website_products_match = prospect.website_products_match;
-            }
-            if (prospect.linkedin_url) {
-              insertPayload.linkedin_url = prospect.linkedin_url;
-              rawData.linkedin_url = prospect.linkedin_url;
-            }
-            
-            // ✅ DADOS DE ENRIQUECIMENTO DA RECEITA FEDERAL
-            if (prospect.enrichment?.raw) {
-              rawData.receita_federal = prospect.enrichment.raw;
-            }
-            if (prospect.enrichment?.fantasia) {
-              rawData.nome_fantasia = prospect.enrichment.fantasia;
-            }
-            
-            // ✅ DADOS DE ENRIQUECIMENTO DO APOLLO
-            if (prospect.enrichment?.apollo) {
-              rawData.apollo = prospect.enrichment.apollo;
-            }
-            
-            // ✅ Garantir que raw_data seja um objeto válido
-            if (Object.keys(rawData).length > 0) {
-              insertPayload.raw_data = JSON.parse(JSON.stringify(rawData));
-            }
-
-            // ✅ Log detalhado do payload antes de inserir
-            console.log('[Qualified → Companies] 📦 Payload de inserção:', {
-              tenant_id: insertPayload.tenant_id,
-              cnpj: insertPayload.cnpj,
-              company_name: insertPayload.company_name,
-              name: insertPayload.name,
-              origem: insertPayload.origem, // ✅ CRÍTICO: Verificar origem
-              source_name: insertPayload.source_name, // ✅ CRÍTICO: Verificar source_name
-              has_city: !!insertPayload.headquarters_city,
-              has_state: !!insertPayload.headquarters_state,
-              has_industry: !!insertPayload.industry,
-              has_website: !!insertPayload.website,
-              has_origem: !!insertPayload.origem, // ✅ CRÍTICO
-              has_source_name: !!insertPayload.source_name,
-              has_fit_score: insertPayload.fit_score !== undefined,
-              has_grade: !!insertPayload.grade,
-              has_icp_id: !!insertPayload.icp_id,
-              // ✅ CRÍTICO: Verificar campos de website
-              has_website_encontrado: !!insertPayload.website_encontrado,
-              has_website_fit_score: insertPayload.website_fit_score !== undefined,
-              has_website_products_match: !!insertPayload.website_products_match,
-              has_linkedin_url: !!insertPayload.linkedin_url,
-              website_fit_score_value: insertPayload.website_fit_score,
-              linkedin_url_value: insertPayload.linkedin_url,
-              payload_keys: Object.keys(insertPayload),
-            });
-
-            const { data: newCompany, error: createError } = await ((supabase as any).from('companies'))
-              .insert(insertPayload)
-              .select('id, company_name, cnpj')
-              .single();
-
-            if (createError) {
-              // ✅ Log detalhado do erro para debug
-              const errorLog = {
-                error: createError,
-                error_code: createError.code,
-                error_message: createError.message,
-                error_details: createError.details,
-                error_hint: createError.hint,
-                payload: insertPayload,
-                payload_stringified: JSON.stringify(insertPayload, null, 2),
-                raw_data_type: typeof insertPayload.raw_data,
-                raw_data_keys: insertPayload.raw_data ? Object.keys(insertPayload.raw_data) : null,
-                has_name: !!insertPayload.name,
-                has_company_name: !!insertPayload.company_name,
-                has_tenant_id: !!insertPayload.tenant_id,
-                tenant_id_value: insertPayload.tenant_id,
-                cnpj_value: insertPayload.cnpj,
-                prospect_id: prospect.id,
-                // ✅ CRÍTICO: Verificar se campos de website estão no payload
-                has_website_encontrado: 'website_encontrado' in insertPayload,
-                has_website_fit_score: 'website_fit_score' in insertPayload,
-                has_website_products_match: 'website_products_match' in insertPayload,
-                has_linkedin_url: 'linkedin_url' in insertPayload,
-                website_fit_score_value: insertPayload.website_fit_score,
-                linkedin_url_value: insertPayload.linkedin_url,
-              };
-              
-              // ✅ ALERTA ESPECÍFICO: Se erro for PGRST204 (coluna não encontrada)
-              if (createError.code === 'PGRST204' || createError.message?.includes('column') || createError.message?.includes('schema cache')) {
-                console.error('[Qualified → Companies] ⚠️⚠️⚠️ ERRO DE SCHEMA: Coluna não encontrada na tabela companies!', {
-                  error_message: createError.message,
-                  error_hint: createError.hint,
-                  campos_no_payload: Object.keys(insertPayload).filter(k => k.includes('website') || k.includes('linkedin')),
-                  acao_necessaria: 'Aplicar migration 20250225000004_ensure_website_columns_all_tables.sql',
-                });
-              }
-              
-              console.error('[Qualified → Companies] ❌ Erro Supabase ao inserir em companies', errorLog);
-              
-              // ✅ Exibir erro detalhado para o usuário
-              let errorMsg = createError.message || 'Erro desconhecido';
-              if (createError.code) {
-                errorMsg += ` (código: ${createError.code})`;
-              }
-              if (createError.details) {
-                errorMsg += ` - Detalhes: ${createError.details}`;
-              }
-              if (createError.hint) {
-                errorMsg += ` - Dica: ${createError.hint}`;
-              }
-              
-              // ✅ Verificar se é erro de RLS/permissão
-              if (createError.code === '42501' || createError.message?.includes('permission') || createError.message?.includes('policy')) {
-                errorMsg += ' [ERRO DE PERMISSÃO RLS - Verifique as políticas de acesso]';
-              }
-              
-              errors.push(`CNPJ ${prospect.cnpj}: ${errorMsg}`);
-              continue;
-            }
-
-            if (!newCompany?.id) {
-              console.error('[Qualified → Companies] ❌ Insert retornou sem ID', {
-                newCompany,
-                cnpj: prospect.cnpj,
-              });
-              errors.push(`CNPJ ${prospect.cnpj}: empresa criada sem ID`);
-              continue;
-            }
-
-            console.log('[Qualified → Companies] ✅ Empresa criada em companies', {
-              company_id: newCompany.id,
-              cnpj: newCompany.cnpj,
-              company_name: newCompany.company_name,
-            });
-
-            // ✅ DELETAR de qualified_prospects (não apenas atualizar status)
-            // Isso garante que a empresa saia do estoque de qualificadas
-            const { error: deleteErrorCreate } = await ((supabase as any).from('qualified_prospects'))
-              .delete()
-              .eq('id', prospect.id);
-
-            if (deleteErrorCreate) {
-              console.error('[Qualified → Companies] ❌ Erro ao deletar de qualified_prospects', {
-                error: deleteErrorCreate,
-                prospect_id: prospect.id,
-              });
-              // Não falhar o processo, apenas logar o erro
-            } else {
-              console.log('[Qualified → Companies] ✅ Removido de qualified_prospects', {
-                prospect_id: prospect.id,
-                cnpj: prospect.cnpj,
-              });
-            }
-
-            promotedCount++;
+            errors.push(`CNPJ ${prospect.cnpj}: empresa sem ID após UPSERT`);
+            continue;
           }
+
+          const finalCompanyId = upsertedCompany.id;
+          console.log('[Qualified → Companies] ✅ UPSERT companies OK', {
+            company_id: finalCompanyId,
+            cnpj: upsertedCompany.cnpj,
+            company_name: upsertedCompany.company_name,
+          });
+
+          // ✅ DELETAR de qualified_prospects
+          const { error: deleteError } = await ((supabase as any).from('qualified_prospects'))
+            .delete()
+            .eq('id', prospect.id);
+
+          if (deleteError) {
+            console.error('[Qualified → Companies] ❌ Erro ao deletar de qualified_prospects', {
+              error: deleteError,
+              prospect_id: prospect.id,
+            });
+          } else {
+            console.log('[Qualified → Companies] ✅ Removido de qualified_prospects', {
+              prospect_id: prospect.id,
+              cnpj: prospect.cnpj,
+            });
+          }
+
+          // Contar como promovido (tanto INSERT quanto UPDATE)
+          promotedCount++;
         } catch (err: any) {
           // ✅ Log detalhado do erro para debug
           const errorDetails = {
@@ -1683,7 +1419,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       if (errors.length > 0) {
         toast({
           title: '⚠️ Envio parcial',
-          description: `${promotedCount} criada(s), ${updatedCount} atualizada(s). ${errors.length} erro(s).`,
+          description: `${promotedCount} empresa(s) processada(s). ${errors.length} erro(s).`,
           variant: 'destructive',
           action: (
             <Button
@@ -1701,7 +1437,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       } else {
         toast({
           title: '✅ Enviado para Banco de Empresas',
-          description: `${promotedCount} empresa(s) criada(s), ${updatedCount} atualizada(s). Total: ${selectedIds.size}`,
+          description: `${promotedCount} empresa(s) processada(s). Total: ${selectedIds.size}`,
           action: (
             <Button
               variant="outline"
@@ -1716,7 +1452,6 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
 
       console.log('[Qualified → Companies] ✅ Processamento concluído', {
         promotedCount,
-        updatedCount,
         errors: errors.length,
       });
 
@@ -3399,8 +3134,11 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                               );
                             }
                             
-                            // ✅ FALLBACK: Se setor não existir ou não estiver no formato correto, buscar via CNAE
-                            const classification = getCNAEClassificationForProspect(prospect);
+                            // ✅ MC-CANON-3: FALLBACK - Usar mesma lógica de ApprovedLeads
+                            // Extrair CNAE primeiro, depois buscar classificação passando código explicitamente
+                            const cnaeResolution = resolveCompanyCNAE(prospect);
+                            const cnaeCode = cnaeResolution.principal.code;
+                            const classification = cnaeCode ? getCNAEClassificationForProspect({ ...prospect, cnae_principal: cnaeCode }) : null;
                             const setor = classification?.setor_industria;
                             const categoria = classification?.categoria;
                             
@@ -3429,9 +3167,19 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                               );
                             }
                             
+                            // ✅ MC-CANON-3: Se tem CNAE mas não tem classificação, mostrar "Sem classificação CNAE"
+                            if (cnaeCode) {
+                              return (
+                                <span className="text-xs text-muted-foreground" title="Sem classificação CNAE">
+                                  Sem classificação CNAE
+                                </span>
+                              );
+                            }
+                            
+                            // ✅ MC-CANON-3: Se não tem CNAE, mostrar "Sem CNAE"
                             return (
-                              <span className="text-xs text-muted-foreground" title="Sem setor">
-                                Sem setor
+                              <span className="text-xs text-muted-foreground" title="Sem CNAE">
+                                Sem CNAE
                               </span>
                             );
                           })()}
