@@ -116,17 +116,32 @@ import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolv
 import { formatCNPJ } from '@/lib/utils/validators';
 
 // 🎨 Função para gerar cores dinâmicas consistentes baseadas no nome do setor/segmento
+// ✅ MELHORADO: Hash mais robusto para maior diferenciação entre setores diferentes
 const getDynamicBadgeColors = (name: string | null | undefined, type: 'setor' | 'categoria'): string => {
   if (!name) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200 border-gray-300 dark:border-gray-700';
   
-  // Hash simples para garantir consistência (mesmo nome = mesma cor)
-  let hash = 0;
+  // Hash mais robusto usando múltiplos fatores para maior diferenciação
   const normalizedName = name.toLowerCase().trim();
+  let hash = 0;
+  
+  // Hash primário: soma de caracteres com pesos diferentes
   for (let i = 0; i < normalizedName.length; i++) {
-    hash = normalizedName.charCodeAt(i) + ((hash << 5) - hash);
+    const char = normalizedName.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
   }
   
-  // Paleta de cores do Tailwind (12 cores diferentes)
+  // Hash secundário: baseado nas primeiras letras (mais importante para diferenciação)
+  let secondaryHash = 0;
+  const firstChars = normalizedName.substring(0, Math.min(5, normalizedName.length));
+  for (let i = 0; i < firstChars.length; i++) {
+    secondaryHash = secondaryHash * 31 + firstChars.charCodeAt(i);
+  }
+  
+  // Combinar hashes para maior diferenciação
+  const combinedHash = Math.abs(hash * 17 + secondaryHash * 23);
+  
+  // Paleta expandida com cores mais distintas (16 cores diferentes)
   const colorPalettes = [
     { bg: 'bg-blue-100', text: 'text-blue-800', darkBg: 'dark:bg-blue-900', darkText: 'dark:text-blue-200', border: 'border-blue-300', darkBorder: 'dark:border-blue-700' },
     { bg: 'bg-purple-100', text: 'text-purple-800', darkBg: 'dark:bg-purple-900', darkText: 'dark:text-purple-200', border: 'border-purple-300', darkBorder: 'dark:border-purple-700' },
@@ -140,11 +155,15 @@ const getDynamicBadgeColors = (name: string | null | undefined, type: 'setor' | 
     { bg: 'bg-emerald-100', text: 'text-emerald-800', darkBg: 'dark:bg-emerald-900', darkText: 'dark:text-emerald-200', border: 'border-emerald-300', darkBorder: 'dark:border-emerald-700' },
     { bg: 'bg-rose-100', text: 'text-rose-800', darkBg: 'dark:bg-rose-900', darkText: 'dark:text-rose-200', border: 'border-rose-300', darkBorder: 'dark:border-rose-700' },
     { bg: 'bg-violet-100', text: 'text-violet-800', darkBg: 'dark:bg-violet-900', darkText: 'dark:text-violet-200', border: 'border-violet-300', darkBorder: 'dark:border-violet-700' },
+    { bg: 'bg-slate-100', text: 'text-slate-800', darkBg: 'dark:bg-slate-900', darkText: 'dark:text-slate-200', border: 'border-slate-300', darkBorder: 'dark:border-slate-700' },
+    { bg: 'bg-lime-100', text: 'text-lime-800', darkBg: 'dark:bg-lime-900', darkText: 'dark:text-lime-200', border: 'border-lime-300', darkBorder: 'dark:border-lime-700' },
+    { bg: 'bg-fuchsia-100', text: 'text-fuchsia-800', darkBg: 'dark:bg-fuchsia-900', darkText: 'dark:text-fuchsia-200', border: 'border-fuchsia-300', darkBorder: 'dark:border-fuchsia-700' },
+    { bg: 'bg-yellow-100', text: 'text-yellow-800', darkBg: 'dark:bg-yellow-900', darkText: 'dark:text-yellow-200', border: 'border-yellow-300', darkBorder: 'dark:border-yellow-700' },
   ];
   
-  // Para categorias, adiciona offset no hash para garantir cores diferentes do setor
-  const hashOffset = type === 'categoria' ? 1000 : 0;
-  const colorIndex = Math.abs(hash + hashOffset) % colorPalettes.length;
+  // Para categorias, adiciona offset maior no hash para garantir cores diferentes do setor
+  const hashOffset = type === 'categoria' ? 5000 : 0;
+  const colorIndex = (combinedHash + hashOffset) % colorPalettes.length;
   const colors = colorPalettes[colorIndex];
   
   return `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} ${colors.border} ${colors.darkBorder}`;
@@ -2026,6 +2045,17 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               }
             }
             
+            // ✅ CRÍTICO: Preparar enrichment_data para trigger funcionar automaticamente
+            const existingEnrichmentData = prospect.enrichment_data || {};
+            const enrichmentData = {
+              ...existingEnrichmentData,
+              receita_federal: data,
+              receita: data, // Compatibilidade
+              atividade_principal: data.atividade_principal,
+              cnae_fiscal: cnaeCode,
+              enriched_at: new Date().toISOString(),
+            };
+            
             const updateData: any = {
               razao_social: data.nome || data.razao_social || prospect.razao_social,
               nome_fantasia: nomeFantasia || prospect.nome_fantasia,
@@ -2034,10 +2064,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               setor: setorFormatted, // ✅ Setor formatado "Setor - Categoria" da tabela cnae_classifications
               cnae_principal: cnaeCode || prospect.cnae_principal, // ✅ Salvar código CNAE também
               website: data.website || prospect.website,
+              enrichment_data: enrichmentData, // ✅ CRÍTICO: Salvar em enrichment_data para trigger funcionar
               updated_at: new Date().toISOString(),
             };
 
-            const { error } = await ((supabase as any).from('qualified_prospects'))
+            // ✅ CRÍTICO: Atualizar qualified_prospects usando nome correto da tabela
+            const { error } = await supabase
+              .from('qualified_prospects')
               .update(updateData)
               .eq('id', prospectId);
 
