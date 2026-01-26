@@ -3424,6 +3424,35 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                       <TableCell className="text-center">
                         <div className="flex justify-center items-center gap-1 flex-wrap">
                           {(() => {
+                            // ✅ CRÍTICO: PRIORIDADE 1 - Usar setor do banco (salvo pelo trigger)
+                            const setorField = prospect.setor;
+                            if (setorField && typeof setorField === 'string' && setorField.includes(' - ')) {
+                              const [setor, categoria] = setorField.split(' - ').map(s => s.trim());
+                              return (
+                                <>
+                                  {/* 🎨 Badge de Setor com cores dinâmicas - cada setor tem cor única e consistente */}
+                                  <Badge 
+                                    variant="secondary" 
+                                    className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
+                                    title={setor}
+                                  >
+                                    {setor}
+                                  </Badge>
+                                  {/* 🎨 Badge de Categoria/Segmento com cores dinâmicas - cada segmento tem cor única baseada no nome */}
+                                  {categoria && (
+                                    <Badge 
+                                      variant="secondary" 
+                                      className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
+                                      title={categoria}
+                                    >
+                                      {categoria}
+                                    </Badge>
+                                  )}
+                                </>
+                              );
+                            }
+                            
+                            // ✅ FALLBACK: Se setor não existir ou não estiver no formato correto, buscar via CNAE
                             const classification = getCNAEClassificationForProspect(prospect);
                             const setor = classification?.setor_industria;
                             const categoria = classification?.categoria;

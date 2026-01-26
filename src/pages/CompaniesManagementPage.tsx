@@ -2932,6 +2932,35 @@ export default function CompaniesManagementPage() {
                       <TableCell className="text-center max-w-[260px] px-2 overflow-hidden">
                         <div className="flex justify-center items-center gap-1 flex-wrap">
                           {(() => {
+                            // ✅ CRÍTICO: PRIORIDADE 1 - Usar sector_name do banco (salvo pelo trigger)
+                            const sectorName = (company as any).sector_name;
+                            if (sectorName && typeof sectorName === 'string' && sectorName.includes(' - ')) {
+                              const [setor, categoria] = sectorName.split(' - ').map(s => s.trim());
+                              return (
+                                <>
+                                  {/* 🎨 Badge de Setor com cores dinâmicas - cada setor tem cor única e consistente */}
+                                  <Badge
+                                    variant="secondary"
+                                    className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
+                                    title={setor}
+                                  >
+                                    {setor}
+                                  </Badge>
+                                  {/* 🎨 Badge de Categoria/Segmento com cores dinâmicas - cada segmento tem cor única baseada no nome */}
+                                  {categoria && (
+                                    <Badge
+                                      variant="secondary"
+                                      className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
+                                      title={categoria}
+                                    >
+                                      {categoria}
+                                    </Badge>
+                                  )}
+                                </>
+                              );
+                            }
+                            
+                            // ✅ FALLBACK: Se sector_name não existir ou não estiver no formato correto, buscar via CNAE
                             const cnaeResolution = resolveCompanyCNAE(company);
                             const cnaeCode = cnaeResolution.principal.code;
                             const classification = cnaeCode ? getCNAEClassificationForCompany({ ...company, cnae_principal: cnaeCode }) : null;
