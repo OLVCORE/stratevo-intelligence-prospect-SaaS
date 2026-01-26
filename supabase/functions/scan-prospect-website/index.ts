@@ -108,9 +108,10 @@ serve(async (req) => {
     const qualified_prospect_id = prospectId;
 
     // 1. Buscar produtos do tenant para comparação
+    // ✅ MC5: Incluir subcategoria se existir (para fallback heurístico)
     const { data: tenantProducts, error: tenantError } = await supabase
       .from('tenant_products')
-      .select('nome, categoria, descricao')
+      .select('nome, categoria, descricao, subcategoria')
       .eq('tenant_id', tenant_id);
 
     if (tenantError) {
@@ -554,18 +555,56 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
       console.log('[ScanProspect] ⚠️ SERPER_API_KEY não configurada, pulando busca LinkedIn');
     }
 
-    // 7. ✅ ANÁLISE INTELIGENTE COM IA: Comparar produtos usando contexto e aplicação
+    // 7. ✅ MC5: VALIDAÇÃO PRÉVIA - Verificar pré-condições ANTES do matching
+    // ⛔ NÃO criar produtos, NÃO alterar onboarding, NÃO preencher nada automaticamente
+    if (tenantProductsList.length === 0) {
+      console.log('[ScanProspect] ⏭️ MC5: SKIPPED - tenant_products vazio');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          executed: false,
+          skipped: true,
+          reason: 'tenant_products_empty',
+          message: 'Tenant não possui produtos cadastrados. Cadastre produtos antes de executar matching.',
+          website_fit_score: 0,
+          website_products_match: [],
+          products_found: extractedProducts.length
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (extractedProducts.length === 0) {
+      console.log('[ScanProspect] ⏭️ MC5: SKIPPED - prospect_extracted_products vazio');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          executed: false,
+          skipped: true,
+          reason: 'prospect_products_empty',
+          message: 'Nenhum produto extraído do website do prospect. Website pode não conter informações de produtos.',
+          website_fit_score: 0,
+          website_products_match: [],
+          products_found: 0
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // ✅ MC5: ANÁLISE INTELIGENTE COM IA: Comparar produtos usando contexto e aplicação
     const compatibleProducts: any[] = [];
     let websiteFitScore = 0; // ✅ Declarar variável antes de usar
+    let scoreBreakdown: any = {}; // ✅ MC5: Metadados explicativos
+    let matchingReason = ''; // ✅ MC5: Motivo do matching
     
-    console.log(`[ScanProspect] 🔍 Condições para análise IA:`, {
+    console.log(`[ScanProspect] 🔍 MC5: Condições para análise IA:`, {
       extractedProducts: extractedProducts.length,
       tenantProducts: tenantProductsList.length,
       hasOpenAIKey: !!openaiKey,
     });
     
-    if (extractedProducts.length > 0 && tenantProductsList.length > 0 && openaiKey) {
-      console.log('[ScanProspect] 🤖 Usando IA para análise contextual de fit...');
+    if (openaiKey) {
+      console.log('[ScanProspect] 🤖 MC5: Usando IA para análise contextual de fit...');
       
       try {
         // Preparar contexto para análise IA
@@ -663,38 +702,51 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
                 websiteFitScore = aiResult.overall_fit_score || 
                   Math.min(20, Math.round((compatibleProducts.length / extractedProducts.length) * 20));
                 
-                console.log(`[ScanProspect] ✅ IA encontrou ${compatibleProducts.length} matches com score ${websiteFitScore}/20`);
+                console.log(`[ScanProspect] ✅ MC5: IA encontrou ${compatibleProducts.length} matches com score ${websiteFitScore}/20`);
+                matchingReason = 'ai_analysis';
+                scoreBreakdown = {
+                  ai_matches: compatibleProducts.length,
+                  ai_score: websiteFitScore
+                };
+              } else {
+                // ✅ MC5: IA retornou vazio - ativar fallback heurístico
+                console.log('[ScanProspect] ⚠️ MC5: IA retornou vazio — fallback heurístico ativado');
               }
             } catch (parseError) {
-              console.warn('[ScanProspect] ⚠️ Erro ao parsear resposta IA, usando fallback:', parseError);
+              console.warn('[ScanProspect] ⚠️ MC5: Erro ao parsear resposta IA, usando fallback heurístico:', parseError);
             }
+          } else {
+            console.log('[ScanProspect] ⚠️ MC5: IA retornou conteúdo vazio — fallback heurístico ativado');
           }
         } else {
           const errorText = await aiAnalysisResponse.text();
-          console.warn('[ScanProspect] ⚠️ Erro na API OpenAI:', aiAnalysisResponse.status, errorText);
-          console.warn('[ScanProspect] ⚠️ Usando fallback simples...');
+          console.warn('[ScanProspect] ⚠️ MC5: Erro na API OpenAI:', aiAnalysisResponse.status, errorText);
+          console.warn('[ScanProspect] ⚠️ MC5: Usando fallback heurístico...');
         }
       } catch (aiError) {
-        console.warn('[ScanProspect] ⚠️ Erro ao chamar IA, usando fallback:', aiError);
+        console.warn('[ScanProspect] ⚠️ MC5: Erro ao chamar IA, usando fallback heurístico:', aiError);
       }
     } else {
-      console.log('[ScanProspect] ⚠️ Análise IA não executada:', {
-        reason: !extractedProducts.length ? 'Sem produtos extraídos' : 
-                !tenantProductsList.length ? 'Sem produtos do tenant' : 
-                !openaiKey ? 'Sem chave OpenAI' : 'Desconhecido'
-      });
+      console.log('[ScanProspect] ⚠️ MC5: OpenAI key não configurada, usando apenas fallback heurístico');
     }
 
-    // ✅ FALLBACK: Comparação simples se IA não funcionar ou não houver produtos suficientes
-    if (compatibleProducts.length === 0 && extractedProducts.length > 0 && tenantProductsList.length > 0) {
-      console.log('[ScanProspect] 🔄 Usando fallback de comparação simples...');
+    // ✅ MC5: FALLBACK HEURÍSTICO - SOMENTE SE IA retornou vazio ou não foi chamada
+    // ⚠️ Não substituir IA, apenas complementar quando IA falha
+    if (compatibleProducts.length === 0) {
+      console.log('[ScanProspect] 🔄 MC5: Usando fallback heurístico (IA retornou vazio ou não disponível)...');
+      
+      let categoriaMatches = 0;
+      let subcategoriaMatches = 0;
+      let keywordMatches = 0;
       
       for (const extracted of extractedProducts) {
         for (const tenant of tenantProductsList) {
           const extractedLower = extracted.nome?.toLowerCase() || '';
           const tenantLower = tenant.nome?.toLowerCase() || '';
+          const extractedDesc = (extracted.descricao || '').toLowerCase();
+          const tenantDesc = (tenant.descricao || '').toLowerCase();
           
-          // Match por categoria
+          // ✅ MC5: Match por categoria (+4 pontos)
           if (extracted.categoria && tenant.categoria && 
               extracted.categoria.toLowerCase() === tenant.categoria.toLowerCase()) {
             compatibleProducts.push({
@@ -702,38 +754,93 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
               tenant_product: tenant.nome,
               match_type: 'categoria',
               confidence: 0.6,
+              reason: 'Categoria idêntica'
             });
+            categoriaMatches++;
             break;
           }
           
-          // Match por palavras-chave
-          const extractedWords = extractedLower.split(/\s+/);
-          const tenantWords = tenantLower.split(/\s+/);
-          const commonWords = extractedWords.filter(w => w.length > 3 && tenantWords.includes(w));
+          // ✅ MC5: Match por subcategoria (+2 pontos) - NOVO
+          if (extracted.subcategoria && tenant.subcategoria && 
+              extracted.subcategoria.toLowerCase() === tenant.subcategoria.toLowerCase()) {
+            compatibleProducts.push({
+              prospect_product: extracted.nome,
+              tenant_product: tenant.nome,
+              match_type: 'subcategoria',
+              confidence: 0.5,
+              reason: 'Subcategoria idêntica'
+            });
+            subcategoriaMatches++;
+            break;
+          }
           
-          if (commonWords.length >= 2) {
+          // ✅ MC5: Match por palavras-chave (+1 ponto por palavra)
+          const extractedWords = extractedLower.split(/\s+/).filter(w => w.length > 3);
+          const tenantWords = tenantLower.split(/\s+/).filter(w => w.length > 3);
+          const commonWords = extractedWords.filter(w => tenantWords.includes(w));
+          
+          // Também verificar em descrições
+          const extractedDescWords = extractedDesc.split(/\s+/).filter(w => w.length > 3);
+          const tenantDescWords = tenantDesc.split(/\s+/).filter(w => w.length > 3);
+          const commonDescWords = extractedDescWords.filter(w => tenantDescWords.includes(w));
+          
+          const totalCommonWords = commonWords.length + commonDescWords.length;
+          
+          if (totalCommonWords >= 2) {
             compatibleProducts.push({
               prospect_product: extracted.nome,
               tenant_product: tenant.nome,
               match_type: 'keywords',
-              confidence: 0.4,
+              confidence: Math.min(0.9, 0.3 + (totalCommonWords * 0.1)),
+              reason: `${totalCommonWords} palavras-chave em comum`
             });
+            keywordMatches++;
             break;
           }
         }
       }
       
-      // Calcular score baseado em matches encontrados
+      // ✅ MC5: Calcular score heurístico (categoria: +4, subcategoria: +2, keyword: +1)
       if (compatibleProducts.length > 0) {
-        const matchRatio = compatibleProducts.length / extractedProducts.length;
-        websiteFitScore = Math.min(20, Math.round(matchRatio * 20));
+        const categoriaScore = Math.min(4, categoriaMatches * 4);
+        const subcategoriaScore = Math.min(2, subcategoriaMatches * 2);
+        const keywordScore = Math.min(14, keywordMatches * 1); // Máximo 14 para não ultrapassar 20
+        
+        websiteFitScore = Math.min(20, categoriaScore + subcategoriaScore + keywordScore);
+        
+        // ✅ MC5: Score breakdown explicativo
+        scoreBreakdown = {
+          categoria: categoriaScore,
+          subcategoria: subcategoriaScore,
+          keywords: keywordScore
+        };
+        
+        // ✅ MC5: Matching reason
+        const reasons: string[] = [];
+        if (categoriaMatches > 0) reasons.push('categoria_match');
+        if (subcategoriaMatches > 0) reasons.push('subcategoria_match');
+        if (keywordMatches > 0) reasons.push('keyword_overlap');
+        matchingReason = reasons.join(' + ') || 'heuristic_fallback';
+        
+        console.log(`[ScanProspect] ✅ MC5: Matching heurístico aplicado: ${matchingReason}`);
+        console.log(`[ScanProspect] ✅ MC5: Score breakdown:`, scoreBreakdown);
       }
+    } else {
+      // ✅ MC5: Se IA retornou matches, usar score da IA (já calculado acima)
+      matchingReason = matchingReason || 'ai_analysis';
+      scoreBreakdown = scoreBreakdown || {
+        ai_matches: compatibleProducts.length,
+        ai_score: websiteFitScore
+      };
     }
 
-    console.log(`[ScanProspect] ✅ Produtos compatíveis encontrados: ${compatibleProducts.length}`);
-    console.log(`[ScanProspect] ✅ Website Fit Score: ${websiteFitScore}/20 pontos`);
+    console.log(`[ScanProspect] ✅ MC5: Produtos compatíveis encontrados: ${compatibleProducts.length}`);
+    console.log(`[ScanProspect] ✅ MC5: Website Fit Score: ${websiteFitScore}/20 pontos`);
+    console.log(`[ScanProspect] ✅ MC5: Matching reason: ${matchingReason}`);
+    console.log(`[ScanProspect] ✅ MC5: Score breakdown:`, JSON.stringify(scoreBreakdown));
 
-    // ✅ Formatar produtos compatíveis no formato esperado
+    // ✅ MC5: Formatar produtos compatíveis no formato esperado
+    // ✅ MC5: Adicionar score_breakdown e matching_reason aos metadados
     const formattedCompatibleProducts = compatibleProducts.map((comp: any) => ({
       prospect_product: comp.prospect_product || comp.extracted || '',
       tenant_product: comp.tenant_product || comp.tenant || '',
@@ -741,8 +848,15 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
       confidence: comp.confidence || 0.5,
       reason: comp.reason || '',
     }));
-
-    console.log(`[ScanProspect] ✅ Website Fit Score calculado: ${websiteFitScore}/20 pontos`);
+    
+    // ✅ MC5: Adicionar metadados explicativos (sem alterar score base)
+    const matchingMetadata = {
+      score_total: websiteFitScore,
+      score_breakdown: scoreBreakdown,
+      matching_reason: matchingReason || 'no_matches',
+      matches_count: compatibleProducts.length,
+      source: matchingReason === 'ai_analysis' ? 'ai' : 'heuristic'
+    };
 
     // ✅ CRÍTICO: Atualizar qualified_prospects com os dados calculados
     if (qualified_prospect_id) {
@@ -765,6 +879,22 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
       // ✅ SEMPRE atualizar website_products_match (mesmo se for array vazio)
       updatePayload.website_products_match = formattedCompatibleProducts || [];
       console.log('[ScanProspect] ✅ website_products_match será atualizado:', updatePayload.website_products_match.length, 'produtos');
+      
+      // ✅ MC5: Adicionar metadados explicativos ao enrichment_data (sem alterar score base)
+      // ⚠️ Apenas metadados, não recalcula score
+      if (qualified_prospect_id) {
+        const { data: currentProspect } = await supabase
+          .from('qualified_prospects')
+          .select('enrichment_data')
+          .eq('id', qualified_prospect_id)
+          .single();
+        
+        const existingEnrichmentData = currentProspect?.enrichment_data || {};
+        updatePayload.enrichment_data = {
+          ...existingEnrichmentData,
+          matching_metadata: matchingMetadata
+        };
+      }
 
       // ✅ SEMPRE atualizar linkedin_url se foi encontrado
       if (linkedinUrl && linkedinUrl.trim()) {
@@ -986,18 +1116,22 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
     });
 
     // ✅ MC4: Incluir source_used na resposta final
+    // ✅ MC5: Incluir matching_metadata na resposta
     return new Response(
       JSON.stringify({
         success: true,
+        executed: true,
+        skipped: false,
         source_used: sourceUsed || 'website',
         products_found: extractedProducts.length,
         products_inserted: insertedCount,
         compatible_products: compatibleProducts.length,
-        website_fit_score: websiteFitScore, // ✅ ADICIONADO
-        website_products_match: formattedCompatibleProducts, // ✅ FORMATADO
-        linkedin_url: linkedinUrl, // ✅ CRÍTICO: Retornar LinkedIn na resposta
+        website_fit_score: websiteFitScore,
+        website_products_match: formattedCompatibleProducts,
+        linkedin_url: linkedinUrl,
         compatible_products_details: compatibleProducts,
-        message: `Website escaneado. LinkedIn: ${sourceUsed || 'não encontrado'}, Produtos: ${insertedCount}`
+        matching_metadata: matchingMetadata, // ✅ MC5: Metadados explicativos
+        message: `Website escaneado. LinkedIn: ${sourceUsed || 'não encontrado'}, Produtos: ${insertedCount}, Score: ${websiteFitScore}/20 (${matchingReason})`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
