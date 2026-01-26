@@ -51,6 +51,41 @@ import { getCNAEClassifications, type CNAEClassification } from '@/services/cnae
 import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
 import { getCompanyOrigin, getCompanyOriginString } from '@/lib/utils/originResolver';
 
+// 🎨 Função para gerar cores dinâmicas consistentes baseadas no nome do setor/segmento
+const getDynamicBadgeColors = (name: string | null | undefined, type: 'setor' | 'categoria'): string => {
+  if (!name) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200 border-gray-300 dark:border-gray-700';
+  
+  // Hash simples para garantir consistência (mesmo nome = mesma cor)
+  let hash = 0;
+  const normalizedName = name.toLowerCase().trim();
+  for (let i = 0; i < normalizedName.length; i++) {
+    hash = normalizedName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Paleta de cores do Tailwind (12 cores diferentes)
+  const colorPalettes = [
+    { bg: 'bg-blue-100', text: 'text-blue-800', darkBg: 'dark:bg-blue-900', darkText: 'dark:text-blue-200', border: 'border-blue-300', darkBorder: 'dark:border-blue-700' },
+    { bg: 'bg-purple-100', text: 'text-purple-800', darkBg: 'dark:bg-purple-900', darkText: 'dark:text-purple-200', border: 'border-purple-300', darkBorder: 'dark:border-purple-700' },
+    { bg: 'bg-green-100', text: 'text-green-800', darkBg: 'dark:bg-green-900', darkText: 'dark:text-green-200', border: 'border-green-300', darkBorder: 'dark:border-green-700' },
+    { bg: 'bg-orange-100', text: 'text-orange-800', darkBg: 'dark:bg-orange-900', darkText: 'dark:text-orange-200', border: 'border-orange-300', darkBorder: 'dark:border-orange-700' },
+    { bg: 'bg-pink-100', text: 'text-pink-800', darkBg: 'dark:bg-pink-900', darkText: 'dark:text-pink-200', border: 'border-pink-300', darkBorder: 'dark:border-pink-700' },
+    { bg: 'bg-indigo-100', text: 'text-indigo-800', darkBg: 'dark:bg-indigo-900', darkText: 'dark:text-indigo-200', border: 'border-indigo-300', darkBorder: 'dark:border-indigo-700' },
+    { bg: 'bg-teal-100', text: 'text-teal-800', darkBg: 'dark:bg-teal-900', darkText: 'dark:text-teal-200', border: 'border-teal-300', darkBorder: 'dark:border-teal-700' },
+    { bg: 'bg-cyan-100', text: 'text-cyan-800', darkBg: 'dark:bg-cyan-900', darkText: 'dark:text-cyan-200', border: 'border-cyan-300', darkBorder: 'dark:border-cyan-700' },
+    { bg: 'bg-amber-100', text: 'text-amber-800', darkBg: 'dark:bg-amber-900', darkText: 'dark:text-amber-200', border: 'border-amber-300', darkBorder: 'dark:border-amber-700' },
+    { bg: 'bg-emerald-100', text: 'text-emerald-800', darkBg: 'dark:bg-emerald-900', darkText: 'dark:text-emerald-200', border: 'border-emerald-300', darkBorder: 'dark:border-emerald-700' },
+    { bg: 'bg-rose-100', text: 'text-rose-800', darkBg: 'dark:bg-rose-900', darkText: 'dark:text-rose-200', border: 'border-rose-300', darkBorder: 'dark:border-rose-700' },
+    { bg: 'bg-violet-100', text: 'text-violet-800', darkBg: 'dark:bg-violet-900', darkText: 'dark:text-violet-200', border: 'border-violet-300', darkBorder: 'dark:border-violet-700' },
+  ];
+  
+  // Para categorias, adiciona offset no hash para garantir cores diferentes do setor
+  const hashOffset = type === 'categoria' ? 1000 : 0;
+  const colorIndex = Math.abs(hash + hashOffset) % colorPalettes.length;
+  const colors = colorPalettes[colorIndex];
+  
+  return `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} ${colors.border} ${colors.darkBorder}`;
+};
+
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
   if (!sourceName) return 'Sem origem';
@@ -2642,19 +2677,19 @@ export default function ApprovedLeads() {
                           if (setor) {
                             return (
                               <>
-                                {/* ✅ Badge de Setor (azul) - mesmo estilo do onboarding Step 3 - Vercel Deploy Trigger */}
+                                {/* 🎨 Badge de Setor com cores dinâmicas - cada setor tem cor única e consistente */}
                                 <Badge
                                   variant="secondary"
-                                  className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700"
+                                  className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
                                   title={setor}
                                 >
                                   {setor}
                                 </Badge>
-                                {/* ✅ Badge de Categoria/Segmento (roxo) - mesmo estilo do onboarding Step 3 - Vercel Deploy Trigger */}
+                                {/* 🎨 Badge de Categoria/Segmento com cores dinâmicas - cada segmento tem cor única baseada no nome */}
                                 {categoria && (
                                   <Badge
                                     variant="secondary"
-                                    className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-700"
+                                    className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
                                     title={categoria}
                                   >
                                     {categoria}
