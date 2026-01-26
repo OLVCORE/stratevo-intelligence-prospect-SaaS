@@ -316,8 +316,10 @@ DECLARE
   v_categoria TEXT;
   v_setor_formatted TEXT;
 BEGIN
-  -- Só processar se setor estiver null, vazio ou não no formato "Setor - Categoria"
-  IF NEW.setor IS NULL OR NEW.setor = '' OR NEW.setor NOT LIKE '%-%' THEN
+  -- ✅ CRÍTICO: Processar se setor estiver null, vazio ou não no formato "Setor - Categoria"
+  -- OU se enrichment_data foi atualizado (enriquecimento Receita Federal)
+  IF (NEW.setor IS NULL OR NEW.setor = '' OR NEW.setor NOT LIKE '%-%') 
+     OR (TG_OP = 'UPDATE' AND (OLD.enrichment_data IS DISTINCT FROM NEW.enrichment_data)) THEN
     -- Extrair CNAE usando a mesma lógica da função principal
     v_cnae_code := NULL;
     
@@ -404,7 +406,7 @@ $$;
 -- Criar trigger BEFORE INSERT OR UPDATE
 DROP TRIGGER IF EXISTS trigger_qualified_prospects_update_sector ON public.qualified_prospects;
 CREATE TRIGGER trigger_qualified_prospects_update_sector
-  BEFORE INSERT OR UPDATE ON public.qualified_prospects
+  BEFORE INSERT OR UPDATE OF enrichment_data, setor, cnae_principal ON public.qualified_prospects
   FOR EACH ROW
   EXECUTE FUNCTION trigger_update_qualified_prospect_sector();
 
