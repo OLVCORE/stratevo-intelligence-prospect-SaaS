@@ -2069,7 +2069,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             };
 
             // ✅ CRÍTICO: Atualizar qualified_prospects usando nome correto da tabela
-            const { error } = await supabase
+            const { error } = await (supabase as any)
               .from('qualified_prospects')
               .update(updateData)
               .eq('id', prospectId);

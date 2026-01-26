@@ -243,7 +243,7 @@ BEGIN
       SELECT setor_industria, categoria 
       INTO v_setor_industria, v_categoria
       FROM public.cnae_classifications
-      WHERE cnae_code = v_cnae_code
+      WHERE cnae_code = normalize_cnae_code(v_cnae_code)
       LIMIT 1;
       
       -- Formatar como "Setor - Categoria" se ambos existirem
@@ -350,13 +350,12 @@ BEGIN
       END;
     END IF;
     
-    -- Prioridade 2: enrichment_data (enriquecimento Receita Federal)
+    -- Prioridade 2: enrichment_data
     IF v_cnae_code IS NULL AND NEW.enrichment_data IS NOT NULL THEN
       BEGIN
         v_cnae_code := extract_cnae_from_raw_data(NEW.enrichment_data);
       EXCEPTION
         WHEN OTHERS THEN
-          -- Fallback: tentar extrair manualmente (MESMA LÓGICA DA BASE DE EMPRESAS)
           v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(
             COALESCE(
               (NEW.enrichment_data->'receita_federal'->'atividade_principal'->0->>'code'),
@@ -414,3 +413,4 @@ CREATE TRIGGER trigger_qualified_prospects_update_sector
 -- Comentário
 COMMENT ON FUNCTION trigger_update_qualified_prospect_sector IS 
 'MC2.6.24: Trigger automático que atualiza setor e cnae_principal ao inserir/atualizar qualified_prospects. Garante que TODAS as empresas futuras sejam processadas automaticamente.';
+image.pngimage.pngimage.pngimage.pngimage.pngimage.pngimage.png
