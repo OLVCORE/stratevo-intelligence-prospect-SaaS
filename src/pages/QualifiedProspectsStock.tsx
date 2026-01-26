@@ -2512,7 +2512,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
     new Set(
       prospects.map(p => {
         const classification = getCNAEClassificationForProspect(p);
-        return classification?.setor_industria || 'Sem setor';
+        // ✅ MC-CANON-4: Compatibilidade entre modelo antigo (setor) e novo (setor_industria)
+        return classification?.setor ?? classification?.setor_industria ?? 'Sem setor';
       })
     )
   ).sort();
@@ -3134,13 +3135,16 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                               );
                             }
                             
-                            // ✅ MC-CANON-3: FALLBACK - Usar mesma lógica de ApprovedLeads
-                            // Extrair CNAE primeiro, depois buscar classificação passando código explicitamente
+                            // ✅ MC-CANON-4: EXATAMENTE igual ApprovedLeads (que funciona)
                             const cnaeResolution = resolveCompanyCNAE(prospect);
                             const cnaeCode = cnaeResolution.principal.code;
-                            const classification = cnaeCode ? getCNAEClassificationForProspect({ ...prospect, cnae_principal: cnaeCode }) : null;
-                            const setor = classification?.setor_industria;
-                            const categoria = classification?.categoria;
+                            // ✅ MC-CANON-4: Usar getCNAEClassificationForProspect mas garantir que o código seja usado
+                            // Criar objeto temporário com cnae_principal para garantir que extractProspectCNAE encontre
+                            const prospectWithCNAE = cnaeCode ? { ...prospect, cnae_principal: String(cnaeCode).trim() } : prospect;
+                            const classification = getCNAEClassificationForProspect(prospectWithCNAE);
+                            // ✅ MC-CANON-4: Compatibilidade entre modelo antigo (setor) e novo (setor_industria)
+                            const setor = classification?.setor ?? classification?.setor_industria ?? null;
+                            const categoria = classification?.categoria ?? null;
                             
                             if (setor) {
                               return (
