@@ -2075,7 +2075,17 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               .eq('id', prospectId);
 
             if (error) throw error;
+            
+            // ✅ DEBUG: Log para verificar se setor foi atualizado
+            console.log(`[Bulk Enrichment] ✅ Prospect ${prospectId} atualizado:`, {
+              setor: setorFormatted,
+              cnae_principal: cnaeCode,
+              hasEnrichmentData: !!enrichmentData.receita_federal
+            });
+            
             enrichedCount++;
+          } else {
+            console.warn(`[Bulk Enrichment] ⚠️ Prospect ${prospectId}: dados da Receita não retornados`);
           }
         } catch (error: any) {
           const prospect = prospects.find(p => p.id === prospectId);
@@ -2516,6 +2526,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           .eq('id', prospectId);
 
         if (error) throw error;
+
+        // ✅ DEBUG: Log para verificar se setor foi atualizado
+        console.log(`[Individual Enrichment] ✅ Prospect ${prospectId} atualizado:`, {
+          setor: setorFormatted,
+          cnae_principal: cnaeCode,
+          hasEnrichmentData: !!enrichmentData.receita_federal
+        });
 
         toast({
           title: '✅ Empresa enriquecida com sucesso!',
