@@ -702,6 +702,9 @@ serve(async (req) => {
       );
     }
 
+    // ✅ MC4: Declarar variável de complemento Lusha no escopo correto
+    let lushaComplemented = 0;
+    
     // Salvar decisores na tabela decision_makers
     if (decisores.length > 0) {
       // ✅ NÃO DELETAR: A função RPC usa ON CONFLICT UPDATE
@@ -988,7 +991,77 @@ serve(async (req) => {
         .update(updateData)
         .eq('id', companyId);
       
+      // ✅ MC4: FALLBACK - Complementar com Lusha se email/telefone faltam
+      if (companyId) {
+        // Buscar decisores salvos que não têm email/telefone
+        const { data: decisoresSemContato } = await supabaseClient
+          .from('decision_makers')
+          .select('id, name, linkedin_url, email, phone, title')
+          .eq('company_id', companyId)
+          .or('email.is.null,phone.is.null')
+          .limit(5); // Limitar a 5 para não gastar muitos créditos Lusha
+        
+        if (decisoresSemContato && decisoresSemContato.length > 0) {
+          console.log('[ENRICH-APOLLO] 🔄 MC4: Complementando com Lusha para', decisoresSemContato.length, 'decisores sem contato');
+          
+          const lushaApiKey = Deno.env.get('LUSHA_API_KEY');
+          if (lushaApiKey) {
+            for (const decisor of decisoresSemContato) {
+              // Apenas para decisores VIP (C-Level, Diretor, etc.)
+              const isVIP = decisor.title?.toLowerCase().includes('ceo') ||
+                           decisor.title?.toLowerCase().includes('cfo') ||
+                           decisor.title?.toLowerCase().includes('cio') ||
+                           decisor.title?.toLowerCase().includes('diretor') ||
+                           decisor.title?.toLowerCase().includes('presidente');
+              
+              if (isVIP && decisor.linkedin_url && (!decisor.email || !decisor.phone)) {
+                try {
+                  const lushaResponse = await fetch('https://api.lusha.com/person', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'api_key': lushaApiKey
+                    },
+                    body: JSON.stringify({
+                      linkedinUrl: decisor.linkedin_url
+                    })
+                  });
+                  
+                  if (lushaResponse.ok) {
+                    const lushaData = await lushaResponse.json();
+                    const phoneNumbers = lushaData.phoneNumbers || [];
+                    const emailAddresses = lushaData.emailAddresses || [];
+                    
+                    const mobilePhone = phoneNumbers.find((p: any) => p.type === 'mobile' && p.number)?.number;
+                    const personalEmail = emailAddresses.find((e: any) => !e.type?.includes('work') && e.address)?.address;
+                    
+                    const updateData: any = {};
+                    if (mobilePhone && !decisor.phone) updateData.phone = mobilePhone;
+                    if (personalEmail && !decisor.email) updateData.email = personalEmail;
+                    
+                    if (Object.keys(updateData).length > 0) {
+                      await supabaseClient
+                        .from('decision_makers')
+                        .update(updateData)
+                        .eq('id', decisor.id);
+                      
+                      lushaComplemented++;
+                      console.log('[ENRICH-APOLLO] ✅ MC4: Lusha complementou contato para', decisor.name);
+                    }
+                  }
+                } catch (lushaError) {
+                  console.warn('[ENRICH-APOLLO] ⚠️ MC4: Erro ao complementar com Lusha para', decisor.name, ':', lushaError);
+                }
+              }
+            }
+          } else {
+            console.log('[ENRICH-APOLLO] ⚠️ MC4: LUSHA_API_KEY não configurada, pulando complemento');
+          }
+        }
+      }
+      
       // ✅ MC2: MARCAR ENRICHMENT COMO CONCLUÍDO
+      // ✅ MC4: Registrar source_used no metadata
       if (companyId) {
         // Marcar Apollo Org como enriquecido
         if (organizationData?.id) {
@@ -997,7 +1070,8 @@ serve(async (req) => {
             p_enrichment_type: 'apollo_org',
             p_metadata: {
               apollo_organization_id: organizationData.id,
-              organization_name: organizationData.name
+              organization_name: organizationData.name,
+              source_used: 'apollo'
             }
           });
         }
@@ -1009,7 +1083,9 @@ serve(async (req) => {
             p_enrichment_type: 'decision_makers',
             p_metadata: {
               decision_makers_count: decisores.length,
-              enriched_via: 'apollo'
+              enriched_via: 'apollo',
+              source_used: 'apollo',
+              lusha_complemented: lushaComplemented
             }
           });
         }
@@ -1157,6 +1233,7 @@ serve(async (req) => {
     }
 
     // ✅ MC3: Padronizar resposta Apollo
+    // ✅ MC4: Incluir source_used e informações de fallback
     // Buscar count total após inserção (trigger já atualizou)
     let decisionMakersTotal = 0;
     if (companyId) {
@@ -1167,14 +1244,33 @@ serve(async (req) => {
       decisionMakersTotal = count || 0;
     }
     
+    // MC4: Determinar source usado
+    let sourceUsed = 'apollo';
+    if (linkedinUrlToUse) {
+      // Se usou LinkedIn do banco, source é 'canonical'
+      const { data: companyCheck } = await supabaseClient
+        .from('companies')
+        .select('linkedin_url')
+        .eq('id', companyId)
+        .single();
+      
+      if (companyCheck?.linkedin_url === linkedinUrlToUse) {
+        sourceUsed = 'canonical';
+      } else {
+        sourceUsed = 'apollo';
+      }
+    }
+    
     return new Response(
       JSON.stringify({
         executed: true,
         skipped: false,
         reason: 'ok',
         success: true,
+        source_used: sourceUsed,
         decision_makers_inserted: decisores.length,
         decision_makers_total: decisionMakersTotal,
+        lusha_complemented: lushaComplemented || 0,
         organization: organizationData ? {
           name: organizationData.name,
           linkedin_url: organizationData.linkedin_url,
@@ -1188,7 +1284,7 @@ serve(async (req) => {
           users: users.length
         },
         main_decision_maker: mainDecisionMaker || null,
-        message: `${decisores.length} decisores encontrados e salvos (total: ${decisionMakersTotal})`
+        message: `${decisores.length} decisores encontrados e salvos (total: ${decisionMakersTotal}${lushaComplemented > 0 ? `, ${lushaComplemented} complementados com Lusha` : ''})`
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

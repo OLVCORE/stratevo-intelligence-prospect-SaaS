@@ -123,7 +123,24 @@ serve(async (req) => {
     console.log('[ScanProspect] ✅ Usando qualified_prospect_id:', qualified_prospect_id);
 
     // ✅ MC2: IDEMPOTÊNCIA - Verificar se pode rodar enrichment
+    // ✅ MC4: FALLBACK - Verificar LinkedIn canônico antes de qualquer busca
+    let sourceUsed = 'none';
+    let linkedinUrlFromCanonical: string | null = null;
+    
     if (company_id) {
+      // MC4: Verificar LinkedIn canônico primeiro (FALLBACK LEVEL 1)
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('linkedin_url')
+        .eq('id', company_id)
+        .single();
+      
+      if (companyData?.linkedin_url) {
+        linkedinUrlFromCanonical = companyData.linkedin_url;
+        sourceUsed = 'canonical';
+        console.log('[ScanProspect] ✅ MC4: LinkedIn encontrado em companies (canônico):', linkedinUrlFromCanonical);
+      }
+      
       // Verificar Website/Products
       const { data: canRunWebsite, error: checkError } = await supabase
         .rpc('can_run_enrichment', {
@@ -133,8 +150,9 @@ serve(async (req) => {
       
       if (checkError) {
         console.warn('[ScanProspect] ⚠️ Erro ao verificar estado:', checkError);
-      } else if (canRunWebsite && !canRunWebsite.can_run) {
-        console.log('[ScanProspect] ⏭️ SKIPPED (idempotency):', canRunWebsite.reason, '-', canRunWebsite.message);
+      } else if (canRunWebsite && !canRunWebsite.can_run && linkedinUrlFromCanonical) {
+        // MC4: Se LinkedIn já existe e website já foi escaneado, skip completo
+        console.log('[ScanProspect] ⏭️ SKIPPED (MC4 fallback): LinkedIn canônico já existe, website já escaneado');
         
         // Verificar Products também
         const { data: canRunProducts } = await supabase
@@ -149,16 +167,15 @@ serve(async (req) => {
               success: true,
               skipped: true,
               reason: 'already_enriched',
-              message: 'Website and products already enriched',
+              source_used: 'canonical',
+              message: 'LinkedIn canônico já existe, website e produtos já enriquecidos',
+              linkedin_url: linkedinUrlFromCanonical,
               website: canRunWebsite,
               products: canRunProducts
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        
-        // Se website já foi escaneado mas produtos não, continuar apenas para produtos
-        console.log('[ScanProspect] ⚠️ Website já escaneado, mas extraindo produtos...');
       }
       
       // Verificar Products
@@ -175,6 +192,7 @@ serve(async (req) => {
             success: true,
             skipped: true,
             reason: 'already_enriched',
+            source_used: sourceUsed || 'none',
             message: 'Products already extracted',
             products: canRunProducts
           }),
@@ -411,8 +429,22 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
       console.warn('[ScanProspect] ⚠️ Erro ao extrair LinkedIn do HTML:', error);
     }
     
-    // ✅ ESTRATÉGIA 2: Buscar via SERPER (se não encontrou no HTML)
-    if (!linkedinUrl && serperKey) {
+    // ✅ MC4: FALLBACK - Usar LinkedIn canônico se encontrado
+    if (linkedinUrlFromCanonical && !linkedinUrl) {
+      linkedinUrl = linkedinUrlFromCanonical;
+      sourceUsed = 'canonical';
+      console.log('[ScanProspect] ✅ MC4: Usando LinkedIn canônico (companies.linkedin_url)');
+    }
+    
+    // ✅ MC4: FALLBACK - Se encontrou no HTML, marcar source
+    if (linkedinUrl && sourceUsed === 'none') {
+      sourceUsed = 'website';
+      console.log('[ScanProspect] ✅ MC4: LinkedIn encontrado via website scraping (HTML)');
+    }
+    
+    // ✅ MC4: FALLBACK - Buscar via SERPER apenas se não encontrou em canônico nem HTML
+    // ⛔ Nunca chamar SERPER se LinkedIn canônico já existe
+    if (!linkedinUrl && !linkedinUrlFromCanonical && serperKey) {
       // ✅ Buscar prospect no banco para ter mais dados
       let prospectData: any = null;
       try {
@@ -514,7 +546,8 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
         if (!linkedinUrl) {
           console.log('[ScanProspect] ⚠️ LinkedIn não encontrado após tentar todas as queries SERPER');
         } else {
-          console.log('[ScanProspect] ✅ LinkedIn encontrado via SERPER:', linkedinUrl);
+          sourceUsed = 'serper';
+          console.log('[ScanProspect] ✅ MC4: LinkedIn encontrado via SERPER (fallback final):', linkedinUrl);
         }
       }
     } else if (!linkedinUrl) {
@@ -836,6 +869,7 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
               });
               
               // ✅ MC2: MARCAR ENRICHMENT COMO CONCLUÍDO
+              // ✅ MC4: Registrar source_used no metadata
               if (companyIdToSync) {
                 // Marcar Website como escaneado
                 if (updatePayload.website_encontrado || updatePayload.linkedin_url) {
@@ -845,6 +879,7 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
                     p_metadata: {
                       website: updatePayload.website_encontrado,
                       linkedin_url: updatePayload.linkedin_url,
+                      source_used: sourceUsed || 'website',
                       enriched_via: 'scan-prospect-website'
                     }
                   });
@@ -857,6 +892,7 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
                     p_enrichment_type: 'products',
                     p_metadata: {
                       products_count: insertedCount,
+                      source_used: sourceUsed || 'website',
                       enriched_via: 'openai-extraction'
                     }
                   });
@@ -949,9 +985,11 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
       linkedin_found: !!linkedinUrl,
     });
 
+    // ✅ MC4: Incluir source_used na resposta final
     return new Response(
       JSON.stringify({
         success: true,
+        source_used: sourceUsed || 'website',
         products_found: extractedProducts.length,
         products_inserted: insertedCount,
         compatible_products: compatibleProducts.length,
@@ -959,6 +997,7 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
         website_products_match: formattedCompatibleProducts, // ✅ FORMATADO
         linkedin_url: linkedinUrl, // ✅ CRÍTICO: Retornar LinkedIn na resposta
         compatible_products_details: compatibleProducts,
+        message: `Website escaneado. LinkedIn: ${sourceUsed || 'não encontrado'}, Produtos: ${insertedCount}`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
