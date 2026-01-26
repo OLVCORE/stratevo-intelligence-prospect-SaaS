@@ -693,9 +693,11 @@ export default function ApprovedLeads() {
       }
 
       // 🔥 EDGE FUNCTION Apollo com FILTROS INTELIGENTES
+      // MC1: Passar analysis_id para atualização por ID (não por CNPJ)
       const { error } = await supabase.functions.invoke('enrich-apollo-decisores', {
         body: {
           company_id: targetCompanyId,
+          analysis_id: analysisId, // MC1: ID do icp_analysis_results (prioridade sobre cnpj)
           company_name: analysis.company_name || analysis.name,
           domain: analysis.website || analysis.domain,
           modes: ['people', 'company'],

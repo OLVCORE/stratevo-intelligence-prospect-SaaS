@@ -10,6 +10,7 @@ const corsHeaders = {
 
 interface EnrichApolloRequest {
   company_id?: string; // optional: only update DB when provided
+  analysis_id?: string; // MC1: ID do icp_analysis_results (prioridade sobre cnpj)
   qualified_prospect_id?: string; // NOVO: ID do prospect no estoque qualificado
   company_name?: string;
   companyName?: string; // backward compatibility
@@ -123,10 +124,17 @@ serve(async (req) => {
     const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
 
     console.log('[ENRICH-APOLLO] ✅ Cliente Supabase inicializado');
-    const companyId = body.company_id || body.companyId;
+    const companyId = body.company_id; // MC1: Usar apenas company_id (removido backward compatibility companyId)
+    const analysisId = body.analysis_id; // MC1: ID do icp_analysis_results (prioridade sobre cnpj)
     const qualifiedProspectId = body.qualified_prospect_id; // NOVO: suporte para estoque qualificado
     const companyName = body.company_name || body.companyName;
     const { domain, linkedin_url, positions, apollo_org_id, city, state, industry, cep, fantasia } = body;
+    
+    console.log('[ENRICH-APOLLO] 🎯 MC1: Identificadores recebidos:', {
+      company_id: companyId,
+      analysis_id: analysisId,
+      qualified_prospect_id: qualifiedProspectId
+    });
     
     console.log('[ENRICH-APOLLO] 🎯 Filtros inteligentes:', { city, state, industry, cep, fantasia });
     console.log('[ENRICH-APOLLO] 🔗 LinkedIn URL fornecido:', linkedin_url || 'N/A');
@@ -881,59 +889,88 @@ serve(async (req) => {
         .update(updateData)
         .eq('id', companyId);
       
-      // ✅ ATUALIZAR TAMBÉM icp_analysis_results (para o badge funcionar e dados aparecerem!)
-      const { data: companyRecord } = await supabaseClient
-        .from('companies')
-        .select('cnpj, raw_data, linkedin_url, apollo_id, industry, description')
-        .eq('id', companyId)
-        .single();
+      // ✅ MC1: SINCRONIZAR icp_analysis_results usando função canônica sync_company
+      // Prioridade: analysis_id > company_id > cnpj (fallback apenas se necessário)
+      const analysisId = body.analysis_id;
       
-      if (companyRecord?.cnpj) {
-        // ✅ ATUALIZAR raw_analysis COM DADOS COMPLETOS DO APOLLO
-        const existingRawAnalysis = await supabaseClient
-          .from('icp_analysis_results')
-          .select('raw_analysis')
-          .eq('cnpj', companyRecord.cnpj)
-          .single();
-        
-        const currentRawAnalysis = existingRawAnalysis.data?.raw_analysis || {};
-        
-        const updateIcpData: any = {
-          raw_analysis: {
-            ...currentRawAnalysis,
-            ...companyRecord.raw_data, // ✅ Dados completos do Apollo
-            apollo_enriched_at: new Date().toISOString(),
-          }
-        };
-        
-        // ✅ ATUALIZAR CAMPOS DIRETOS TAMBÉM (se disponíveis)
-        if (companyRecord.linkedin_url) {
-          updateIcpData.linkedin_url = companyRecord.linkedin_url;
-        }
-        
-        if (companyRecord.apollo_id) {
-          updateIcpData.apollo_id = companyRecord.apollo_id;
-        }
-        
-        // ✅ ATUALIZAR decision_makers_count
-        const decisoresCount = companyRecord.raw_data?.apollo_decisores_count || 0;
-        if (decisoresCount > 0) {
-          updateIcpData.decision_makers_count = decisoresCount;
-        }
-        
-        const { error: updateIcpError } = await supabaseClient
-          .from('icp_analysis_results')
-          .update(updateIcpData)
-          .eq('cnpj', companyRecord.cnpj);
-        
-        if (updateIcpError) {
-          console.error('[ENRICH-APOLLO] ❌ Erro ao atualizar icp_analysis_results:', updateIcpError);
-        } else {
-          console.log('[ENRICH-APOLLO] ✅ Dados atualizados em icp_analysis_results:', {
-            linkedin_url: updateIcpData.linkedin_url || 'N/A',
-            decisores_count: decisoresCount,
-            apollo_id: updateIcpData.apollo_id || 'N/A'
+      if (companyId) {
+        // MC1: Usar função sync_company para sincronização canônica
+        const { data: syncResult, error: syncError } = await supabaseClient
+          .rpc('sync_company', {
+            p_company_id: companyId,
+            p_opts: {
+              force_linkedin: true,
+              force_apollo_id: true
+            }
           });
+        
+        if (syncError) {
+          console.error('[ENRICH-APOLLO] ❌ Erro ao sincronizar via sync_company:', syncError);
+        } else {
+          console.log('[ENRICH-APOLLO] ✅ Sincronização canônica concluída:', syncResult);
+        }
+        
+        // MC1: Se analysis_id foi fornecido, atualizar campos específicos por ID (não por CNPJ)
+        if (analysisId) {
+          const { data: companyRecord } = await supabaseClient
+            .from('companies')
+            .select('raw_data, linkedin_url, apollo_organization_id, industry, description')
+            .eq('id', companyId)
+            .single();
+          
+          if (companyRecord) {
+            // MC1: Buscar decision_makers_count REAL (não de raw_data)
+            const { count: realDecisoresCount } = await supabaseClient
+              .from('decision_makers')
+              .select('*', { count: 'exact', head: true })
+              .eq('company_id', companyId);
+            
+            const existingRawAnalysis = await supabaseClient
+              .from('icp_analysis_results')
+              .select('raw_analysis')
+              .eq('id', analysisId)
+              .single();
+            
+            const currentRawAnalysis = existingRawAnalysis.data?.raw_analysis || {};
+            
+            const updateIcpData: any = {
+              raw_analysis: {
+                ...currentRawAnalysis,
+                ...companyRecord.raw_data,
+                apollo_enriched_at: new Date().toISOString(),
+              }
+            };
+            
+            if (companyRecord.linkedin_url) {
+              updateIcpData.linkedin_url = companyRecord.linkedin_url;
+            }
+            
+            if (companyRecord.apollo_organization_id) {
+              updateIcpData.apollo_id = companyRecord.apollo_organization_id;
+            }
+            
+            // MC1: Usar COUNT real de decision_makers
+            if (realDecisoresCount !== null && realDecisoresCount > 0) {
+              updateIcpData.decision_makers_count = realDecisoresCount;
+            }
+            
+            // MC1: Atualizar por ID (não por CNPJ!)
+            const { error: updateIcpError } = await supabaseClient
+              .from('icp_analysis_results')
+              .update(updateIcpData)
+              .eq('id', analysisId);
+            
+            if (updateIcpError) {
+              console.error('[ENRICH-APOLLO] ❌ Erro ao atualizar icp_analysis_results por ID:', updateIcpError);
+            } else {
+              console.log('[ENRICH-APOLLO] ✅ Dados atualizados em icp_analysis_results (por ID):', {
+                analysis_id: analysisId,
+                linkedin_url: updateIcpData.linkedin_url || 'N/A',
+                decisores_count: realDecisoresCount || 0,
+                apollo_id: updateIcpData.apollo_id || 'N/A'
+              });
+            }
+          }
         }
       }
       
