@@ -350,12 +350,13 @@ BEGIN
       END;
     END IF;
     
-    -- Prioridade 2: enrichment_data
+    -- Prioridade 2: enrichment_data (enriquecimento Receita Federal)
     IF v_cnae_code IS NULL AND NEW.enrichment_data IS NOT NULL THEN
       BEGIN
         v_cnae_code := extract_cnae_from_raw_data(NEW.enrichment_data);
       EXCEPTION
         WHEN OTHERS THEN
+          -- Fallback: tentar extrair manualmente (MESMA LÓGICA DA BASE DE EMPRESAS)
           v_cnae_code := UPPER(REPLACE(REPLACE(TRIM(
             COALESCE(
               (NEW.enrichment_data->'receita_federal'->'atividade_principal'->0->>'code'),
@@ -368,12 +369,12 @@ BEGIN
       END;
     END IF;
     
-    -- Buscar setor e categoria
+    -- Buscar setor e categoria na tabela cnae_classifications
     IF v_cnae_code IS NOT NULL AND v_cnae_code != '' THEN
       SELECT setor_industria, categoria 
       INTO v_setor_industria, v_categoria
       FROM public.cnae_classifications
-      WHERE cnae_code = v_cnae_code
+      WHERE cnae_code = normalize_cnae_code(v_cnae_code)
       LIMIT 1;
       
       -- Formatar como "Setor - Categoria"
