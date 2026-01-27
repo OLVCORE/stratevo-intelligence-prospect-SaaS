@@ -56,7 +56,7 @@ export function DealDetailsDialog({ deal, open, onOpenChange }: DealDetailsDialo
       try {
         const { data } = await supabase
           .from('contacts')
-          .select('id, company_name, email, phone')
+          .select('id, name, email, phone')
           .eq('company_id', deal.company_id as string)
           .order('created_at', { ascending: true })
           .limit(1)

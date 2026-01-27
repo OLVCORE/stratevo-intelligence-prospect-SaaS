@@ -85,7 +85,7 @@ export function EnhancedKanbanBoard() {
     if (!deals) return [];
     
     return deals.filter(deal => {
-      if (filters.search && !deal.deal_title.toLowerCase().includes(filters.search.toLowerCase())) {
+      if (filters.search && !((deal as { deal_title?: string }).deal_title ?? deal.title ?? '').toLowerCase().includes(filters.search.toLowerCase())) {
         return false;
       }
       if (filters.priority && !filters.priority.includes(deal.priority)) {

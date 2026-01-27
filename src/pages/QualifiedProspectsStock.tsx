@@ -1332,38 +1332,76 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             upsertPayload.raw_data = JSON.parse(JSON.stringify(rawData));
           }
 
-          // ✅ MC-CANON-2B: UPSERT atômico com retorno de ID
-          const { data: upsertedCompany, error: upsertError } = await ((supabase as any).from('companies'))
-            .upsert(upsertPayload, { onConflict: 'tenant_id,cnpj' })
+          // ✅ MC-CANON-2B: SELECT+UPDATE/INSERT (evita depender de UNIQUE(tenant_id,cnpj) no banco)
+          const { data: existingCompany, error: selectError } = await (supabase as any)
+            .from('companies')
             .select('id, company_name, cnpj')
-            .single();
+            .eq('tenant_id', tenantId)
+            .eq('cnpj', normalizedCnpj)
+            .maybeSingle();
 
-          if (upsertError) {
-            console.error('[Qualified → Companies] ❌ Erro no UPSERT', {
-              error: upsertError,
-              error_code: upsertError.code,
-              error_message: upsertError.message,
+          if (selectError) {
+            console.error('[Qualified → Companies] ❌ Erro ao buscar company', {
+              error: selectError,
               cnpj: prospect.cnpj,
             });
-            errors.push(`CNPJ ${prospect.cnpj}: ${upsertError.message}`);
+            errors.push(`CNPJ ${prospect.cnpj}: ${selectError.message}`);
             continue;
           }
 
-          if (!upsertedCompany?.id) {
-            console.error('[Qualified → Companies] ❌ UPSERT retornou sem ID', {
-              upsertedCompany,
-              cnpj: prospect.cnpj,
-            });
-            errors.push(`CNPJ ${prospect.cnpj}: empresa sem ID após UPSERT`);
-            continue;
-          }
+          let finalCompanyId: string;
+          let companyRow: { id: string; company_name?: string; cnpj?: string };
 
-          const finalCompanyId = upsertedCompany.id;
-          console.log('[Qualified → Companies] ✅ UPSERT companies OK', {
-            company_id: finalCompanyId,
-            cnpj: upsertedCompany.cnpj,
-            company_name: upsertedCompany.company_name,
-          });
+          if (existingCompany?.id) {
+            const { error: updateError } = await (supabase as any)
+              .from('companies')
+              .update(upsertPayload)
+              .eq('id', existingCompany.id);
+            if (updateError) {
+              console.error('[Qualified → Companies] ❌ Erro ao atualizar company', {
+                error: updateError,
+                cnpj: prospect.cnpj,
+              });
+              errors.push(`CNPJ ${prospect.cnpj}: ${updateError.message}`);
+              continue;
+            }
+            finalCompanyId = existingCompany.id;
+            companyRow = existingCompany;
+            console.log('[Qualified → Companies] ✅ Company atualizada', {
+              company_id: finalCompanyId,
+              cnpj: companyRow.cnpj,
+              company_name: companyRow.company_name,
+            });
+          } else {
+            const { data: insertedCompany, error: insertError } = await (supabase as any)
+              .from('companies')
+              .insert(upsertPayload)
+              .select('id, company_name, cnpj')
+              .single();
+            if (insertError) {
+              console.error('[Qualified → Companies] ❌ Erro ao inserir company', {
+                error: insertError,
+                cnpj: prospect.cnpj,
+              });
+              errors.push(`CNPJ ${prospect.cnpj}: ${insertError.message}`);
+              continue;
+            }
+            if (!insertedCompany?.id) {
+              console.error('[Qualified → Companies] ❌ INSERT retornou sem ID', {
+                insertedCompany,
+                cnpj: prospect.cnpj,
+              });
+              errors.push(`CNPJ ${prospect.cnpj}: empresa sem ID após INSERT`);
+              continue;
+            }
+            finalCompanyId = insertedCompany.id;
+            companyRow = insertedCompany;
+            console.log('[Qualified → Companies] ✅ Company criada', {
+              company_id: finalCompanyId,
+              cnpj: companyRow.cnpj,
+              company_name: companyRow.company_name,
+            });
+          }
 
           // ✅ DELETAR de qualified_prospects
           const { error: deleteError } = await ((supabase as any).from('qualified_prospects'))

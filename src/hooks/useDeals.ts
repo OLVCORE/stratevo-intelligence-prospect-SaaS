@@ -15,7 +15,7 @@ export interface Deal {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   expected_close_date?: string | null;
   created_at: string;
-  companies?: { name: string };
+  companies?: { name?: string; company_name?: string; industry?: string; website?: string; linkedin_url?: string; sector_name?: string; raw_data?: Record<string, unknown> };
 }
 
 const DEALS_QUERY_KEY = ['sdr_deals'];
@@ -27,7 +27,7 @@ export function useDeals(filters?: { stage?: string; status?: string }) {
       // Construir query base
       let query = supabase
         .from('sdr_deals')
-        .select('*, companies:companies!sdr_deals_company_id_fkey(company_name)')
+        .select('*, companies:companies!sdr_deals_company_id_fkey(company_name, industry, website, linkedin_url, sector_name, raw_data)')
         .order('created_at', { ascending: false });
       
       // Filtro por stage

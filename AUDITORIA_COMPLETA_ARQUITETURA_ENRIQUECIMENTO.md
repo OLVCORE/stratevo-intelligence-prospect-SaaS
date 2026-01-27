@@ -1140,4 +1140,429 @@
 
 ---
 
-**Auditoria concluída. Pronto para arquitetura canônica.**
+## 📋 PLANO DE AÇÃO PRIORIZADO
+
+### 🔴 FASE 1: CORREÇÕES CRÍTICAS (Bloqueiam Funcionalidade)
+**Prazo:** 1-2 semanas  
+**Impacto:** Alto - Desbloqueia funcionalidades principais
+
+#### 1.1 Corrigir Atualização de `icp_analysis_results` no Apollo
+**Prioridade:** 🔴 CRÍTICA  
+**Esforço:** 4-6 horas  
+**Arquivo:** `supabase/functions/enrich-apollo-decisores/index.ts`
+
+**Ações:**
+- [ ] Mudar busca de `WHERE cnpj = ?` para `WHERE id = analysisId`
+- [ ] Garantir que `company_id` seja criado/vinculado antes de atualizar `icp_analysis_results`
+- [ ] Adicionar validação: se `company_id` não existe, criar registro em `companies` primeiro
+- [ ] Testar com leads aprovados que não têm `company_id`
+
+**Código a Modificar:**
+```typescript
+// Linha ~884-938: Trocar lógica de UPDATE
+// ANTES:
+UPDATE icp_analysis_results SET ... WHERE cnpj = companyRecord.cnpj
+
+// DEPOIS:
+UPDATE icp_analysis_results SET ... WHERE id = analysisId
+```
+
+---
+
+#### 1.2 Corrigir Matching de Produtos (Validação + Logs)
+**Prioridade:** 🔴 CRÍTICA  
+**Esforço:** 6-8 horas  
+**Arquivo:** `supabase/functions/scan-prospect-website/index.ts`
+
+**Ações:**
+- [ ] Adicionar validação prévia: verificar se `tenant_products` tem dados
+- [ ] Adicionar validação prévia: verificar se `prospect_extracted_products` já tem dados
+- [ ] Adicionar logs detalhados em cada etapa:
+  - Quantos produtos do tenant foram encontrados
+  - Quantos produtos do prospect foram extraídos
+  - Por que matching retornou 0 (tenant sem produtos? prospect sem produtos? IA falhou?)
+- [ ] Adicionar fallback visual no frontend: mostrar motivo quando score = 0
+
+**Código a Adicionar:**
+```typescript
+// Antes de calcular matching:
+if (!tenantProductsList || tenantProductsList.length === 0) {
+  console.warn('[MATCHING] Tenant não tem produtos cadastrados');
+  return { score: 0, reason: 'tenant_no_products' };
+}
+
+if (!extractedProducts || extractedProducts.length === 0) {
+  console.warn('[MATCHING] Nenhum produto extraído do prospect');
+  return { score: 0, reason: 'prospect_no_products' };
+}
+```
+
+---
+
+#### 1.3 Garantir Sincronismo de `decision_makers_count`
+**Prioridade:** 🔴 CRÍTICA  
+**Esforço:** 4-6 horas  
+**Arquivos:** 
+- `supabase/functions/enrich-apollo-decisores/index.ts`
+- `supabase/migrations/` (criar trigger)
+
+**Ações:**
+- [ ] Criar trigger que atualiza `icp_analysis_results.decision_makers_count` quando `decision_makers` muda
+- [ ] Garantir que Edge Function atualize `decision_makers_count` após inserir decisores
+- [ ] Adicionar validação: se `decision_makers_count` não foi atualizado, logar erro
+
+**Trigger a Criar:**
+```sql
+CREATE OR REPLACE FUNCTION update_decision_makers_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE icp_analysis_results
+  SET decision_makers_count = (
+    SELECT COUNT(*) FROM decision_makers WHERE company_id = NEW.company_id
+  )
+  WHERE company_id = NEW.company_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_decision_makers_count
+AFTER INSERT OR UPDATE OR DELETE ON decision_makers
+FOR EACH ROW EXECUTE FUNCTION update_decision_makers_count();
+```
+
+---
+
+### 🟡 FASE 2: REDUÇÃO DE CUSTO (Economia Imediata)
+**Prazo:** 1 semana  
+**Impacto:** Médio - Reduz custos operacionais significativamente
+
+#### 2.1 Implementar Reaproveitamento de Apollo
+**Prioridade:** 🟡 ALTA  
+**Esforço:** 6-8 horas  
+**Arquivo:** `supabase/functions/enrich-apollo-decisores/index.ts`
+
+**Ações:**
+- [ ] Verificar se `companies.apollo_organization_id` já existe antes de buscar
+- [ ] Se existe, usar `apollo_organization_id` diretamente (não buscar por nome)
+- [ ] Verificar se `decision_makers` já tem registros para `company_id` antes de buscar
+- [ ] Se já existem decisores, retornar dados existentes (não chamar API)
+
+**Código a Adicionar:**
+```typescript
+// Antes de chamar Apollo:
+const existingCompany = await supabase
+  .from('companies')
+  .select('apollo_organization_id')
+  .eq('id', company_id)
+  .single();
+
+if (existingCompany.data?.apollo_organization_id) {
+  // Usar organization ID existente
+  organizationId = existingCompany.data.apollo_organization_id;
+} else {
+  // Buscar por nome (lógica atual)
+}
+
+// Verificar decisores existentes:
+const existingDecisores = await supabase
+  .from('decision_makers')
+  .select('id')
+  .eq('company_id', company_id);
+
+if (existingDecisores.data && existingDecisores.data.length > 0) {
+  // Retornar decisores existentes (não chamar API)
+  return { success: true, decisores: existingDecisores.data };
+}
+```
+
+**Economia Estimada:** 3-5 créditos Apollo por chamada evitada
+
+---
+
+#### 2.2 Implementar Reaproveitamento de Website Scraping
+**Prioridade:** 🟡 ALTA  
+**Esforço:** 4-6 horas  
+**Arquivo:** `supabase/functions/scan-prospect-website/index.ts`
+
+**Ações:**
+- [ ] Verificar se `prospect_extracted_products` já tem dados para `qualified_prospect_id`
+- [ ] Se já existem produtos extraídos, retornar dados existentes (não chamar IA)
+- [ ] Adicionar flag `force_re_extract` para permitir re-extração quando necessário
+
+**Economia Estimada:** $0.01-0.02 por extração evitada
+
+---
+
+#### 2.3 Implementar Reaproveitamento de LinkedIn
+**Prioridade:** 🟡 MÉDIA  
+**Esforço:** 3-4 horas  
+**Arquivo:** `supabase/functions/scan-prospect-website/index.ts`
+
+**Ações:**
+- [ ] Verificar se `companies.linkedin_url` ou `icp_analysis_results.linkedin_url` já existe
+- [ ] Se existe, usar URL existente (não buscar via SERPER)
+- [ ] Sincronizar `linkedin_url` entre tabelas
+
+**Economia Estimada:** $0.001 por busca SERPER evitada
+
+---
+
+### 🟢 FASE 3: ARQUITETURA CANÔNICA (Fundação Sólida)
+**Prazo:** 2-3 semanas  
+**Impacto:** Alto - Previne problemas futuros
+
+#### 3.1 Criar Fonte da Verdade Única (`companies`)
+**Prioridade:** 🟢 ALTA  
+**Esforço:** 8-12 horas  
+**Arquivos:** 
+- `supabase/migrations/` (criar triggers)
+- Edge Functions (ajustar lógica)
+
+**Ações:**
+- [ ] Definir `companies` como fonte da verdade
+- [ ] Criar triggers de sincronização: `companies` → `icp_analysis_results`
+- [ ] Criar triggers de sincronização: `companies` → `qualified_prospects`
+- [ ] Ajustar Edge Functions para sempre atualizar `companies` primeiro
+- [ ] Migrar dados existentes: garantir que todos os leads aprovados tenham `company_id`
+
+**Triggers a Criar:**
+```sql
+-- Sincronizar LinkedIn URL
+CREATE OR REPLACE FUNCTION sync_linkedin_url()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.linkedin_url IS NOT NULL THEN
+    UPDATE icp_analysis_results
+    SET linkedin_url = NEW.linkedin_url
+    WHERE company_id = NEW.id;
+    
+    UPDATE qualified_prospects
+    SET linkedin_url = NEW.linkedin_url
+    WHERE company_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_sync_linkedin_url
+AFTER UPDATE ON companies
+FOR EACH ROW EXECUTE FUNCTION sync_linkedin_url();
+```
+
+---
+
+#### 3.2 Implementar Sistema de Cache
+**Prioridade:** 🟢 MÉDIA  
+**Esforço:** 6-8 horas  
+**Arquivos:** 
+- `supabase/migrations/` (criar tabela de cache)
+- Edge Functions (usar cache)
+
+**Ações:**
+- [ ] Criar tabela `enrichment_cache`:
+  - `cache_key` (TEXT, UNIQUE) - ex: "apollo_org_12345"
+  - `cache_data` (JSONB) - dados em cache
+  - `expires_at` (TIMESTAMP) - expiração do cache
+- [ ] Implementar lógica de cache nas Edge Functions
+- [ ] Adicionar TTL: cache expira em 30 dias
+
+**Tabela a Criar:**
+```sql
+CREATE TABLE enrichment_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cache_key TEXT UNIQUE NOT NULL,
+  cache_data JSONB NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_enrichment_cache_key ON enrichment_cache(cache_key);
+CREATE INDEX idx_enrichment_cache_expires ON enrichment_cache(expires_at);
+```
+
+---
+
+#### 3.3 Implementar Validação de Dados
+**Prioridade:** 🟢 MÉDIA  
+**Esforço:** 4-6 horas  
+**Arquivos:** 
+- `src/components/icp/tabs/useReportAutosave.ts`
+- Edge Functions (validação antes de setar status)
+
+**Ações:**
+- [ ] Validar dados antes de setar status 'completed'
+- [ ] Se `data` está vazio, setar status 'error' ou 'draft'
+- [ ] Adicionar logs quando validação falha
+- [ ] Mostrar mensagem ao usuário quando dados não estão disponíveis
+
+---
+
+### 🔵 FASE 4: MELHORIAS DE UX (Opcional)
+**Prazo:** 1 semana  
+**Impacto:** Baixo - Melhora experiência do usuário
+
+#### 4.1 Adicionar Botões de Enriquecimento no Menu Individual
+**Prioridade:** 🔵 BAIXA  
+**Esforço:** 2-3 horas  
+**Arquivo:** `src/components/icp/ApprovedLeads.tsx`
+
+**Ações:**
+- [ ] Adicionar "Apollo" no menu individual (engrenagem)
+- [ ] Adicionar "Receita Federal" no menu individual
+- [ ] Adicionar "Website" no menu individual
+
+---
+
+#### 4.2 Implementar Fallback Automático de Decisores
+**Prioridade:** 🔵 BAIXA  
+**Esforço:** 8-10 horas  
+**Arquivos:** 
+- `supabase/functions/enrich-decisores-fallback/index.ts` (nova função)
+
+**Ações:**
+- [ ] Criar Edge Function que tenta: Apollo → Lusha → LinkedIn scraping
+- [ ] Chamar automaticamente quando Apollo não retorna decisores
+- [ ] Consolidar dados de múltiplas fontes
+
+---
+
+## 📊 ESTIMATIVA DE ESFORÇO TOTAL
+
+| Fase | Esforço | Prazo | Impacto |
+|------|---------|-------|---------|
+| Fase 1: Correções Críticas | 14-20 horas | 1-2 semanas | 🔴 Alto |
+| Fase 2: Redução de Custo | 13-18 horas | 1 semana | 🟡 Médio |
+| Fase 3: Arquitetura Canônica | 18-26 horas | 2-3 semanas | 🟢 Alto |
+| Fase 4: Melhorias de UX | 10-13 horas | 1 semana | 🔵 Baixo |
+| **TOTAL** | **55-77 horas** | **5-7 semanas** | - |
+
+---
+
+## 🎯 ROADMAP DE IMPLEMENTAÇÃO RECOMENDADO
+
+### Semana 1-2: Fase 1 (Correções Críticas)
+**Objetivo:** Desbloquear funcionalidades principais
+
+1. **Dia 1-2:** Corrigir atualização de `icp_analysis_results` no Apollo
+2. **Dia 3-5:** Corrigir matching de produtos (validação + logs)
+3. **Dia 6-7:** Garantir sincronismo de `decision_makers_count`
+4. **Dia 8-10:** Testes e validação das correções
+
+**Resultado Esperado:**
+- ✅ Apollo atualiza `icp_analysis_results` corretamente
+- ✅ Matching de produtos funciona e mostra logs claros
+- ✅ Decisores aparecem na tabela com contagem correta
+
+---
+
+### Semana 3: Fase 2 (Redução de Custo)
+**Objetivo:** Reduzir custos operacionais
+
+1. **Dia 1-3:** Implementar reaproveitamento de Apollo
+2. **Dia 4-5:** Implementar reaproveitamento de Website Scraping
+3. **Dia 6-7:** Implementar reaproveitamento de LinkedIn
+
+**Resultado Esperado:**
+- ✅ 50-70% de redução em chamadas Apollo desnecessárias
+- ✅ 50-70% de redução em extrações de produtos desnecessárias
+- ✅ 50-70% de redução em buscas LinkedIn desnecessárias
+
+---
+
+### Semana 4-6: Fase 3 (Arquitetura Canônica)
+**Objetivo:** Criar fundação sólida
+
+1. **Semana 4:** Criar fonte da verdade única (`companies`)
+2. **Semana 5:** Implementar sistema de cache
+3. **Semana 6:** Implementar validação de dados
+
+**Resultado Esperado:**
+- ✅ `companies` é fonte da verdade única
+- ✅ Sincronização automática entre tabelas
+- ✅ Cache reduz chamadas externas
+- ✅ Validação previne dados vazios
+
+---
+
+### Semana 7: Fase 4 (Melhorias de UX) - Opcional
+**Objetivo:** Melhorar experiência do usuário
+
+1. **Dia 1-2:** Adicionar botões de enriquecimento no menu individual
+2. **Dia 3-5:** Implementar fallback automático de decisores
+
+**Resultado Esperado:**
+- ✅ UX mais intuitiva
+- ✅ Fallback automático aumenta taxa de sucesso
+
+---
+
+## 💰 IMPACTO FINANCEIRO ESTIMADO
+
+### Redução de Custos (Fase 2)
+
+**Apollo:**
+- Antes: 3-5 créditos por chamada (mesmo se dados já existem)
+- Depois: 0 créditos se dados já existem
+- **Economia:** 50-70% das chamadas Apollo (~$50-200/mês dependendo do volume)
+
+**OpenAI (Website Scraping):**
+- Antes: $0.01-0.02 por extração (mesmo se produtos já foram extraídos)
+- Depois: $0 se produtos já foram extraídos
+- **Economia:** 50-70% das extrações (~$10-50/mês dependendo do volume)
+
+**SERPER (LinkedIn):**
+- Antes: $0.001 por busca (mesmo se LinkedIn já existe)
+- Depois: $0 se LinkedIn já existe
+- **Economia:** 50-70% das buscas (~$5-20/mês dependendo do volume)
+
+**Total Estimado:** $65-270/mês de economia
+
+---
+
+## ✅ CHECKLIST DE VALIDAÇÃO
+
+### Após Fase 1 (Correções Críticas)
+- [ ] Apollo atualiza `icp_analysis_results` corretamente (testar com leads sem `company_id`)
+- [ ] Matching de produtos retorna score > 0 quando há produtos compatíveis
+- [ ] Logs mostram motivo quando matching = 0
+- [ ] `decision_makers_count` é atualizado automaticamente quando decisores são inseridos
+- [ ] Decisores aparecem na tabela `ApprovedLeads`
+
+### Após Fase 2 (Redução de Custo)
+- [ ] Apollo não chama API se `apollo_organization_id` já existe
+- [ ] Apollo não chama API se `decision_makers` já tem dados
+- [ ] Website scraping não extrai produtos se `prospect_extracted_products` já tem dados
+- [ ] LinkedIn não busca via SERPER se `linkedin_url` já existe
+- [ ] Métricas mostram redução de 50%+ em chamadas externas
+
+### Após Fase 3 (Arquitetura Canônica)
+- [ ] `companies` é atualizado primeiro em todas as Edge Functions
+- [ ] Triggers sincronizam `icp_analysis_results` e `qualified_prospects` automaticamente
+- [ ] Cache reduz chamadas externas em 30%+
+- [ ] Status 'completed' só é setado quando dados realmente existem
+- [ ] Validação previne dados vazios em relatórios
+
+---
+
+## 📝 NOTAS FINAIS
+
+### Priorização Recomendada
+1. **URGENTE:** Fase 1 (Correções Críticas) - Bloqueia funcionalidades
+2. **IMPORTANTE:** Fase 2 (Redução de Custo) - Economia imediata
+3. **DESEJÁVEL:** Fase 3 (Arquitetura Canônica) - Previne problemas futuros
+4. **OPCIONAL:** Fase 4 (Melhorias de UX) - Nice to have
+
+### Riscos Identificados
+- **Migração de dados:** Pode haver leads aprovados sem `company_id` - precisa migração
+- **RLS (Row Level Security):** Verificar se triggers e Edge Functions têm permissões corretas
+- **Performance:** Triggers podem impactar performance se houver muitos updates - monitorar
+
+### Próximos Passos Imediatos
+1. Revisar este plano com o time
+2. Priorizar Fase 1 (começar hoje)
+3. Criar issues no projeto para cada item
+4. Começar implementação da Fase 1.1 (corrigir Apollo)
+
+---
+
+**Auditoria concluída. Plano de ação detalhado criado. Pronto para implementação.**

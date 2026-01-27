@@ -50,60 +50,7 @@ import { formatCNPJ } from '@/lib/utils/validators';
 import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
 import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
 import { getCompanyOrigin, getCompanyOriginString } from '@/lib/utils/originResolver';
-
-// 🎨 Função para gerar cores dinâmicas consistentes baseadas no nome do setor/segmento
-// ✅ MELHORADO: Hash mais robusto para maior diferenciação entre setores diferentes
-const getDynamicBadgeColors = (name: string | null | undefined, type: 'setor' | 'categoria'): string => {
-  if (!name) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200 border-gray-300 dark:border-gray-700';
-  
-  // Hash mais robusto usando múltiplos fatores para maior diferenciação
-  const normalizedName = name.toLowerCase().trim();
-  let hash = 0;
-  
-  // Hash primário: soma de caracteres com pesos diferentes
-  for (let i = 0; i < normalizedName.length; i++) {
-    const char = normalizedName.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  
-  // Hash secundário: baseado nas primeiras letras (mais importante para diferenciação)
-  let secondaryHash = 0;
-  const firstChars = normalizedName.substring(0, Math.min(5, normalizedName.length));
-  for (let i = 0; i < firstChars.length; i++) {
-    secondaryHash = secondaryHash * 31 + firstChars.charCodeAt(i);
-  }
-  
-  // Combinar hashes para maior diferenciação
-  const combinedHash = Math.abs(hash * 17 + secondaryHash * 23);
-  
-  // Paleta expandida com cores mais distintas (16 cores diferentes)
-  const colorPalettes = [
-    { bg: 'bg-blue-100', text: 'text-blue-800', darkBg: 'dark:bg-blue-900', darkText: 'dark:text-blue-200', border: 'border-blue-300', darkBorder: 'dark:border-blue-700' },
-    { bg: 'bg-purple-100', text: 'text-purple-800', darkBg: 'dark:bg-purple-900', darkText: 'dark:text-purple-200', border: 'border-purple-300', darkBorder: 'dark:border-purple-700' },
-    { bg: 'bg-green-100', text: 'text-green-800', darkBg: 'dark:bg-green-900', darkText: 'dark:text-green-200', border: 'border-green-300', darkBorder: 'dark:border-green-700' },
-    { bg: 'bg-orange-100', text: 'text-orange-800', darkBg: 'dark:bg-orange-900', darkText: 'dark:text-orange-200', border: 'border-orange-300', darkBorder: 'dark:border-orange-700' },
-    { bg: 'bg-pink-100', text: 'text-pink-800', darkBg: 'dark:bg-pink-900', darkText: 'dark:text-pink-200', border: 'border-pink-300', darkBorder: 'dark:border-pink-700' },
-    { bg: 'bg-indigo-100', text: 'text-indigo-800', darkBg: 'dark:bg-indigo-900', darkText: 'dark:text-indigo-200', border: 'border-indigo-300', darkBorder: 'dark:border-indigo-700' },
-    { bg: 'bg-teal-100', text: 'text-teal-800', darkBg: 'dark:bg-teal-900', darkText: 'dark:text-teal-200', border: 'border-teal-300', darkBorder: 'dark:border-teal-700' },
-    { bg: 'bg-cyan-100', text: 'text-cyan-800', darkBg: 'dark:bg-cyan-900', darkText: 'dark:text-cyan-200', border: 'border-cyan-300', darkBorder: 'dark:border-cyan-700' },
-    { bg: 'bg-amber-100', text: 'text-amber-800', darkBg: 'dark:bg-amber-900', darkText: 'dark:text-amber-200', border: 'border-amber-300', darkBorder: 'dark:border-amber-700' },
-    { bg: 'bg-emerald-100', text: 'text-emerald-800', darkBg: 'dark:bg-emerald-900', darkText: 'dark:text-emerald-200', border: 'border-emerald-300', darkBorder: 'dark:border-emerald-700' },
-    { bg: 'bg-rose-100', text: 'text-rose-800', darkBg: 'dark:bg-rose-900', darkText: 'dark:text-rose-200', border: 'border-rose-300', darkBorder: 'dark:border-rose-700' },
-    { bg: 'bg-violet-100', text: 'text-violet-800', darkBg: 'dark:bg-violet-900', darkText: 'dark:text-violet-200', border: 'border-violet-300', darkBorder: 'dark:border-violet-700' },
-    { bg: 'bg-slate-100', text: 'text-slate-800', darkBg: 'dark:bg-slate-900', darkText: 'dark:text-slate-200', border: 'border-slate-300', darkBorder: 'dark:border-slate-700' },
-    { bg: 'bg-lime-100', text: 'text-lime-800', darkBg: 'dark:bg-lime-900', darkText: 'dark:text-lime-200', border: 'border-lime-300', darkBorder: 'dark:border-lime-700' },
-    { bg: 'bg-fuchsia-100', text: 'text-fuchsia-800', darkBg: 'dark:bg-fuchsia-900', darkText: 'dark:text-fuchsia-200', border: 'border-fuchsia-300', darkBorder: 'dark:border-fuchsia-700' },
-    { bg: 'bg-yellow-100', text: 'text-yellow-800', darkBg: 'dark:bg-yellow-900', darkText: 'dark:text-yellow-200', border: 'border-yellow-300', darkBorder: 'dark:border-yellow-700' },
-  ];
-  
-  // Para categorias, adiciona offset maior no hash para garantir cores diferentes do setor
-  const hashOffset = type === 'categoria' ? 5000 : 0;
-  const colorIndex = (combinedHash + hashOffset) % colorPalettes.length;
-  const colors = colorPalettes[colorIndex];
-  
-  return `${colors.bg} ${colors.text} ${colors.darkBg} ${colors.darkText} ${colors.border} ${colors.darkBorder}`;
-};
+import { getSectorBadgeColors } from '@/lib/utils/sectorBadgeColors';
 
 // Helper para normalizar source_name removendo referências a TOTVS/TVS
 const normalizeSourceName = (sourceName: string | null | undefined): string => {
@@ -303,26 +250,11 @@ export default function ApprovedLeads() {
       return;
     }
 
-    // 🚨 MICROCICLO 4: Validar que empresas estão em ACTIVE antes de criar deal
-    const { getCanonicalState } = await import('@/lib/utils/stateTransitionValidator');
+    // ✅ REGRA STRATEVO ONE: Leads Aprovados NUNCA exigem ACTIVE para entrar no funil.
+    // Mover para Pipeline cria registro no estágio LEADS (não Deal em Discovery).
     const selectedCompanies = companies.filter(c => analysisIds.includes(c.id));
-    
-    const invalidStates = selectedCompanies.filter((company: any) => {
-      // Verificar se company tem canonical_status ou determinar pelo contexto
-      const state = company.canonical_status 
-        ? company.canonical_status 
-        : getCanonicalState(company, 'company');
-      return state !== 'ACTIVE';
-    });
 
-    if (invalidStates.length > 0) {
-      toast.error('Ação não permitida', {
-        description: `${invalidStates.length} empresa(s) não estão em ACTIVE (Sales Target). Apenas leads aprovados podem criar deals.`
-      });
-      return;
-    }
-
-    const confirmMessage = `🚀 Enviar ${analysisIds.length} empresas para o Pipeline de Vendas?\n\nIsso criará ${analysisIds.length} deal(s) no estágio "Discovery".`;
+    const confirmMessage = `🚀 Enviar ${analysisIds.length} empresa(s) para o Pipeline de Vendas?\n\nSerão criados ${analysisIds.length} lead(s) no estágio "Leads". O Deal poderá ser criado depois, na etapa Discovery.`;
     
     if (!confirm(confirmMessage)) {
       toast.info('Envio cancelado');
@@ -332,21 +264,23 @@ export default function ApprovedLeads() {
     setIsSendingToPipeline(true);
 
     try {
-      // 1. Buscar dados das empresas aprovadas
-      const { data: approvedData, error: fetchError } = await supabase
+      // 1. Buscar dados das empresas aprovadas (select explícito para evitar 400 em colunas inexistentes)
+      const selectCols = 'id, company_id, cnpj, razao_social, icp_score, temperatura, raw_data, website';
+      const { data: rawApproved, error: fetchError } = await supabase
         .from('icp_analysis_results')
-        .select('*')
+        .select(selectCols)
         .in('id', analysisIds);
 
       if (fetchError) throw fetchError;
-      if (!approvedData || approvedData.length === 0) throw new Error('Nenhuma empresa encontrada');
+      const approvedData = (rawApproved || []) as { id: string; company_id: string | null; cnpj: string; razao_social: string; icp_score?: number; temperatura?: string; raw_data?: unknown; website?: string }[];
+      if (approvedData.length === 0) throw new Error('Nenhuma empresa encontrada');
 
       // 2. Validar dados obrigatórios
       const validCompanies = approvedData.filter(q => 
         q.cnpj && 
-        q.cnpj.trim() !== '' && 
+        String(q.cnpj).trim() !== '' && 
         q.razao_social && 
-        q.razao_social.trim() !== ''
+        String(q.razao_social).trim() !== ''
       );
 
       if (validCompanies.length === 0) {
@@ -356,44 +290,21 @@ export default function ApprovedLeads() {
       // 3. CRIAR DEALS (transferência para pipeline)
       const { data: { user } } = await supabase.auth.getUser();
       
-      // ✅ PRESERVAR TODOS OS DADOS ENRIQUECIDOS ao criar deals
+      // ✅ Schema da tabela sdr_deals: title, stage, value, assigned_to (conforme useDeals / database.types).
+      // Estágio "discovery" para aparecer na primeira etapa do funil.
       const dealsToCreate = validCompanies.map(q => {
-        const rawData: any = {
-          ...(q.raw_data || {}),
-          ...(q.raw_analysis || {}),
-          // Preservar dados de enriquecimento de website
-          website_enrichment: q.website_encontrado ? {
-            website_encontrado: q.website_encontrado,
-            website_fit_score: q.website_fit_score,
-            website_products_match: q.website_products_match,
-            linkedin_url: q.linkedin_url,
-          } : undefined,
-          // Preservar fit_score e grade se existirem
-          fit_score: (q.raw_data as any)?.fit_score || (q.raw_analysis as any)?.fit_score,
-          grade: (q.raw_data as any)?.grade || (q.raw_analysis as any)?.grade,
-          icp_id: (q.raw_data as any)?.icp_id || (q.raw_analysis as any)?.icp_id,
-          // Preservar dados de enriquecimento da Receita Federal
-          receita_federal: (q.raw_data as any)?.receita_federal || (q.raw_analysis as any)?.receita_federal,
-          // Preservar dados de enriquecimento do Apollo
-          apollo: (q.raw_data as any)?.apollo || (q.raw_analysis as any)?.apollo,
-          // Metadados adicionais
-          icp_score: q.icp_score || 0,
-          temperatura: q.temperatura || 'cold',
-        };
-
-        // ✅ CORRIGIDO: Usar campos corretos do schema sdr_deals
+        const companyId = typeof q.company_id === 'string' ? q.company_id : null;
+        const desc = `Empresa aprovada. ICP Score: ${q.icp_score ?? 0}. Temperatura: ${q.temperatura ?? 'cold'}. Website: ${(q.website || '') || 'N/A'}.`;
         return {
-          title: `Prospecção - ${q.razao_social}`, // ✅ title (não deal_title)
-          description: `Empresa aprovada com ICP Score: ${q.icp_score || 0}. Temperatura: ${q.temperatura || 'cold'}. Website: ${q.website_encontrado || 'N/A'}. LinkedIn: ${q.linkedin_url || 'N/A'}.`,
-          company_id: q.company_id,
-          value: 0, // ✅ value (não deal_value)
-          probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50),
-          priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
-          stage: 'discovery', // ✅ stage (não deal_stage)
-          assigned_to: user?.id || null, // ✅ assigned_to (UUID, não email)
+          title: `Prospecção - ${q.razao_social}`,
+          description: desc,
+          company_id: companyId,
+          value: 0,
+          probability: Math.min(Math.round(Number(q.icp_score ?? 0) / 100 * 50), 50),
+          stage: 'lead',
+          assigned_to: user?.id ?? null,
           source: 'approved_to_pipeline',
-          bitrix24_data: rawData, // ✅ bitrix24_data (não raw_data)
-          status: 'open', // ✅ status obrigatório
+          status: 'open',
         };
       });
 
@@ -403,23 +314,20 @@ export default function ApprovedLeads() {
 
       if (insertError) throw insertError;
 
-      // 4. Atualizar status para 'pipeline' (TRANSFERÊNCIA!)
+      // 4. Atualizar status para 'pipeline'
       const validIds = validCompanies.map(q => q.id);
       const { error: updateError } = await supabase
         .from('icp_analysis_results')
-        .update({ 
-          status: 'pipeline', // ✅ NOVO STATUS!
-          pipeline_sent_at: new Date().toISOString()
-        })
+        .update({ status: 'pipeline' })
         .in('id', validIds);
 
       if (updateError) throw updateError;
 
       toast.success(`✅ ${validCompanies.length} empresas enviadas para o Pipeline!`, {
-        description: `${validCompanies.length} deals criados no estágio Discovery`,
+        description: `${validCompanies.length} lead(s) no estágio Lead. Mova para Qualificação ou Discovery manualmente no SDR Workspace.`,
         action: {
-          label: 'Ver Pipeline →',
-          onClick: () => navigate('/leads/pipeline')
+          label: 'Abrir Pipeline (SDR) →',
+          onClick: () => navigate('/sdr/workspace')
         },
         duration: 6000
       });
@@ -2142,10 +2050,10 @@ export default function ApprovedLeads() {
                 onPreviewSelected={handlePreviewSelected}
                 onRefreshSelected={handleRefreshSelected}
                 onBulkEnrichReceita={handleBulkEnrichReceita}
-                onBulkEnrichApollo={handleBulkEnrichApollo}
-                onBulkEnrich360={handleBulkEnrich360}
-                onBulkEnrichWebsite={handleBulkEnrichWebsite}
-                onBulkVerification={handleBulkVerification}
+                onBulkEnrichApollo={undefined}
+                onBulkEnrich360={undefined}
+                onBulkEnrichWebsite={undefined}
+                onBulkVerification={undefined}
                 onBulkDiscoverCNPJ={handleBulkDiscoverCNPJ}
                 onBulkApprove={handleSendToPipelineBatch}
                 onRestoreDiscarded={() => restoreAllDiscarded()}
@@ -2701,7 +2609,7 @@ export default function ApprovedLeads() {
                                 {/* 🎨 Badge de Setor com cores dinâmicas - cada setor tem cor única e consistente */}
                                 <Badge
                                   variant="secondary"
-                                  className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
+                                  className={`text-[10px] px-1.5 py-0.5 ${getSectorBadgeColors(setor, 'setor')}`}
                                   title={setor}
                                 >
                                   {setor}
@@ -2710,7 +2618,7 @@ export default function ApprovedLeads() {
                                 {categoria && (
                                   <Badge
                                     variant="secondary"
-                                    className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
+                                    className={`text-[10px] px-1.5 py-0.5 ${getSectorBadgeColors(categoria, 'categoria')}`}
                                     title={categoria}
                                   >
                                     {categoria}

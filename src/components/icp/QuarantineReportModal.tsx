@@ -78,7 +78,7 @@ export function QuarantineReportModal({
 
   const handleSaveToSystem = useCallback(async () => {
     if (!stcResult) {
-      toast.info('Execute a verificação TOTVS antes de salvar');
+      toast.info('Execute a verificação antes de salvar');
       return;
     }
     

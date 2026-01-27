@@ -121,7 +121,7 @@ export function UnifiedEnrichButton({
                 </>
               ) : (
                 <>
-                  <strong>Fluxo de Enriquecimento:</strong> 1) Receita Federal (sempre) → 2) Relatório STC → Aba TOTVS → 3) Se GO → Apollo (Decisores)
+                  <strong>Fluxo de Enriquecimento:</strong> 1) Receita Federal (sempre) → 2) Dossiê Estratégico (aba Fit de Produtos) → 3) Se GO → Apollo (Decisores)
                 </>
               )}
             </p>
@@ -281,7 +281,7 @@ export function UnifiedEnrichButton({
           <div className="px-2 py-1.5 text-xs text-muted-foreground space-y-1">
             <p>💡 <strong>Fluxo Correto:</strong></p>
             <p>1️⃣ Receita Federal (sempre disponível)</p>
-            <p>2️⃣ Relatório STC → Aba TOTVS define GO/NO-GO</p>
+            <p>2️⃣ Dossiê Estratégico (aba Fit de Produtos) define GO/NO-GO</p>
             <p>3️⃣ Apollo só se status for GO (economiza créditos)</p>
           </div>
         </DropdownMenuContent>

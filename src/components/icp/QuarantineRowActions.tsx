@@ -234,30 +234,26 @@ export function QuarantineRowActions({
 
           <DropdownMenuSeparator />
 
-          {/* Verificação de Uso - Abrir modal (origem única) */}
+          {/* Abrir no Funil (Discovery) — Dossiê Estratégico só no funil; esta ação leva o lead ao pipeline */}
           <Tooltip delayDuration={100}>
             <TooltipTrigger asChild>
               <DropdownMenuItem 
                 onClick={() => {
-                  setShowReport(true);
                   setIsOpen(false);
-                  toast.info('Use o botão "Verificar Agora" ou "Atualizar" dentro do relatório para executar a verificação.');
+                  navigate('/leads/pipeline');
+                  toast.info('O Dossiê Estratégico deve ser aberto na etapa Discovery do funil. Envie a empresa para o Pipeline e abra o Dossiê a partir de lá.');
                 }}
                 disabled={isEnriching}
-                className="relative animate-pulse bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 hover:from-primary/30 hover:via-primary/20 hover:to-primary/30 border-l-4 border-primary font-semibold cursor-pointer transition-all dark:from-primary/30 dark:via-primary/20 dark:to-primary/30 dark:hover:from-primary/40 dark:hover:via-primary/30 dark:hover:to-primary/40"
+                className="relative bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 hover:from-primary/30 hover:via-primary/20 hover:to-primary/30 border-l-4 border-primary font-semibold cursor-pointer transition-all dark:from-primary/30 dark:via-primary/20 dark:to-primary/30 dark:hover:from-primary/40 dark:hover:via-primary/30 dark:hover:to-primary/40"
               >
-                {enrichingAction === 'Verificação de Uso' ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin text-primary" />
-                ) : (
-                  <Target className="h-4 w-4 mr-2 text-primary" />
-                )}
-                <span className="text-primary">Verificação de Uso (STC)</span>
-                <Sparkles className="h-3 w-3 ml-auto text-primary animate-pulse" />
+                <Target className="h-4 w-4 mr-2 text-primary" />
+                <span className="text-primary">Abrir no Funil (Discovery)</span>
+                <Sparkles className="h-3 w-3 ml-auto text-primary" />
               </DropdownMenuItem>
             </TooltipTrigger>
             <TooltipContent side="right" className="max-w-xs bg-primary text-primary-foreground">
-              <p className="font-semibold text-sm">⭐ STC - Verificação de Uso (Prioritário)</p>
-              <p className="text-xs mt-1">Verifica em <strong>70 fontes premium</strong>: 30 portais vagas, 26 notícias/tech (Baguete, CIO, Exame), 6 vídeos/social (YouTube, Instagram), 1 parceiro (Fusion). Detecta triple/double/single match com highlight de termos encontrados</p>
+              <p className="font-semibold text-sm">Abrir no Funil (Discovery)</p>
+              <p className="text-xs mt-1">O Dossiê Estratégico só é aberto a partir do funil, na etapa Discovery. Use &quot;Enviar para Pipeline&quot; e depois abra o Dossiê no lead no funil.</p>
             </TooltipContent>
           </Tooltip>
 
