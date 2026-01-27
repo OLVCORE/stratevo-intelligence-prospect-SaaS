@@ -70,15 +70,35 @@ export function resolveCompanyCNAE(company: any): CNAEResolution {
       enrichmentRaw.cnae_principal_descricao || // ✅ MC2.4: qualified_prospects
       null;
     
-    // CNAEs secundários de icp_analysis_results (se existir campo)
+    // CNAEs secundários: icp_analysis_results.cnaes_secundarios e/ou raw_data (Receita/API)
     const secundarios: Array<{ code: string; description: string | null }> = [];
+    const seen = new Set<string>();
+    const pushSec = (code: string, desc: string | null) => {
+      const k = String(code).trim();
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        secundarios.push({ code: k, description: desc || null });
+      }
+    };
     if ((company as any).cnaes_secundarios && Array.isArray((company as any).cnaes_secundarios)) {
       (company as any).cnaes_secundarios.forEach((sec: any) => {
         if (sec && (sec.code || sec.codigo)) {
-          secundarios.push({
-            code: String(sec.code || sec.codigo).trim(),
-            description: sec.description || sec.descricao || null,
-          });
+          pushSec(String(sec.code || sec.codigo).trim(), sec.description || sec.descricao || null);
+        }
+      });
+    }
+    const atividadesSecICP =
+      rawData.receita_federal?.atividades_secundarias ||
+      rawData.receita?.atividades_secundarias ||
+      rawData.atividades_secundarias ||
+      enrichmentRaw.receita_federal?.atividades_secundarias ||
+      enrichmentRaw.receita?.atividades_secundarias ||
+      enrichmentRaw.atividades_secundarias ||
+      [];
+    if (Array.isArray(atividadesSecICP)) {
+      atividadesSecICP.forEach((sec: any) => {
+        if (sec && (sec.code || sec.codigo)) {
+          pushSec(String(sec.code || sec.codigo).trim(), sec.text || sec.texto || sec.description || sec.descricao || null);
         }
       });
     }
@@ -200,13 +220,29 @@ export function resolveCompanyCNAE(company: any): CNAEResolution {
       rawData.cnae_descricao ||
       rawData.cnae_principal_descricao ||
       null;
-    
+    const secundariosCompany: Array<{ code: string; description: string | null }> = [];
+    const atividadesSecCompany =
+      rawData.receita_federal?.atividades_secundarias ||
+      rawData.receita?.atividades_secundarias ||
+      rawData.atividades_secundarias ||
+      (company as any).cnaes_secundarios ||
+      [];
+    if (Array.isArray(atividadesSecCompany)) {
+      atividadesSecCompany.forEach((sec: any) => {
+        if (sec && (sec.code || sec.codigo)) {
+          secundariosCompany.push({
+            code: String(sec.code || sec.codigo).trim(),
+            description: sec.text || sec.texto || sec.description || sec.descricao || null,
+          });
+        }
+      });
+    }
     return {
       principal: {
         code: String(fromCompany).trim(),
         description: companyDescription ? String(companyDescription).trim() : null,
       },
-      secundarios: [],
+      secundarios: secundariosCompany,
       fonte: 'companies' as const,
     };
   }

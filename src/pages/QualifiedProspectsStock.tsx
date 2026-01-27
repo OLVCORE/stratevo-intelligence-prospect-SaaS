@@ -3149,27 +3149,40 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                             const setorField = prospect.setor;
                             if (setorField && typeof setorField === 'string' && setorField.includes(' - ')) {
                               const [setor, categoria] = setorField.split(' - ').map(s => s.trim());
+                              const cnaeResSetor = resolveCompanyCNAE(prospect);
+                              const tooltipPrincipal = cnaeResSetor.principal.code || cnaeResSetor.principal.description
+                                ? `${cnaeResSetor.principal.code || 'N/A'} - ${cnaeResSetor.principal.description || 'Sem descrição'}`
+                                : null;
+                              const tooltipSecundarios = cnaeResSetor.secundarios.length > 0
+                                ? cnaeResSetor.secundarios.map(s => `${s.code} - ${s.description || 'Sem descrição'}`).join('\n')
+                                : null;
+                              const tooltipText = [tooltipPrincipal ? `CNAE Principal:\n${tooltipPrincipal}` : null, tooltipSecundarios ? `CNAEs Secundários:\n${tooltipSecundarios}` : null].filter(Boolean).join('\n\n');
                               return (
-                                <>
-                                  {/* 🎨 Badge de Setor com cores dinâmicas - cada setor tem cor única e consistente */}
-                                  <Badge 
-                                    variant="secondary" 
-                                    className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
-                                    title={setor}
-                                  >
-                                    {setor}
-                                  </Badge>
-                                  {/* 🎨 Badge de Categoria/Segmento com cores dinâmicas - cada segmento tem cor única baseada no nome */}
-                                  {categoria && (
-                                    <Badge 
-                                      variant="secondary" 
-                                      className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
-                                      title={categoria}
-                                    >
-                                      {categoria}
-                                    </Badge>
-                                  )}
-                                </>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center gap-1 flex-wrap justify-center">
+                                        <Badge 
+                                          variant="secondary" 
+                                          className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
+                                        >
+                                          {setor}
+                                        </Badge>
+                                        {categoria && (
+                                          <Badge 
+                                            variant="secondary" 
+                                            className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
+                                          >
+                                            {categoria}
+                                          </Badge>
+                                        )}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="max-w-sm whitespace-pre-wrap p-3">
+                                      {tooltipText || `${setor}${categoria ? ` - ${categoria}` : ''}`}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               );
                             }
                             
@@ -3185,27 +3198,39 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
                             const categoria = classification?.categoria ?? null;
                             
                             if (setor) {
+                              const tooltipPrincipal = cnaeResolution.principal.code || cnaeResolution.principal.description
+                                ? `${cnaeResolution.principal.code || 'N/A'} - ${cnaeResolution.principal.description || 'Sem descrição'}`
+                                : null;
+                              const tooltipSecundarios = cnaeResolution.secundarios.length > 0
+                                ? cnaeResolution.secundarios.map(s => `${s.code} - ${s.description || 'Sem descrição'}`).join('\n')
+                                : null;
+                              const tooltipText = [tooltipPrincipal ? `CNAE Principal:\n${tooltipPrincipal}` : null, tooltipSecundarios ? `CNAEs Secundários:\n${tooltipSecundarios}` : null].filter(Boolean).join('\n\n');
                               return (
-                                <>
-                                  {/* 🎨 Badge de Setor com cores dinâmicas - cada setor tem cor única e consistente */}
-                                  <Badge 
-                                    variant="secondary" 
-                                    className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
-                                    title={setor}
-                                  >
-                                    {setor}
-                                  </Badge>
-                                  {/* 🎨 Badge de Categoria/Segmento com cores dinâmicas - cada segmento tem cor única baseada no nome */}
-                                  {categoria && (
-                                    <Badge 
-                                      variant="secondary" 
-                                      className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
-                                      title={categoria}
-                                    >
-                                      {categoria}
-                                    </Badge>
-                                  )}
-                                </>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center gap-1 flex-wrap justify-center">
+                                        <Badge 
+                                          variant="secondary" 
+                                          className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(setor, 'setor')}`}
+                                        >
+                                          {setor}
+                                        </Badge>
+                                        {categoria && (
+                                          <Badge 
+                                            variant="secondary" 
+                                            className={`text-[10px] px-1.5 py-0.5 ${getDynamicBadgeColors(categoria, 'categoria')}`}
+                                          >
+                                            {categoria}
+                                          </Badge>
+                                        )}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="max-w-sm whitespace-pre-wrap p-3">
+                                      {tooltipText || `${setor}${categoria ? ` - ${categoria}` : ''}`}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               );
                             }
                             

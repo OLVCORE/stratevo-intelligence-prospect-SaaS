@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { resolveCompanyCNAE } from '@/lib/utils/cnaeResolver';
 import { getSectorBadgeColors } from '@/lib/utils/sectorBadgeColors';
 import { getCNAEClassification } from '@/services/cnaeClassificationService';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface DraggableDealCardProps {
   deal: Deal;
@@ -134,21 +135,38 @@ export function DraggableDealCard({ deal, isDragging, isSelected, onSelect, onCl
               </div>
             )}
 
-            {/* Setor: badges com cores canônicas (mesmo padrão do seletor de setor/segmentação em Leads Aprovados) */}
-            {sectorBadges.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1">
-                {sectorBadges.map((label, index) => (
-                  <Badge
-                    key={label}
-                    variant="secondary"
-                    className={cn('text-[10px] px-1.5 py-0 h-5 border', getSectorBadgeColors(label, index === 0 ? 'setor' : 'categoria'))}
-                    title={label}
-                  >
-                    {label}
-                  </Badge>
-                ))}
-              </div>
-            )}
+            {/* Setor: badges com cores canônicas; tooltip ao passar o mouse mostra CNAE principal + todos secundários */}
+            {sectorBadges.length > 0 && (() => {
+              const tooltipPrincipal = cnaeResolution.principal.code || cnaeResolution.principal.description
+                ? `${cnaeResolution.principal.code || 'N/A'} - ${cnaeResolution.principal.description || 'Sem descrição'}`
+                : null;
+              const tooltipSecundarios = cnaeResolution.secundarios.length > 0
+                ? cnaeResolution.secundarios.map(s => `${s.code} - ${s.description || 'Sem descrição'}`).join('\n')
+                : null;
+              const tooltipText = [tooltipPrincipal ? `CNAE Principal:\n${tooltipPrincipal}` : null, tooltipSecundarios ? `CNAEs Secundários:\n${tooltipSecundarios}` : null].filter(Boolean).join('\n\n');
+              return (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex flex-wrap items-center gap-1 cursor-help">
+                        {sectorBadges.map((label, index) => (
+                          <Badge
+                            key={label}
+                            variant="secondary"
+                            className={cn('text-[10px] px-1.5 py-0 h-5 border', getSectorBadgeColors(label, index === 0 ? 'setor' : 'categoria'))}
+                          >
+                            {label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-sm whitespace-pre-wrap p-3">
+                      {tooltipText || sectorBadges.join(' - ')}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              );
+            })()}
 
             {/* Contato principal + telefone */}
             {(primaryContact?.name || primaryContact?.phone) && (

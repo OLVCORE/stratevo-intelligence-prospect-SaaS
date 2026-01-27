@@ -2604,27 +2604,39 @@ export default function ApprovedLeads() {
                           const categoria = classification?.categoria;
 
                           if (setor) {
+                            const tooltipPrincipal = cnaeResolution.principal.code || cnaeResolution.principal.description
+                              ? `${cnaeResolution.principal.code || 'N/A'} - ${cnaeResolution.principal.description || 'Sem descrição'}`
+                              : null;
+                            const tooltipSecundarios = cnaeResolution.secundarios.length > 0
+                              ? cnaeResolution.secundarios.map(s => `${s.code} - ${s.description || 'Sem descrição'}`).join('\n')
+                              : null;
+                            const tooltipText = [tooltipPrincipal ? `CNAE Principal:\n${tooltipPrincipal}` : null, tooltipSecundarios ? `CNAEs Secundários:\n${tooltipSecundarios}` : null].filter(Boolean).join('\n\n');
                             return (
-                              <>
-                                {/* 🎨 Badge de Setor com cores dinâmicas - cada setor tem cor única e consistente */}
-                                <Badge
-                                  variant="secondary"
-                                  className={`text-[10px] px-1.5 py-0.5 ${getSectorBadgeColors(setor, 'setor')}`}
-                                  title={setor}
-                                >
-                                  {setor}
-                                </Badge>
-                                {/* 🎨 Badge de Categoria/Segmento com cores dinâmicas - cada segmento tem cor única baseada no nome */}
-                                {categoria && (
-                                  <Badge
-                                    variant="secondary"
-                                    className={`text-[10px] px-1.5 py-0.5 ${getSectorBadgeColors(categoria, 'categoria')}`}
-                                    title={categoria}
-                                  >
-                                    {categoria}
-                                  </Badge>
-                                )}
-                              </>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 flex-wrap justify-center">
+                                      <Badge
+                                        variant="secondary"
+                                        className={`text-[10px] px-1.5 py-0.5 ${getSectorBadgeColors(setor, 'setor')}`}
+                                      >
+                                        {setor}
+                                      </Badge>
+                                      {categoria && (
+                                        <Badge
+                                          variant="secondary"
+                                          className={`text-[10px] px-1.5 py-0.5 ${getSectorBadgeColors(categoria, 'categoria')}`}
+                                        >
+                                          {categoria}
+                                        </Badge>
+                                      )}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-sm whitespace-pre-wrap p-3">
+                                    {tooltipText || `${setor}${categoria ? ` - ${categoria}` : ''}`}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             );
                           }
 

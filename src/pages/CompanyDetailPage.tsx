@@ -1356,19 +1356,31 @@ export default function CompanyDetailPage() {
                 </div>
               )}
 
-              {/* Atividades Secundárias - Compacto */}
-              {receitaData?.cnaes_secundarios && receitaData.cnaes_secundarios.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold mb-2 text-primary">Atividades Secundárias</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                    {receitaData.cnaes_secundarios.map((ativ: any, i: number) => (
-                      <div key={i} className="p-2 bg-muted/20 rounded border text-xs">
-                        <span className="font-mono font-semibold text-primary">{ativ.codigo}</span> - <span className="text-muted-foreground">{ativ.descricao}</span>
+              {/* Atividades Secundárias - Compacto (cnaes_secundarios ou atividades_secundarias da API Brasil/Receita) */}
+              {(() => {
+                const secundarios = receitaData?.cnaes_secundarios || receitaData?.atividades_secundarias || rawData?.receita_federal?.atividades_secundarias || rawData?.atividades_secundarias || [];
+                const lista = Array.isArray(secundarios) ? secundarios : [];
+                return (
+                  <div>
+                    <p className="text-xs font-semibold mb-2 text-primary">Atividades Secundárias</p>
+                    {lista.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                        {lista.map((ativ: any, i: number) => {
+                          const codigo = ativ.codigo ?? ativ.code ?? 'N/A';
+                          const descricao = ativ.descricao ?? ativ.text ?? 'Sem descrição';
+                          return (
+                            <div key={i} className="p-2 bg-muted/20 rounded border text-xs">
+                              <span className="font-mono font-semibold text-primary">{codigo}</span> - <span className="text-muted-foreground">{descricao}</span>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Nenhuma atividade secundária cadastrada. Atualize pela Receita Federal para carregar.</p>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* NCM - Só mostra se tiver */}
               {rawData.cod_ncms_primarios && rawData.cod_ncms_primarios !== 'N/A' && (
