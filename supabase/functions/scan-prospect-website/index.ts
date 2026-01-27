@@ -2,14 +2,12 @@
 // Extrai produtos/serviços e compara com produtos do tenant
 // NÃO modifica scan-website-products ou scan-competitor-url
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
-  'Access-Control-Max-Age': '86400',
 };
 
 interface ScanProspectRequest {
@@ -21,13 +19,13 @@ interface ScanProspectRequest {
   cnpj?: string; // NOVO: para buscar qualified_prospect_id se necessário
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // 🔥 CRÍTICO: Tratar OPTIONS PRIMEIRO (ANTES DE QUALQUER COISA - SEM TRY/CATCH)
   // ⚠️ IMPORTANTE: O navegador faz preflight OPTIONS antes de POST
   // ⚠️ CRÍTICO: Status 200 é obrigatório para passar no check do navegador
   if (req.method === 'OPTIONS') {
     console.log('[SCAN-PROSPECT-WEBSITE] ✅ OPTIONS preflight recebido');
-    return new Response('', { 
+    return new Response('ok', { 
       status: 200,
       headers: corsHeaders
     });
@@ -301,7 +299,7 @@ serve(async (req) => {
           error: 'Nenhum conteúdo encontrado no website',
           products_found: 0,
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -558,7 +556,7 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
     // 7. ✅ MC5: VALIDAÇÃO PRÉVIA - Verificar pré-condições ANTES do matching
     // ⛔ NÃO criar produtos, NÃO alterar onboarding, NÃO preencher nada automaticamente
     if (tenantProductsList.length === 0) {
-      console.log('[ScanProspect] ⏭️ MC5: SKIPPED - tenant_products vazio');
+      console.log('[MC-5 MATCHING] ⏭️ SKIPPED - tenant_products vazio');
       return new Response(
         JSON.stringify({
           success: true,
@@ -575,7 +573,7 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
     }
     
     if (extractedProducts.length === 0) {
-      console.log('[ScanProspect] ⏭️ MC5: SKIPPED - prospect_extracted_products vazio');
+      console.log('[MC-5 MATCHING] ⏭️ SKIPPED - prospect_extracted_products vazio');
       return new Response(
         JSON.stringify({
           success: true,
@@ -589,6 +587,43 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+    
+    // ✅ MC5: IDEMPOTÊNCIA - Verificar se matching já foi calculado recentemente
+    if (qualified_prospect_id) {
+      const { data: currentProspect } = await supabase
+        .from('qualified_prospects')
+        .select('enrichment_data, website_products_match, website_fit_score')
+        .eq('id', qualified_prospect_id)
+        .single();
+      
+      if (currentProspect?.enrichment_data?.matching_metadata?.computed_at) {
+        const computedAt = new Date(currentProspect.enrichment_data.matching_metadata.computed_at);
+        const now = new Date();
+        const hoursSinceComputed = (now.getTime() - computedAt.getTime()) / (1000 * 60 * 60);
+        
+        // Se foi calculado há menos de 24 horas E já tem website_products_match preenchido
+        if (hoursSinceComputed < 24 && 
+            currentProspect.website_products_match && 
+            Array.isArray(currentProspect.website_products_match) &&
+            currentProspect.website_products_match.length > 0) {
+          console.log('[MC-5 MATCHING] ⏭️ SKIPPED - already_computed (há', Math.round(hoursSinceComputed), 'horas)');
+          return new Response(
+            JSON.stringify({
+              success: true,
+              executed: false,
+              skipped: true,
+              reason: 'already_computed',
+              message: 'Matching já foi calculado recentemente. Use force recompute para recalcular.',
+              website_fit_score: currentProspect.website_fit_score || 0,
+              website_products_match: currentProspect.website_products_match || [],
+              matching_metadata: currentProspect.enrichment_data.matching_metadata,
+              computed_at: currentProspect.enrichment_data.matching_metadata.computed_at
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
     }
     
     // ✅ MC5: ANÁLISE INTELIGENTE COM IA: Comparar produtos usando contexto e aplicação
@@ -822,8 +857,14 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
         if (keywordMatches > 0) reasons.push('keyword_overlap');
         matchingReason = reasons.join(' + ') || 'heuristic_fallback';
         
-        console.log(`[ScanProspect] ✅ MC5: Matching heurístico aplicado: ${matchingReason}`);
-        console.log(`[ScanProspect] ✅ MC5: Score breakdown:`, scoreBreakdown);
+        console.log(`[MC-5 MATCHING] ✅ Matching heurístico aplicado: ${matchingReason}`);
+        console.log(`[MC-5 MATCHING] ✅ Score breakdown:`, scoreBreakdown);
+      } else {
+        // ✅ MC5: Se heurística não encontrou matches, garantir reason explícita
+        matchingReason = 'no_match_found';
+        scoreBreakdown = {};
+        websiteFitScore = 0;
+        console.log(`[MC-5 MATCHING] ⚠️ Nenhum match encontrado via heurística`);
       }
     } else {
       // ✅ MC5: Se IA retornou matches, usar score da IA (já calculado acima)
@@ -834,10 +875,10 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
       };
     }
 
-    console.log(`[ScanProspect] ✅ MC5: Produtos compatíveis encontrados: ${compatibleProducts.length}`);
-    console.log(`[ScanProspect] ✅ MC5: Website Fit Score: ${websiteFitScore}/20 pontos`);
-    console.log(`[ScanProspect] ✅ MC5: Matching reason: ${matchingReason}`);
-    console.log(`[ScanProspect] ✅ MC5: Score breakdown:`, JSON.stringify(scoreBreakdown));
+    console.log(`[MC-5 MATCHING] ✅ Produtos compatíveis encontrados: ${compatibleProducts.length}`);
+    console.log(`[MC-5 MATCHING] ✅ Website Fit Score: ${websiteFitScore}/20 pontos`);
+    console.log(`[MC-5 MATCHING] ✅ Matching reason: ${matchingReason}`);
+    console.log(`[MC-5 MATCHING] ✅ Score breakdown:`, JSON.stringify(scoreBreakdown));
 
     // ✅ MC5: Formatar produtos compatíveis no formato esperado
     // ✅ MC5: Adicionar score_breakdown e matching_reason aos metadados
@@ -853,9 +894,10 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
     const matchingMetadata = {
       score_total: websiteFitScore,
       score_breakdown: scoreBreakdown,
-      matching_reason: matchingReason || 'no_matches',
+      matching_reason: matchingReason || 'no_match_found',
       matches_count: compatibleProducts.length,
-      source: matchingReason === 'ai_analysis' ? 'ai' : 'heuristic'
+      source_used: matchingReason === 'ai_analysis' ? 'ai' : (matchingReason.includes('heuristic') ? 'heuristic' : 'none'),
+      computed_at: new Date().toISOString() // ✅ MC5: Timestamp obrigatório
     };
 
     // ✅ CRÍTICO: Atualizar qualified_prospects com os dados calculados
@@ -880,21 +922,24 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
       updatePayload.website_products_match = formattedCompatibleProducts || [];
       console.log('[ScanProspect] ✅ website_products_match será atualizado:', updatePayload.website_products_match.length, 'produtos');
       
-      // ✅ MC5: Adicionar metadados explicativos ao enrichment_data (sem alterar score base)
-      // ⚠️ Apenas metadados, não recalcula score
-      if (qualified_prospect_id) {
-        const { data: currentProspect } = await supabase
-          .from('qualified_prospects')
-          .select('enrichment_data')
-          .eq('id', qualified_prospect_id)
-          .single();
-        
-        const existingEnrichmentData = currentProspect?.enrichment_data || {};
-        updatePayload.enrichment_data = {
-          ...existingEnrichmentData,
-          matching_metadata: matchingMetadata
-        };
-      }
+    // ✅ MC5: Adicionar metadados explicativos ao enrichment_data (sem alterar score base)
+    // ⚠️ Apenas metadados, não recalcula score
+    if (qualified_prospect_id) {
+      const { data: currentProspect } = await supabase
+        .from('qualified_prospects')
+        .select('enrichment_data')
+        .eq('id', qualified_prospect_id)
+        .single();
+      
+      const existingEnrichmentData = currentProspect?.enrichment_data || {};
+      updatePayload.enrichment_data = {
+        ...existingEnrichmentData,
+        matching_metadata: {
+          ...matchingMetadata,
+          computed_at: new Date().toISOString() // ✅ MC5: Timestamp de quando foi calculado
+        }
+      };
+    }
 
       // ✅ SEMPRE atualizar linkedin_url se foi encontrado
       if (linkedinUrl && linkedinUrl.trim()) {
@@ -1131,7 +1176,7 @@ Identifique quais produtos do tenant podem ser APLICADOS ou USADOS nos processos
         linkedin_url: linkedinUrl,
         compatible_products_details: compatibleProducts,
         matching_metadata: matchingMetadata, // ✅ MC5: Metadados explicativos
-        message: `Website escaneado. LinkedIn: ${sourceUsed || 'não encontrado'}, Produtos: ${insertedCount}, Score: ${websiteFitScore}/20 (${matchingReason})`
+        message: `Website escaneado. LinkedIn: ${sourceUsed || 'não encontrado'}, Produtos: ${insertedCount}, Score: ${websiteFitScore}/20 (${matchingReason || 'no_match_found'})`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
