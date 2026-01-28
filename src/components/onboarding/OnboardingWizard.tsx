@@ -641,6 +641,35 @@ export function OnboardingWizard() {
     initializeICP();
   }, [tenantId, isNewTenant]); // 🔥 CRÍTICO: Incluir isNewTenant para não buscar ICP quando for novo tenant
 
+  // 🔥 UX: Se o usuário está no Step 6 e o ID do ICP ainda não está no estado,
+  // tentar recuperar o último ICP criado para o tenant (ex.: recarregou a aba).
+  useEffect(() => {
+    const hydrateCreatedIcpId = async () => {
+      if (currentStep !== 6) return;
+      if (!tenantId) return;
+      if (createdIcpId) return;
+      if (isNewTenant) return;
+
+      try {
+        const { data: lastMetadata, error } = await (supabase as any)
+          .from('icp_profiles_metadata')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && lastMetadata?.id) {
+          setCreatedIcpId(lastMetadata.id);
+        }
+      } catch (e) {
+        // silencioso: apenas uma tentativa de hidratação
+      }
+    };
+
+    void hydrateCreatedIcpId();
+  }, [currentStep, tenantId, createdIcpId, isNewTenant]);
+
   // 🔥 CRÍTICO: Escutar mudanças no tenant do contexto e recarregar dados
   useEffect(() => {
     const handleTenantChanged = async (event: CustomEvent) => {
@@ -1469,7 +1498,11 @@ export function OnboardingWizard() {
     if (stepData && typeof stepData === 'object') {
       // Se for um evento do React, não processar
       if ('nativeEvent' in stepData || 'target' in stepData && stepData.target?.tagName) {
-        console.warn('[OnboardingWizard] ⚠️ stepData parece ser um evento, ignorando...');
+        // Isso pode acontecer quando algum componente chama onSave passando o evento do React por engano.
+        // Não é erro crítico — apenas ignoramos para evitar referência circular e ruído no console.
+        if (!silent) {
+          console.debug('[OnboardingWizard] ℹ️ stepData era um evento; ignorando para salvar.');
+        }
         stepData = undefined;
       }
     }
@@ -1949,7 +1982,8 @@ export function OnboardingWizard() {
 
       if (tenantId) {
         try {
-          const { data: { user: authUser } } = await supabase.auth.getUser();
+          // ✅ Preferir user da sessão (evita falhar por instabilidade de rede/DNS)
+          const authUser = session.user ?? (await supabase.auth.getUser()).data.user ?? null;
           if (!authUser) {
             console.error('[OnboardingWizard] ❌ Usuário não autenticado');
             toast.error('Erro de autenticação', {
@@ -2156,9 +2190,13 @@ export function OnboardingWizard() {
     setIsSubmitting(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // ✅ Preferir sessão local (evita falhar por instabilidade de rede/DNS)
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user ?? null;
       if (!user) {
-        throw new Error('Usuário não autenticado');
+        // fallback: pode disparar request; útil se persistSession estiver off
+        const { data: { user: remoteUser } } = await supabase.auth.getUser();
+        if (!remoteUser) throw new Error('Usuário não autenticado');
       }
 
       const tenantData = formData.step1_DadosBasicos;
@@ -2175,7 +2213,16 @@ export function OnboardingWizard() {
         console.log('[OnboardingWizard] ✅ Usando tenant existente:', tenantId);
         tenant = await multiTenantService.obterTenant(tenantId);
         if (!tenant) {
-          throw new Error('Tenant não encontrado. Por favor, recomece o onboarding.');
+          const currentSupabaseUrl = (supabase as any)?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
+          console.error('[OnboardingWizard] ❌ Tenant não encontrado no projeto Supabase atual', {
+            tenantId,
+            supabaseUrl: currentSupabaseUrl,
+          });
+          toast.error('Tenant não encontrado', {
+            description:
+              'Não foi possível localizar essa empresa no Supabase configurado. Verifique se você está apontando para o projeto correto (VITE_SUPABASE_URL) e tente novamente.',
+          });
+          throw new Error('Tenant não encontrado. Verifique o projeto Supabase (VITE_SUPABASE_URL) e recarregue.');
         }
         console.log('[OnboardingWizard] ✅ Tenant encontrado:', tenant.id);
       } else {

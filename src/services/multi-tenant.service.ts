@@ -228,6 +228,21 @@ export class MultiTenantService {
         }
       }
 
+      // 🔥 IMPORTANTE: Em cenários com RLS, consultas podem retornar "vazio" sem erro.
+      // Nesses casos, tentar buscar o tenant via lista de tenants do usuário (RPC) antes de desistir.
+      try {
+        const { data: tenantsList, error: listError } = await (supabase as any).rpc('get_user_tenants_complete');
+        if (!listError && tenantsList && Array.isArray(tenantsList) && tenantsList.length > 0) {
+          const foundTenant = tenantsList.find((t: any) => t.id === tenantId);
+          if (foundTenant) {
+            console.log('[MultiTenant] ✅ Tenant encontrado na lista de tenants (fallback sem erro)');
+            return foundTenant as Tenant;
+          }
+        }
+      } catch (listError) {
+        console.warn('[MultiTenant] Erro ao buscar lista de tenants (fallback sem erro):', listError);
+      }
+
       // Fallback: query direta (se função RPC não existir ou falhar)
       if (rpcError && (rpcError.code === 'PGRST202' || rpcError.status === 500)) {
         console.warn('[MultiTenant] Função RPC não disponível - usando fallback');
