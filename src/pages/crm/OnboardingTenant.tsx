@@ -110,7 +110,7 @@ export default function OnboardingTenant() {
       if (userTenantError) throw userTenantError;
 
       toast.success('Empresa cadastrada com sucesso!');
-      navigate('/crm/dashboard');
+      navigate('/sdr/workspace');
 
     } catch (error: any) {
       console.error('Error creating tenant:', error);

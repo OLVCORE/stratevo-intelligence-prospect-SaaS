@@ -188,6 +188,11 @@ const menuGroups: MenuGroup[] = [
         icon: BarChart3,
       },
       {
+        title: "Relatórios",
+        path: "/crm/reports",
+        icon: TrendingUp,
+      },
+      {
         title: "Financeiro",
         path: "/crm/financial",
         icon: DollarSign,

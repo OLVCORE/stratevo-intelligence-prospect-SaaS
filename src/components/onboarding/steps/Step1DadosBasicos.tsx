@@ -1275,17 +1275,22 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
       });
     }
     
-    // Adicionar concorrentes que têm URL para scan
+    // Adicionar concorrentes: usar URL do concorrente (urlParaScan ou website); NUNCA URL do tenant
+    const tenantWebsite = formData.website?.trim() || '';
     concorrentes.forEach((conc, index) => {
-      if (conc.urlParaScan?.trim()) {
-        extractionTasks.push({
-          type: 'competitor',
-          index,
-          name: conc.razaoSocial || conc.nomeFantasia || 'Concorrente',
-          url: conc.urlParaScan.trim(),
-          cnpj: conc.cnpj.replace(/\D/g, ''),
-        });
+      const competitorUrl = (conc.urlParaScan || conc.website || '').trim();
+      if (!competitorUrl || competitorUrl === 'N/A') return;
+      if (competitorUrl === tenantWebsite) {
+        console.warn(`[Step1] ⚠️ Concorrente "${conc.razaoSocial || conc.nomeFantasia}" tem URL igual ao tenant — ignorando para evitar mistura`);
+        return;
       }
+      extractionTasks.push({
+        type: 'competitor',
+        index,
+        name: conc.razaoSocial || conc.nomeFantasia || 'Concorrente',
+        url: competitorUrl,
+        cnpj: conc.cnpj?.replace(/\D/g, '') || '',
+      });
     });
     
     if (extractionTasks.length === 0) {
@@ -1329,27 +1334,40 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
             
             // 🔥 CORRIGIDO: Usar função diferente para tenant vs concorrente
             if (task.type === 'tenant') {
-              // Para tenant: usar scan-website-products (salva em tenant_products)
-              console.log('[Step1] 🔍 Extraindo produtos do tenant via scan-website-products');
+              // Para tenant: usar scan-website-products (salva em tenant_products); mode explícito
+              console.log('[Step1] 🔍 Extraindo produtos do tenant via scan-website-products', { url: task.url });
               const { data, error } = await supabase.functions.invoke('scan-website-products', {
                 body: {
                   tenant_id: tenant.id,
                   website_url: task.url,
+                  mode: 'tenant',
                 },
               });
               
               if (error) throw error;
               
-              extracted = data?.products_extracted || data?.products_found || 0;
-              inserted = data?.products_inserted || 0;
+              extracted = data?.count ?? data?.products_extracted ?? data?.products_found ?? 0;
+              inserted = data?.count ?? data?.products_inserted ?? 0;
+              
+              if (data?.mode !== 'tenant' || data?.saved_to !== 'tenant_products') {
+                console.warn('[Step1] Resposta tenant inesperada:', data?.mode, data?.saved_to);
+              }
               
               // Atualizar produtos do tenant
               await new Promise(resolve => setTimeout(resolve, 1000));
               await loadTenantProducts();
             } else {
-              // Para concorrentes: usar scan-competitor-url (salva em tenant_competitor_products)
-              console.log('[Step1] 🔍 Extraindo produtos do concorrente via scan-competitor-url');
-              
+              // Para concorrentes: usar URL DO CONCORRENTE (task.url); NUNCA URL do tenant
+              if (task.url === formData.website?.trim()) {
+                console.error('[Step1] ❌ ERRO: URL do concorrente igual à do tenant — pulando', task.name);
+                throw new Error(`URL do concorrente "${task.name}" não pode ser igual à do tenant`);
+              }
+              console.log('[Step1] 🔍 Extraindo produtos do concorrente via scan-competitor-url', {
+                name: task.name,
+                url: task.url,
+                nao_usar_tenant: formData.website?.trim(),
+              });
+
               // Detectar tipo de URL
               let sourceType = 'website';
               if (task.url.includes('instagram.com')) sourceType = 'instagram';
@@ -1850,10 +1868,16 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [concorrentes.map((c, i) => c.cnpjPendente ? `${i}-${c.cnpj}` : '').filter(Boolean).join('|')]);
 
-  // 🔥 NOVO: Scan de URL do concorrente
+  // 🔥 NOVO: Scan de URL do concorrente — usar SEMPRE URL do concorrente (nunca do tenant)
   const handleScanConcorrenteURL = async (concorrente: ConcorrenteDireto, index: number) => {
-    if (!concorrente.urlParaScan || !tenant?.id) {
-      toast.error('Informe a URL para escanear');
+    const competitorUrl = (concorrente.urlParaScan || concorrente.website || '').trim();
+    if (!competitorUrl || !tenant?.id) {
+      toast.error('Informe a URL do concorrente para escanear');
+      return;
+    }
+    if (competitorUrl === formData.website?.trim()) {
+      toast.error('A URL do concorrente não pode ser igual à do seu tenant');
+      console.error('[Step1] ❌ URL do concorrente igual à do tenant:', competitorUrl);
       return;
     }
 
@@ -1861,22 +1885,22 @@ export function Step1DadosBasicos({ onNext, onBack, onSave, onSaveExplicit, init
     // 🔥 NOVO: Marcar como extraindo
     const competitorKey = `competitor_${concorrente.cnpj.replace(/\D/g, '')}`;
     setExtractionStatus(prev => ({ ...prev, [competitorKey]: 'extracting' }));
-    toast.info(`Escaneando ${concorrente.urlParaScan}...`);
+    toast.info(`Escaneando ${competitorUrl}...`);
 
     try {
       // Detectar tipo de URL
       let sourceType = 'website';
-      if (concorrente.urlParaScan.includes('instagram.com')) sourceType = 'instagram';
-      else if (concorrente.urlParaScan.includes('linkedin.com')) sourceType = 'linkedin';
-      else if (concorrente.urlParaScan.includes('facebook.com')) sourceType = 'facebook';
+      if (competitorUrl.includes('instagram.com')) sourceType = 'instagram';
+      else if (competitorUrl.includes('linkedin.com')) sourceType = 'linkedin';
+      else if (competitorUrl.includes('facebook.com')) sourceType = 'facebook';
 
-      // Chamar Edge Function para extrair produtos
+      // Chamar Edge Function para extrair produtos (source_url = URL do concorrente)
       const { data, error } = await supabase.functions.invoke('scan-competitor-url', {
         body: {
           tenant_id: tenant.id,
           competitor_cnpj: concorrente.cnpj.replace(/\D/g, ''),
           competitor_name: concorrente.razaoSocial,
-          source_url: concorrente.urlParaScan,
+          source_url: competitorUrl,
           source_type: sourceType,
         },
       });

@@ -22,6 +22,8 @@ import { GenericProgressBar } from '@/components/ui/GenericProgressBar';
 import { LinkedInConnectionModal } from '@/components/icp/LinkedInConnectionModal';
 import { LinkedInLeadCollector } from '@/components/icp/LinkedInLeadCollector';
 import { LinkedInAuthDialog } from '@/components/icp/LinkedInAuthDialog';
+import { enrichCompany } from '@/services/enrichment/EnrichmentOrchestrator';
+import type { EnrichmentInput } from '@/types/enrichment';
 
 interface DecisorsContactsTabProps {
   companyId?: string;
@@ -485,97 +487,89 @@ export function DecisorsContactsTab({
     sonnerToast.success('✅ Decisores & Contatos Salvos!');
   };
 
-  // 🚀 Enriquecimento Apollo via ApolloOrgIdDialog (similar ao CompanyDetailPage)
+  // 🚀 Enriquecimento via Orquestrador (Edge: Apollo + Lusha; fallback LinkedIn → Apollo → Lusha → Hunter)
   const [isEnrichingApollo, setIsEnrichingApollo] = useState(false);
-  const handleEnrichApollo = async (apolloOrgId?: string) => {
+
+  /** Fluxo único: busca empresa, monta input, chama Edge e recarrega dados. apolloOrgId opcional (modal Apollo ID Manual). */
+  const runEnrichmentFlow = async (apolloOrgId?: string) => {
     if (!companyId || !companyName) {
       sonnerToast.error('Erro: ID ou nome da empresa não disponível');
       return;
     }
-    
+
     setIsEnrichingApollo(true);
     try {
-      console.log('[DECISORES-TAB] 🚀 Buscando decisores Apollo para:', companyName);
-      console.log('[DECISORES-TAB] 📋 Apollo Org ID:', apolloOrgId || 'N/A');
-      
-      // Buscar dados da empresa para obter CEP, fantasia, etc.
       const { data: companyData } = await supabase
         .from('companies')
         .select('*')
         .eq('id', companyId)
         .single();
-      
+
       if (!companyData) {
         throw new Error('Empresa não encontrada');
       }
-      
+
       const companyDataAny = companyData as any;
       const rawDataLocal = companyDataAny.raw_data || {};
       const receitaFederal = rawDataLocal.receita_federal || {};
-      
-      // Extrair dados com fallback completo
       const cityToSend = receitaFederal.municipio || companyDataAny.city || '';
       const stateToSend = receitaFederal.uf || companyDataAny.state || '';
       const cepToSend = receitaFederal.cep || companyDataAny.zip_code || '';
       const fantasiaToSend = receitaFederal.fantasia || receitaFederal.nome_fantasia || companyDataAny.fantasy_name || '';
-      
-      // Salvar Apollo Org ID na empresa se fornecido
+
       if (apolloOrgId) {
         await supabase
           .from('companies')
           .update({ apollo_organization_id: apolloOrgId } as any)
           .eq('id', companyId);
-        
-        // Atualizar customApolloUrl para refletir o ID salvo
         setCustomApolloUrl(`https://app.apollo.io/#/organizations/${apolloOrgId}`);
       }
-      
-      sonnerToast.info('Buscando decisores no Apollo.io...', {
+
+      const linkedinUrlToSend = customLinkedInUrl || linkedinUrl || companyDataAny.linkedin_url || rawDataLocal?.apollo_organization?.linkedin_url;
+      const apolloIdToSend = apolloOrgId || apolloOrganizationId || companyDataAny.apollo_organization_id;
+
+      const input: EnrichmentInput = {
+        company_id: companyId,
+        company_name: companyName,
+        domain: domain || companyDataAny.domain || companyDataAny.website,
+        linkedin_url: linkedinUrlToSend || undefined,
+        apollo_org_id: apolloIdToSend || undefined,
+        apollo_url: customApolloUrl?.trim() || undefined,
+        city: cityToSend || undefined,
+        state: stateToSend || undefined,
+        industry: companyDataAny.industry || undefined,
+        cep: cepToSend || undefined,
+        fantasia: fantasiaToSend || undefined,
+      };
+
+      sonnerToast.info('Buscando decisores (fallback: LinkedIn → Apollo → Lusha → Hunter)...', {
         description: apolloOrgId ? 'Usando Organization ID manual' : 'Usando filtros inteligentes (CEP + Fantasia)'
       });
-      
-      // 🎯 INICIAR PROGRESSO
+
       setProgressStartTime(Date.now());
       setCurrentPhase('apollo_search');
-      
-      // Usar função enrich-apollo-decisores COM FILTROS INTELIGENTES
-      const { data, error } = await supabase.functions.invoke('enrich-apollo-decisores', {
-        body: {
-          company_id: companyId,
-          company_name: companyName,
-          domain: domain || companyDataAny.domain || companyDataAny.website,
-          apollo_org_id: apolloOrgId || apolloOrganizationId || companyDataAny.apollo_organization_id,
-          modes: ['people', 'company'],
-          city: cityToSend,
-          state: stateToSend,
-          industry: companyDataAny.industry,
-          cep: cepToSend,
-          fantasia: fantasiaToSend
-        }
-      });
-      
-      if (error) {
-        console.error('[DECISORES-TAB] ❌ Erro Apollo:', error);
-        throw error;
+
+      const result = await enrichCompany(supabase, input);
+
+      console.log('[DECISORES-TAB] ✅ Orquestrador retornou:', result);
+
+      const decisoresEncontrados = result.decisionMakersInserted ?? result.decisionMakersTotal ?? 0;
+      setTotalDecisors(decisoresEncontrados);
+
+      if (!result.success && result.error) {
+        throw new Error(result.error);
       }
 
-      console.log('[DECISORES-TAB] ✅ Apollo retornou:', data);
-      
-      const decisoresEncontrados = (data as any)?.decisores_salvos || (data as any)?.decisores?.length || 0;
-      setTotalDecisors(decisoresEncontrados);
-      
-      // 🎯 ATUALIZAR PROGRESSO
       setCurrentPhase('linkedin_analysis');
       setTimeout(() => setCurrentPhase('enrichment'), 10000);
       setTimeout(() => setCurrentPhase('classification'), 25000);
-      
-      // ✅ Recarregar dados após enrichment (aguardar um pouco para garantir que salvou no banco)
+
       console.log('[DECISORES-TAB] ⏳ Aguardando 1.5s para garantir que dados foram salvos...');
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Aguardar 1.5s para garantir que salvou
-      
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
       console.log('[DECISORES-TAB] 🔄 Recarregando dados após enriquecimento...');
       const refreshedData = await loadDecisorsData();
-      
+
       if (refreshedData) {
         console.log('[DECISORES-TAB] ✅ Dados recarregados:', {
           decisores: refreshedData.decisors?.length || 0,
@@ -584,12 +578,10 @@ export function DecisorsContactsTab({
           industry: refreshedData.companyApolloOrg?.industry || 'N/A',
           keywords: refreshedData.companyApolloOrg?.keywords?.length || 0
         });
-        
-        // ✅ PRESERVAR dados existentes e mesclar com novos
+
         setAnalysisData(prev => {
           const merged = {
             ...refreshedData,
-            // Preservar dados que não devem ser sobrescritos
             decisors: refreshedData.decisors || prev?.decisors || [],
             decisorsWithEmails: refreshedData.decisorsWithEmails || prev?.decisorsWithEmails || [],
             companyApolloOrg: refreshedData.companyApolloOrg || prev?.companyApolloOrg || null,
@@ -600,10 +592,8 @@ export function DecisorsContactsTab({
         });
       } else {
         console.warn('[DECISORES-TAB] ⚠️ Nenhum dado retornado após enriquecimento - mantendo dados existentes');
-        // ✅ NÃO resetar para null - manter dados existentes
       }
-      
-      // 🎯 FINALIZAR PROGRESSO
+
       setTimeout(() => {
         setCurrentPhase('completed');
         setTimeout(() => {
@@ -611,19 +601,24 @@ export function DecisorsContactsTab({
           setCurrentPhase(null);
         }, 1000);
       }, 30000);
-      
+
       sonnerToast.success('Decisores encontrados!', {
-        description: `${decisoresEncontrados} decisores salvos no banco`
+        description: result.message ?? `${decisoresEncontrados} decisores salvos (fonte: ${result.sourceUsed})`
       });
     } catch (e: any) {
       console.error('[DECISORES-TAB] ❌ Erro completo:', e);
-      sonnerToast.error('Erro ao buscar decisores', { 
-        description: e.message || 'Verifique o Apollo Organization ID'
+      sonnerToast.error('Erro ao buscar decisores', {
+        description: e.message || 'Verifique Apollo Organization ID ou LinkedIn URL'
       });
     } finally {
       setIsEnrichingApollo(false);
     }
   };
+
+  const handleEnrichApollo = (apolloOrgId?: string) => runEnrichmentFlow(apolloOrgId);
+
+  /** Botão "Extrair Decisores": mesmo fluxo do orquestrador (Apollo + Lusha), com URLs manuais se preenchidas */
+  const handleExtractDecisionMakers = () => runEnrichmentFlow();
 
   // 🚀 Enriquecimento TRIPLO (Apollo → Hunter.io → PhantomBuster)
   const apolloMutation = useMutation({
@@ -897,6 +892,9 @@ export function DecisorsContactsTab({
             </div>
           </div>
 
+          <p className="text-xs text-muted-foreground mb-2">
+            Sistema de fallback ativo: LinkedIn → Apollo → Lusha → Hunter
+          </p>
           <div className="flex gap-2 flex-wrap">
             <Button
               onClick={handleRefreshData}
@@ -927,11 +925,11 @@ export function DecisorsContactsTab({
             </Button>
             
             <Button
-              onClick={() => linkedinMutation.mutate()}
-              disabled={linkedinMutation.isPending}
+              onClick={handleExtractDecisionMakers}
+              disabled={isEnrichingApollo}
               variant="default"
             >
-              {linkedinMutation.isPending ? (
+              {isEnrichingApollo ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Sparkles className="h-4 w-4 mr-2" />
@@ -960,7 +958,7 @@ export function DecisorsContactsTab({
 
       {/* Loading */}
       {/* 🎯 BARRA DE PROGRESSO */}
-      {(progressStartTime || linkedinMutation.isPending || apolloMutation.isPending) && (
+      {(progressStartTime || isEnrichingApollo || linkedinMutation.isPending || apolloMutation.isPending) && (
         <Card className="p-4 mt-4">
           <GenericProgressBar
             phases={[
@@ -984,12 +982,16 @@ export function DecisorsContactsTab({
         </Card>
       )}
       
-      {linkedinMutation.isPending && (
+      {(isEnrichingApollo || linkedinMutation.isPending) && (
         <Card className="p-12 text-center">
           <Loader2 className="w-16 h-16 mx-auto mb-4 animate-spin text-muted-foreground" />
-          <p className="font-medium mb-2">Analisando LinkedIn...</p>
+          <p className="font-medium mb-2">
+            {isEnrichingApollo ? 'Buscando decisores (Apollo + Lusha)...' : 'Analisando LinkedIn...'}
+          </p>
           <p className="text-sm text-muted-foreground">
-            Extraindo decisores, emails e dados da empresa (30-60s)
+            {isEnrichingApollo
+              ? 'Fallback: LinkedIn → Apollo → Lusha → Hunter (até ~45s)'
+              : 'Extraindo decisores, emails e dados da empresa (30-60s)'}
           </p>
         </Card>
       )}
@@ -1588,12 +1590,12 @@ export function DecisorsContactsTab({
       )}
 
       {/* Estado vazio */}
-      {!analysisData && !linkedinMutation.isPending && (
+      {!analysisData && !linkedinMutation.isPending && !isEnrichingApollo && (
         <Card className="p-12 text-center">
           <Users className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
           <h4 className="font-semibold mb-2">Extração de Decisores não executada</h4>
           <p className="text-sm text-muted-foreground mb-4">
-            Clique em "Extrair Decisores" para mapear tomadores de decisão via PhantomBuster
+            Clique em &quot;Extrair Decisores&quot; para mapear tomadores de decisão (LinkedIn → Apollo → Lusha → Hunter)
           </p>
           {!linkedinUrl && (
             <Badge variant="secondary" className="text-xs">

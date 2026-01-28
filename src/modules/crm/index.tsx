@@ -64,6 +64,7 @@ const Integrations = createLazyComponent(() => import("./pages/Integrations"), "
 const Analytics = createLazyComponent(() => import("./pages/Analytics"), "Analytics");
 const Financial = createLazyComponent(() => import("./pages/Financial"), "Financeiro");
 const Customization = createLazyComponent(() => import("./pages/Customization"), "Customization");
+const CRMReports = createLazyComponent(() => import("@/pages/crm/ReportsPage"), "Relatórios CRM");
 
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-[400px]">
@@ -96,6 +97,7 @@ export function CRMModule() {
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="integrations" element={<Integrations />} />
                 <Route path="analytics" element={<Analytics />} />
+                <Route path="reports" element={<CRMReports />} />
                 <Route path="financial" element={<Financial />} />
                 <Route path="customization" element={<Customization />} />
         </Routes>

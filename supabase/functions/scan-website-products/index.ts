@@ -18,44 +18,59 @@ serve(async (req) => {
     )
 
     const body = await req.json()
-    
-    // 🔥 VALIDAÇÃO RIGOROSA DE PARÂMETROS
-    let company_id = typeof body.company_id === 'string' ? body.company_id.trim() : undefined
-    let tenant_id = typeof body.tenant_id === 'string' ? body.tenant_id.trim() : undefined
+
+    // 🔥 EXTRAIR PARÂMETROS COM VALIDAÇÃO RIGOROSA
+    const company_id = typeof body.company_id === 'string' ? body.company_id.trim() : undefined
+    const tenant_id = typeof body.tenant_id === 'string' ? body.tenant_id.trim() : undefined
     const website_url = typeof body.website_url === 'string' ? body.website_url.trim() : ''
+    const explicitMode = body.mode // 'prospect' | 'tenant' — prioridade absoluta
 
-    // Rejeitar company_id inválido (string "undefined", "null", vazio ou UUID mal-formado)
-    if (company_id === '' || company_id === 'undefined' || company_id === 'null' || (company_id && company_id.length < 30)) {
-      company_id = undefined
-    }
+    const companyIdValid = company_id && company_id !== '' && company_id !== 'undefined' && company_id !== 'null' && company_id.length >= 30
+    const tenantIdValid = tenant_id && tenant_id !== '' && tenant_id !== 'undefined' && tenant_id !== 'null' && tenant_id.length >= 30
 
-    // Rejeitar tenant_id inválido
-    if (tenant_id === '' || tenant_id === 'undefined' || tenant_id === 'null' || (tenant_id && tenant_id.length < 30)) {
-      tenant_id = undefined
-    }
+    console.log('[ScanWebsite] ━━━ RECEBIDO ━━━')
+    console.log('[ScanWebsite] company_id:', company_id ?? 'N/A', companyIdValid ? '(válido)' : '')
+    console.log('[ScanWebsite] tenant_id:', tenant_id ?? 'N/A', tenantIdValid ? '(válido)' : '')
+    console.log('[ScanWebsite] website_url:', website_url)
+    console.log('[ScanWebsite] mode (explícito):', explicitMode ?? 'N/A')
 
-    if (!website_url) {
+    if (!website_url || website_url === 'N/A' || website_url.length < 10) {
       return new Response(
-        JSON.stringify({ error: 'website_url is required' }),
+        JSON.stringify({ success: false, error: 'website_url inválida ou não fornecida', received: { website_url } }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // 🔥 DEFINIR MODO COM PRIORIDADE ABSOLUTA
-    const isProspectMode = company_id !== undefined && company_id.length >= 30
-    const isTenantMode = !isProspectMode && tenant_id !== undefined && tenant_id.length >= 30
+    // 🔥 DETERMINAR MODO: prioridade para mode explícito; nunca misturar prospect com tenant
+    let mode = explicitMode
+    if (!mode || (mode !== 'prospect' && mode !== 'tenant')) {
+      if (companyIdValid) mode = 'prospect'
+      else if (tenantIdValid) mode = 'tenant'
+    }
 
-    console.log(`[ScanWebsite] Mode: ${isProspectMode ? 'PROSPECT' : isTenantMode ? 'TENANT' : 'INVALID'}`)
-    console.log(`[ScanWebsite] company_id: ${company_id ?? 'N/A'}`)
-    console.log(`[ScanWebsite] tenant_id: ${tenant_id ?? 'N/A'}`)
-    console.log(`[ScanWebsite] website_url: ${website_url}`)
+    console.log('[ScanWebsite] 🎯 MODO DETERMINADO:', mode)
 
-    if (!isProspectMode && !isTenantMode) {
+    if (!mode || (mode !== 'prospect' && mode !== 'tenant')) {
       return new Response(
-        JSON.stringify({ 
-          error: 'É necessário enviar company_id válido (UUID do prospect) OU tenant_id válido (UUID do tenant)',
-          received: { company_id, tenant_id }
+        JSON.stringify({
+          success: false,
+          error: 'Não foi possível determinar o modo (prospect ou tenant). Envie mode: "prospect" ou "tenant" e o ID correspondente.',
+          received: { company_id, tenant_id, explicitMode },
+          hint: 'Prospect: company_id + website_url + mode: "prospect". Tenant: tenant_id + website_url + mode: "tenant".'
         }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (mode === 'prospect' && !companyIdValid) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'company_id inválido para modo prospect', received: { company_id } }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    if (mode === 'tenant' && !tenantIdValid) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'tenant_id inválido para modo tenant', received: { tenant_id } }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -78,9 +93,11 @@ serve(async (req) => {
       }
     ]
 
-    // 🔥 MODO PROSPECT: Gravar APENAS em companies.raw_data
-    if (isProspectMode) {
-      console.log(`[ScanWebsite] 🔵 MODO PROSPECT - Salvando em companies.raw_data para company_id: ${company_id}`)
+    // 🔵 MODO PROSPECT: Gravar APENAS em companies.raw_data (NUNCA em tenant_products)
+    if (mode === 'prospect') {
+      console.log('[ScanWebsite] 🔵 MODO PROSPECT')
+      console.log('[ScanWebsite] 💾 SALVANDO EM: companies.raw_data.produtos_extracted')
+      console.log('[ScanWebsite] 🆔 company_id:', company_id)
 
       // Buscar raw_data atual
       const { data: companyData, error: fetchError } = await supabase
@@ -97,16 +114,14 @@ serve(async (req) => {
         )
       }
 
-      const currentRawData = companyData?.raw_data || {}
+      const currentRawData = (companyData?.raw_data as Record<string, unknown>) || {}
       const updatedRawData = {
         ...currentRawData,
         produtos_extracted: mockProducts.map(p => ({
-          name: p.name,
-          category: p.category,
-          description: p.description,
-          price: p.price,
-          image_url: p.image_url,
-          extracted_at: new Date().toISOString()
+          ...p,
+          extracted_at: new Date().toISOString(),
+          source: website_url,
+          extraction_mode: 'prospect'
         }))
       }
 
@@ -123,7 +138,8 @@ serve(async (req) => {
         )
       }
 
-      console.log(`[ScanWebsite] ✅ ${mockProducts.length} produtos salvos em companies.raw_data`)
+      console.log('[ScanWebsite] ✅', mockProducts.length, 'produtos salvos em companies.raw_data')
+      console.log('[ScanWebsite] ⚠️ VERIFICAÇÃO: NÃO foi salvo em tenant_products')
 
       return new Response(
         JSON.stringify({
@@ -132,28 +148,28 @@ serve(async (req) => {
           count: mockProducts.length,
           products: mockProducts,
           company_id: company_id,
+          saved_to: 'companies.raw_data.produtos_extracted',
+          company_name: (companyData as { name?: string })?.name,
           message: `${mockProducts.length} produtos extraídos e salvos no dossiê do prospect`
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // 🔥 MODO TENANT: Gravar APENAS em tenant_products
-    if (isTenantMode) {
-      console.log(`[ScanWebsite] 🟢 MODO TENANT - Salvando em tenant_products para tenant_id: ${tenant_id}`)
+    // 🟢 MODO TENANT: Gravar APENAS em tenant_products (NUNCA em companies.raw_data)
+    if (mode === 'tenant') {
+      console.log('[ScanWebsite] 🟢 MODO TENANT')
+      console.log('[ScanWebsite] 💾 SALVANDO EM: tenant_products')
+      console.log('[ScanWebsite] 🆔 tenant_id:', tenant_id)
 
-      const { data: { user } } = await supabase.auth.getUser()
-      const created_by = user?.id
-
+      // tenant_products: nome, descricao, categoria, ativo (schema 20250201000001)
       const productsToInsert = mockProducts.map(p => ({
         tenant_id: tenant_id,
-        name: p.name,
-        category: p.category,
-        description: p.description,
-        price: p.price,
-        image_url: p.image_url,
-        is_active: true,
-        created_by: created_by,
+        nome: p.name,
+        descricao: p.description ?? null,
+        categoria: p.category ?? null,
+        ativo: true,
+        imagem_url: p.image_url ?? null,
         created_at: new Date().toISOString()
       }))
 
@@ -177,6 +193,7 @@ serve(async (req) => {
           mode: 'tenant',
           count: productsToInsert.length,
           tenant_id: tenant_id,
+          saved_to: 'tenant_products',
           message: `${productsToInsert.length} produtos do catálogo salvos`
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

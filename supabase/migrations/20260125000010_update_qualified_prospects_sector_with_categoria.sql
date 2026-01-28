@@ -413,4 +413,3 @@ CREATE TRIGGER trigger_qualified_prospects_update_sector
 -- Comentário
 COMMENT ON FUNCTION trigger_update_qualified_prospect_sector IS 
 'MC2.6.24: Trigger automático que atualiza setor e cnae_principal ao inserir/atualizar qualified_prospects. Garante que TODAS as empresas futuras sejam processadas automaticamente.';
-image.pngimage.pngimage.pngimage.pngimage.pngimage.pngimage.png

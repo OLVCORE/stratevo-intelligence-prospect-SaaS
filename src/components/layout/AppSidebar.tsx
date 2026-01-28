@@ -170,19 +170,6 @@ const menuGroups: MenuGroup[] = [
         description: "Enriquecimento e criação de deals - único local de enrichment"
       },
       {
-        title: "6. Pipeline de Vendas",
-        icon: Rocket,
-        url: "/sdr/workspace",
-        highlighted: true,
-        description: "Deals ativos - SDR Workspace"
-      },
-      {
-        title: "Sequências Comerciais",
-        icon: Repeat,
-        url: "/sequences",
-        description: "Criar e gerenciar sequências de comunicação automatizadas"
-      },
-      {
         title: "Empresas Descartadas",
         icon: XCircle,
         url: "/leads/discarded",
@@ -240,15 +227,9 @@ const menuGroups: MenuGroup[] = [
           { title: "Inbox Unificado", icon: Inbox, url: "/sdr/inbox", description: "Central de mensagens multi-canal" },
           { title: "Sequências", icon: Repeat, url: "/sdr/sequences", description: "Cadências automatizadas" },
           { title: "Tarefas", icon: ListChecks, url: "/sdr/tasks", description: "Gestão de tarefas inteligentes" },
+          { title: "Relatórios", icon: BarChart3, url: "/sdr/reports", description: "Métricas, forecast e export CSV" },
           { title: "Integrações", icon: Zap, url: "/sdr/integrations", description: "Twilio, WhatsApp, Email, APIs" },
         ],
-      },
-      {
-        title: "CRM",
-        icon: Users,
-        url: "/crm",
-        highlighted: true,
-        description: "Sistema completo de CRM multi-tenant com automações e analytics"
       },
     ]
   },

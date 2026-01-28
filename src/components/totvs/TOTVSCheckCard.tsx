@@ -539,10 +539,11 @@ export default function UsageVerificationCard({
       }
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
       const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      // 🔥 CRÍTICO: Enviar APENAS company_id + website_url; NÃO enviar tenant_id
+      // 🔥 CRÍTICO: Enviar company_id + website_url + mode: 'prospect'; NÃO enviar tenant_id
       const requestBody = {
         company_id: companyIdStr,
         website_url: websiteUrl,
+        mode: 'prospect',
       };
       console.log('[ExtractProspect] Request body:', requestBody);
       const response = await fetch(`${SUPABASE_URL}/functions/v1/scan-website-products`, {
@@ -559,6 +560,12 @@ export default function UsageVerificationCard({
         throw new Error(result.error || 'Erro na extração');
       }
       if (result.success && result.mode === 'prospect') {
+        if (result.saved_to !== 'companies.raw_data.produtos_extracted') {
+          console.error('[ExtractProspect] ❌ Salvou no lugar errado:', result.saved_to);
+          toast.error('Produtos foram salvos no destino incorreto. Contate o suporte.');
+          setExtractProductsLoading(false);
+          return;
+        }
         toast.success(`✅ ${result.count ?? 0} produtos extraídos do prospect`);
         if (result.products && Array.isArray(result.products)) {
           setProspectProductsFromCompanyRaw(result.products.map((p: any) => ({

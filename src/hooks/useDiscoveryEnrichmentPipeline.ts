@@ -112,12 +112,12 @@ export function useDiscoveryEnrichmentPipeline({
       if (scanRan && websiteToScan) {
         reportProgress(2, PIPELINE_STEPS[2].name, PIPELINE_STEPS[2].percent);
         toast.info('Escaneando website e extraindo produtos da empresa analisada...');
-        // 🔥 DOSSIÊ: scan-website-products com company_id → companies.raw_data; enviar tenant_id para compatibilidade com validação no backend
+        // 🔥 DOSSIÊ: scan-website-products com company_id → companies.raw_data; NÃO enviar tenant_id (evita confusão)
         const { data: scanData, error: scanErr } = await supabase.functions.invoke('scan-website-products', {
           body: {
             company_id: companyId,
             website_url: websiteToScan,
-            tenant_id: tenantId || undefined,
+            mode: 'prospect',
           },
         });
         if (scanErr) {

@@ -99,9 +99,9 @@ import LinkedInCallbackPage from "./pages/LinkedInCallbackPage";
 const MyCompaniesPage = lazy(() => import("./pages/MyCompanies"));
 const UsersManagementPage = lazy(() => import("./pages/admin/UsersManagement"));
 const GeographicAnalysisPage = lazy(() => import("./pages/GeographicAnalysisPage"));
-// CRM Module
-const CRMModule = lazy(() => import("./modules/crm"));
+// CRM antigo desativado: redirecionado para SDR Workspace (CRM oficial)
 const OnboardingTenant = lazy(() => import("./pages/crm/OnboardingTenant"));
+const CRMReportsPage = lazy(() => import("./pages/crm/ReportsPage"));
 // Prospecção Avançada Module
 const ProspeccaoAvancadaModule = lazy(() => import("./modules/prospeccao-avancada"));
 // Sales Academy Module
@@ -575,22 +575,25 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            {/* CRM Module Routes */}
-            <Route
-              path="/crm/*"
-              element={
-                <ProtectedRoute>
-                  <TenantGuard>
-                    <CRMModule />
-                  </TenantGuard>
-                </ProtectedRoute>
-              }
-            />
+            {/* CRM antigo: redireciona para SDR Workspace (CRM oficial) */}
+            <Route path="/crm" element={<Navigate to="/sdr/workspace" replace />} />
             <Route
               path="/crm/onboarding"
               element={
                 <ProtectedRoute>
                   <OnboardingTenant />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/crm/*" element={<Navigate to="/sdr/workspace" replace />} />
+            {/* Relatórios CRM no fluxo oficial (SDR Workspace) */}
+            <Route
+              path="/sdr/reports"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CRMReportsPage />
+                  </AppLayout>
                 </ProtectedRoute>
               }
             />
