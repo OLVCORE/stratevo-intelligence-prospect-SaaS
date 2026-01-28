@@ -763,6 +763,23 @@ export function RecommendedProductsTab({
 
     // ✅ NÃO DESREGISTRAR! Abas devem permanecer no registry
   }, [productGapsData, onDataChange]);
+
+  // 🎯 PROGRESSO DO LOADING — SEMPRE declarado antes de qualquer return (Rules of Hooks)
+  useEffect(() => {
+    if (isLoading && enabled && !progressStartTime) {
+      setProgressStartTime(Date.now());
+      setCurrentPhase('gap_analysis');
+      setTimeout(() => setCurrentPhase('product_matching'), 6000);
+      setTimeout(() => setCurrentPhase('roi_calculation'), 11000);
+      setTimeout(() => setCurrentPhase('recommendations'), 16000);
+    } else if (!isLoading && progressStartTime) {
+      setCurrentPhase('completed');
+      setTimeout(() => {
+        setProgressStartTime(null);
+        setCurrentPhase(null);
+      }, 1000);
+    }
+  }, [isLoading, enabled, progressStartTime]);
   
   // 🔄 RESET
   const handleReset = () => {
@@ -1011,25 +1028,6 @@ export function RecommendedProductsTab({
   }
 
   // Loading state (só mostrar se análise foi iniciada)
-  // 🎯 ATUALIZAR PROGRESSO DURANTE CARREGAMENTO
-  useEffect(() => {
-    if (isLoading && enabled && !progressStartTime) {
-      setProgressStartTime(Date.now());
-      setCurrentPhase('gap_analysis');
-      
-      // Simular progresso das 4 fases
-      setTimeout(() => setCurrentPhase('product_matching'), 6000);
-      setTimeout(() => setCurrentPhase('roi_calculation'), 11000);
-      setTimeout(() => setCurrentPhase('recommendations'), 16000);
-    } else if (!isLoading && progressStartTime) {
-      setCurrentPhase('completed');
-      setTimeout(() => {
-        setProgressStartTime(null);
-        setCurrentPhase(null);
-      }, 1000);
-    }
-  }, [isLoading, enabled, progressStartTime]);
-  
   if (isLoading && enabled) {
     // 🎯 4 FASES REAIS DO BACKEND (conforme generate-product-gaps/index.ts)
     const productsPhases = [

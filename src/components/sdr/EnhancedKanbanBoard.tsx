@@ -223,9 +223,9 @@ export function EnhancedKanbanBoard() {
         </DragOverlay>
       </DndContext>
 
-      {/* Dialogs */}
+      {/* Dialogs — deal "ao vivo" da lista para que, ao salvar Website/LinkedIn/Apollo/Lusha no modal, os dados apareçam sem fechar */}
       <DealDetailsDialog
-        deal={selectedDeal}
+        deal={selectedDeal ? (filteredDeals?.find(d => d.id === selectedDeal.id) ?? selectedDeal) : null}
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
       />
@@ -274,7 +274,7 @@ export function EnhancedKanbanBoard() {
       />
 
       <DealDetailsDialog
-        deal={selectedDeal}
+        deal={selectedDeal ? (filteredDeals?.find(d => d.id === selectedDeal.id) ?? selectedDeal) : null}
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
       />

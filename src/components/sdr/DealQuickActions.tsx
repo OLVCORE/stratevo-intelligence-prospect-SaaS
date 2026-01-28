@@ -9,6 +9,8 @@ import { differenceInDays } from 'date-fns';
 
 interface DealQuickActionsProps {
   deal: any;
+  /** Chamado ao clicar em "Executar ação" — ex.: para "Agendar demo" abrir Detalhes e focar em data/GO */
+  onExecuteAction?: (suggestion: AISuggestion) => void;
 }
 
 interface AISuggestion {
@@ -18,7 +20,7 @@ interface AISuggestion {
   type: 'call' | 'email' | 'meeting' | 'proposal' | 'research';
 }
 
-export function DealQuickActions({ deal }: DealQuickActionsProps) {
+export function DealQuickActions({ deal, onExecuteAction }: DealQuickActionsProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
@@ -196,7 +198,14 @@ export function DealQuickActions({ deal }: DealQuickActionsProps) {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">{suggestion.reason}</p>
-                    <Button size="sm" className="w-full mt-2">
+                    <Button
+                      size="sm"
+                      className="w-full mt-2"
+                      onClick={() => {
+                        if (onExecuteAction) onExecuteAction(suggestion);
+                        else toast({ title: 'Ação', description: suggestion.action, variant: 'default' });
+                      }}
+                    >
                       Executar ação
                     </Button>
                   </div>

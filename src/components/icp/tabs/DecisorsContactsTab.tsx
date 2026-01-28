@@ -28,9 +28,12 @@ interface DecisorsContactsTabProps {
   companyName?: string;
   linkedinUrl?: string;
   domain?: string;
+  apolloOrganizationId?: string | null;
+  apolloUrl?: string | null;
   savedData?: any;
   stcHistoryId?: string;
   onDataChange?: (data: any) => void;
+  onWebsiteDiscovered?: (website: string) => void;
 }
 
 export function DecisorsContactsTab({ 
@@ -38,9 +41,12 @@ export function DecisorsContactsTab({
   companyName, 
   linkedinUrl, 
   domain,
+  apolloOrganizationId,
+  apolloUrl,
   savedData,
   stcHistoryId,
-  onDataChange 
+  onDataChange,
+  onWebsiteDiscovered 
 }: DecisorsContactsTabProps) {
   const { toast } = useToast();
   
@@ -64,7 +70,7 @@ export function DecisorsContactsTab({
     };
   });
   const [customLinkedInUrl, setCustomLinkedInUrl] = useState(linkedinUrl || '');
-  const [customApolloUrl, setCustomApolloUrl] = useState('');
+  const [customApolloUrl, setCustomApolloUrl] = useState(apolloUrl || (apolloOrganizationId ? `https://app.apollo.io/#/organizations/${apolloOrganizationId}` : ''));
   
   // 🔍 FILTROS MÚLTIPLOS
   const [filterBuyingPower, setFilterBuyingPower] = useState<string[]>([]);
@@ -87,8 +93,15 @@ export function DecisorsContactsTab({
   
   // 🔐 AUTENTICAÇÃO LINKEDIN
   const [linkedInAuthOpen, setLinkedInAuthOpen] = useState(false);
+
+  // 🔗 Sincronizar Apollo com valores oficiais do modal (companies.apollo_organization_id / apollo_url)
+  useEffect(() => {
+    const url = apolloUrl || (apolloOrganizationId ? `https://app.apollo.io/#/organizations/${apolloOrganizationId}` : '');
+    if (url) setCustomApolloUrl(url);
+  }, [apolloUrl, apolloOrganizationId]);
   
   // 🔥 CRÍTICO: Carregar dados salvos PRIMEIRO (de savedData ou full_report)
+  // Company details Apollo (segmento, keywords, employees, SIC/NAICS) devem aparecer mesmo quando decisors vêm do histórico
   useEffect(() => {
     if (savedData) {
       console.log('[DECISORES-TAB] 📦 Dados salvos recebidos via prop savedData:', {
@@ -104,8 +117,23 @@ export function DecisorsContactsTab({
       if (savedData.decisors && savedData.decisors.length > 0) {
         sonnerToast.success(`✅ ${savedData.decisors.length} decisores restaurados do histórico!`);
         console.log('[DECISORES-TAB] ✅ Dados restaurados do histórico');
-        return; // Não carregar do banco se já tem dados salvos
       }
+      
+      // ✅ PRIORIDADE 1b: Se faltar Company details Apollo (estilo Klabin), completar a partir de companies.raw_data
+      if ((!savedData.companyApolloOrg || Object.keys(savedData.companyApolloOrg || {}).length === 0) && companyId) {
+        loadDecisorsData().then((data) => {
+          if (data?.companyApolloOrg) {
+            setAnalysisData((prev) => ({
+              ...prev,
+              decisors: prev?.decisors ?? data?.decisors ?? [],
+              companyApolloOrg: data.companyApolloOrg,
+              companyData: data.companyData ?? prev?.companyData,
+            }));
+            console.log('[DECISORES-TAB] ✅ Company details Apollo completados a partir do banco');
+          }
+        });
+      }
+      return;
     }
     
     // ✅ PRIORIDADE 2: Se não tem dados salvos, carregar do banco
@@ -516,7 +544,7 @@ export function DecisorsContactsTab({
           company_id: companyId,
           company_name: companyName,
           domain: domain || companyDataAny.domain || companyDataAny.website,
-          apollo_org_id: apolloOrgId || companyDataAny.apollo_organization_id,
+          apollo_org_id: apolloOrgId || apolloOrganizationId || companyDataAny.apollo_organization_id,
           modes: ['people', 'company'],
           city: cityToSend,
           state: stateToSend,
@@ -1320,13 +1348,16 @@ export function DecisorsContactsTab({
                         )}
                       </td>
 
-                      {/* 3. LINKS (LinkedIn) */}
+                      {/* 3. LINKS (LinkedIn) - normalizar URL para sempre abrir corretamente */}
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {decisor.linkedin_url && (
+                          {decisor.linkedin_url && (() => {
+                            const url = String(decisor.linkedin_url).trim();
+                            const href = url.startsWith('http') ? url : url.startsWith('/') ? `https://linkedin.com${url}` : `https://linkedin.com/in/${url.replace(/^in\/?/, '')}`;
+                            return (
                             <>
                               <a 
-                                href={decisor.linkedin_url} 
+                                href={href} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 className="inline-flex p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 transition-colors"
@@ -1349,7 +1380,8 @@ export function DecisorsContactsTab({
                                 <User className="w-3.5 h-3.5 text-green-400" />
                               </Button>
                             </>
-                          )}
+                            );
+                          })()}
                         </div>
                       </td>
 

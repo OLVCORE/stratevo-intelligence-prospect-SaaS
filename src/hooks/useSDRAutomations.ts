@@ -18,7 +18,7 @@ export function useSDRAutomations() {
       const { data: deals, error } = await supabase
         .from('sdr_deals')
         .select('*')
-        .in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']) // FIX: usar deal_stage, não status
+        .in('stage', ['discovery', 'qualification', 'proposal', 'negotiation'])
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -37,7 +37,7 @@ export function useSDRAutomations() {
             dealId: deal.id,
             type: 'stale_deal',
             priority: daysInStage > 14 ? 'urgent' : 'high',
-            message: `Deal "${deal.deal_title}" está há ${daysInStage} dias no mesmo estágio`,
+            message: `Deal "${deal.title ?? (deal as { deal_title?: string }).deal_title}" está há ${daysInStage} dias no mesmo estágio`,
             action: 'Definir próxima ação',
             actionUrl: `/sdr/workspace?deal=${deal.id}`,
           });
@@ -49,30 +49,30 @@ export function useSDRAutomations() {
             dealId: deal.id,
             type: 'sla_alert',
             priority: daysToClose < 3 ? 'urgent' : 'high',
-            message: `Deal "${deal.deal_title}" fecha em ${daysToClose} dias`,
+            message: `Deal "${deal.title ?? (deal as { deal_title?: string }).deal_title}" fecha em ${daysToClose} dias`,
             action: 'Acelerar fechamento',
             actionUrl: `/sdr/workspace?deal=${deal.id}`,
           });
         }
 
         // Sugestão de próxima ação baseada no estágio
-        if (deal.stage === 'discovery' && daysInStage > 3) {
+        if ((deal.stage ?? (deal as { deal_stage?: string }).deal_stage) === 'discovery' && daysInStage > 3) {
           automations.push({
             dealId: deal.id,
             type: 'next_action',
             priority: 'medium',
-            message: `Sugiro agendar demo para "${deal.deal_title}"`,
+            message: `Sugiro agendar demo para "${deal.title ?? (deal as { deal_title?: string }).deal_title}"`,
             action: 'Agendar demo',
             actionUrl: `/sdr/workspace?deal=${deal.id}`,
           });
         }
 
-        if (deal.stage === 'proposal' && daysInStage > 5) {
+        if ((deal.stage ?? (deal as { deal_stage?: string }).deal_stage) === 'proposal' && daysInStage > 5) {
           automations.push({
             dealId: deal.id,
             type: 'follow_up',
             priority: 'high',
-            message: `Follow-up necessário em "${deal.deal_title}"`,
+            message: `Follow-up necessário em "${deal.title ?? (deal as { deal_title?: string }).deal_title}"`,
             action: 'Enviar follow-up',
             actionUrl: `/sdr/inbox`,
           });

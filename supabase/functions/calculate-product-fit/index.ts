@@ -77,42 +77,30 @@ serve(async (req) => {
       );
     }
 
-    // 2. Buscar produtos do tenant
-    // 🔥 CRÍTICO: Tabela pode ter 'ativo' (boolean) ou 'is_active' (boolean)
-    // Tentar primeiro com 'is_active', se falhar, tentar com 'ativo'
+    // 2. Buscar produtos do tenant — schema real: ativo, nome (sem is_active/display_order)
     let tenantProducts: any[] | null = null;
-    let productsError: any = null;
-    
-    // Tentar primeiro com is_active (estrutura nova)
+
     const { data: products1, error: error1 } = await supabase
       .from('tenant_products')
       .select('*')
       .eq('tenant_id', tenant_id)
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
-    
-    if (error1) {
-      console.warn('[PRODUCT-FIT] ⚠️ Erro ao buscar com is_active, tentando com ativo:', error1);
-      // Tentar com 'ativo' (estrutura antiga)
+      .or('ativo.eq.true,ativo.is.null')
+      .order('nome', { ascending: true, nullsFirst: false });
+
+    if (!error1 && products1 && products1.length > 0) {
+      tenantProducts = products1;
+      console.log('[PRODUCT-FIT] 📦 Produtos (ativo + nome):', products1.length);
+    } else {
+      if (error1) console.warn('[PRODUCT-FIT] ⚠️ ativo/nome falhou, fail-safe:', error1?.message);
       const { data: products2, error: error2 } = await supabase
         .from('tenant_products')
         .select('*')
         .eq('tenant_id', tenant_id)
-        .eq('ativo', true)
-        .order('display_order', { ascending: true });
-      
-      if (error2) {
-        console.error('[PRODUCT-FIT] ❌ Erro ao buscar produtos (tentativa 2):', error2);
-        productsError = error2;
-      } else {
+        .order('nome', { ascending: true, nullsFirst: false });
+      if (!error2 && products2 && products2.length > 0) {
         tenantProducts = products2;
+        console.log('[PRODUCT-FIT] 📦 Fail-safe: todos do tenant ordenados por nome:', products2.length);
       }
-    } else {
-      tenantProducts = products1;
-    }
-
-    if (productsError) {
-      console.error('[PRODUCT-FIT] ❌ Erro final ao buscar produtos:', productsError);
     }
 
     const products = tenantProducts || [];
@@ -193,24 +181,22 @@ serve(async (req) => {
       cidade: company.cidade || company.city || ''
     };
 
-    // 6. Análise de website (se disponível) - usar análise existente se houver
+    // 6. Análise de website e produtos extraídos do prospect (scan-prospect-website → companies.raw_data)
     let websiteAnalysis = '';
+    const rawData = (company.raw_data as Record<string, unknown>) || {};
+    const produtosExtracted = Array.isArray(rawData.produtos_extracted) ? rawData.produtos_extracted : [];
     if (companyData.website) {
-      // Buscar análise de website existente (se houver)
-      const { data: websiteData } = await supabase
-        .from('companies')
-        .select('website_analysis, raw_data')
-        .eq('id', company_id)
-        .single();
-
-      if (websiteData?.website_analysis) {
-        websiteAnalysis = websiteData.website_analysis;
-      } else if (websiteData?.raw_data?.website_analysis) {
-        websiteAnalysis = websiteData.raw_data.website_analysis;
+      if (company.website_analysis) {
+        websiteAnalysis = company.website_analysis;
+      } else if (rawData.website_analysis) {
+        websiteAnalysis = String(rawData.website_analysis);
       } else {
         websiteAnalysis = `Website: ${companyData.website}`;
       }
     }
+    const prospectProductsSummary = produtosExtracted.length > 0
+      ? produtosExtracted.map((p: any, i: number) => `${i + 1}. ${p.nome || p.name || 'N/A'}${p.categoria ? ` (${p.categoria})` : ''}${p.descricao ? ` - ${p.descricao}` : ''}`).join('\n')
+      : '';
 
     // 7. Preparar prompt para IA
     const icpCriteria = onboardingData?.criteria || icpProfile?.criteria || {};
@@ -237,6 +223,7 @@ EMPRESA PROSPECTADA:
 - Funcionários: ${companyData.funcionarios}
 - Localização: ${companyData.cidade}/${companyData.uf}
 ${websiteAnalysis ? `- Análise do Website: ${websiteAnalysis.substring(0, 1000)}` : ''}
+${prospectProductsSummary ? `\n- Produtos/Serviços extraídos do website da empresa (o que ela fabrica/vende/oferece):\n${prospectProductsSummary}` : ''}
 
 TAREFA:
 Analise a aderência (FIT) entre os produtos/serviços do TENANT e as necessidades da EMPRESA PROSPECTADA.

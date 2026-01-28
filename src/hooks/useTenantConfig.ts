@@ -44,50 +44,37 @@ export function useTenantProducts() {
     queryFn: async () => {
       if (!tenant?.id) return [];
 
+      // Schema real: ativo, nome, categoria, extraido_de (sem ordem_exibicao/display_order)
       const { data, error } = await supabase
         .from('tenant_products')
         .select('*')
         .eq('tenant_id', tenant.id)
-        .eq('is_active', true)
-        .order('display_order', { ascending: true, nullsFirst: false });
+        .or('ativo.eq.true,ativo.is.null')
+        .order('nome', { ascending: true, nullsFirst: false });
 
       if (error) {
-        // Se erro 400 (coluna não existe ou sintaxe), tentar sem order
-        if (error.code === '42703' || error.code === '42883' || error.status === 400 || 
-            error.message?.includes('column') || error.message?.includes('does not exist') ||
-            error.message?.includes('ORDER BY')) {
-          console.warn('[useTenantProducts] Erro ao ordenar, tentando sem order ou por nome');
-          
-          // Tentar primeiro por nome
+        // Se coluna ordem_exibicao/ativo não existir, tentar só ativo e order por nome
+        if (error.code === '42703' || error.code === '42883' || error.status === 400 ||
+            error.message?.includes('column') || error.message?.includes('does not exist')) {
+          console.warn('[useTenantProducts] Erro em order/filtro, tentando ativo + nome');
           try {
-            const { data: dataFallback, error: errorFallback } = await supabase
+            const { data: d2, error: e2 } = await supabase
               .from('tenant_products')
               .select('*')
               .eq('tenant_id', tenant.id)
-              .eq('is_active', true)
+              .or('ativo.eq.true,ativo.is.null')
               .order('nome', { ascending: true });
-            
-            if (!errorFallback) {
-              return dataFallback || [];
-            }
-          } catch (fallbackError) {
-            // Se falhar, tentar sem order
-            console.warn('[useTenantProducts] Erro ao ordenar por nome, tentando sem order');
-          }
-          
-          // Último recurso: sem order
-          const { data: dataNoOrder, error: errorNoOrder } = await supabase
+            if (!e2) return d2 || [];
+          } catch (_) {}
+          const { data: d3, error: e3 } = await supabase
             .from('tenant_products')
             .select('*')
-            .eq('tenant_id', tenant.id)
-            .eq('is_active', true);
-          
-          if (errorNoOrder) {
-            console.error('[useTenantProducts] Erro mesmo sem order:', errorNoOrder);
-            throw errorNoOrder;
+            .eq('tenant_id', tenant.id);
+          if (e3) {
+            console.error('[useTenantProducts] Erro mesmo sem order:', e3);
+            throw e3;
           }
-          
-          return dataNoOrder || [];
+          return d3 || [];
         }
         throw error;
       }

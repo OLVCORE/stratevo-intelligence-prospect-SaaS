@@ -147,13 +147,13 @@ export default function CommandCenter() {
         // ✅ MC2.5: Removido filtro tenant_id (campo não existe em icp_analysis_results)
         safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'pendente'), null),
         safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('status', 'aprovada'), null),
-        safeQuery(() => supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('sdr_deals').select('*, companies!inner(tenant_id)', { count: 'exact', head: true }).eq('companies.tenant_id', tenantId).in('stage', ['discovery', 'qualification', 'proposal', 'negotiation']), null),
         // ✅ MC2.5: Removido filtro tenant_id (campo não existe em icp_analysis_results)
         safeQuery(() => supabase.from('icp_analysis_results').select('*', { count: 'exact', head: true }).eq('temperatura', 'hot').eq('status', 'aprovada'), null),
         safeQuery(() => supabase.from('stc_verification_history').select('*', { count: 'exact', head: true }).eq('status', 'processing').eq('tenant_id', tenantId), null),
-        safeQuery(() => supabase.from('sdr_deals').select('deal_value, created_at').in('deal_stage', ['discovery', 'qualification', 'proposal', 'negotiation']).eq('tenant_id', tenantId), [] as any[], 0),
-        safeQuery(() => supabase.from('sdr_deals').select('deal_value, created_at, won_date').eq('deal_stage', 'won').eq('tenant_id', tenantId).limit(10), [] as any[], 0),
-        safeQuery(() => supabase.from('sdr_deals').select('*', { count: 'exact', head: true }).eq('deal_stage', 'lost').eq('tenant_id', tenantId), null),
+        safeQuery(() => supabase.from('sdr_deals').select('value, created_at, companies!inner(tenant_id)').eq('companies.tenant_id', tenantId).in('stage', ['discovery', 'qualification', 'proposal', 'negotiation']), [] as any[], 0),
+        safeQuery(() => supabase.from('sdr_deals').select('value, created_at, won_date, companies!inner(tenant_id)').eq('companies.tenant_id', tenantId).eq('stage', 'won').limit(10), [] as any[], 0),
+        safeQuery(() => supabase.from('sdr_deals').select('*, companies!inner(tenant_id)', { count: 'exact', head: true }).eq('companies.tenant_id', tenantId).eq('stage', 'lost'), null),
         safeQuery(() => supabase.from('companies').select('created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(1).single(), null),
       ]);
 
@@ -169,7 +169,7 @@ export default function CommandCenter() {
       const lastImportData = lastImportResult.data;
 
       // Calcular valor total do pipeline
-      const dealsValue = dealsData?.reduce((sum, deal) => sum + (Number(deal.deal_value) || 0), 0) || 0;
+      const dealsValue = dealsData?.reduce((sum, deal) => sum + (Number((deal as { value?: number; deal_value?: number }).value ?? (deal as { deal_value?: number }).deal_value) || 0), 0) || 0;
 
       // Calcular ciclo médio de venda (deals ganhos nos últimos 30 dias)
       const avgDealCycle = wonDeals && wonDeals.length > 0

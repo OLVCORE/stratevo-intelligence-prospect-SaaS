@@ -91,11 +91,32 @@ export function DraggableDealCard({ deal, isDragging, isSelected, onSelect, onCl
       : cnaeClassification
         ? [cnaeClassification.setor_industria, cnaeClassification.categoria].filter(Boolean)
         : [];
-  const website = deal.companies?.website ?? '';
+  // Website oficial: só companies.website e companies.domain (fonte = modal do deal; nunca raw_data/discovered)
+  const comp = deal.companies as { website?: string; domain?: string } | null | undefined;
+  const websiteOfficial = comp?.website || comp?.domain || '';
 
-  const linkedInCompanyUrl = deal.companies?.linkedin_url
-    ? (String(deal.companies.linkedin_url).startsWith('http') ? deal.companies.linkedin_url : `https://linkedin.com/company/${deal.companies.linkedin_url}`)
-    : (companyName ? `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(companyName)}` : null);
+  // LinkedIn página da empresa: se já temos linkedin_url, usar; senão buscar com fórmula "primeiro nome + segundo nome + cidade + estado + país"
+  const raw = comp?.raw_data || {};
+  const city = (raw.city ?? raw.cidade ?? raw.municipio) as string | undefined;
+  const state = (raw.state ?? raw.estado ?? raw.uf) as string | undefined;
+  const country = (raw.country ?? raw.pais ?? 'Brasil') as string;
+  const words = (companyName || '').trim().split(/\s+/).filter(w => w.length > 1);
+  const primeiroNome = words[0] || '';
+  const segundoNome = words[1] || '';
+  const keywordsLinkedIn = [primeiroNome, segundoNome, city, state, country].filter(Boolean).join(' ');
+  const linkedInCompanyUrl = (() => {
+    const url = deal.companies?.linkedin_url;
+    if (url && String(url).trim()) {
+      return String(url).startsWith('http') ? url : `https://linkedin.com/company/${url.replace(/^\/company\//, '')}`;
+    }
+    if (companyName && keywordsLinkedIn) {
+      return `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(keywordsLinkedIn)}`;
+    }
+    if (companyName) {
+      return `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(companyName)}`;
+    }
+    return null;
+  })();
 
   return (
     <Card
@@ -132,6 +153,23 @@ export function DraggableDealCard({ deal, isDragging, isSelected, onSelect, onCl
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate font-medium text-foreground/90">{companyName}</span>
+              </div>
+            )}
+
+            {/* Website oficial do prospect — na frente do card, mesmo valor gravado em companies */}
+            {websiteOfficial && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <a
+                  href={websiteOfficial.startsWith('http') ? websiteOfficial : `https://${websiteOfficial}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-primary hover:underline truncate max-w-full"
+                  title="Site oficial da empresa"
+                >
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{websiteOfficial.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+                </a>
               </div>
             )}
 
@@ -188,8 +226,21 @@ export function DraggableDealCard({ deal, isDragging, isSelected, onSelect, onCl
               </div>
             )}
 
-            {/* Links: LinkedIn empresa, LinkedIn contato (busca), Site, Mais contatos */}
+            {/* Links: Site (website oficial) primeiro, depois LinkedIn página da empresa, LinkedIn contato, Mais contatos */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {websiteOfficial && (
+                <a
+                  href={websiteOfficial.startsWith('http') ? websiteOfficial : `https://${websiteOfficial}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+                  title="Website oficial da empresa"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Site
+                </a>
+              )}
               {linkedInCompanyUrl && (
                 <a
                   href={linkedInCompanyUrl}
@@ -197,10 +248,10 @@ export function DraggableDealCard({ deal, isDragging, isSelected, onSelect, onCl
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
-                  title="LinkedIn da empresa"
+                  title="LinkedIn – página da empresa"
                 >
                   <Linkedin className="h-3 w-3" />
-                  Empresa
+                  LinkedIn
                 </a>
               )}
               {primaryContact?.name && (
@@ -214,19 +265,6 @@ export function DraggableDealCard({ deal, isDragging, isSelected, onSelect, onCl
                 >
                   <Linkedin className="h-3 w-3" />
                   Contato
-                </a>
-              )}
-              {website && (
-                <a
-                  href={website.startsWith('http') ? website : `https://${website}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
-                  title="Site"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Site
                 </a>
               )}
               <button

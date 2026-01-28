@@ -72,29 +72,28 @@ export function ApolloOrgIdDialog({ onEnrich, disabled }: ApolloOrgIdDialogProps
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <img src={apolloLogo} alt="Apollo" className="h-5 w-5" />
-            Buscar por Apollo Organization ID
+            Motor: Dados completos da empresa por Apollo
           </DialogTitle>
           <DialogDescription>
-            Cole o Organization ID do Apollo.io para buscar os contatos diretamente. 
-            Você encontra o ID na URL da página da empresa no Apollo.
+            Cole a <strong>URL da empresa no Apollo</strong> ou o Organization ID. O motor busca os <strong>Company details</strong> (descrição, industry, keywords, employees, SIC, NAICS, founding year) e os decisores. Use a URL da página da empresa no Apollo — o ID é extraído automaticamente.
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="apollo-org-id">Apollo Organization ID</Label>
+            <Label htmlFor="apollo-org-id">URL Apollo ou Organization ID</Label>
             <Input
               id="apollo-org-id"
-              placeholder="Cole a URL completa ou só o ID: 5a9d68c2a6da98d9466cf9bc"
+              placeholder="https://app.apollo.io/#/organizations/64696fd0fd539b0001ca5d01/people?..."
               value={apolloOrgId}
               onChange={(e) => setApolloOrgId(e.target.value)}
               disabled={isLoading}
             />
             <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">
-              ✅ Pode colar a URL COMPLETA! O ID será extraído automaticamente.
+              ✅ Cole a URL completa da empresa no Apollo — o motor extrai o ID e busca Company details + decisores.
             </p>
             <p className="text-xs text-muted-foreground">
-              Exemplo: https://app.apollo.io/#/organizations/<strong className="text-primary">5a9d68c2a6da98d9466cf9bc</strong>
+              Exemplo: <code className="text-primary bg-muted px-1 rounded">…/organizations/<strong>64696fd0fd539b0001ca5d01</strong>/people</code>
             </p>
           </div>
         </div>
@@ -108,7 +107,7 @@ export function ApolloOrgIdDialog({ onEnrich, disabled }: ApolloOrgIdDialogProps
             disabled={!apolloOrgId.trim() || isLoading}
           >
             {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Buscar Contatos
+            Buscar dados da empresa + decisores
           </Button>
         </DialogFooter>
       </DialogContent>

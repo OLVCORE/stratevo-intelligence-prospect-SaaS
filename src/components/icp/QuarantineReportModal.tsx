@@ -2,16 +2,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Separator } from '@/components/ui/separator';
 import TOTVSCheckCard from '@/components/totvs/TOTVSCheckCard';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, XCircle, FileText, Maximize2, Minimize2, Download, Loader2, FileDown, Database, Send, History } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CheckCircle, XCircle, FileText, Maximize2, Minimize2, Download, Loader2, FileDown, Database, Send, History, CalendarIcon } from 'lucide-react';
 import { useApproveQuarantineBatch, useRejectQuarantine } from '@/hooks/useICPQuarantine';
-import { useCreateDeal } from '@/hooks/useDeals';
+import { useCreateDeal, useMoveDeal, useUpdateDeal } from '@/hooks/useDeals';
+import { usePipelineStages } from '@/hooks/usePipelineStages';
 import { useLatestSTCReport } from '@/hooks/useSTCHistory';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { DiscardCompanyModal } from '@/components/icp/DiscardCompanyModal';
 import { ReportHistoryModal } from '@/components/icp/ReportHistoryModal';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -23,6 +31,14 @@ interface QuarantineReportModalProps {
   cnpj?: string;
   domain?: string;
   companyId?: string;
+  /** Fase 2 Discovery: uso somente leitura do Dossiê a partir do Pipeline; esconde Descartar e exibe CTA de enriquecimento se sem dados */
+  discoveryOnly?: boolean;
+  /** Quando discoveryOnly: ID do deal para GO / Data de Fechamento (ação fica no Dossiê, após fit/decisores/contatos/sequências) */
+  dealId?: string;
+  /** Data esperada de fechamento inicial do deal (para exibir/editar no Dossiê) */
+  initialExpectedCloseDate?: string | null;
+  /** Callback após avançar o deal para proposta (ex.: fechar modal e refrescar lista) */
+  onDealAdvanced?: () => void;
 }
 
 export function QuarantineReportModal({
@@ -33,12 +49,36 @@ export function QuarantineReportModal({
   cnpj,
   domain,
   companyId,
+  discoveryOnly = false,
+  dealId,
+  initialExpectedCloseDate,
+  onDealAdvanced,
 }: QuarantineReportModalProps) {
+  const queryClient = useQueryClient();
   const { mutate: approveBatch } = useApproveQuarantineBatch();
   const { mutate: rejectCompany } = useRejectQuarantine();
   const { mutate: createDeal } = useCreateDeal();
+  const { mutateAsync: moveDeal } = useMoveDeal();
+  const { mutateAsync: updateDeal } = useUpdateDeal();
+  const { data: stages } = usePipelineStages();
   const navigate = useNavigate();
-  
+
+  // Ao abrir o Dossiê, invalidar company-data para o TOTVSCheckCard carregar website/linkedin/apollo/lusha gravados no modal do deal
+  useEffect(() => {
+    if (open && companyId) {
+      queryClient.invalidateQueries({ queryKey: ['company-data', companyId] });
+    }
+  }, [open, companyId, queryClient]);
+
+  const openStages = (stages ?? []).filter((s: { is_closed?: boolean }) => !s.is_closed);
+  const discoveryIndex = openStages.findIndex((s: { key?: string }) => s.key === 'discovery');
+  const nextStage = discoveryIndex >= 0 && discoveryIndex < openStages.length - 1 ? openStages[discoveryIndex + 1] : null;
+
+  const [expectedCloseDate, setExpectedCloseDate] = useState<string | null>(initialExpectedCloseDate ?? null);
+  useEffect(() => {
+    if (open && initialExpectedCloseDate !== undefined) setExpectedCloseDate(initialExpectedCloseDate ?? null);
+  }, [open, initialExpectedCloseDate]);
+
   // Buscar último relatório salvo
   const { data: latestReport, isLoading: loadingHistory } = useLatestSTCReport(companyId, companyName);
 
@@ -50,6 +90,7 @@ export function QuarantineReportModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingToPipeline, setIsSendingToPipeline] = useState(false);
   const [loadedFromHistory, setLoadedFromHistory] = useState(false);
+  const [isGoingToProposal, setIsGoingToProposal] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // ✅ Carregar relatório salvo automaticamente ao abrir modal
@@ -338,6 +379,15 @@ export function QuarantineReportModal({
             ref={contentRef}
             className="flex-1 overflow-y-auto p-6 space-y-6"
           >
+            {/* Fase 2 Discovery: CTA quando não há dados — não executa enriquecimento automaticamente */}
+            {discoveryOnly && !latestReport?.full_report && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                <p className="font-medium">Nenhum dado de enriquecimento nesta etapa.</p>
+                <p className="mt-1 text-muted-foreground">
+                  Executar Enriquecimento nesta etapa (Discovery) para preencher o Dossiê. Ações de Apollo, Website+LinkedIn, 360° e Fit de Produtos ficam disponíveis no Discovery.
+                </p>
+              </div>
+            )}
             <TOTVSCheckCard
               companyId={companyId}
               companyName={companyName}
@@ -349,18 +399,84 @@ export function QuarantineReportModal({
             />
           </div>
 
-          {/* Footer fixo - SIMPLIFICADO */}
+          {/* Footer fixo - SIMPLIFICADO; em discoveryOnly não exibir Descartar */}
           <div className="shrink-0 border-t bg-muted/30 p-4">
+            {/* GO + Data de Fechamento: apenas no Dossiê, quando aberto a partir de um deal em Discovery */}
+            {discoveryOnly && dealId && (
+              <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Avançar para Proposta e definir data de fechamento (após fit, decisores, contatos e primeiras sequências)
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data Esperada de Fechamento</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={cn(
+                            "justify-start text-left font-normal min-w-[200px]",
+                            !expectedCloseDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {expectedCloseDate ? format(new Date(expectedCloseDate), "PPP", { locale: ptBR }) : "Selecione uma data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={expectedCloseDate ? new Date(expectedCloseDate) : undefined}
+                          onSelect={(d) => setExpectedCloseDate(d?.toISOString() ?? null)}
+                          locale={ptBR}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      size="sm"
+                      className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                      disabled={!nextStage || isGoingToProposal}
+                      onClick={async () => {
+                        if (!dealId || !nextStage) return;
+                        setIsGoingToProposal(true);
+                        try {
+                          if (expectedCloseDate) {
+                            await updateDeal({ dealId, updates: { expected_close_date: expectedCloseDate } });
+                          }
+                          await moveDeal({ dealId, newStage: nextStage.key });
+                          toast.success(`Deal avançado para ${(nextStage as { name?: string }).name ?? nextStage.key}`);
+                          onDealAdvanced?.();
+                          onOpenChange(false);
+                        } catch (e: any) {
+                          toast.error(e?.message ?? 'Erro ao avançar deal');
+                        } finally {
+                          setIsGoingToProposal(false);
+                        }
+                      }}
+                    >
+                      {isGoingToProposal ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      GO — Avançar para {(nextStage as { name?: string })?.name ?? 'Proposta'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             <DialogFooter className="gap-3 flex justify-between items-center">
-              <Button 
-                variant="ghost" 
-                onClick={() => setShowDiscard(true)} 
-                className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-                size="sm"
-              >
-                <XCircle className="w-4 h-4" />
-                <span className="text-sm">Descartar</span>
-              </Button>
+              {!discoveryOnly && (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => setShowDiscard(true)} 
+                  className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                  size="sm"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span className="text-sm">Descartar</span>
+                </Button>
+              )}
+              {discoveryOnly && <div />}
               
               <div className="flex gap-2">
                 <Button 

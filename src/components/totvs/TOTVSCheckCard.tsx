@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +18,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useProductFit } from '@/hooks/useProductFit';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -70,7 +80,13 @@ import {
   UserCircle,
   Save,
   Loader2,
-  TrendingUp
+  TrendingUp,
+  Pencil,
+  ChevronDown,
+  ChevronUp,
+  Box,
+  Star,
+  FileText,
 } from 'lucide-react';
 
 interface UsageVerificationCardProps {
@@ -153,7 +169,25 @@ export default function UsageVerificationCard({
   
   // 🔐 Estado de salvamento (usado para bloqueio sequencial)
   const [verificationSaved, setVerificationSaved] = useState(false);
-  
+
+  // HOTFIX: Produtos do prospect — loading dos botões (só por clique, sem automático)
+  const [discoverWebsiteLoading, setDiscoverWebsiteLoading] = useState(false);
+  const [extractProductsLoading, setExtractProductsLoading] = useState(false);
+  // Edição do website do prospect (lápis + modal salvar)
+  const [websiteEditModalOpen, setWebsiteEditModalOpen] = useState(false);
+  const [websiteEditValue, setWebsiteEditValue] = useState('');
+  const [isSavingWebsite, setIsSavingWebsite] = useState(false);
+  // Gerar Fit após scraping
+  const [gerarFitLoading, setGerarFitLoading] = useState(false);
+  // Produtos do prospect da última extração (para exibir imediatamente após o toast, antes do refetch)
+  const [lastExtractedProspectProducts, setLastExtractedProspectProducts] = useState<Array<{ nome?: string; name?: string; descricao?: string; categoria?: string; category?: string }>>([]);
+  const [prospectProductsFromCompanyRaw, setProspectProductsFromCompanyRaw] = useState<Array<{ nome?: string; name?: string; descricao?: string; categoria?: string; category?: string }>>([]);
+  // Visualização dos produtos (igual onboarding ABA1: cards | table)
+  const [tenantProductsViewMode, setTenantProductsViewMode] = useState<'cards' | 'table'>('cards');
+  const [prospectProductsViewMode, setProspectProductsViewMode] = useState<'cards' | 'table'>('cards');
+  const [tenantProductsOpen, setTenantProductsOpen] = useState(true);
+  const [prospectProductsOpen, setProspectProductsOpen] = useState(true);
+
   // Compartilhar dados entre abas (Keywords → Competitors)
   const [sharedSimilarCompanies, setSharedSimilarCompanies] = useState<any[]>([]);
   
@@ -398,14 +432,14 @@ export default function UsageVerificationCard({
     }
   }, [companyId, tenant?.id, enabled]);
 
-  // ✅ BUSCAR DADOS DA EMPRESA (incluindo linkedin_url) do banco
+  // ✅ BUSCAR DADOS DA EMPRESA (incluindo description para dossiê executivo e contexto do prospect)
   const { data: companyData } = useQuery({
     queryKey: ['company-data', companyId],
     queryFn: async () => {
       if (!companyId) return null;
       const { data, error } = await supabase
         .from('companies')
-        .select('linkedin_url, domain, website, raw_data')
+        .select('linkedin_url, domain, website, raw_data, industry, description, apollo_organization_id, apollo_url')
         .eq('id', companyId)
         .single();
       
@@ -419,6 +453,217 @@ export default function UsageVerificationCard({
     enabled: !!companyId,
     staleTime: 5 * 60 * 1000 // Cache por 5 minutos
   });
+
+  // Buscar raw_data.produtos_extracted explicitamente para a coluna do prospect (evita depender do tipo de companyData)
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.from('companies').select('raw_data').eq('id', companyId).single();
+      if (cancelled || error) return;
+      const raw = (data as any)?.raw_data;
+      if (!raw || typeof raw !== 'object') return;
+      const arr = Array.isArray(raw.produtos_extracted) ? raw.produtos_extracted : Array.isArray(raw.prospect_products) ? raw.prospect_products : Array.isArray(raw.website_products) ? raw.website_products : [];
+      if (arr.length > 0) {
+        setProspectProductsFromCompanyRaw(arr.map((p: any) => ({
+          nome: p.nome ?? p.name,
+          name: p.nome ?? p.name,
+          descricao: p.descricao,
+          categoria: p.categoria ?? p.category,
+          category: p.categoria ?? p.category,
+        })));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [companyId]);
+
+  // HOTFIX: Descobrir Website (Serper) — só por clique. NUNCA sobrescreve website já gravado (modal do deal = fonte oficial).
+  const handleDiscoverWebsite = useCallback(async () => {
+    if (!companyId || !tenant?.id || !companyName) {
+      toast.error('Empresa ou tenant não disponível.');
+      return;
+    }
+    setDiscoverWebsiteLoading(true);
+    try {
+      const { data: freshCompany } = await supabase
+        .from('companies')
+        .select('website, domain')
+        .eq('id', companyId)
+        .single();
+      const jaDefinido = ((freshCompany?.website ?? freshCompany?.domain) ?? '').trim();
+      if (jaDefinido) {
+        toast.info('Website já definido oficialmente. Use o lápis aqui ou no modal do deal para alterar.');
+        queryClient.invalidateQueries({ queryKey: ['company-data', companyId] });
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke('find-prospect-website', {
+        body: { razao_social: companyName, cnpj: cnpj || undefined, tenant_id: tenant.id },
+      });
+      if (error) throw error;
+      if (data?.success && data?.website) {
+        await supabase.from('companies').update({ website: data.website }).eq('id', companyId);
+        toast.success('Website descoberto: ' + data.website);
+        queryClient.invalidateQueries({ queryKey: ['company-data', companyId] });
+        queryClient.invalidateQueries({ queryKey: ['sdr_deals'] });
+      } else {
+        toast.warning('Website não encontrado');
+      }
+    } catch (e: unknown) {
+      toast.error((e as Error)?.message || 'Erro ao descobrir website');
+    } finally {
+      setDiscoverWebsiteLoading(false);
+    }
+  }, [companyId, companyName, cnpj, tenant?.id, queryClient]);
+
+  // Extrair Produtos do Prospect — MESMO MECANISMO do onboarding Etapa 1 (scan-website-products com company_id → companies.raw_data)
+  // CRÍTICO: Enviar APENAS company_id + website_url; NUNCA enviar tenant_id para evitar confusão no backend
+  const handleExtractProspectProducts = useCallback(async () => {
+    const companyIdStr = String(companyId ?? '').trim();
+    if (!companyIdStr || companyIdStr === 'undefined' || companyIdStr === 'null' || companyIdStr.length < 30) {
+      toast.error('ID da empresa inválido. Não é possível extrair produtos.');
+      console.error('[ExtractProspect] company_id inválido:', companyIdStr);
+      return;
+    }
+    setExtractProductsLoading(true);
+    try {
+      const { data: freshCompany } = await supabase
+        .from('companies')
+        .select('website, domain')
+        .eq('id', companyId)
+        .single();
+      const websiteUrl = (freshCompany?.website ?? freshCompany?.domain ?? domain ?? '').trim();
+      if (!websiteUrl || websiteUrl === 'N/A') {
+        toast.error('Website do prospect não disponível');
+        setExtractProductsLoading(false);
+        return;
+      }
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      // 🔥 CRÍTICO: Enviar APENAS company_id + website_url; NÃO enviar tenant_id
+      const requestBody = {
+        company_id: companyIdStr,
+        website_url: websiteUrl,
+      };
+      console.log('[ExtractProspect] Request body:', requestBody);
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/scan-website-products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+      const result = await response.json();
+      console.log('[ExtractProspect] Response:', result);
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro na extração');
+      }
+      if (result.success && result.mode === 'prospect') {
+        toast.success(`✅ ${result.count ?? 0} produtos extraídos do prospect`);
+        if (result.products && Array.isArray(result.products)) {
+          setProspectProductsFromCompanyRaw(result.products.map((p: any) => ({
+            nome: p.name ?? p.nome,
+            name: p.name ?? p.nome,
+            descricao: p.description ?? p.descricao,
+            categoria: p.category ?? p.categoria,
+            category: p.category ?? p.categoria,
+          })));
+          setLastExtractedProspectProducts(result.products.map((p: any) => ({
+            nome: p.name ?? p.nome,
+            name: p.name ?? p.nome,
+            descricao: p.description ?? p.descricao,
+            categoria: p.category ?? p.categoria,
+            category: p.category ?? p.categoria,
+          })));
+        }
+        await queryClient.refetchQueries({ queryKey: ['company-data', companyId] });
+        queryClient.invalidateQueries({ queryKey: ['stc-history', companyId] });
+        queryClient.invalidateQueries({ queryKey: ['product-fit', companyId, tenant?.id] });
+      } else {
+        toast.error(result.error || 'Erro ao extrair produtos do prospect');
+      }
+    } catch (e: unknown) {
+      console.error('[ExtractProspect] Erro:', e);
+      toast.error(e instanceof Error ? e.message : 'Erro ao extrair produtos do prospect');
+    } finally {
+      setExtractProductsLoading(false);
+    }
+  }, [companyId, domain, tenant?.id, queryClient]);
+
+  // Abrir modal de edição do website do prospect (pré-preenche URL atual)
+  const handleOpenWebsiteEdit = useCallback(() => {
+    const cd = companyData as { website?: string; domain?: string } | null | undefined;
+    const current = cd?.website ?? cd?.domain ?? domain ?? '';
+    setWebsiteEditValue(typeof current === 'string' ? current : '');
+    setWebsiteEditModalOpen(true);
+  }, [companyData, domain]);
+
+  // Salvar website no banco (100% persistente). Atualiza companies.website e companies.domain (host)
+  const handleSaveWebsite = useCallback(async () => {
+    if (!companyId) return;
+    const url = String(websiteEditValue || '').trim();
+    if (!url) {
+      toast.error('Informe uma URL válida.');
+      return;
+    }
+    setIsSavingWebsite(true);
+    try {
+      let host = '';
+      try {
+        const u = url.startsWith('http') ? url : `https://${url}`;
+        host = new URL(u).hostname || '';
+      } catch {
+        host = url.replace(/^https?:\/\//, '').split('/')[0] || '';
+      }
+      const { error } = await supabase
+        .from('companies')
+        .update({ website: url, domain: host || undefined })
+        .eq('id', companyId);
+      if (error) throw error;
+      toast.success('Website gravado com sucesso.');
+      queryClient.invalidateQueries({ queryKey: ['company-data', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['sdr_deals'] });
+      setWebsiteEditModalOpen(false);
+    } catch (e: unknown) {
+      toast.error((e as Error)?.message || 'Erro ao salvar website');
+    } finally {
+      setIsSavingWebsite(false);
+    }
+  }, [companyId, websiteEditValue, queryClient]);
+
+  // Gerar Fit: chama calculate-product-fit, refetch para atualizar score e recomendações na tela
+  const handleGerarFit = useCallback(async () => {
+    if (!companyId || !tenant?.id) {
+      toast.error('Empresa ou tenant não disponível.');
+      return;
+    }
+    setGerarFitLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('calculate-product-fit', {
+        body: { company_id: companyId, tenant_id: tenant.id },
+      });
+      if (error) {
+        const err = error as { name?: string; context?: Response };
+        if (err?.name === 'FunctionsHttpError' && err?.context) {
+          try {
+            const body = await err.context.clone().json() as { error?: string };
+            if (body?.error) throw new Error(body.error);
+          } catch (_) {}
+        }
+        throw error;
+      }
+      toast.success('Fit gerado. Atualizando score e recomendações.');
+      await queryClient.refetchQueries({ queryKey: ['product-fit', companyId, tenant.id] });
+      queryClient.invalidateQueries({ queryKey: ['stc-history', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['stc-latest', companyId] });
+    } catch (e: unknown) {
+      const msg = (e as Error)?.message || 'Erro ao gerar fit';
+      toast.error(msg);
+      console.warn('[TOTVSCheckCard] handleGerarFit erro:', e);
+    } finally {
+      setGerarFitLoading(false);
+    }
+  }, [companyId, tenant?.id, queryClient]);
 
   // Usar relatório salvo como fonte principal se existir
   // 💾 SALVAMENTO: Dados salvos ficam em full_report.product_fit_report
@@ -537,6 +782,10 @@ export default function UsageVerificationCard({
       if (report.product_fit_report || report.detection_report) {
         setVerificationSaved(true);
         console.log('[VERIFICATION] ✅ Fit de Produtos marcado como salvo (dados do histórico)');
+      }
+      // Hidratar produtos do prospect do relatório salvo (para exibir ao reabrir sem depender só de companyData)
+      if (Array.isArray(report.prospect_products) && report.prospect_products.length > 0) {
+        setLastExtractedProspectProducts(report.prospect_products as Array<{ nome?: string; name?: string; descricao?: string; categoria?: string; category?: string }>);
       }
       
       // 🔥 CRITICAL: Marcar outras abas como salvas se tiverem dados (atualizar unsavedChanges)
@@ -1094,10 +1343,19 @@ export default function UsageVerificationCard({
       
       if (stcHistoryId) {
         try {
+          // Produtos do prospect para persistir no relatório (exibir ao reabrir a aba)
+          const raw = (companyData as Record<string, unknown>)?.raw_data as Record<string, unknown> | undefined;
+          const prospectProductsToSave =
+            (lastExtractedProspectProducts.length > 0 ? lastExtractedProspectProducts : null) ??
+            (prospectProductsFromCompanyRaw.length > 0 ? prospectProductsFromCompanyRaw : null) ??
+            (Array.isArray(raw?.produtos_extracted) ? (raw.produtos_extracted as any[]) : null) ??
+            (Array.isArray(raw?.prospect_products) ? (raw.prospect_products as any[]) : null) ??
+            [];
           // Montar full_report com dados de todas as abas
           const fullReport = {
             product_fit_report: data, // 🔥 NOVO: Dados do Fit de Produtos (auto)
             detection_report: data, // 🔥 FALLBACK: Manter compatibilidade com dados antigos
+            prospect_products: prospectProductsToSave, // 🔥 Persistir produtos extraídos do prospect para exibir ao reabrir
             decisors_report: tabDataRef.current.decisors,
             digital_report: tabDataRef.current.digital, // 🔥 Digital Intelligence (substitui keywords)
             competitors_report: tabDataRef.current.competitors,
@@ -1519,6 +1777,24 @@ export default function UsageVerificationCard({
             <div className="text-xs">ID: {stcHistoryId?.substring(0, 8) || 'Gerando...'}</div>
           </div>
         </div>
+        {/* Descrição completa da empresa (Apollo / companies.description) */}
+        {(() => {
+          const data = companyData as unknown as Record<string, unknown> | null | undefined;
+          const raw = data?.raw_data as Record<string, unknown> | undefined;
+          const apolloOrg = raw?.apollo_organization as Record<string, unknown> | undefined;
+          const desc =
+            (data?.description as string | undefined)?.trim() ||
+            (apolloOrg?.about as string)?.trim() ||
+            (raw?.about as string)?.trim() ||
+            (apolloOrg?.short_description as string)?.trim();
+          if (!desc) return null;
+          return (
+            <div className="mt-4 pt-4 border-t border-border">
+              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Sobre a empresa</h3>
+              <p className="text-sm text-foreground/90 whitespace-pre-wrap line-clamp-6 max-h-[180px] overflow-y-auto">{desc}</p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 💾 SAVEBAR - HEADER COMPACTO COM SAVE, PDF, HISTÓRICO, PROGRESSO */}
@@ -1692,17 +1968,20 @@ export default function UsageVerificationCard({
           <UniversalTabWrapper tabName="Fit de Produtos">
           {/* 🐛 DEBUG: Log state antes de renderizar */}
           {(() => {
+            const hasSavedReport = !!latestReport?.full_report;
+            const showContent = hasSavedReport || !!data || enabled;
             console.log('[VERIFICATION-TAB-RENDER] Condições:', {
               hasData: !!data,
               enabled,
-              dataKeys: data ? Object.keys(data) : [],
-              willShowButton: !data || !enabled
+              hasSavedReport,
+              showContent,
+              willShowButton: !showContent
             });
             return null;
           })()}
           
-          {/* SE NÃO TEM DADOS DO STC, MOSTRAR BOTÃO VERIFICAR */}
-          {!data || !enabled ? (
+          {/* Mostrar conteúdo (duas colunas) quando houver relatório salvo OU dados de fit OU verificação habilitada; senão mostrar Verificar Agora */}
+          {!latestReport?.full_report && (!data || !enabled) ? (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
                 <Search className="w-10 h-10 text-primary" />
@@ -1737,12 +2016,286 @@ export default function UsageVerificationCard({
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Duas colunas lado a lado: tenant (catálogo) | prospect (extraídos) — mesmo padrão do onboarding ABA1 */}
+              {(() => {
+                const fr = (latestReport?.full_report as Record<string, unknown>) || {};
+                const raw = (companyData as Record<string, unknown>)?.raw_data as Record<string, unknown> | undefined;
+                const prospectProducts: Array<{ nome?: string; name?: string; descricao?: string; categoria?: string; category?: string }> =
+                  (lastExtractedProspectProducts.length > 0 ? lastExtractedProspectProducts : null) ??
+                  (prospectProductsFromCompanyRaw.length > 0 ? prospectProductsFromCompanyRaw : null) ??
+                  (Array.isArray(fr.prospect_products) ? (fr.prospect_products as any[]) : null) ??
+                  (Array.isArray(raw?.produtos_extracted) ? (raw.produtos_extracted as any[]) : null) ??
+                  (Array.isArray(raw?.prospect_products) ? (raw.prospect_products as any[]) : null) ??
+                  (Array.isArray(raw?.website_products) ? (raw.website_products as any[]) : null) ??
+                  [];
+                const rawTenantList = (tenantProducts as any[]) ?? [];
+                const normalizeName = (s: string | undefined | null) => (s ?? '').toString().trim().toLowerCase();
+                const prospectNamesSet = new Set(prospectProducts.map((pp) => normalizeName(pp.nome ?? pp.name)).filter(Boolean));
+                const tenantList = rawTenantList.filter((p: any) => {
+                  const name = normalizeName(p.nome ?? p.name ?? p.product_name);
+                  return !name || !prospectNamesSet.has(name);
+                });
+                const excludedFromTenant = rawTenantList.filter((p: any) => {
+                  const name = normalizeName(p.nome ?? p.name ?? p.product_name);
+                  return name && prospectNamesSet.has(name);
+                });
+                const prospectProductsFinal = prospectProducts.length > 0 ? prospectProducts : excludedFromTenant.map((p: any) => ({
+                  nome: p.nome ?? p.name ?? p.product_name,
+                  name: p.nome ?? p.name ?? p.product_name,
+                  descricao: p.descricao,
+                  categoria: p.categoria ?? p.category,
+                  category: p.categoria ?? p.category,
+                }));
+                const tenantCount = tenantList.length;
+                const prospectCount = prospectProductsFinal.length;
+                const lastExtraction = latestReport?.updated_at ? new Date(latestReport.updated_at).toLocaleString('pt-BR') : null;
+                return (
+                  <>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Coluna 1: Produtos do tenant (catálogo) — padrão visual corporativo Emerald */}
+                    <Collapsible open={tenantProductsOpen} onOpenChange={setTenantProductsOpen}>
+                      <Card className="p-4 border-l-4 border-l-emerald-600/90 shadow-md bg-gradient-to-br from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 transition-all duration-200 hover:from-emerald-50/60 hover:to-emerald-100/40">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-100 flex items-center gap-2">
+                            <Package className="w-4 h-4 text-emerald-700 dark:text-emerald-500" />
+                            Produtos do tenant (catálogo) ({tenantCount})
+                          </h4>
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8">
+                              {tenantProductsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </CollapsibleTrigger>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Produtos/serviços que o tenant pode oferecer. Fonte: onboarding. Compare com os produtos do prospect ao lado.
+                        </p>
+                        {/* Painel consolidado — contadores Emerald */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                          <div className="rounded-lg border border-emerald-200/60 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/50 to-emerald-100/20 dark:from-emerald-900/20 dark:to-emerald-800/10 p-2 text-center shadow-sm">
+                            <Box className="h-4 w-4 mx-auto mb-1 text-emerald-700 dark:text-emerald-500" />
+                            <span className="text-lg font-semibold text-emerald-800 dark:text-emerald-100">{tenantCount}</span>
+                            <p className="text-[10px] text-muted-foreground">Total</p>
+                          </div>
+                          <div className="rounded-lg border border-emerald-200/60 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/50 to-emerald-100/20 dark:from-emerald-900/20 dark:to-emerald-800/10 p-2 text-center shadow-sm">
+                            <CheckCircle className="h-4 w-4 mx-auto mb-1 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">{tenantCount}</span>
+                            <p className="text-[10px] text-muted-foreground">Ativos</p>
+                          </div>
+                        </div>
+                        <CollapsibleContent>
+                          {tenantList.length > 0 ? (
+                            <Tabs value={tenantProductsViewMode} onValueChange={(v) => setTenantProductsViewMode(v as 'cards' | 'table')}>
+                              <TabsList className="grid w-full grid-cols-2 h-8 bg-muted/50 mb-3">
+                                <TabsTrigger value="cards">Cards</TabsTrigger>
+                                <TabsTrigger value="table">Tabela</TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="cards" className="mt-0">
+                                <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-2">
+                                  {tenantList.map((p: any, i: number) => (
+                                    <Card key={p.id || i} className="p-3 border-l-4 border-l-emerald-600/90 shadow-md">
+                                      <div className="font-medium text-sm">{p.nome ?? p.product_name ?? p.name ?? '—'}</div>
+                                      {p.categoria && <Badge variant="outline" className="text-xs mt-1">{p.categoria}</Badge>}
+                                      {p.descricao && <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{p.descricao}</p>}
+                                    </Card>
+                                  ))}
+                                </div>
+                              </TabsContent>
+                              <TabsContent value="table" className="mt-0">
+                                <div className="max-h-80 overflow-y-auto border rounded-md">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead>Categoria</TableHead>
+                                        <TableHead>Descrição</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {tenantList.map((p: any, i: number) => (
+                                        <TableRow key={p.id || i}>
+                                          <TableCell className="font-medium text-sm">{p.nome ?? p.product_name ?? p.name ?? '—'}</TableCell>
+                                          <TableCell>{p.categoria ? <Badge variant="outline">{p.categoria}</Badge> : '—'}</TableCell>
+                                          <TableCell className="text-xs text-muted-foreground">{p.descricao || '—'}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TabsContent>
+                            </Tabs>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic py-4">Nenhum produto cadastrado para o tenant. Configure no onboarding.</p>
+                          )}
+                        </CollapsibleContent>
+                      </Card>
+                    </Collapsible>
+
+                    {/* Coluna 2: Produtos do prospect (extraídos) — padrão visual corporativo Sky */}
+                    <Collapsible open={prospectProductsOpen} onOpenChange={setProspectProductsOpen}>
+                      <Card className="p-4 border-l-4 border-l-sky-600/90 shadow-md bg-gradient-to-br from-slate-50/50 to-slate-100/30 dark:from-slate-900/40 dark:to-slate-800/20 transition-all duration-200 hover:from-sky-50/60 hover:to-sky-100/40">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-semibold text-sky-800 dark:text-sky-100 flex items-center gap-2">
+                            <Globe className="w-4 h-4 text-sky-700 dark:text-sky-500" />
+                            Produtos do prospect (extraídos) ({prospectCount})
+                            {extractProductsLoading && (
+                              <span className="h-3 w-3 rounded-full bg-yellow-500 animate-pulse border-2 border-background" title="Extraindo produtos..." />
+                            )}
+                          </h4>
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8">
+                              {prospectProductsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </CollapsibleTrigger>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Extraídos do website do prospect (mesmo mecanismo do onboarding Etapa 1).
+                        </p>
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Website:</span>
+                          {(companyData as Record<string, unknown>)?.website || (companyData as Record<string, unknown>)?.domain || domain ? (
+                            <a
+                              href={String((companyData as Record<string, unknown>)?.website || (companyData as Record<string, unknown>)?.domain || domain).startsWith('http') ? (companyData as Record<string, unknown>)?.website || (companyData as Record<string, unknown>)?.domain || domain : `https://${(companyData as Record<string, unknown>)?.website || (companyData as Record<string, unknown>)?.domain || domain}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-medium text-sky-700 dark:text-sky-300 hover:underline truncate max-w-[200px]"
+                            >
+                              {(companyData as Record<string, unknown>)?.website || (companyData as Record<string, unknown>)?.domain || domain}
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={handleOpenWebsiteEdit} title="Editar website"><Pencil className="h-4 w-4" /></Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <Button type="button" variant="outline" size="sm" onClick={handleDiscoverWebsite} disabled={discoverWebsiteLoading || !companyId || !tenant?.id}>
+                            {discoverWebsiteLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Search className="h-3 w-3 mr-1" />}
+                            Descobrir Website
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" onClick={handleExtractProspectProducts} disabled={extractProductsLoading || !companyId || !tenant?.id}>
+                            {extractProductsLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Package className="h-3 w-3 mr-1" />}
+                            Extrair Produtos do Prospect
+                          </Button>
+                        </div>
+                        {/* Painel consolidado prospect — contador Sky */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <div className="rounded-lg border border-sky-200/60 dark:border-sky-800/40 bg-gradient-to-br from-sky-50/50 to-sky-100/20 dark:from-sky-900/20 dark:to-sky-800/10 p-2 text-center shadow-sm">
+                            <Box className="h-4 w-4 mx-auto mb-1 text-sky-700 dark:text-sky-500" />
+                            <span className="text-lg font-semibold text-sky-800 dark:text-sky-100">{prospectCount}</span>
+                            <p className="text-[10px] text-muted-foreground">Extraídos</p>
+                          </div>
+                        </div>
+                        <CollapsibleContent>
+                          {prospectProductsFinal.length > 0 ? (
+                            <Tabs value={prospectProductsViewMode} onValueChange={(v) => setProspectProductsViewMode(v as 'cards' | 'table')}>
+                              <TabsList className="grid w-full grid-cols-2 h-8 bg-muted/50 mb-3">
+                                <TabsTrigger value="cards">Cards</TabsTrigger>
+                                <TabsTrigger value="table">Tabela</TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="cards" className="mt-0">
+                                <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-2">
+                                  {prospectProductsFinal.map((p: any, i: number) => (
+                                    <Card key={i} className="p-3 border-l-4 border-l-sky-600/90 shadow-md">
+                                      <div className="font-medium text-sm">{p.nome ?? p.name ?? '—'}</div>
+                                      {(p.categoria ?? p.category) && <Badge variant="outline" className="text-xs mt-1">{p.categoria ?? p.category}</Badge>}
+                                      {p.descricao && <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{p.descricao}</p>}
+                                    </Card>
+                                  ))}
+                                </div>
+                              </TabsContent>
+                              <TabsContent value="table" className="mt-0">
+                                <div className="max-h-80 overflow-y-auto border rounded-md">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead>Categoria</TableHead>
+                                        <TableHead>Descrição</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {prospectProductsFinal.map((p: any, i: number) => (
+                                        <TableRow key={i}>
+                                          <TableCell className="font-medium text-sm">{p.nome ?? p.name ?? '—'}</TableCell>
+                                          <TableCell>{(p.categoria ?? p.category) ? <Badge variant="outline">{p.categoria ?? p.category}</Badge> : '—'}</TableCell>
+                                          <TableCell className="text-xs text-muted-foreground">{p.descricao || '—'}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TabsContent>
+                            </Tabs>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic py-4">Nenhum produto extraído ainda. Use &quot;Extrair Produtos do Prospect&quot; acima.</p>
+                          )}
+                        </CollapsibleContent>
+                      </Card>
+                    </Collapsible>
+                  </div>
+
+                  {/* Diagnóstico Fit + Botão Gerar Fit */}
+                  <Card className="p-4 border border-border/50">
+                    {(tenantCount > 0 || prospectCount > 0 || lastExtraction) && (
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Diagnóstico Fit: {tenantCount} produtos tenant, {prospectCount} produtos prospect.
+                        {lastExtraction && ` Última extração: ${lastExtraction}`}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={handleGerarFit}
+                        disabled={gerarFitLoading || !companyId || !tenant?.id}
+                      >
+                        {gerarFitLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                        Gerar Fit de Produtos
+                      </Button>
+                      <span className="text-xs text-muted-foreground">Após extrair os produtos do prospect, clique para a IA calcular o fit e as recomendações.</span>
+                    </div>
+                  </Card>
+
+                  <Dialog open={websiteEditModalOpen} onOpenChange={setWebsiteEditModalOpen}>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Editar website do prospect</DialogTitle>
+                        <DialogDescription>Corrija a URL se o search retornou um site errado. O valor é gravado no banco e usado na extração de produtos.</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-2">
+                        <div className="grid gap-2">
+                          <Label htmlFor="website-url">URL do website</Label>
+                          <Input id="website-url" value={websiteEditValue} onChange={(e) => setWebsiteEditValue(e.target.value)} placeholder="https://exemplo.com.br" />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button type="button" onClick={handleSaveWebsite} disabled={isSavingWebsite || !websiteEditValue?.trim()}>
+                          {isSavingWebsite ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                          Salvar
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </>
+                );
+              })()}
+
               {/* 🎨 PRODUCT FIT SCORE CARD */}
               <ProductFitScoreCard
                 fitScore={data?.fit_score || 0}
                 fitLevel={data?.fit_level || 'low'}
                 confidence={data?.metadata?.confidence || 'medium'}
-                overallJustification={data?.analysis?.overall_justification}
+                overallJustification={
+                  (() => {
+                    const j = data?.analysis?.overall_justification || '';
+                    const isEmptyCatalog =
+                      typeof j === 'string' &&
+                      (j.includes('Nenhum produto') && (j.includes('tenant') || j.includes('catálogo')));
+                    return isEmptyCatalog
+                      ? 'Este tenant não possui catálogo de produtos configurado para cálculo de Fit.'
+                      : j || undefined;
+                  })()
+                }
                 cnaeMatch={data?.analysis?.cnae_match}
                 sectorMatch={data?.analysis?.sector_match}
               />
@@ -1770,10 +2323,10 @@ export default function UsageVerificationCard({
             key={`decisors-${companyId}-${latestReport?.id || 'new'}-${latestReport?.updated_at || ''}`} // 🔥 FORÇAR RE-RENDER quando latestReport mudar
             companyId={companyId}
             companyName={companyName}
-            linkedinUrl={companyData?.linkedin_url || companyData?.raw_data?.linkedin_url || companyData?.raw_data?.apollo_organization?.linkedin_url}
+            linkedinUrl={companyData?.linkedin_url || (companyData as Record<string, unknown>)?.raw_data?.linkedin_url || (companyData as Record<string, unknown>)?.raw_data?.apollo_organization?.linkedin_url}
             domain={domain || companyData?.domain || companyData?.website}
-            tenantId={tenant?.id}
-            tenantSectorCode={tenant?.sector_code}
+            apolloOrganizationId={(companyData as Record<string, unknown>)?.apollo_organization_id ?? null}
+            apolloUrl={(companyData as Record<string, unknown>)?.apollo_url ?? null}
             savedData={tabDataRef.current.decisors || latestReport?.full_report?.decisors_report} // 🔥 PRIORIDADE: tabDataRef primeiro, depois latestReport
             onDataChange={(decisorsData) => {
               console.log('[VERIFICATION] 💾 Salvando decisores:', decisorsData);
@@ -1806,7 +2359,7 @@ export default function UsageVerificationCard({
             companyId={companyId}
             companyName={companyName}
             cnpj={cnpj}
-            domain={discoveredWebsite || domain}
+            domain={domain || (companyData as Record<string, unknown>)?.website as string || (companyData as Record<string, unknown>)?.domain as string || discoveredWebsite || ''}
             sector={latestReport?.full_report?.icp_score?.sector || tenant?.sector_code}
             tenantId={tenant?.id}
             tenantSectorCode={tenant?.sector_code}
@@ -1832,7 +2385,7 @@ export default function UsageVerificationCard({
           {/* 
           <KeywordsSEOTab
             companyName={companyName}
-            domain={discoveredWebsite || domain}
+            domain={domain || (companyData as Record<string, unknown>)?.website as string || (companyData as Record<string, unknown>)?.domain as string || discoveredWebsite || ''}
             cnpj={cnpj}
             stcHistoryId={stcHistoryId || undefined}
             savedData={latestReport?.full_report?.keywords_seo_report}

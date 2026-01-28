@@ -310,7 +310,7 @@ export default function DigitalIntelligenceTab({
     return 'secondary';
   };
 
-  const groupUrlsBySource = (urls: AnalyzedURL[]) => {
+  const groupUrlsBySource = (urls: AnalyzedURL[] | undefined) => {
     const grouped: Record<string, AnalyzedURL[]> = {
       website: [],
       linkedin: [],
@@ -323,8 +323,9 @@ export default function DigitalIntelligenceTab({
       other: [],
     };
 
-    urls.forEach(url => {
-      grouped[url.source_type].push(url);
+    (urls ?? []).forEach(url => {
+      const key = url.source_type && grouped[url.source_type] !== undefined ? url.source_type : 'other';
+      grouped[key].push(url);
     });
 
     return grouped;

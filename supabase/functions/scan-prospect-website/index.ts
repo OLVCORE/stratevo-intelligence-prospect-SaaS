@@ -4,10 +4,11 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
+const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Max-Age': '86400',
 };
 
 interface ScanProspectRequest {
@@ -34,29 +35,49 @@ Deno.serve(async (req) => {
   try {
     const { tenant_id, qualified_prospect_id, company_id, website_url, razao_social, cnpj } = await req.json() as ScanProspectRequest;
 
-    if (!tenant_id || !website_url) {
+    if (!tenant_id) {
       return new Response(
-        JSON.stringify({ success: false, error: 'tenant_id e website_url são obrigatórios' }),
+        JSON.stringify({ success: false, error: 'tenant_id é obrigatório' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Buscar qualified_prospect_id se não fornecido
-    let prospectId = qualified_prospect_id;
-    
-    if (!prospectId) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Tentar buscar por company_id
+    // Buscar qualified_prospect_id se não fornecido; permitir company_id-only (modo Discovery)
+    // Fonte oficial: body.website_url (modal do deal). Só usa companies.website/domain se body vier vazio.
+    let prospectId = qualified_prospect_id;
+    let companyOnlyMode = false;
+    const websiteFromBody = typeof website_url === 'string' ? website_url.trim() : '';
+    let websiteUrlToUse = websiteFromBody;
+
+    if (!prospectId && company_id) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('id, cnpj, website, domain')
+        .eq('id', company_id)
+        .single();
+      if (company && !websiteUrlToUse) {
+        websiteUrlToUse = (company as any).website || (company as any).domain || '';
+      }
+      const { data: prospect } = await supabase
+        .from('qualified_prospects')
+        .select('id')
+        .eq('tenant_id', tenant_id)
+        .eq('cnpj', (company as any)?.cnpj || '')
+        .single();
+      if (prospect) prospectId = prospect.id;
+      else if (company_id && websiteUrlToUse) {
+        companyOnlyMode = true;
+        console.log('[ScanProspect] 📌 Modo company_id-only: extraindo produtos para companies.raw_data (Discovery)');
+      }
+    }
+
+    if (!prospectId && !companyOnlyMode) {
       if (company_id) {
-        const { data: company } = await supabase
-          .from('companies')
-          .select('id, cnpj')
-          .eq('id', company_id)
-          .single();
-        
+        const { data: company } = await supabase.from('companies').select('id, cnpj').eq('id', company_id).single();
         if (company?.cnpj) {
           const { data: prospect } = await supabase
             .from('qualified_prospects')
@@ -64,12 +85,9 @@ Deno.serve(async (req) => {
             .eq('tenant_id', tenant_id)
             .eq('cnpj', company.cnpj)
             .single();
-          
           if (prospect) prospectId = prospect.id;
         }
       }
-      
-      // Tentar buscar por CNPJ diretamente
       if (!prospectId && cnpj) {
         const { data: prospect } = await supabase
           .from('qualified_prospects')
@@ -77,10 +95,8 @@ Deno.serve(async (req) => {
           .eq('tenant_id', tenant_id)
           .eq('cnpj', cnpj)
           .single();
-        
         if (prospect) prospectId = prospect.id;
       }
-
       if (!prospectId) {
         return new Response(
           JSON.stringify({ success: false, error: 'qualified_prospect_id não encontrado. Empresa precisa estar no estoque qualificado.' }),
@@ -89,7 +105,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log('[ScanProspect] 🔍 Escaneando website:', website_url);
+    if (!websiteUrlToUse?.trim()) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'website_url é obrigatório quando company_id não possui website/domain' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[ScanProspect] 🔍 Escaneando website:', websiteUrlToUse);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -102,8 +125,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Usar prospectId encontrado
-    const qualified_prospect_id = prospectId;
+    const qualified_prospect_id = prospectId ?? undefined;
 
     // 1. Buscar produtos do tenant para comparação
     // ✅ MC5: Incluir subcategoria se existir (para fallback heurístico)
@@ -201,8 +223,8 @@ Deno.serve(async (req) => {
     }
 
     // 2. Extrair domínio do website
-    const domain = website_url.replace(/^https?:\/\//, '').split('/')[0];
-    const baseUrl = website_url.startsWith('http') ? website_url : `https://${website_url}`;
+    const domain = websiteUrlToUse.replace(/^https?:\/\//, '').split('/')[0];
+    const baseUrl = websiteUrlToUse.startsWith('http') ? websiteUrlToUse : `https://${websiteUrlToUse}`;
 
     // 3. Coletar conteúdo do website
     const pagesContent: string[] = [];
@@ -349,10 +371,39 @@ Retorne APENAS um JSON array válido, sem markdown, sem explicações.`,
 
     console.log(`[ScanProspect] 📦 Produtos extraídos: ${extractedProducts.length}`);
 
-    // 5. Inserir produtos na tabela prospect_extracted_products
+    // 5. Persistir produtos: company_only → companies.raw_data; senão → prospect_extracted_products
     let insertedCount = 0;
+    if (companyOnlyMode && company_id) {
+      const { data: cur } = await supabase.from('companies').select('raw_data').eq('id', company_id).single();
+      const raw = (cur?.raw_data as Record<string, unknown>) || {};
+      const updated = {
+        ...raw,
+        produtos_extracted: extractedProducts.map((p: any) => ({
+          nome: p.nome?.trim(),
+          descricao: p.descricao?.trim(),
+          categoria: p.categoria?.trim(),
+          subcategoria: p.subcategoria?.trim(),
+        })),
+        website_analysis: (raw.website_analysis as string) || `Website: ${websiteUrlToUse}. ${extractedProducts.length} produto(s) extraído(s).`,
+      };
+      await supabase.from('companies').update({ raw_data: updated }).eq('id', company_id);
+      insertedCount = extractedProducts.length;
+      console.log('[ScanProspect] ✅ Modo company_only: produtos salvos em companies.raw_data.produtos_extracted');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          company_only: true,
+          products_found: extractedProducts.length,
+          products_saved: insertedCount,
+          message: 'Produtos extraídos do website da empresa e salvos em companies.raw_data (cálculo de fit usar este dado).',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     for (const product of extractedProducts) {
       if (!product.nome || product.nome.trim().length === 0) continue;
+      if (!qualified_prospect_id) continue;
 
       const { error: insertError } = await supabase
         .from('prospect_extracted_products')

@@ -242,7 +242,10 @@ serve(async (req) => {
       throw new Error('APOLLO_API_KEY não configurada');
     }
 
-    // PASSO 1: Usar apollo_org_id se fornecido, senão buscar pelo LinkedIn URL ou nome
+    // PASSO 1: Motor "dados completos por Apollo Org ID"
+    // Se apollo_org_id for fornecido (ex.: URL https://app.apollo.io/#/organizations/64696fd0fd539b0001ca5d01/people):
+    //   - Usa GET https://api.apollo.io/v1/organizations/${organizationId} para Company details
+    //   - Persiste em companies: industry, description, linkedin_url, apollo_id; raw_data.apollo_organization (industry, short_description, keywords, sic_codes, naics_codes, etc.)
     let organizationId: string | null = apollo_org_id || null;
     
     // ✅ PRIORIDADE 1: Buscar por LinkedIn URL (mais preciso!)

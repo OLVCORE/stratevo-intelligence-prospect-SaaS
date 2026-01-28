@@ -64,6 +64,7 @@ import { DecisionMakerSearchDialog } from '@/components/companies/DecisionMakerS
 import { isInSalesTargetContext } from '@/lib/utils/enrichmentContextValidator';
 import { CanonicalStateBadge } from '@/components/companies/CanonicalStateBadge';
 import { useCanonicalState } from '@/hooks/useCanonicalState';
+import { useEnrichmentOrchestration } from '@/hooks/useEnrichmentOrchestration';
 
 export default function CompanyDetailPage() {
   const { id } = useParams();
@@ -86,6 +87,9 @@ export default function CompanyDetailPage() {
 
   // ✅ MICROCICLO 2: Ativar Realtime para mudanças na empresa
   useRealtimeCompanyChanges(id);
+
+  // ✅ ETAPA 1 OLV: Orquestração Lock → Apollo Company → Apollo People → Receita (ponto de uso obrigatório)
+  const { orchestrateEnrichment, isEnriching: isOrchestrating } = useEnrichmentOrchestration();
 
   // Função para parsear colaboradores/decisores do formato da planilha
   const parseCollaborators = (cargosStr?: string, linkedinStr?: string) => {
@@ -831,6 +835,29 @@ export default function CompanyDetailPage() {
                       </TooltipContent>
                     </Tooltip>
 
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => id && company && orchestrateEnrichment({ companyId: id, cnpj: company?.cnpj ?? undefined })}
+                          disabled={!id || !company || isEnriching || isOrchestrating}
+                          className="relative"
+                          title="Enriquecer Empresa (ordem recomendada)"
+                        >
+                          {isOrchestrating ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Target className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enriquecer Empresa (ordem recomendada)</p>
+                        <p className="text-xs text-muted-foreground">Lock → Apollo Company → Apollo People → Receita</p>
+                      </TooltipContent>
+                    </Tooltip>
+
                     <ApolloOrgIdDialog 
                       onEnrich={handleEnrichApollo}
                       disabled={isEnriching}
@@ -1324,8 +1351,13 @@ export default function CompanyDetailPage() {
               {/* Info Rápida - 4 Colunas Compactas */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 border rounded bg-muted/10">
-                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Setor Amigável</p>
-                  <p className="text-xs font-semibold">{rawData.setor_amigavel || company.industry || 'N/A'}</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">Setor / Indústria</p>
+                  <p className="text-xs font-semibold">
+                    {rawData?.apollo_organization?.industry ?? company.industry ?? rawData?.setor_amigavel ?? 'N/A'}
+                    {rawData?.apollo_organization?.industry && (
+                      <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">Fonte: Apollo</span>
+                    )}
+                  </p>
                 </div>
                 <div className="p-2 border rounded bg-muted/10">
                   <p className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold mb-1">CNAE Principal</p>
