@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -44,20 +44,29 @@ export default function SDRWorkspacePage() {
   }, []);
   
   // ✅ REMOVER FILTRO status: 'open' (coluna não existe na tabela)
-  // Filtrar apenas pelos stages abertos (discovery, qualification, proposal, negotiation)
-  const { data: deals } = useDeals(); 
+  const { data: deals } = useDeals();
   const { data: stages } = usePipelineStages();
   const { data: automations, isLoading: automationsLoading } = useSDRAutomations();
   const { data: companiesAtRisk } = { data: [] }; // DESABILITAR TEMPORARIAMENTE
 
-  // Stats
+  // Contador alinhado ao pipeline: só deals com stage válido (evita 11 no contador e 2 no Kanban por deals órfãos)
+  const validStageKeys = useMemo(
+    () => new Set(stages?.filter(s => !s.is_closed).map(s => s.key) ?? []),
+    [stages]
+  );
+  const dealsVisibleInPipeline = useMemo(
+    () => (deals ?? []).filter(d => validStageKeys.has(d.stage)),
+    [deals, validStageKeys]
+  );
+
+  // Stats (usar apenas deals visíveis no pipeline para bater com o Kanban)
   const stats = {
-    totalDeals: deals?.length || 0,
-    totalValue: deals?.reduce((sum, d) => sum + d.value, 0) || 0,
-    avgProbability: deals?.length 
-      ? deals.reduce((sum, d) => sum + d.probability, 0) / deals.length 
+    totalDeals: dealsVisibleInPipeline.length,
+    totalValue: dealsVisibleInPipeline.reduce((sum, d) => sum + d.value, 0),
+    avgProbability: dealsVisibleInPipeline.length
+      ? dealsVisibleInPipeline.reduce((sum, d) => sum + d.probability, 0) / dealsVisibleInPipeline.length
       : 0,
-    hotDeals: deals?.filter(d => d.priority === 'urgent' || d.priority === 'high').length || 0,
+    hotDeals: dealsVisibleInPipeline.filter(d => d.priority === 'urgent' || d.priority === 'high').length,
     atRisk: companiesAtRisk?.length || 0,
   };
 
