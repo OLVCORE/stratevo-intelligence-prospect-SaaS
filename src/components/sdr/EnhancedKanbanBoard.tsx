@@ -32,13 +32,57 @@ export function EnhancedKanbanBoard() {
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    
-    if (over && active.id !== over.id) {
-      const dealId = active.id as string;
-      const newStage = over.id as string;
-      await moveDeal.mutateAsync({ dealId, newStage });
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('[Kanban] 🎯 DRAG END');
+    console.log('  draggableId (dealId):', active.id);
+    console.log('  over?.id (stage destino):', over?.id);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    if (!over) {
+      console.warn('[Kanban] ⚠️ Sem destino - cancelando');
+      setActiveId(null);
+      return;
     }
-    
+
+    if (active.id === over.id) {
+      setActiveId(null);
+      return;
+    }
+
+    const dealId = active.id as string;
+    // Se soltou em cima de outro card, over.id é o id do deal; usar o stage desse deal como destino.
+    const allDeals = deals ?? [];
+    const droppedOnDeal = allDeals.find(d => d.id === over.id);
+    const newStage = droppedOnDeal
+      ? droppedOnDeal.stage
+      : String(over.id);
+
+    if (!dealId || dealId.length < 10) {
+      console.error('[Kanban] ❌ dealId inválido:', dealId);
+      toast.error('ID do deal inválido');
+      setActiveId(null);
+      return;
+    }
+
+    if (!newStage || newStage.length < 2) {
+      console.error('[Kanban] ❌ stage de destino inválido:', newStage);
+      toast.error('Stage de destino inválido');
+      setActiveId(null);
+      return;
+    }
+
+    try {
+      console.log('[Kanban] 🚀 Executando moveDeal...');
+      await moveDeal.mutateAsync({ dealId, newStage });
+      console.log('[Kanban] ✅ Deal movido com sucesso');
+      toast.success('Deal movido com sucesso');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao mover deal';
+      console.error('[Kanban] ❌ Erro ao mover deal:', err);
+      toast.error('Erro ao mover deal', { description: message });
+    }
+
     setActiveId(null);
   };
 
@@ -110,15 +154,22 @@ export function EnhancedKanbanBoard() {
     });
   }, [deals, filters]);
 
+  // Só exibir e contar deals cujo stage existe no pipeline (evita órfãos com stage UUID inválido). Hooks devem vir antes de qualquer return.
+  const validStageKeys = useMemo(() => new Set(stages?.filter(s => !s.is_closed).map(s => s.key) ?? []), [stages]);
+  const dealsWithValidStage = useMemo(
+    () => (filteredDeals ?? []).filter(d => validStageKeys.has(d.stage)),
+    [filteredDeals, validStageKeys]
+  );
+
   if (stagesLoading || dealsLoading) {
     return <div className="flex items-center justify-center h-96">Carregando...</div>;
   }
 
-  const dealsByStage = filteredDeals?.reduce((acc, deal) => {
+  const dealsByStage = dealsWithValidStage.reduce((acc, deal) => {
     if (!acc[deal.stage]) acc[deal.stage] = [];
     acc[deal.stage].push(deal);
     return acc;
-  }, {} as Record<string, typeof filteredDeals>);
+  }, {} as Record<string, typeof dealsWithValidStage>);
 
   const hasActiveFilters = Object.keys(filters).length > 0;
 
@@ -129,7 +180,7 @@ export function EnhancedKanbanBoard() {
         <div>
           <h2 className="text-2xl font-bold">Pipeline de Vendas</h2>
           <p className="text-sm text-muted-foreground">
-            {filteredDeals?.length || 0} negócios {hasActiveFilters && '(filtrados)'}
+            {dealsWithValidStage.length} negócios {hasActiveFilters && '(filtrados)'}
           </p>
         </div>
         <div className="flex gap-2">

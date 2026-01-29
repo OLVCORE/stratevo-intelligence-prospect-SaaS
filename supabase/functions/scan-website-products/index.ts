@@ -34,6 +34,19 @@ serve(async (req) => {
     console.log('[ScanWebsite] website_url:', website_url)
     console.log('[ScanWebsite] mode (explícito):', explicitMode ?? 'N/A')
 
+    // GUARD: modo prospect não pode receber tenant_id (evita gravar em tenant_products por engano)
+    if ((explicitMode === 'prospect' || companyIdValid) && tenantIdValid) {
+      console.error('[ScanWebsite] ❌ tenant_id enviado junto com company_id/mode=prospect — rejeitando')
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Não é permitido enviar tenant_id quando mode=prospect ou company_id está presente. Produtos do prospect devem ir para companies.raw_data.',
+          received: { company_id, tenant_id, mode: explicitMode },
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     if (!website_url || website_url === 'N/A' || website_url.length < 10) {
       return new Response(
         JSON.stringify({ success: false, error: 'website_url inválida ou não fornecida', received: { website_url } }),
@@ -75,31 +88,284 @@ serve(async (req) => {
       )
     }
 
-    // 🔥 SIMULAÇÃO DE EXTRAÇÃO (substitua por scraping real se necessário)
-    const mockProducts = [
-      {
-        name: `Produto Extraído de ${website_url}`,
-        category: 'Categoria Exemplo',
-        description: 'Descrição exemplo do produto extraído',
-        price: null,
-        image_url: null
-      },
-      {
-        name: `Outro Produto de ${website_url}`,
-        category: 'Categoria 2',
-        description: 'Segunda descrição',
-        price: null,
-        image_url: null
+    type ExtractedProduct = { name: string; category: string; description: string; price: null; image_url: null; extracted_at: string; source: string; note?: string }
+    let extractedProducts: ExtractedProduct[] = []
+
+    // ===== MODO PROSPECT: MOTOR PROFUNDO (sitemap + homepage + catálogos + páginas comuns) — mesmo mecanismo do onboarding tenant/concorrentes =====
+    // Não vincula onboarding ao prospect; só aplica o mesmo tipo de busca incansável por produtos/serviços.
+    if (mode === 'prospect' && companyIdValid) {
+      const baseUrl = website_url.startsWith('http') ? website_url : `https://${website_url}`
+      let domain = ''
+      try {
+        domain = new URL(baseUrl).hostname
+      } catch {
+        domain = website_url.replace(/https?:\/\//, '').split('/')[0]
       }
-    ]
 
-    // 🔵 MODO PROSPECT: Gravar APENAS em companies.raw_data (NUNCA em tenant_products)
+      const pagesContent: string[] = []
+      const discoveredUrls = new Set<string>()
+      const fetchOpts = { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, signal: AbortSignal.timeout(12000) }
+
+      // 1) Sitemap — URLs de produto/categoria/catálogo
+      const sitemapPaths = ['/sitemap.xml', '/sitemap_index.xml', '/sitemap1.xml']
+      const productKeywords = ['produto', 'categoria', 'catalogo', 'product', 'category', 'shop', 'loja', 'servico', 'serviço', 'service', 'solucao', 'solução', '/p/', '/produto/', '/item/', '/product/']
+      const sitemapUrls: string[] = []
+      for (const path of sitemapPaths) {
+        try {
+          const res = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, fetchOpts)
+          if (!res.ok) continue
+          const xml = await res.text()
+          const locs = xml.match(/<loc>(.*?)<\/loc>/gi) || []
+          for (const loc of locs) {
+            const url = loc.replace(/<\/?loc>/gi, '').trim()
+            const lower = url.toLowerCase()
+            if (url && productKeywords.some(k => lower.includes(k)) && !discoveredUrls.has(url)) {
+              sitemapUrls.push(url)
+              discoveredUrls.add(url)
+            }
+          }
+          if (sitemapUrls.length > 0) break
+        } catch (_) {}
+      }
+      console.log(`[ScanWebsite] 🔵 PROSPECT profundo: ${sitemapUrls.length} URLs no sitemap`)
+
+      // 2) Homepage
+      try {
+        const homeRes = await fetch(baseUrl, { ...fetchOpts, signal: AbortSignal.timeout(15000) })
+        if (homeRes.ok) {
+          const html = await homeRes.text()
+          const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 20000)
+          pagesContent.push(`URL: ${baseUrl} (Homepage)\nConteúdo: ${text}`)
+          discoveredUrls.add(baseUrl)
+        }
+      } catch (e) {
+        console.warn('[ScanWebsite] ⚠️ Homepage prospect:', e)
+      }
+
+      // 3) Páginas comuns de produtos/serviços
+      const commonPaths = ['/produtos', '/servicos', '/solucoes', '/catalogo', '/products', '/services', '/linha-produtos', '/nossos-produtos', '/produtos-em-destaque']
+      for (const path of commonPaths) {
+        try {
+          const url = `https://${domain}${path}`
+          if (discoveredUrls.has(url)) continue
+          const res = await fetch(url, fetchOpts)
+          if (res.ok) {
+            const html = await res.text()
+            const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 12000)
+            pagesContent.push(`URL: ${url}\nConteúdo: ${text}`)
+            discoveredUrls.add(url)
+          }
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, 200))
+      }
+
+      // 4) Até 12 páginas do sitemap (catálogos secundários)
+      for (let i = 0; i < Math.min(12, sitemapUrls.length); i++) {
+        try {
+          const url = sitemapUrls[i]
+          const res = await fetch(url, fetchOpts)
+          if (res.ok) {
+            const html = await res.text()
+            const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 12000)
+            pagesContent.push(`URL: ${url}\nConteúdo: ${text}`)
+          }
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, 250))
+      }
+
+      const aggregatedContent = pagesContent.join('\n\n---\n\n')
+      const openaiKey = Deno.env.get('OPENAI_API_KEY')
+
+      // Filtro de ruído: NUNCA considerar como produto
+      const isNoise = (name: string): boolean => {
+        const lower = name.toLowerCase().trim()
+        const noiseTerms = ['notícias', 'noticias', 'newsletter', 'institucional', 'news', 'contato', 'fale conosco', 'trabalhe conosco', 'política de privacidade', 'termos de uso', 'cadastre-se', 'login', 'menu', 'home', 'início', 'inicio']
+        return noiseTerms.some(term => lower === term || lower.includes(term)) || lower.length < 4
+      }
+
+      if (openaiKey && aggregatedContent.length > 500) {
+        try {
+          const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                {
+                  role: 'system',
+                  content: `Você é um especialista em identificar PRODUTOS e SERVIÇOS em websites. Extraia APENAS produtos e serviços reais (nomes de produtos, linhas, categorias de oferta). NUNCA inclua: notícias, newsletter, páginas institucionais, "contato", "menu". Responda APENAS com JSON: { "produtos": [ { "nome": "...", "descricao": "...", "categoria": "..." } ] }`
+                },
+                {
+                  role: 'user',
+                  content: `Extraia TODOS os produtos e serviços oferecidos pela empresa (nomes de produtos, linhas, soluções). Ignore notícias, newsletter e conteúdo institucional.\n\n${aggregatedContent.substring(0, 28000)}`
+                }
+              ],
+              temperature: 0.1,
+              max_tokens: 6000
+            })
+          })
+          if (openaiRes.ok) {
+            const json = await openaiRes.json()
+            const raw = json.choices?.[0]?.message?.content || '{}'
+            const clean = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim()
+            const start = clean.indexOf('{')
+            const end = clean.lastIndexOf('}') + 1
+            if (start >= 0 && end > start) {
+              const parsed = JSON.parse(clean.substring(start, end))
+              const list = parsed.produtos || parsed.products || []
+              extractedProducts = list
+                .filter((p: { nome?: string; name?: string }) => {
+                  const n = (p.nome || p.name || '').trim()
+                  return n && !isNoise(n)
+                })
+                .map((p: { nome?: string; name?: string; descricao?: string; description?: string; categoria?: string; category?: string }) => ({
+                  name: (p.nome || p.name || '').trim().substring(0, 255),
+                  category: (p.categoria || p.category || 'Extraído do website').substring(0, 100),
+                  description: (p.descricao || p.description || '').substring(0, 500) || `Produto do website ${website_url}`,
+                  price: null,
+                  image_url: null,
+                  extracted_at: new Date().toISOString(),
+                  source: website_url
+                }))
+              console.log(`[ScanWebsite] 🔵 PROSPECT profundo (OpenAI): ${extractedProducts.length} produtos`)
+            }
+          }
+        } catch (e) {
+          console.warn('[ScanWebsite] ⚠️ OpenAI prospect:', e)
+        }
+      }
+
+      // Fallback: regex em todo o conteúdo agregado + filtro de ruído
+      if (extractedProducts.length === 0 && aggregatedContent.length > 100) {
+        const productPatterns = [
+          /<div[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<article[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/article>/gi,
+          /<h[2-4][^>]*class="[^"]*product[^"]*title[^"]*"[^>]*>(.*?)<\/h[2-4]>/gi,
+          /<a[^>]*href="[^"]*produto[^"]*"[^>]*>(.*?)<\/a>/gi,
+          /<a[^>]*href="[^"]*servico[^"]*"[^>]*>(.*?)<\/a>/gi,
+          /<a[^>]*href="[^"]*catalogo[^"]*"[^>]*>(.*?)<\/a>/gi,
+          /<h[2-4][^>]*>(.*?)<\/h[2-4]>/gi,
+          /<li[^>]*class="[^"]*service[^"]*"[^>]*>([\s\S]*?)<\/li>/gi
+        ]
+        const found = new Set<string>()
+        for (const pattern of productPatterns) {
+          let m
+          const re = new RegExp(pattern.source, pattern.flags)
+          while ((m = re.exec(aggregatedContent)) !== null) {
+            const text = (m[1] || m[0]).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().substring(0, 200)
+            if (text.length >= 5 && text.length <= 150 && !isNoise(text)) found.add(text)
+          }
+        }
+        extractedProducts = Array.from(found).slice(0, 30).map(name => ({
+          name,
+          category: 'Extraído do website',
+          description: `Produto/serviço identificado no website ${website_url}`,
+          price: null,
+          image_url: null,
+          extracted_at: new Date().toISOString(),
+          source: website_url
+        }))
+        console.log(`[ScanWebsite] 🔵 PROSPECT profundo (regex): ${extractedProducts.length} produtos`)
+      }
+
+      if (extractedProducts.length === 0) {
+        const domainName = domain || website_url.replace(/https?:\/\//, '').split('/')[0]
+        extractedProducts = [{
+          name: `Produtos/Serviços de ${domainName}`,
+          category: 'Extraído do website',
+          description: `Conteúdo extraído do domínio ${website_url}. Nenhum produto específico identificado nas páginas analisadas.`,
+          price: null,
+          image_url: null,
+          extracted_at: new Date().toISOString(),
+          source: website_url,
+          note: 'Extração limitada - revise manualmente'
+        }]
+      }
+    } else {
+      // ===== MOTOR SIMPLES (TENANT): uma página + regex — onboarding Aba 1 não é alterado =====
+      try {
+        const urlToFetch = website_url.startsWith('http') ? website_url : `https://${website_url}`
+        const websiteResponse = await fetch(urlToFetch, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+          },
+          signal: AbortSignal.timeout(15000)
+        })
+
+        if (!websiteResponse.ok) throw new Error(`HTTP ${websiteResponse.status}`)
+        const html = await websiteResponse.text()
+
+        const productPatterns = [
+          /<div[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<article[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/article>/gi,
+          /<h[2-4][^>]*class="[^"]*product[^"]*title[^"]*"[^>]*>(.*?)<\/h[2-4]>/gi,
+          /<a[^>]*href="[^"]*produto[^"]*"[^>]*>(.*?)<\/a>/gi,
+          /<h[2-4][^>]*>(.*?)<\/h[2-4]>/gi,
+          /<li[^>]*class="[^"]*service[^"]*"[^>]*>([\s\S]*?)<\/li>/gi
+        ]
+        const foundProductNames = new Set<string>()
+        for (const pattern of productPatterns) {
+          let match
+          const re = new RegExp(pattern.source, pattern.flags)
+          while ((match = re.exec(html)) !== null) {
+            const productText = match[1] || match[0]
+            const cleanText = productText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().substring(0, 200)
+            if (cleanText.length > 5 && cleanText.length < 150) foundProductNames.add(cleanText)
+          }
+        }
+
+        extractedProducts = Array.from(foundProductNames).slice(0, 20).map(name => ({
+          name,
+          category: 'Extraído do website',
+          description: `Produto identificado no website ${website_url}`,
+          price: null,
+          image_url: null,
+          extracted_at: new Date().toISOString(),
+          source: website_url
+        }))
+        console.log(`[ScanWebsite] 🔍 Motor tenant (uma página): ${extractedProducts.length} produtos`)
+      } catch (scrapeError: unknown) {
+        const msg = scrapeError instanceof Error ? scrapeError.message : String(scrapeError)
+        console.error('[ScanWebsite] ⚠️ Erro no scraping tenant:', msg)
+        const domain = website_url.replace(/https?:\/\//, '').split('/')[0]
+        extractedProducts = [{
+          name: `Produtos de ${domain}`,
+          category: 'Extraído do website',
+          description: `Informações extraídas do domínio ${website_url}`,
+          price: null,
+          image_url: null,
+          extracted_at: new Date().toISOString(),
+          source: website_url,
+          note: 'Extração limitada - fallback por erro de scraping'
+        }]
+      }
+    }
+
+    // 🔵 MODO PROSPECT - Salvar em companies.raw_data (MESMO motor acima)
     if (mode === 'prospect') {
-      console.log('[ScanWebsite] 🔵 MODO PROSPECT')
-      console.log('[ScanWebsite] 💾 SALVANDO EM: companies.raw_data.produtos_extracted')
-      console.log('[ScanWebsite] 🆔 company_id:', company_id)
+      if (!company_id || company_id.length < 30) {
+        return new Response(
+          JSON.stringify({ error: 'company_id inválido para modo prospect' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
-      // Buscar raw_data atual
+      console.log(`[ScanWebsite] 🔵 MODO PROSPECT - Motor profundo (sitemap + homepage + catálogos), salvando em companies.raw_data`)
+
+      if (extractedProducts.length === 0) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Nenhum produto encontrado no website do prospect',
+            website_url,
+            suggestion: 'Verifique se o website possui produtos listados ou tente outro formato de URL'
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       const { data: companyData, error: fetchError } = await supabase
         .from('companies')
         .select('raw_data')
@@ -107,7 +373,7 @@ serve(async (req) => {
         .single()
 
       if (fetchError) {
-        console.error('[ScanWebsite] Erro ao buscar company:', fetchError)
+        console.error('[ScanWebsite] ❌ Empresa não encontrada:', fetchError)
         return new Response(
           JSON.stringify({ error: 'Empresa não encontrada', details: fetchError.message }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -117,12 +383,10 @@ serve(async (req) => {
       const currentRawData = (companyData?.raw_data as Record<string, unknown>) || {}
       const updatedRawData = {
         ...currentRawData,
-        produtos_extracted: mockProducts.map(p => ({
-          ...p,
-          extracted_at: new Date().toISOString(),
-          source: website_url,
-          extraction_mode: 'prospect'
-        }))
+        produtos_extracted: extractedProducts,
+        extraction_date: new Date().toISOString(),
+        extraction_source: website_url,
+        extraction_mode: 'prospect'
       }
 
       const { error: updateError } = await supabase
@@ -131,46 +395,58 @@ serve(async (req) => {
         .eq('id', company_id)
 
       if (updateError) {
-        console.error('[ScanWebsite] Erro ao atualizar raw_data:', updateError)
+        console.error('[ScanWebsite] ❌ Erro ao atualizar raw_data:', updateError)
         return new Response(
           JSON.stringify({ error: 'Erro ao salvar produtos do prospect', details: updateError.message }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      console.log('[ScanWebsite] ✅', mockProducts.length, 'produtos salvos em companies.raw_data')
-      console.log('[ScanWebsite] ⚠️ VERIFICAÇÃO: NÃO foi salvo em tenant_products')
+      console.log(`[ScanWebsite] ✅ ${extractedProducts.length} produtos salvos em companies.raw_data`)
 
       return new Response(
         JSON.stringify({
           success: true,
           mode: 'prospect',
-          count: mockProducts.length,
-          products: mockProducts,
+          count: extractedProducts.length,
+          products: extractedProducts,
           company_id: company_id,
           saved_to: 'companies.raw_data.produtos_extracted',
+          website_url: website_url,
           company_name: (companyData as { name?: string })?.name,
-          message: `${mockProducts.length} produtos extraídos e salvos no dossiê do prospect`
+          message: `${extractedProducts.length} produtos extraídos do website do prospect`
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // 🟢 MODO TENANT: Gravar APENAS em tenant_products (NUNCA em companies.raw_data)
+    // 🟢 MODO TENANT: MESMO motor de scraping, gravar APENAS em tenant_products (NUNCA em companies.raw_data)
     if (mode === 'tenant') {
-      console.log('[ScanWebsite] 🟢 MODO TENANT')
+      console.log('[ScanWebsite] 🟢 MODO TENANT - Usando MESMO motor de scraping do prospect')
       console.log('[ScanWebsite] 💾 SALVANDO EM: tenant_products')
       console.log('[ScanWebsite] 🆔 tenant_id:', tenant_id)
 
-      // tenant_products: nome, descricao, categoria, ativo (schema 20250201000001)
-      const productsToInsert = mockProducts.map(p => ({
+      // Garantir pelo menos um item para insert (evita array vazio)
+      const safeProducts = extractedProducts.length > 0
+        ? extractedProducts
+        : [{
+            name: `Produtos de ${website_url.replace(/https?:\/\//, '').split('/')[0] || 'website'}`,
+            category: 'Extraído do website',
+            description: `Extraído de ${website_url}`,
+            price: null,
+            image_url: null,
+            extracted_at: new Date().toISOString(),
+            source: website_url
+          }]
+
+      // tenant_products: nome, descricao, categoria, ativo, imagem_url (schema 20250201000001)
+      const productsToInsert = safeProducts.map(p => ({
         tenant_id: tenant_id,
-        nome: p.name,
-        descricao: p.description ?? null,
-        categoria: p.category ?? null,
+        nome: (p.name || 'Produto').trim().substring(0, 255),
+        descricao: (p.description ?? null) ? String(p.description).trim().substring(0, 5000) : null,
+        categoria: (p.category ?? null) ? String(p.category).trim().substring(0, 100) : null,
         ativo: true,
-        imagem_url: p.image_url ?? null,
-        created_at: new Date().toISOString()
+        imagem_url: p.image_url ?? null
       }))
 
       const { error: insertError } = await supabase
@@ -178,9 +454,14 @@ serve(async (req) => {
         .insert(productsToInsert)
 
       if (insertError) {
-        console.error('[ScanWebsite] Erro ao inserir em tenant_products:', insertError)
+        console.error('[ScanWebsite] Erro ao inserir em tenant_products:', insertError.message, insertError.code, insertError.details)
         return new Response(
-          JSON.stringify({ error: 'Erro ao salvar produtos do tenant', details: insertError.message }),
+          JSON.stringify({
+            error: 'Erro ao salvar produtos do tenant',
+            details: insertError.message,
+            code: insertError.code,
+            hint: 'Verifique RLS e colunas da tabela tenant_products (nome, descricao, categoria, ativo, imagem_url).'
+          }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
@@ -200,10 +481,16 @@ serve(async (req) => {
       )
     }
 
-  } catch (error) {
-    console.error('[ScanWebsite] Erro geral:', error)
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    const errStack = error instanceof Error ? error.stack : undefined
+    console.error('[ScanWebsite] Erro geral:', errMsg, errStack)
     return new Response(
-      JSON.stringify({ error: 'Erro interno do servidor', details: error.message }),
+      JSON.stringify({
+        error: 'Erro interno do servidor',
+        details: errMsg,
+        hint: 'Verifique os logs da Edge Function no Supabase Dashboard.'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

@@ -32,9 +32,11 @@ export function useDeals(filters?: DealFilters) {
         .from('sdr_deals')
         .select('*, companies:companies!sdr_deals_company_id_fkey(company_name, industry, website, domain, linkedin_url, sector_name, raw_data, apollo_organization_id, apollo_url)')
         .order('created_at', { ascending: false });
+
+      // Se a tabela sdr_deals tiver coluna deleted_at, adicione: query = query.is('deleted_at', null);
       
-      // Filtro por deal_stage (coluna real da tabela)
-      if (filters?.stage) query = query.eq('deal_stage', filters.stage);
+      // Filtro por stage (coluna real da tabela sdr_deals)
+      if (filters?.stage) query = query.eq('stage', filters.stage);
       
       // Filtro por status
       if (filters?.status) query = query.eq('status', filters.status);
@@ -71,7 +73,7 @@ export function useCreateDeal() {
       const { data: { user } } = await supabase.auth.getUser();
       const stage = deal.stage || 'discovery';
       const value = deal.value ?? 0;
-      // Tabela usa deal_stage, deal_title, deal_value (FK em deal_stage)
+      // Tipos Supabase exigem deal_title/deal_stage/deal_value; update usa "stage" (coluna real)
       const dealToInsert = {
         deal_title: deal.title,
         deal_stage: stage,
@@ -99,12 +101,8 @@ export function useUpdateDeal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ dealId, updates }: { dealId: string; updates: Record<string, any> }) => {
-      // Mapear campos virtuais (stage/title/value) para colunas reais (deal_stage/deal_title/deal_value)
+      // sdr_deals usa stage (TEXT). Aceitar stage/title/value; mapear title/value se existirem.
       const backendUpdates: Record<string, unknown> = { ...updates };
-      if (updates.stage !== undefined) {
-        backendUpdates.deal_stage = updates.stage;
-        delete backendUpdates.stage;
-      }
       if (updates.title !== undefined) {
         backendUpdates.deal_title = updates.title;
         delete backendUpdates.title;
@@ -129,21 +127,84 @@ export function useMoveDeal() {
   return useMutation({
     mutationFn: async ({ dealId, newStage }: { dealId: string; newStage: string }) => {
       const status = newStage === 'won' ? 'won' : newStage === 'lost' ? 'lost' : 'open';
-      console.log('[useMoveDeal] Atualizando deal:', { dealId, newStage, status });
-      const { data, error } = await supabase.from('sdr_deals').update({
-        deal_stage: newStage,
-        status,
-      }).eq('id', dealId).select().single();
+
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('[useMoveDeal] 🎯 INÍCIO DA MOVIMENTAÇÃO');
+      console.log('  dealId:', dealId);
+      console.log('  newStage:', newStage);
+      console.log('  status:', status);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // DEBUG: Buscar deal ANTES da atualização
+      const { data: dealBefore, error: fetchError } = await supabase
+        .from('sdr_deals')
+        .select('*')
+        .eq('id', dealId)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error('[useMoveDeal] ❌ Erro ao buscar deal:', fetchError);
+        console.error('  Code:', fetchError.code, 'Message:', fetchError.message, 'Details:', fetchError.details, 'Hint:', fetchError.hint);
+        throw fetchError;
+      }
+      if (!dealBefore) {
+        console.error('[useMoveDeal] ❌ Deal não encontrado:', dealId);
+        throw new Error('Deal não encontrado');
+      }
+
+      console.log('[useMoveDeal] ✅ Deal encontrado:', { id: dealBefore.id, deal_title: (dealBefore as Record<string, unknown>).deal_title ?? (dealBefore as Record<string, unknown>).title, deal_stage: (dealBefore as Record<string, unknown>).deal_stage ?? (dealBefore as Record<string, unknown>).stage, tenant_id: (dealBefore as Record<string, unknown>).tenant_id, deleted_at: (dealBefore as Record<string, unknown>).deleted_at });
+
+      // Validar stage em sdr_pipeline_stages: buscar por key ou id (sempre persistir stage KEY, nunca UUID)
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newStage);
+      const stageQuery = isUuid
+        ? supabase.from('sdr_pipeline_stages').select('id, key, name').eq('id', newStage).maybeSingle()
+        : supabase.from('sdr_pipeline_stages').select('id, key, name').eq('key', newStage).maybeSingle();
+      const { data: stageRow, error: stageError } = await stageQuery;
+
+      if (stageError || !stageRow) {
+        console.error('[useMoveDeal] ❌ Stage não encontrado por key/id:', newStage, stageError?.message ?? '');
+        throw new Error(`Stage inválido: "${newStage}". Use o nome do estágio (ex: lead, qualification, discovery) ou um ID de estágio válido.`);
+      }
+
+      const stageKey = (stageRow as { key: string }).key;
+      console.log('[useMoveDeal] ✅ Stage de destino:', (stageRow as { name?: string }).name ?? stageKey);
+
+      // sdr_deals usa coluna "stage" (TEXT). Sempre gravar a KEY do stage, nunca UUID (evita deals órfãos).
+      const updatePayload: Record<string, unknown> = { status, stage: stageKey };
+      console.log('[useMoveDeal] 📤 Payload de atualização:', updatePayload);
+      console.log('[useMoveDeal] 🚀 Executando UPDATE...');
+
+      const { data: updatedDeal, error } = await supabase
+        .from('sdr_deals')
+        .update(updatePayload)
+        .eq('id', dealId)
+        .select()
+        .single();
+
       if (error) {
-        console.error('[useMoveDeal] Erro:', error);
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.error('[useMoveDeal] ❌ ERRO NO UPDATE');
+        console.error('  Code:', error.code, 'Message:', error.message, 'Details:', error.details, 'Hint:', error.hint);
+        console.error('  dealId:', dealId, 'newStage:', newStage);
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         throw error;
       }
-      console.log('[useMoveDeal] Deal atualizado:', data);
-      return data;
+
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('[useMoveDeal] ✅ UPDATE CONCLUÍDO');
+      console.log('  stage anterior:', (dealBefore as Record<string, unknown>).stage ?? (dealBefore as Record<string, unknown>).deal_stage);
+      console.log('  stage novo:', (updatedDeal as Record<string, unknown>).stage ?? (updatedDeal as Record<string, unknown>).deal_stage);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      return updatedDeal;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
       toastMessages.sdr.dealMoved();
+      console.log('[useMoveDeal] ✅ Query invalidada, recarregando deals...');
+    },
+    onError: (err) => {
+      console.error('[useMoveDeal] ❌ Mutation falhou:', err);
     },
   });
 }
@@ -166,11 +227,8 @@ export function useBulkUpdateDeals() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ dealIds, updates }: { dealIds: string[]; updates: Record<string, any> }) => {
+      // sdr_deals usa coluna "stage" (TEXT). Manter stage; mapear title/value se existirem.
       const backendUpdates: Record<string, unknown> = { ...updates };
-      if (updates.stage !== undefined) {
-        backendUpdates.deal_stage = updates.stage;
-        delete backendUpdates.stage;
-      }
       if (updates.title !== undefined) {
         backendUpdates.deal_title = updates.title;
         delete backendUpdates.title;

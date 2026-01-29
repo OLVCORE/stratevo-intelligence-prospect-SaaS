@@ -516,12 +516,12 @@ export default function UsageVerificationCard({
   }, [companyId, companyName, cnpj, tenant?.id, queryClient]);
 
   // Extrair Produtos do Prospect — MESMO MECANISMO do onboarding Etapa 1 (scan-website-products com company_id → companies.raw_data)
-  // CRÍTICO: Enviar APENAS company_id + website_url; NUNCA enviar tenant_id para evitar confusão no backend
+  // CRÍTICO: NUNCA enviar tenant_id; se enviado, a Edge Function rejeita ou grava em tenant_products por engano
   const handleExtractProspectProducts = useCallback(async () => {
     const companyIdStr = String(companyId ?? '').trim();
     if (!companyIdStr || companyIdStr === 'undefined' || companyIdStr === 'null' || companyIdStr.length < 30) {
       toast.error('ID da empresa inválido. Não é possível extrair produtos.');
-      console.error('[ExtractProspect] company_id inválido:', companyIdStr);
+      console.error('[ExtractProspect] ❌ company_id inválido:', companyIdStr);
       return;
     }
     setExtractProductsLoading(true);
@@ -534,17 +534,24 @@ export default function UsageVerificationCard({
       const websiteUrl = (freshCompany?.website ?? freshCompany?.domain ?? domain ?? '').trim();
       if (!websiteUrl || websiteUrl === 'N/A') {
         toast.error('Website do prospect não disponível');
+        console.error('[ExtractProspect] ❌ website_url inválido:', websiteUrl);
         setExtractProductsLoading(false);
         return;
       }
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
       const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      // 🔥 CRÍTICO: Enviar company_id + website_url + mode: 'prospect'; NÃO enviar tenant_id
+      // Prospect: APENAS company_id + website_url + mode. NÃO INCLUIR tenant_id.
       const requestBody = {
         company_id: companyIdStr,
         website_url: websiteUrl,
-        mode: 'prospect',
+        mode: 'prospect' as const,
       };
+      if ('tenant_id' in requestBody) {
+        console.error('[ExtractProspect] ❌ ERRO CRÍTICO: tenant_id detectado no body!');
+        toast.error('Erro de configuração: tenant_id não deve ser enviado');
+        setExtractProductsLoading(false);
+        return;
+      }
       console.log('[ExtractProspect] Request body:', requestBody);
       const response = await fetch(`${SUPABASE_URL}/functions/v1/scan-website-products`, {
         method: 'POST',
@@ -557,40 +564,38 @@ export default function UsageVerificationCard({
       const result = await response.json();
       console.log('[ExtractProspect] Response:', result);
       if (!response.ok) {
-        throw new Error(result.error || 'Erro na extração');
+        throw new Error(result.error || `HTTP ${response.status}`);
       }
-      if (result.success && result.mode === 'prospect') {
-        if (result.saved_to !== 'companies.raw_data.produtos_extracted') {
-          console.error('[ExtractProspect] ❌ Salvou no lugar errado:', result.saved_to);
-          toast.error('Produtos foram salvos no destino incorreto. Contate o suporte.');
-          setExtractProductsLoading(false);
-          return;
-        }
-        toast.success(`✅ ${result.count ?? 0} produtos extraídos do prospect`);
-        if (result.products && Array.isArray(result.products)) {
-          setProspectProductsFromCompanyRaw(result.products.map((p: any) => ({
-            nome: p.name ?? p.nome,
-            name: p.name ?? p.nome,
-            descricao: p.description ?? p.descricao,
-            categoria: p.category ?? p.categoria,
-            category: p.category ?? p.categoria,
-          })));
-          setLastExtractedProspectProducts(result.products.map((p: any) => ({
-            nome: p.name ?? p.nome,
-            name: p.name ?? p.nome,
-            descricao: p.description ?? p.descricao,
-            categoria: p.category ?? p.categoria,
-            category: p.category ?? p.categoria,
-          })));
-        }
-        await queryClient.refetchQueries({ queryKey: ['company-data', companyId] });
-        queryClient.invalidateQueries({ queryKey: ['stc-history', companyId] });
-        queryClient.invalidateQueries({ queryKey: ['product-fit', companyId, tenant?.id] });
-      } else {
-        toast.error(result.error || 'Erro ao extrair produtos do prospect');
+      if (!result.success) {
+        throw new Error(result.error || 'Extração falhou');
       }
+      if (result.mode !== 'prospect') {
+        console.error('[ExtractProspect] ❌ MODO INCORRETO:', result.mode);
+        throw new Error(`Modo incorreto: esperado 'prospect', recebido '${result.mode}'`);
+      }
+      const savedTo = result.saved_to ?? '';
+      if (savedTo && !savedTo.includes('companies.raw_data')) {
+        console.error('[ExtractProspect] ❌ DESTINO INCORRETO:', savedTo);
+        throw new Error(`Destino incorreto: ${savedTo}`);
+      }
+      const productsCount = result.count ?? result.products_found ?? 0;
+      toast.success(`✅ ${productsCount} produtos extraídos do prospect`);
+      if (result.products && Array.isArray(result.products)) {
+        const mapped = result.products.map((p: { name?: string; nome?: string; description?: string; descricao?: string; category?: string; categoria?: string }) => ({
+          nome: p.name ?? p.nome,
+          name: p.name ?? p.nome,
+          descricao: p.description ?? p.descricao,
+          categoria: p.category ?? p.categoria,
+          category: p.category ?? p.categoria,
+        }));
+        setProspectProductsFromCompanyRaw(mapped);
+        setLastExtractedProspectProducts(mapped);
+      }
+      await queryClient.refetchQueries({ queryKey: ['company-data', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['stc-history', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['product-fit', companyId, tenant?.id] });
     } catch (e: unknown) {
-      console.error('[ExtractProspect] Erro:', e);
+      console.error('[ExtractProspect] ❌ ERRO:', e);
       toast.error(e instanceof Error ? e.message : 'Erro ao extrair produtos do prospect');
     } finally {
       setExtractProductsLoading(false);
