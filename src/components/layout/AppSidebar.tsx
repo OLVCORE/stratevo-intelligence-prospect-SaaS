@@ -170,6 +170,13 @@ const menuGroups: MenuGroup[] = [
         description: "Enriquecimento e criação de deals - único local de enrichment"
       },
       {
+        title: "Data Enrich",
+        icon: Sparkles,
+        url: "/leads/data-enrich",
+        highlighted: true,
+        description: "Enriquecer empresas com decisores (Apollo, LinkedIn, Lusha) - olv-dataenrich"
+      },
+      {
         title: "Empresas Descartadas",
         icon: XCircle,
         url: "/leads/discarded",

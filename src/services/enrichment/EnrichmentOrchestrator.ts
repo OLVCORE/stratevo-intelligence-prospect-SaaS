@@ -20,7 +20,13 @@ export function extractApolloOrgIdFromUrl(url: string): string | null {
   return match ? match[1] : null;
 }
 
-/** Normaliza input para o body da Edge: apollo_url → apollo_org_id, etc. */
+/** Normaliza domain: sem protocolo/www (Apollo espera apenas hostname) */
+function normalizeDomain(domain: string | undefined): string | undefined {
+  if (!domain?.trim()) return undefined;
+  return domain.trim().toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0] || undefined;
+}
+
+/** Normaliza input para o body da Edge: apollo_url → apollo_org_id, domain limpo, etc. */
 export function normalizeEnrichmentInput(input: EnrichmentInput): Record<string, unknown> {
   const apolloOrgId =
     input.apollo_org_id ||
@@ -29,9 +35,10 @@ export function normalizeEnrichmentInput(input: EnrichmentInput): Record<string,
   return {
     company_id: input.company_id || undefined,
     company_name: input.company_name || undefined,
-    domain: input.domain || undefined,
+    domain: normalizeDomain(input.domain) || input.domain || undefined,
     linkedin_url: input.linkedin_url || undefined,
     apollo_org_id: apolloOrgId || undefined,
+    force_refresh: input.force_refresh === true ? true : undefined,
     city: input.city || undefined,
     state: input.state || undefined,
     industry: input.industry || undefined,
@@ -74,6 +81,9 @@ function mapEdgeResponseToResult(data: unknown): EnrichmentResult {
     statistics: raw.statistics,
     message: raw.message ?? (raw.error ?? ''),
     error: raw.error,
+    organizationFound: raw.organization_found,
+    organizationIdUsed: raw.organization_id_used ?? undefined,
+    reasonEmpty: raw.reason_empty,
   };
 }
 

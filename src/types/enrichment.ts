@@ -19,6 +19,8 @@ export interface EnrichmentInput {
   fantasia?: string;
   analysis_id?: string;
   qualified_prospect_id?: string;
+  /** Quando true e apollo_org_id informado, ignora idempotência e reexecuta (Apollo ID Manual) */
+  force_refresh?: boolean;
 }
 
 /** Classificação de poder de decisão (edge: buying_power) */
@@ -81,6 +83,10 @@ export interface EnrichmentEdgeResponse {
   main_decision_maker?: DecisionMakerRow | null;
   message?: string;
   error?: string;
+  organization_found?: boolean;
+  organization_id_used?: string | null;
+  /** Preenchido quando decision_makers_total === 0: org_not_found, no_people_in_apollo, idempotency_skip, apollo_key_missing */
+  reason_empty?: string;
 }
 
 /** Resultado normalizado do orquestrador (para a UI) */
@@ -96,4 +102,7 @@ export interface EnrichmentResult {
   statistics: EnrichmentEdgeResponse['statistics'];
   message: string;
   error?: string;
+  organizationFound?: boolean;
+  organizationIdUsed?: string | null;
+  reasonEmpty?: string;
 }

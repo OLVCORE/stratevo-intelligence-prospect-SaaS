@@ -91,10 +91,10 @@ serve(async (req) => {
     type ExtractedProduct = { name: string; category: string; description: string; price: null; image_url: null; extracted_at: string; source: string; note?: string }
     let extractedProducts: ExtractedProduct[] = []
 
-    // ===== MODO PROSPECT: MOTOR PROFUNDO (sitemap + homepage + catálogos + páginas comuns) — mesmo mecanismo do onboarding tenant/concorrentes =====
-    // Não vincula onboarding ao prospect; só aplica o mesmo tipo de busca incansável por produtos/serviços.
+    // ===== MODO PROSPECT: MOTOR PROFUNDO — sitemap (todas as URLs + index), homepage, catálogos, até ~80 páginas =====
     if (mode === 'prospect' && companyIdValid) {
       const baseUrl = website_url.startsWith('http') ? website_url : `https://${website_url}`
+      const baseOrigin = baseUrl.replace(/\/$/, '')
       let domain = ''
       try {
         domain = new URL(baseUrl).hostname
@@ -103,38 +103,71 @@ serve(async (req) => {
       }
 
       const pagesContent: string[] = []
+      const rawHtmlByUrl: { url: string; html: string }[] = []
       const discoveredUrls = new Set<string>()
-      const fetchOpts = { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, signal: AbortSignal.timeout(12000) }
+      const FETCH_TIMEOUT_MS = 15000
+      const FETCH_TIMEOUT_PAGE_MS = 10000
+      const fetchOpts = {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
+        },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      }
 
-      // 1) Sitemap — URLs de produto/categoria/catálogo
-      const sitemapPaths = ['/sitemap.xml', '/sitemap_index.xml', '/sitemap1.xml']
-      const productKeywords = ['produto', 'categoria', 'catalogo', 'product', 'category', 'shop', 'loja', 'servico', 'serviço', 'service', 'solucao', 'solução', '/p/', '/produto/', '/item/', '/product/']
-      const sitemapUrls: string[] = []
-      for (const path of sitemapPaths) {
+      // 1) Sitemap — coletar TODAS as URLs (não só as com palavra-chave); suporte a sitemap index
+      const productKeywords = ['produto', 'categoria', 'catalogo', 'product', 'category', 'shop', 'loja', 'servico', 'serviço', 'service', 'solucao', 'solução', '/p/', '/produto/', '/item/', '/product/', '/categoria/', '/linha']
+      const allSitemapUrls: string[] = []
+      const sitemapPaths = ['/sitemap.xml', '/sitemap_index.xml', '/sitemap1.xml', '/sitemap_index.xml', '/sitemap.xml']
+
+      async function collectFromSitemap(url: string): Promise<void> {
         try {
-          const res = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, fetchOpts)
-          if (!res.ok) continue
+          const res = await fetch(url, { ...fetchOpts, signal: AbortSignal.timeout(12000) })
+          if (!res.ok) return
           const xml = await res.text()
+          const isIndex = /<sitemap\s/i.test(xml) && /<loc>/i.test(xml)
           const locs = xml.match(/<loc>(.*?)<\/loc>/gi) || []
           for (const loc of locs) {
-            const url = loc.replace(/<\/?loc>/gi, '').trim()
-            const lower = url.toLowerCase()
-            if (url && productKeywords.some(k => lower.includes(k)) && !discoveredUrls.has(url)) {
-              sitemapUrls.push(url)
-              discoveredUrls.add(url)
+            const u = loc.replace(/<\/?loc>/gi, '').trim()
+            if (!u || discoveredUrls.has(u)) continue
+            if (isIndex && (u.endsWith('.xml') || u.includes('sitemap'))) {
+              discoveredUrls.add(u)
+              await collectFromSitemap(u)
+              continue
+            }
+            if (!isIndex && (u.startsWith('http') && u.includes(domain))) {
+              discoveredUrls.add(u)
+              allSitemapUrls.push(u)
             }
           }
-          if (sitemapUrls.length > 0) break
         } catch (_) {}
       }
-      console.log(`[ScanWebsite] 🔵 PROSPECT profundo: ${sitemapUrls.length} URLs no sitemap`)
+
+      for (const path of sitemapPaths) {
+        try {
+          await collectFromSitemap(`${baseOrigin}${path}`)
+          if (allSitemapUrls.length > 0) break
+        } catch (_) {}
+      }
+
+      // Ordenar: URLs com palavra-chave de produto primeiro; depois o restante (até 150 para escolher de onde buscar)
+      const sitemapUrlsSorted = [...allSitemapUrls].sort((a, b) => {
+        const aHas = productKeywords.some(k => a.toLowerCase().includes(k)) ? 1 : 0
+        const bHas = productKeywords.some(k => b.toLowerCase().includes(k)) ? 1 : 0
+        if (aHas !== bHas) return bHas - aHas
+        return 0
+      })
+      const sitemapUrlsToFetch = sitemapUrlsSorted.slice(0, 120)
+      console.log(`[ScanWebsite] 🔵 PROSPECT profundo: ${allSitemapUrls.length} URLs no sitemap (vamos buscar até ${Math.min(80, sitemapUrlsToFetch.length)} páginas)`)
 
       // 2) Homepage
       try {
-        const homeRes = await fetch(baseUrl, { ...fetchOpts, signal: AbortSignal.timeout(15000) })
+        const homeRes = await fetch(baseUrl, { ...fetchOpts, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
         if (homeRes.ok) {
           const html = await homeRes.text()
-          const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 20000)
+          rawHtmlByUrl.push({ url: baseUrl, html })
+          const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 25000)
           pagesContent.push(`URL: ${baseUrl} (Homepage)\nConteúdo: ${text}`)
           discoveredUrls.add(baseUrl)
         }
@@ -142,47 +175,94 @@ serve(async (req) => {
         console.warn('[ScanWebsite] ⚠️ Homepage prospect:', e)
       }
 
-      // 3) Páginas comuns de produtos/serviços
-      const commonPaths = ['/produtos', '/servicos', '/solucoes', '/catalogo', '/products', '/services', '/linha-produtos', '/nossos-produtos', '/produtos-em-destaque']
+      // 3) Páginas comuns de produtos/serviços (mais variações)
+      const commonPaths = [
+        '/produtos', '/servicos', '/solucoes', '/catalogo', '/products', '/services',
+        '/linha-produtos', '/nossos-produtos', '/produtos-em-destaque', '/nossos-servicos',
+        '/linhas', '/item', '/p', '/sobre-nos', '/empresa', '/solucoes', '/soluções'
+      ]
       for (const path of commonPaths) {
         try {
           const url = `https://${domain}${path}`
           if (discoveredUrls.has(url)) continue
-          const res = await fetch(url, fetchOpts)
+          const res = await fetch(url, { ...fetchOpts, signal: AbortSignal.timeout(FETCH_TIMEOUT_PAGE_MS) })
           if (res.ok) {
             const html = await res.text()
-            const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 12000)
+            rawHtmlByUrl.push({ url, html })
+            const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 15000)
             pagesContent.push(`URL: ${url}\nConteúdo: ${text}`)
             discoveredUrls.add(url)
           }
         } catch (_) {}
-        await new Promise(r => setTimeout(r, 200))
+        await new Promise(r => setTimeout(r, 300))
       }
 
-      // 4) Até 12 páginas do sitemap (catálogos secundários)
-      for (let i = 0; i < Math.min(12, sitemapUrls.length); i++) {
+      // 4) Até 80 páginas do sitemap (profundidade máxima para prospect)
+      const maxSitemapPages = 80
+      for (let i = 0; i < Math.min(maxSitemapPages, sitemapUrlsToFetch.length); i++) {
         try {
-          const url = sitemapUrls[i]
-          const res = await fetch(url, fetchOpts)
+          const url = sitemapUrlsToFetch[i]
+          const res = await fetch(url, { ...fetchOpts, signal: AbortSignal.timeout(FETCH_TIMEOUT_PAGE_MS) })
           if (res.ok) {
             const html = await res.text()
+            rawHtmlByUrl.push({ url, html })
             const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 12000)
             pagesContent.push(`URL: ${url}\nConteúdo: ${text}`)
           }
         } catch (_) {}
-        await new Promise(r => setTimeout(r, 250))
+        await new Promise(r => setTimeout(r, 350))
       }
 
       const aggregatedContent = pagesContent.join('\n\n---\n\n')
       const openaiKey = Deno.env.get('OPENAI_API_KEY')
 
-      // Filtro de ruído: NUNCA considerar como produto
       const isNoise = (name: string): boolean => {
         const lower = name.toLowerCase().trim()
-        const noiseTerms = ['notícias', 'noticias', 'newsletter', 'institucional', 'news', 'contato', 'fale conosco', 'trabalhe conosco', 'política de privacidade', 'termos de uso', 'cadastre-se', 'login', 'menu', 'home', 'início', 'inicio']
+        const noiseTerms = ['notícias', 'noticias', 'newsletter', 'institucional', 'news', 'contato', 'fale conosco', 'trabalhe conosco', 'política de privacidade', 'termos de uso', 'cadastre-se', 'login', 'menu', 'home', 'início', 'inicio', '©', 'todos os direitos']
         return noiseTerms.some(term => lower === term || lower.includes(term)) || lower.length < 4
       }
 
+      // 5) Regex no HTML BRUTO de cada página (não no texto sem tags)
+      const productPatterns = [
+        /<div[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+        /<article[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/article>/gi,
+        /<h[2-4][^>]*class="[^"]*product[^"]*title[^"]*"[^>]*>(.*?)<\/h[2-4]>/gi,
+        /<a[^>]*href="[^"]*produto[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+        /<a[^>]*href="[^"]*servico[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+        /<a[^>]*href="[^"]*catalogo[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+        /<h[2-4][^>]*>(.*?)<\/h[2-4]>/gi,
+        /<li[^>]*class="[^"]*service[^"]*"[^>]*>([\s\S]*?)<\/li>/gi,
+        /<span[^>]*class="[^"]*product-name[^"]*"[^>]*>(.*?)<\/span>/gi,
+        /<h3[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)<\/h3>/gi,
+        /data-product-name="([^"]+)"/gi,
+        /title="([^"]{5,120})"/gi
+      ]
+      const regexFound = new Set<string>()
+      for (const { html } of rawHtmlByUrl) {
+        for (const pattern of productPatterns) {
+          let m
+          const re = new RegExp(pattern.source, pattern.flags)
+          while ((m = re.exec(html)) !== null) {
+            const raw = (m[1] || m[0] || '').toString()
+            const text = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200)
+            if (text.length >= 5 && text.length <= 180 && !isNoise(text)) regexFound.add(text)
+          }
+        }
+      }
+      if (regexFound.size > 0) {
+        extractedProducts = Array.from(regexFound).slice(0, 80).map(name => ({
+          name,
+          category: 'Extraído do website',
+          description: `Produto/serviço identificado no website ${website_url}`,
+          price: null,
+          image_url: null,
+          extracted_at: new Date().toISOString(),
+          source: website_url
+        }))
+        console.log(`[ScanWebsite] 🔵 PROSPECT profundo (regex em HTML): ${extractedProducts.length} produtos`)
+      }
+
+      // 6) OpenAI no conteúdo agregado (pode enriquecer ou ser a única fonte)
       if (openaiKey && aggregatedContent.length > 500) {
         try {
           const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -197,7 +277,7 @@ serve(async (req) => {
                 },
                 {
                   role: 'user',
-                  content: `Extraia TODOS os produtos e serviços oferecidos pela empresa (nomes de produtos, linhas, soluções). Ignore notícias, newsletter e conteúdo institucional.\n\n${aggregatedContent.substring(0, 28000)}`
+                  content: `Extraia TODOS os produtos e serviços oferecidos pela empresa (nomes de produtos, linhas, soluções). Ignore notícias, newsletter e conteúdo institucional.\n\n${aggregatedContent.substring(0, 48000)}`
                 }
               ],
               temperature: 0.1,
@@ -213,7 +293,7 @@ serve(async (req) => {
             if (start >= 0 && end > start) {
               const parsed = JSON.parse(clean.substring(start, end))
               const list = parsed.produtos || parsed.products || []
-              extractedProducts = list
+              const openaiProducts = list
                 .filter((p: { nome?: string; name?: string }) => {
                   const n = (p.nome || p.name || '').trim()
                   return n && !isNoise(n)
@@ -227,7 +307,14 @@ serve(async (req) => {
                   extracted_at: new Date().toISOString(),
                   source: website_url
                 }))
-              console.log(`[ScanWebsite] 🔵 PROSPECT profundo (OpenAI): ${extractedProducts.length} produtos`)
+              const existingNames = new Set(extractedProducts.map(p => p.name.toLowerCase()))
+              for (const p of openaiProducts) {
+                if (!existingNames.has(p.name.toLowerCase())) {
+                  existingNames.add(p.name.toLowerCase())
+                  extractedProducts.push(p)
+                }
+              }
+              console.log(`[ScanWebsite] 🔵 PROSPECT profundo (OpenAI): +${openaiProducts.length} produtos (total: ${extractedProducts.length})`)
             }
           }
         } catch (e) {
@@ -235,28 +322,15 @@ serve(async (req) => {
         }
       }
 
-      // Fallback: regex em todo o conteúdo agregado + filtro de ruído
+      // 7) Se ainda zero, tentar regex em texto (títulos e links visíveis)
       if (extractedProducts.length === 0 && aggregatedContent.length > 100) {
-        const productPatterns = [
-          /<div[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-          /<article[^>]*class="[^"]*product[^"]*"[^>]*>([\s\S]*?)<\/article>/gi,
-          /<h[2-4][^>]*class="[^"]*product[^"]*title[^"]*"[^>]*>(.*?)<\/h[2-4]>/gi,
-          /<a[^>]*href="[^"]*produto[^"]*"[^>]*>(.*?)<\/a>/gi,
-          /<a[^>]*href="[^"]*servico[^"]*"[^>]*>(.*?)<\/a>/gi,
-          /<a[^>]*href="[^"]*catalogo[^"]*"[^>]*>(.*?)<\/a>/gi,
-          /<h[2-4][^>]*>(.*?)<\/h[2-4]>/gi,
-          /<li[^>]*class="[^"]*service[^"]*"[^>]*>([\s\S]*?)<\/li>/gi
-        ]
+        const titleLike = aggregatedContent.match(/\b[A-Za-zÀ-ú][A-Za-z0-9À-ú\s\-–—]{4,80}\b/g) || []
         const found = new Set<string>()
-        for (const pattern of productPatterns) {
-          let m
-          const re = new RegExp(pattern.source, pattern.flags)
-          while ((m = re.exec(aggregatedContent)) !== null) {
-            const text = (m[1] || m[0]).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().substring(0, 200)
-            if (text.length >= 5 && text.length <= 150 && !isNoise(text)) found.add(text)
-          }
+        for (const t of titleLike) {
+          const x = t.trim()
+          if (x.length >= 5 && x.length <= 120 && !isNoise(x)) found.add(x)
         }
-        extractedProducts = Array.from(found).slice(0, 30).map(name => ({
+        extractedProducts = Array.from(found).slice(0, 40).map(name => ({
           name,
           category: 'Extraído do website',
           description: `Produto/serviço identificado no website ${website_url}`,
@@ -265,21 +339,23 @@ serve(async (req) => {
           extracted_at: new Date().toISOString(),
           source: website_url
         }))
-        console.log(`[ScanWebsite] 🔵 PROSPECT profundo (regex): ${extractedProducts.length} produtos`)
+        console.log(`[ScanWebsite] 🔵 PROSPECT profundo (regex texto): ${extractedProducts.length} produtos`)
       }
 
+      // 8) Se ainda zero: salvar array vazio e mensagem (não placeholder falso)
       if (extractedProducts.length === 0) {
         const domainName = domain || website_url.replace(/https?:\/\//, '').split('/')[0]
         extractedProducts = [{
           name: `Produtos/Serviços de ${domainName}`,
           category: 'Extraído do website',
-          description: `Conteúdo extraído do domínio ${website_url}. Nenhum produto específico identificado nas páginas analisadas.`,
+          description: `Varredura profunda no domínio ${website_url} (sitemap + até 80 páginas). Nenhum produto específico identificado nas páginas analisadas. Verifique se o site lista produtos em HTML estático ou se exige JavaScript.`,
           price: null,
           image_url: null,
           extracted_at: new Date().toISOString(),
           source: website_url,
-          note: 'Extração limitada - revise manualmente'
+          note: 'Extração profunda executada - revise manualmente se necessário'
         }]
+        console.log(`[ScanWebsite] 🔵 PROSPECT: nenhum produto extraído; salvando mensagem informativa`)
       }
     } else {
       // ===== MOTOR SIMPLES (TENANT): uma página + regex — onboarding Aba 1 não é alterado =====

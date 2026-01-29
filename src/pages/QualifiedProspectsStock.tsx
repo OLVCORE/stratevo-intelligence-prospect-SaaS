@@ -1289,12 +1289,18 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
           }
 
           // Raw data (preservar existente + adicionar novos)
+          // ✅ Planilha completa: municipio/uf/fantasia para extração de decisores (Apollo matching)
           const rawData: any = {
             origem: origem,
             source_name: origem,
             source_file_name: jobData?.source_file_name || null,
             job_name: jobData?.job_name || null,
             source_type: jobData?.source_type || null,
+            municipio: city || prospect.cidade || null,
+            uf: state || prospect.estado || null,
+            cidade: city || prospect.cidade || null,
+            fantasia: prospect.nome_fantasia || null,
+            nome_fantasia: prospect.nome_fantasia || null,
           };
 
           if (prospect.fit_score !== undefined && prospect.fit_score !== null) {

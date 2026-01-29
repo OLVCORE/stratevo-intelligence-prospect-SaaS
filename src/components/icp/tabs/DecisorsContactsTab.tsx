@@ -380,32 +380,39 @@ export function DecisorsContactsTab({
         };
       };
       
+      // Schema decision_makers: name, title, seniority, departments, raw_apollo_data (não raw_data/position/seniority_level)
       const formattedDecisors = existingDecisors.map(d => {
-        const apolloNormalized = normalizeApolloData(d.raw_data);
+        const raw = d.raw_apollo_data || d.raw_data || {};
+        const apolloNormalized = normalizeApolloData(raw);
+        const title = d.title || d.position || '';
+        const seniorityVal = d.seniority || d.seniority_level || '';
+        const deptList = Array.isArray(d.departments) ? d.departments : (raw.departments || []);
+        const firstDept = deptList.length ? deptList[0] : (d.department || null);
         return {
-          name: d.full_name || d.name,
-          title: d.position || d.title,
-          position: d.position,
+          id: d.id,
+          name: d.name || d.full_name || '',
+          title,
+          position: title,
           email: d.email,
           email_status: d.email_status,
           phone: d.phone,
           linkedin_url: d.linkedin_url,
-          department: d.department,
-          seniority_level: d.seniority_level,
-          buying_power: classifyBuyingPower(d.position || '', d.seniority_level || '', d.headline || ''),
+          department: firstDept,
+          seniority_level: seniorityVal,
+          buying_power: classifyBuyingPower(title, seniorityVal, d.headline || ''),
           city: d.city,
           state: d.state,
           country: d.country || 'Brazil',
           photo_url: d.photo_url,
           headline: d.headline,
-          apollo_score: d.people_auto_score_value || apolloNormalized.apollo_score || d.apollo_score || d.raw_apollo_data?.auto_score || d.raw_apollo_data?.person_score,
-          organization_name: d.company_name || companyApolloData?.name || apolloNormalized.organization_name || d.organization_name || companyData?.name,
-          organization_employees: d.company_employees || companyApolloData?.estimated_num_employees || apolloNormalized.organization_employees || d.organization_employees,
-          organization_industry: (Array.isArray(d.company_industries) && d.company_industries.length > 0) ? d.company_industries[0] : (companyApolloData?.industry || apolloNormalized.organization_industry || d.organization_industry || companyData?.industry),
-          organization_keywords: (Array.isArray(d.company_keywords) && d.company_keywords.length > 0) ? d.company_keywords : ((companyApolloData?.keywords && companyApolloData.keywords.length > 0) ? companyApolloData.keywords : (Array.isArray(apolloNormalized.organization_keywords) && apolloNormalized.organization_keywords.length > 0) ? apolloNormalized.organization_keywords : (d.organization_keywords || [])),
-          phone_numbers: Array.isArray(apolloNormalized.phone_numbers) && apolloNormalized.phone_numbers.length > 0 ? apolloNormalized.phone_numbers : (d.phone_numbers || []),
-          departments: d.raw_data?.departments || d.departments || [],
-          employment_history: d.raw_data?.employment_history || [],
+          apollo_score: d.people_auto_score_value ?? apolloNormalized.apollo_score ?? raw.auto_score ?? raw.person_score ?? d.apollo_score,
+          organization_name: d.company_name || companyApolloData?.name || apolloNormalized.organization_name || companyData?.name,
+          organization_employees: d.company_employees ?? companyApolloData?.estimated_num_employees ?? apolloNormalized.organization_employees,
+          organization_industry: (Array.isArray(d.company_industries) && d.company_industries.length > 0) ? d.company_industries[0] : (companyApolloData?.industry || apolloNormalized.organization_industry || companyData?.industry),
+          organization_keywords: (Array.isArray(d.company_keywords) && d.company_keywords.length > 0) ? d.company_keywords : ((companyApolloData?.keywords && companyApolloData.keywords.length > 0) ? companyApolloData.keywords : (apolloNormalized.organization_keywords || [])),
+          phone_numbers: Array.isArray(apolloNormalized.phone_numbers) && apolloNormalized.phone_numbers.length > 0 ? apolloNormalized.phone_numbers : (raw.phone_numbers || []),
+          departments: deptList,
+          employment_history: raw.employment_history || [],
           enriched_with: 'database'
         };
       });
@@ -535,6 +542,7 @@ export function DecisorsContactsTab({
         linkedin_url: linkedinUrlToSend || undefined,
         apollo_org_id: apolloIdToSend || undefined,
         apollo_url: customApolloUrl?.trim() || undefined,
+        force_refresh: !!apolloOrgId,
         city: cityToSend || undefined,
         state: stateToSend || undefined,
         industry: companyDataAny.industry || undefined,
@@ -552,12 +560,32 @@ export function DecisorsContactsTab({
       const result = await enrichCompany(supabase, input);
 
       console.log('[DECISORES-TAB] ✅ Orquestrador retornou:', result);
+      console.log('[DECISORES-TAB] 📊 Detalhe:', {
+        success: result.success,
+        executed: result.executed,
+        total: result.decisionMakersTotal,
+        inserted: result.decisionMakersInserted,
+        reasonEmpty: result.reasonEmpty,
+        organizationFound: result.organizationFound,
+      });
 
       const decisoresEncontrados = result.decisionMakersInserted ?? result.decisionMakersTotal ?? 0;
       setTotalDecisors(decisoresEncontrados);
 
       if (!result.success && result.error) {
         throw new Error(result.error);
+      }
+
+      if (result.reasonEmpty) {
+        const messages: Record<string, string> = {
+          org_not_found: 'Organização não encontrada no Apollo (domain/LinkedIn/nome). Verifique URL ou informe o Apollo Organization ID.',
+          no_people_in_apollo: 'Organização encontrada no Apollo, mas nenhuma pessoa listada para esta empresa.',
+          idempotency_skip: 'Decisores já foram enriquecidos para esta empresa.',
+          apollo_key_missing: 'Chave da API Apollo não configurada. Configure APOLLO_API_KEY no Supabase.',
+          error: 'Erro ao buscar decisores. Tente novamente ou informe o Apollo Organization ID.',
+        };
+        const msg = messages[result.reasonEmpty] || result.message || 'Nenhum decisor retornado.';
+        sonnerToast.warning('Decisores: resultado vazio', { description: msg });
       }
 
       setCurrentPhase('linkedin_analysis');

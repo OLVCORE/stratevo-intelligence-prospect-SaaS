@@ -61,13 +61,13 @@ export function LinkedInLeadCollector({
       const { data, error } = await supabase
         .from('decision_makers')
         .select('source_name')
-        .not('source_name', 'is', null)
-        .neq('source_name', '');
+        .not('source_name', 'is', null);
 
       if (error) throw error;
 
-      // Extrair origens únicas
-      const uniqueSources = Array.from(new Set(data?.map(d => d.source_name).filter(Boolean) || []));
+      // Extrair origens únicas (excluir null/vazio no cliente; neq('','') gera 400 no PostgREST)
+      const rows = (data ?? []) as { source_name?: string | null }[];
+      const uniqueSources = Array.from(new Set(rows.map(d => d.source_name).filter(Boolean) || []));
       setExistingSources(uniqueSources.map((name, idx) => ({
         id: `source-${idx}`,
         name: name as string,

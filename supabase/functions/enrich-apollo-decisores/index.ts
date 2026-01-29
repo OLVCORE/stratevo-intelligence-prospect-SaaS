@@ -8,6 +8,9 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
+// Base URL oficial Apollo (documentação: https://docs.apollo.io/reference/get-complete-organization-info)
+const APOLLO_API_BASE = 'https://api.apollo.io/api/v1';
+
 interface EnrichApolloRequest {
   company_id?: string; // optional: only update DB when provided
   analysis_id?: string; // MC1: ID do icp_analysis_results (prioridade sobre cnpj)
@@ -17,6 +20,8 @@ interface EnrichApolloRequest {
   domain?: string;
   linkedin_url?: string; // ✅ NOVO: LinkedIn URL da empresa (critério principal de busca)
   apollo_org_id?: string; // NOVO: Apollo Organization ID manual
+  /** Quando true e apollo_org_id informado, ignora idempotência e reexecuta (Apollo ID Manual) */
+  force_refresh?: boolean;
   positions?: string[]; // optional: custom positions list
   modes?: string[]; // ['people', 'company']
   city?: string; // 🎯 FILTRO INTELIGENTE: cidade da empresa
@@ -24,6 +29,23 @@ interface EnrichApolloRequest {
   industry?: string; // 🎯 FILTRO INTELIGENTE: setor/CNAE
   cep?: string; // 🎯 FILTRO CEP: 98% precisão (único por empresa no Brasil!)
   fantasia?: string; // 🎯 FILTRO NOME FANTASIA: aumenta assertividade busca
+}
+
+// 🇧🇷 Normalização canônica do nome da empresa (Apollo/LinkedIn buscam sem sufixos jurídicos)
+function normalizeCompanyNameForSearch(name: string | undefined): string {
+  if (!name?.trim()) return '';
+  let s = name.trim();
+  // Remover sufixos jurídicos comuns (case-insensitive, com vírgula ou não)
+  const suffixes = [
+    /\s*,?\s*S\.?\s*[Aa]\.?\s*$/i, /\s*,?\s*S\/A\s*$/i, /\s*,?\s*S\.A\.\s*$/i,
+    /\s*,?\s*LTDA\.?\s*$/i, /\s*,?\s*Ltda\.?\s*$/i, /\s*,?\s*ME\s*$/i, /\s*,?\s*EPP\s*$/i,
+    /\s*,?\s*EIRELI\s*$/i, /\s*,?\s*S\.?S\.?\s*$/i, /\s*,?\s*S\/S\s*$/i,
+    /\s*,?\s*INC\.?\s*$/i, /\s*,?\s*LLC\s*$/i, /\s*,?\s*Ltd\.?\s*$/i,
+  ];
+  for (const re of suffixes) {
+    s = s.replace(re, '').trim();
+  }
+  return s.replace(/\s+/g, ' ').trim() || name.trim();
 }
 
 // 🇧🇷 Classificar poder de decisão - HIERARQUIA BRASILEIRA
@@ -128,7 +150,9 @@ serve(async (req) => {
     const analysisId = body.analysis_id; // MC1: ID do icp_analysis_results (prioridade sobre cnpj)
     const qualifiedProspectId = body.qualified_prospect_id; // NOVO: suporte para estoque qualificado
     const companyName = body.company_name || body.companyName;
-    const { domain, linkedin_url, positions, apollo_org_id, city, state, industry, cep, fantasia } = body;
+    const { domain: rawDomain, linkedin_url, positions, apollo_org_id, force_refresh, city, state, industry, cep, fantasia } = body;
+    // Normalizar domain: sem protocolo/www (Apollo espera apenas hostname)
+    const domain = rawDomain ? String(rawDomain).toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0].trim() || undefined : undefined;
     
     console.log('[ENRICH-APOLLO] 🎯 MC1: Identificadores recebidos:', {
       company_id: companyId,
@@ -156,8 +180,9 @@ serve(async (req) => {
     console.log('[ENRICH-APOLLO-DECISORES] Buscando decisores para:', companyName);
     console.log('[ENRICH-APOLLO-DECISORES] Apollo Org ID fornecido:', apollo_org_id || 'N/A');
 
-    // ✅ MC2: IDEMPOTÊNCIA - Verificar se pode rodar enrichment
-    if (companyId) {
+    // ✅ MC2: IDEMPOTÊNCIA - Pular se usuário pediu "Forçar nova extração" (force_refresh)
+    const skipIdempotency = Boolean(force_refresh);
+    if (companyId && !skipIdempotency) {
       // Verificar Apollo Org
       const { data: canRunApolloOrg, error: checkError } = await supabaseClient
         .rpc('can_run_enrichment', {
@@ -194,7 +219,10 @@ serve(async (req) => {
               decision_makers_total: totalCount || 0,
               message: 'Apollo org and decision makers already enriched',
               apollo_org: canRunApolloOrg,
-              decision_makers: canRunDecisores
+              decision_makers: canRunDecisores,
+              organization_found: true,
+              organization_id_used: null,
+              reason_empty: 'idempotency_skip',
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -229,7 +257,10 @@ serve(async (req) => {
             decision_makers_inserted: 0,
             decision_makers_total: totalCount || 0,
             message: 'Decision makers already exist',
-            decision_makers: canRunDecisores
+            decision_makers: canRunDecisores,
+            organization_found: true,
+            organization_id_used: null,
+            reason_empty: 'idempotency_skip',
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -237,16 +268,65 @@ serve(async (req) => {
     }
 
     const apolloKey = Deno.env.get('APOLLO_API_KEY');
-    
     if (!apolloKey) {
-      throw new Error('APOLLO_API_KEY não configurada');
+      return new Response(
+        JSON.stringify({
+          executed: false,
+          skipped: false,
+          reason: 'apollo_key_missing',
+          success: false,
+          decision_makers_inserted: 0,
+          decision_makers_total: 0,
+          organization_found: false,
+          organization_id_used: null,
+          reason_empty: 'apollo_key_missing',
+          error: 'APOLLO_API_KEY não configurada',
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // PASSO 1: Motor "dados completos por Apollo Org ID"
     // Se apollo_org_id for fornecido (ex.: URL https://app.apollo.io/#/organizations/64696fd0fd539b0001ca5d01/people):
-    //   - Usa GET https://api.apollo.io/v1/organizations/${organizationId} para Company details
+    //   - Usa GET ${APOLLO_API_BASE}/organizations/${organizationId} para Company details
     //   - Persiste em companies: industry, description, linkedin_url, apollo_id; raw_data.apollo_organization (industry, short_description, keywords, sic_codes, naics_codes, etc.)
     let organizationId: string | null = apollo_org_id || null;
+    
+    // ✅ PRIORIDADE 0: Buscar por domain primeiro (quando disponível)
+    if (!organizationId && domain) {
+      console.log('[ENRICH-APOLLO-DECISORES] 🌐 Buscando Organization ID por domain...', domain);
+      try {
+        const orgSearchPayload = {
+          q_organization_domains: [domain],
+          page: 1,
+          per_page: 5
+        };
+        const orgResponse = await fetch(
+          `${APOLLO_API_BASE}/organizations/search`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Api-Key': apolloKey
+            },
+            body: JSON.stringify(orgSearchPayload)
+          }
+        );
+        if (orgResponse.ok) {
+          const orgData = await orgResponse.json();
+          if (orgData.organizations && orgData.organizations.length > 0) {
+            const matched = orgData.organizations.find((org: any) => {
+              const orgDomain = (org.primary_domain || org.website_url || '').toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+              return orgDomain === domain;
+            }) || orgData.organizations[0];
+            organizationId = matched.id;
+            console.log('[ENRICH-APOLLO-DECISORES] ✅ Organização encontrada por domain:', { id: organizationId, name: matched.name });
+          }
+        }
+      } catch (err) {
+        console.warn('[ENRICH-APOLLO-DECISORES] ⚠️ Erro ao buscar por domain:', err);
+      }
+    }
     
     // ✅ PRIORIDADE 1: Buscar por LinkedIn URL (mais preciso!)
     if (!organizationId && linkedinUrlToUse) {
@@ -266,7 +346,7 @@ serve(async (req) => {
           };
           
           const orgResponse = await fetch(
-            'https://api.apollo.io/v1/organizations/search',
+            `${APOLLO_API_BASE}/organizations/search`,
             {
               method: 'POST',
               headers: {
@@ -306,24 +386,36 @@ serve(async (req) => {
     if (!organizationId) {
       console.log('[ENRICH-APOLLO-DECISORES] Buscando Organization ID por nome...');
       
-      // 🎯 ESTRATÉGIA REFINADA: Primeira palavra → Segunda palavra → Nome completo
-      const words = (companyName || '').split(/\s+/).filter(w => w.length > 2);
+      // 🎯 NOME CANÔNICO: remover S.A., LTDA, ME, etc. (como Apollo/LinkedIn fazem busca)
+      const canonicalName = normalizeCompanyNameForSearch(companyName || '');
+      const words = (canonicalName || companyName || '').split(/\s+/).filter(w => w.length > 2);
       const firstWord = words[0];
       const secondWord = words[1];
       
       const namesToTry = [
-        firstWord,           // ✅ PRIORIDADE 1: "CARBON13"
-        secondWord,          // ✅ PRIORIDADE 2: "INDUSTRIA"
-        companyName          // ✅ PRIORIDADE 3: Nome completo
+        firstWord,           // ✅ PRIORIDADE 1: primeira palavra (ex: "Klabin")
+        secondWord,          // ✅ PRIORIDADE 2: segunda palavra (quando há homônimos)
+        canonicalName,       // ✅ PRIORIDADE 3: nome canônico (sem sufixos)
+        companyName          // ✅ FALLBACK: nome original
       ].filter(Boolean);
+      // Deduplicar mantendo ordem
+      const seen = new Set<string>();
+      const namesToTryUnique = namesToTry.filter((n): n is string => {
+        if (!n) return false;
+        const key = n.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       
       console.log('[ENRICH-APOLLO-DECISORES] 🎯 Estratégia de busca:', {
         original: companyName,
-        tentativas: namesToTry,
+        canonico: canonicalName,
+        tentativas: namesToTryUnique,
         filtros: { city, state, domain, country: 'Brazil' }
       });
       
-      for (const name of namesToTry) {
+      for (const name of namesToTryUnique) {
         if (!name) continue;
         
         const orgSearchPayload = {
@@ -333,7 +425,7 @@ serve(async (req) => {
         };
         
         const orgResponse = await fetch(
-          'https://api.apollo.io/v1/organizations/search',
+          `${APOLLO_API_BASE}/organizations/search`,
           {
             method: 'POST',
             headers: {
@@ -472,7 +564,7 @@ serve(async (req) => {
       console.log('[ENRICH-APOLLO] 🏢 Buscando dados da organização...');
       
       const orgResponse = await fetch(
-        `https://api.apollo.io/v1/organizations/${organizationId}`,
+        `${APOLLO_API_BASE}/organizations/${organizationId}`,
         {
           method: 'GET',
           headers: {
@@ -527,11 +619,21 @@ serve(async (req) => {
     };
 
     // Priorizar: organization_id > domain > q_keywords (fallback)
+    // api_search aceita organization_ids e/ou q_organization_domains_list (doc: q_organization_domains_list)
     if (organizationId) {
       basePayload.organization_ids = [organizationId];
-    } else if (domain) {
+      // Fallback para api_search: filtrar por domínio da org já buscada (api_search documenta q_organization_domains_list)
+      const orgDomain = organizationData?.primary_domain || organizationData?.website_url;
+      if (orgDomain) {
+        const host = String(orgDomain).toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+        if (host) basePayload.q_organization_domains_list = [host];
+      }
+    }
+    if (!basePayload.organization_ids && domain) {
       basePayload.q_organization_domains = domain;
-    } else {
+      basePayload.q_organization_domains_list = [domain];
+    }
+    if (!basePayload.organization_ids && !basePayload.q_organization_domains_list) {
       basePayload.q_keywords = companyName;
     }
 
@@ -554,12 +656,16 @@ serve(async (req) => {
       };
       
       try {
+        // Apollo deprecou mixed_people/search; endpoint atual: mixed_people/api_search (docs.apollo.io/reference/people-api-search)
+        const peopleSearchUrl = `${APOLLO_API_BASE}/mixed_people/api_search`;
+        console.log('[ENRICH-APOLLO] 🌐 People search URL:', peopleSearchUrl);
         const apolloResponse = await fetch(
-          'https://api.apollo.io/v1/mixed_people/search',
+          peopleSearchUrl,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
               'X-Api-Key': apolloKey
             },
             body: JSON.stringify(searchPayload)
@@ -573,6 +679,10 @@ serve(async (req) => {
         }
 
         const apolloData = await apolloResponse.json();
+        if (apolloData.error) {
+          console.error(`[ENRICH-APOLLO] ❌ Apollo retornou erro:`, apolloData.error);
+          break;
+        }
         const people = apolloData.people || [];
         
         console.log(`[ENRICH-APOLLO] 📊 Página ${currentPage}: ${people.length} pessoas encontradas`);
@@ -585,8 +695,8 @@ serve(async (req) => {
         // Adicionar pessoas da página atual
         allPeople.push(...people);
 
-        // Verificar se há mais páginas
-        const totalResults = apolloData.pagination?.total_entries || 0;
+        // api_search retorna total_entries no root; endpoint antigo usava pagination.total_entries
+        const totalResults = apolloData.total_entries ?? apolloData.pagination?.total_entries ?? 0;
         const collectedSoFar = currentPage * perPage;
 
         if (collectedSoFar >= totalResults || people.length < perPage) {
@@ -1264,6 +1374,10 @@ serve(async (req) => {
       }
     }
     
+    const organizationFound = !!organizationId;
+    const reasonEmpty = decisionMakersTotal === 0
+      ? (organizationFound ? 'no_people_in_apollo' : 'org_not_found')
+      : undefined;
     return new Response(
       JSON.stringify({
         executed: true,
@@ -1274,6 +1388,9 @@ serve(async (req) => {
         decision_makers_inserted: decisores.length,
         decision_makers_total: decisionMakersTotal,
         lusha_complemented: lushaComplemented || 0,
+        organization_found: organizationFound,
+        organization_id_used: organizationId || null,
+        reason_empty: reasonEmpty,
         organization: organizationData ? {
           name: organizationData.name,
           linkedin_url: organizationData.linkedin_url,
@@ -1305,6 +1422,9 @@ serve(async (req) => {
         success: false,
         decision_makers_inserted: 0,
         decision_makers_total: 0,
+        organization_found: false,
+        organization_id_used: null,
+        reason_empty: 'error',
         error: error.message || 'Erro ao buscar decisores no Apollo'
       }),
       {

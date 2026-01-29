@@ -224,6 +224,40 @@ export default function CompaniesManagementPage() {
     return city ? String(city).trim() : null;
   };
 
+  /** Valor de origem para filtro e exibição (mesma lógica em um só lugar). */
+  const getOriginForFilter = (c: any): string => {
+    let origem = c?.origem || c?.source_name || '';
+    if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+      origem =
+        c?.origem ||
+        c?.source_name ||
+        c?.source_metadata?.source_name ||
+        c?.source_metadata?.campaign ||
+        c?.raw_data?.origem ||
+        c?.raw_data?.source_name ||
+        c?.raw_data?.origem_original ||
+        c?.raw_data?.source_file_name ||
+        c?.raw_data?.source ||
+        '';
+    }
+    if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
+      return 'Sem origem';
+    }
+    const final = String(origem || '').trim();
+    return final || 'Sem origem';
+  };
+
+  /** Lista única de opções de origem para o filtro (checkboxes). */
+  const originOptions = useMemo(() => {
+    const set = new Set<string>();
+    allCompanies.forEach((c) => set.add(getOriginForFilter(c)));
+    return Array.from(set).sort((a, b) => {
+      if (a === 'Sem origem') return 1;
+      if (b === 'Sem origem') return -1;
+      return a.localeCompare(b, 'pt-BR');
+    });
+  }, [allCompanies]);
+
   // 📊 Carregar classificação CNAE → Setor/Categoria para as empresas da página
   useEffect(() => {
     const codesSet = new Set<string>();
@@ -268,32 +302,9 @@ export default function CompaniesManagementPage() {
   const companies = useMemo(() => {
     let filtered = [...allCompanies];
     
-    // Filtro por Origem (normalizado)
+    // Filtro por Origem (checkboxes: seleção múltipla)
     if (filterOrigin.length > 0) {
-      filtered = filtered.filter(c => {
-        // ✅ MESMA LÓGICA DA RENDERIZAÇÃO: buscar origem em múltiplos lugares
-        let origem = (c as any).origem || (c as any).source_name || '';
-        
-        // Se origem/source_name começa com "batch-", buscar de outros lugares
-        if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-          origem = (c as any).origem ||
-                  (c as any).source_name ||
-                  (c as any).source_metadata?.source_name ||
-                  (c as any).source_metadata?.campaign ||
-                  (c as any).raw_data?.origem ||
-                  (c as any).raw_data?.source_name ||
-                  (c as any).raw_data?.origem_original ||
-                  (c as any).raw_data?.source_file_name ||
-                  (c as any).raw_data?.source ||
-                  '';
-        }
-        
-        if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-          return filterOrigin.includes('Sem origem');
-        }
-        
-        return filterOrigin.includes(origem.trim());
-      });
+      filtered = filtered.filter((c) => filterOrigin.includes(getOriginForFilter(c)));
     }
     
     // Filtro por Status CNPJ
@@ -2458,38 +2469,11 @@ export default function CompaniesManagementPage() {
                       </TableHead>
                       <TableHead className="w-[140px] min-w-[120px]">
                         <ColumnFilter
-                          column="source_name"
+                          column="origem"
                           title="Origem"
-                          values={allCompanies.map(c => {
-                            // ✅ MESMA LÓGICA DA RENDERIZAÇÃO: buscar origem em múltiplos lugares
-                            let origem = (c as any).origem || (c as any).source_name || '';
-                            
-                            // Se origem/source_name começa com "batch-", buscar de outros lugares
-                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-                              origem = (c as any).origem ||
-                                      (c as any).source_name ||
-                                      (c as any).source_metadata?.source_name ||
-                                      (c as any).source_metadata?.campaign ||
-                                      (c as any).raw_data?.origem ||
-                                      (c as any).raw_data?.source_name ||
-                                      (c as any).raw_data?.origem_original ||
-                                      (c as any).raw_data?.source_file_name ||
-                                      (c as any).raw_data?.source ||
-                                      '';
-                            }
-                            
-                            // Verificar novamente se ainda é um batch ID após buscar de outros lugares
-                            if (!origem || (typeof origem === 'string' && (origem.startsWith('batch-') || origem.includes('batch-')))) {
-                              return 'Sem origem';
-                            }
-                            
-                            // ✅ CRÍTICO: Garantir que retorna string válida (não null/undefined)
-                            const origemFinal = String(origem || '').trim();
-                            return origemFinal || 'Sem origem';
-                          }).filter(v => v !== null && v !== undefined && v !== '')}
+                          values={originOptions}
                           selectedValues={filterOrigin}
                           onFilterChange={setFilterOrigin}
-                          onSort={() => handleSort('source_name')}
                         />
                       </TableHead>
                       <TableHead className="w-[100px] min-w-[90px]">

@@ -123,6 +123,7 @@ const STCHistoryPage = lazy(() => import("./pages/Leads/STCHistory"));
 const SystemHealthPage = lazy(() => import("./pages/Leads/SystemHealth"));
 const CommandCenter = lazy(() => import("./pages/CommandCenter"));
 const ApprovedLeads = lazy(() => import("./pages/Leads/ApprovedLeads"));
+const DataEnrichPage = lazy(() => import("./pages/Leads/DataEnrichPage"));
 const EmailSequencesPage = lazy(() => import("./pages/EmailSequencesPage"));
 const SmartTasksPage = lazy(() => import("./pages/SmartTasksPage"));
 const SalesCoachingDashboard = lazy(() => import("./pages/SalesCoachingDashboard"));
@@ -265,6 +266,16 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <ApprovedLeads />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/leads/data-enrich"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <DataEnrichPage />
+                    </AppLayout>
                   </ProtectedRoute>
                 }
               />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useBeforeUnload } from 'react-router-dom';
+import { useBeforeUnload, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +40,7 @@ import { ClientDiscoveryTab } from '@/components/icp/tabs/ClientDiscoveryTab';
 import { RecommendedProductsTab } from '@/components/icp/tabs/RecommendedProductsTab';
 import { KeywordsSEOTab } from '@/components/icp/tabs/KeywordsSEOTab';
 import DigitalIntelligenceTab from '@/components/intelligence/DigitalIntelligenceTab';
-import { DecisorsContactsTab } from '@/components/icp/tabs/DecisorsContactsTab';
+import { DecisorsSectionTab } from '@/components/icp/tabs/DecisorsSectionTab';
 import { OpportunitiesTab } from '@/components/icp/tabs/OpportunitiesTab';
 import { IntentSignalsCardV3 } from '@/components/competitive/IntentSignalsCardV3';
 import { TabSaveWrapper } from './TabSaveWrapper';
@@ -109,7 +109,8 @@ export default function UsageVerificationCard({
   latestReport,
 }: UsageVerificationCardProps) {
   console.info('[VERIFICATION] ✅ UsageVerificationCard montado — SaveBar deveria aparecer aqui');
-  
+  const navigate = useNavigate();
+
   // 🔥 NOVO: Buscar dados do tenant
   const { tenant } = useTenant();
   const { data: tenantSearchTerms } = useTenantSearchTerms();
@@ -2187,6 +2188,12 @@ export default function UsageVerificationCard({
                             {extractProductsLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Package className="h-3 w-3 mr-1" />}
                             Extrair Produtos do Prospect
                           </Button>
+                          {companyId && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => navigate(`/leads/data-enrich?companyId=${companyId}`)} className="inline-flex items-center">
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              Data Enrich
+                            </Button>
+                          )}
                         </div>
                         {/* Painel consolidado prospect — contador Sky */}
                         <div className="grid grid-cols-2 gap-2 mb-3">
@@ -2328,24 +2335,27 @@ export default function UsageVerificationCard({
           </UniversalTabWrapper>
         </TabsContent>
 
-        {/* ABA 2: DECISORES & CONTATOS (EXTRAÇÃO APOLLO+LINKEDIN) */}
+        {/* ABA 2: DECISORES (Apollo | LinkedIn | Lusha — 3 sub-abas separadas) */}
         <TabsContent value="decisors" className="mt-0 flex-1 overflow-hidden">
           <UniversalTabWrapper tabName="Decisores">
-          <DecisorsContactsTab
-            key={`decisors-${companyId}-${latestReport?.id || 'new'}-${latestReport?.updated_at || ''}`} // 🔥 FORÇAR RE-RENDER quando latestReport mudar
+          <DecisorsSectionTab
+            key={`decisors-${companyId}-${latestReport?.id || 'new'}-${latestReport?.updated_at || ''}`}
             companyId={companyId}
             companyName={companyName}
             linkedinUrl={companyData?.linkedin_url || (companyData as Record<string, unknown>)?.raw_data?.linkedin_url || (companyData as Record<string, unknown>)?.raw_data?.apollo_organization?.linkedin_url}
             domain={domain || companyData?.domain || companyData?.website}
             apolloOrganizationId={(companyData as Record<string, unknown>)?.apollo_organization_id ?? null}
             apolloUrl={(companyData as Record<string, unknown>)?.apollo_url ?? null}
-            savedData={tabDataRef.current.decisors || latestReport?.full_report?.decisors_report} // 🔥 PRIORIDADE: tabDataRef primeiro, depois latestReport
+            city={((companyData as any)?.city) ?? ((companyData as any)?.raw_data?.address?.city) ?? ((companyData as any)?.raw_data?.cidade)}
+            state={((companyData as any)?.state) ?? ((companyData as any)?.raw_data?.address?.state) ?? ((companyData as any)?.raw_data?.uf)}
+            cep={(companyData as any)?.raw_data?.cep}
+            fantasia={(companyData as any)?.raw_data?.fantasia}
+            industry={(companyData as any)?.industry}
+            savedData={tabDataRef.current.decisors || latestReport?.full_report?.decisors_report}
             onDataChange={(decisorsData) => {
-              console.log('[VERIFICATION] 💾 Salvando decisores:', decisorsData);
               tabDataRef.current.decisors = decisorsData;
               setUnsavedChanges(prev => ({ ...prev, decisors: true }));
               setTabsStatus(prev => ({ ...prev, decisors: 'success' }));
-              // 🔥 AUTO-SAVE com debounce
               if (companyId) {
                 saveTabWithDebounce({
                   companyId,
@@ -2356,10 +2366,7 @@ export default function UsageVerificationCard({
                 });
               }
             }}
-            onWebsiteDiscovered={(website) => {
-              console.log('[TOTVS] 🌐 Website descoberto pelos decisores:', website);
-              setDiscoveredWebsite(website);
-            }}
+            onWebsiteDiscovered={(website) => setDiscoveredWebsite(website)}
           />
           </UniversalTabWrapper>
         </TabsContent>

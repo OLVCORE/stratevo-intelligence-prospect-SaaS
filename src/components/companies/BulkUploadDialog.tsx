@@ -765,7 +765,7 @@ csvHeaders.forEach(header => {
   else if (headerLower.includes('razao') || headerLower.includes('razão')) columnMapping['razao_social'] = header;
   else if (headerLower.includes('nome') && headerLower.includes('fantasia')) columnMapping['nome_fantasia'] = header;
   else if (headerLower.includes('nome') && (headerLower.includes('empresa') || headerLower.includes('fantasia'))) columnMapping['companyName'] = header;
-  else if (headerLower.includes('site') || headerLower.includes('website')) columnMapping['website'] = header;
+  else if (headerLower.includes('site') || headerLower.includes('website') || headerLower.includes('dominio') || headerLower.includes('domínio')) columnMapping['website'] = header;
   else if (headerLower.includes('setor') || headerLower.includes('sector')) columnMapping['sector'] = header;
   else if (headerLower.includes('uf') || headerLower.includes('estado')) columnMapping['uf'] = header;
   else if (headerLower.includes('cidade') || headerLower.includes('municipio')) columnMapping['city'] = header;
@@ -1137,10 +1137,12 @@ const insertDirectlyToProspectingCandidates = async ({
       getValue(c, 'sector', columnMapping) ??
       null;
     
-    // ✅ Mapeamento estruturado de website
+    // ✅ Mapeamento estruturado de website (inclui Domínio da planilha completa)
     const website = 
       c['Site'] ??
       c['Website'] ??
+      c['Domínio'] ??
+      c['Dominio'] ??
       c['URL'] ??
       getValue(c, 'website', columnMapping) ??
       getValue(c, 'site', columnMapping) ??
@@ -1192,15 +1194,14 @@ const insertDirectlyToProspectingCandidates = async ({
     const emailRaw = c['E-mail'] ?? c['Email'] ?? getValue(c, 'contactEmail', columnMapping) ?? getValue(c, 'contato_email', columnMapping);
     const phoneRaw = c['Telefone 1'] ?? c['Telefone'] ?? getValue(c, 'contactPhone', columnMapping) ?? getValue(c, 'contato_telefone', columnMapping);
 
-    // ✅ Montar candidato com dados estruturados
+    // ✅ Montar candidato com dados estruturados (planilha completa → decisores)
     return {
       tenant_id: tenantId,
       icp_id: icpId,
       cnpj: normalizedCnpj, // ✅ CNPJ normalizado (14 dígitos)
       cnpj_raw: c.cnpj_raw || c.cnpj || c.CNPJ || getValue(c, 'cnpj', columnMapping), // ✅ CNPJ original (com máscara)
       company_name: companyName.trim(),
-      // ✅ REMOVIDO: nome_fantasia não existe na tabela prospecting_candidates
-      // Se houver nome fantasia diferente, será incluído em notes
+      nome_fantasia: fantasia ? String(fantasia).trim() : null, // ✅ Planilha completa: nome fantasia para matching Apollo
       website: normalizeWebsite(website),
       sector: sector ? String(sector).trim() : null,
       uf: normalizeUF(state),
