@@ -102,55 +102,47 @@ export function DecisorsContactsTab({
     if (url) setCustomApolloUrl(url);
   }, [apolloUrl, apolloOrganizationId]);
   
-  // 🔥 CRÍTICO: Carregar dados salvos PRIMEIRO (de savedData ou full_report)
-  // Company details Apollo (segmento, keywords, employees, SIC/NAICS) devem aparecer mesmo quando decisors vêm do histórico
+  // 🔥 CRÍTICO: Sempre hidratar com decision_makers (Data Enrich / Apollo). savedData tem prioridade para histórico; se vazio, carregar do banco.
+  // Assim os decisores persistidos (Data Enrich → decision_makers) aparecem na aba mesmo sem relatório salvo.
   useEffect(() => {
-    if (savedData) {
-      console.log('[DECISORES-TAB] 📦 Dados salvos recebidos via prop savedData:', {
-        hasDecisors: !!savedData.decisors,
-        decisorsCount: savedData.decisors?.length || 0,
-        hasCompanyApolloOrg: !!savedData.companyApolloOrg,
-        keys: Object.keys(savedData)
-      });
-      
-      // ✅ PRIORIDADE 1: Usar dados salvos se existirem
+    if (!companyId) return;
+
+    const hasSavedDecisors = savedData?.decisors && savedData.decisors.length > 0;
+
+    if (savedData && hasSavedDecisors) {
+      console.log('[DECISORES-TAB] 📦 Dados salvos recebidos via prop savedData:', { decisorsCount: savedData.decisors?.length });
       setAnalysisData(savedData);
-      
-      if (savedData.decisors && savedData.decisors.length > 0) {
-        sonnerToast.success(`✅ ${savedData.decisors.length} decisores restaurados do histórico!`);
-        console.log('[DECISORES-TAB] ✅ Dados restaurados do histórico');
-      }
-      
-      // ✅ PRIORIDADE 1b: Se faltar Company details Apollo (estilo Klabin), completar a partir de companies.raw_data
-      if ((!savedData.companyApolloOrg || Object.keys(savedData.companyApolloOrg || {}).length === 0) && companyId) {
+      sonnerToast.success(`✅ ${savedData.decisors.length} decisores restaurados do histórico!`);
+      // Completar companyApolloOrg se faltar
+      if ((!savedData.companyApolloOrg || Object.keys(savedData.companyApolloOrg || {}).length === 0)) {
         loadDecisorsData().then((data) => {
           if (data?.companyApolloOrg) {
             setAnalysisData((prev) => ({
               ...prev,
-              decisors: prev?.decisors ?? data?.decisors ?? [],
+              decisors: prev?.decisors ?? [],
               companyApolloOrg: data.companyApolloOrg,
               companyData: data.companyData ?? prev?.companyData,
             }));
-            console.log('[DECISORES-TAB] ✅ Company details Apollo completados a partir do banco');
           }
         });
       }
       return;
     }
-    
-    // ✅ PRIORIDADE 2: Se não tem dados salvos, carregar do banco
+
+    // ✅ SEMPRE carregar do banco (decision_makers): quando não há savedData ou quando savedData não tem decisors (Data Enrich pode ter preenchido depois)
     const loadExistingDecisors = async () => {
       const data = await loadDecisorsData();
       if (data) {
         setAnalysisData(data);
         if (data.decisors && data.decisors.length > 0) {
-          sonnerToast.success(`✅ ${data.decisors.length} decisores carregados do banco!`);
+          sonnerToast.success(`✅ ${data.decisors.length} decisores carregados (banco / Data Enrich)!`);
+          console.log('[DECISORES-TAB] 📊 Decisores carregados de decision_makers:', data.decisors.length);
         }
       }
     };
-    
+
     loadExistingDecisors();
-  }, [companyId, savedData]); // ✅ Adicionar savedData como dependência
+  }, [companyId, savedData]);
   
   // ✅ FUNÇÃO AUXILIAR SIMPLIFICADA (para handleRefreshData e handleEnrichApollo)
   // NOTA: A função completa loadDecisorsData está acima (linha 66)
@@ -257,45 +249,45 @@ export function DecisorsContactsTab({
     
     console.log('[DECISORES-TAB] 🔄 Carregando dados para companyId:', companyId);
     
-    // 1️⃣ Buscar dados da empresa (Apollo Organization)
-    const { data: companyData, error: companyError } = await supabase
+    // 1️⃣ Buscar dados da empresa (Apollo Organization) — select * para compatibilidade de schema
+    const { data: companyDataRaw, error: companyError } = await supabase
       .from('companies')
-      .select('raw_data, industry, name')
+      .select('*')
       .eq('id', companyId)
       .single();
     
-    if (companyError || !companyData) {
+    if (companyError || !companyDataRaw) {
       console.error('[DECISORES-TAB] ❌ Erro ao buscar empresa:', companyError);
       return null;
     }
     
-    // Normalizar dados da empresa (Apollo Organization)
-    const companyApolloData = companyData?.raw_data?.apollo_organization || 
-                              companyData?.raw_data?.enriched_apollo || 
-                              companyData?.raw_data?.apollo ||
-                              companyData?.raw_data?.organization ||
-                              {};
+    const companyData = companyDataRaw as Record<string, unknown> & { name?: string; industry?: string; raw_data?: Record<string, unknown> };
+    const rawData = companyData?.raw_data as Record<string, unknown> | undefined;
+    const companyApolloData = (rawData?.apollo_organization || rawData?.enriched_apollo || rawData?.apollo || rawData?.organization || {}) as Record<string, unknown>;
     
     // 2️⃣ Buscar decisores salvos na tabela decision_makers
-    const { data: existingDecisors } = await supabase
+    const { data: existingDecisorsRaw } = await supabase
       .from('decision_makers')
       .select('*')
       .eq('company_id', companyId);
     
+    type DecisorRow = Record<string, unknown> & { id: string; company_id: string; email?: string; linkedin_url?: string; phone?: string; department?: string; full_name?: string };
+    const existingDecisors = (existingDecisorsRaw || []) as DecisorRow[];
+    
     console.log('[DECISORES-TAB] 📊 Decisores encontrados:', existingDecisors?.length || 0);
     
-    // 🏢 SEMPRE SETAR companyApolloOrg
+    const firstDecisor = existingDecisors?.[0] as Record<string, unknown> | undefined;
     const apolloOrg = companyApolloData || {};
     const baseAnalysisData = {
       companyApolloOrg: {
-        name: apolloOrg.name || companyData?.name,
-        description: apolloOrg.short_description || apolloOrg.description,
+        name: (apolloOrg.name as string) || companyData?.name,
+        description: (apolloOrg.short_description as string) || (apolloOrg.description as string),
         employees: apolloOrg.estimated_num_employees,
-        industry: apolloOrg.industry || companyData?.industry,
-        keywords: apolloOrg.keywords || [],
+        industry: (apolloOrg.industry as string) || companyData?.industry,
+        keywords: (apolloOrg.keywords as string[]) || [],
         founded_year: apolloOrg.founded_year,
-        city: existingDecisors?.[0]?.city,
-        country: existingDecisors?.[0]?.country
+        city: firstDecisor?.city as string | undefined,
+        country: (firstDecisor?.country as string) || 'Brazil'
       },
       companyData: { 
         source: 'database',
@@ -380,39 +372,39 @@ export function DecisorsContactsTab({
         };
       };
       
-      // Schema decision_makers: name, title, seniority, departments, raw_apollo_data (não raw_data/position/seniority_level)
+      // Schema decision_makers: name/title/seniority/departments/raw_apollo_data (Data Enrich e Apollo)
       const formattedDecisors = existingDecisors.map(d => {
-        const raw = d.raw_apollo_data || d.raw_data || {};
+        const raw = (d.raw_apollo_data || d.raw_data || {}) as Record<string, unknown>;
         const apolloNormalized = normalizeApolloData(raw);
-        const title = d.title || d.position || '';
-        const seniorityVal = d.seniority || d.seniority_level || '';
-        const deptList = Array.isArray(d.departments) ? d.departments : (raw.departments || []);
-        const firstDept = deptList.length ? deptList[0] : (d.department || null);
+        const title = String(d.title ?? d.position ?? '');
+        const seniorityVal = String(d.seniority ?? d.seniority_level ?? '');
+        const deptList = Array.isArray(d.departments) ? d.departments : ((raw.departments as unknown[]) || []);
+        const firstDept = deptList.length ? deptList[0] : (d.department ?? null);
         return {
           id: d.id,
-          name: d.name || d.full_name || '',
+          name: String(d.name ?? d.full_name ?? ''),
           title,
           position: title,
           email: d.email,
-          email_status: d.email_status,
+          email_status: d.email_status as string | undefined,
           phone: d.phone,
           linkedin_url: d.linkedin_url,
           department: firstDept,
           seniority_level: seniorityVal,
-          buying_power: classifyBuyingPower(title, seniorityVal, d.headline || ''),
-          city: d.city,
-          state: d.state,
-          country: d.country || 'Brazil',
-          photo_url: d.photo_url,
-          headline: d.headline,
-          apollo_score: d.people_auto_score_value ?? apolloNormalized.apollo_score ?? raw.auto_score ?? raw.person_score ?? d.apollo_score,
-          organization_name: d.company_name || companyApolloData?.name || apolloNormalized.organization_name || companyData?.name,
-          organization_employees: d.company_employees ?? companyApolloData?.estimated_num_employees ?? apolloNormalized.organization_employees,
-          organization_industry: (Array.isArray(d.company_industries) && d.company_industries.length > 0) ? d.company_industries[0] : (companyApolloData?.industry || apolloNormalized.organization_industry || companyData?.industry),
-          organization_keywords: (Array.isArray(d.company_keywords) && d.company_keywords.length > 0) ? d.company_keywords : ((companyApolloData?.keywords && companyApolloData.keywords.length > 0) ? companyApolloData.keywords : (apolloNormalized.organization_keywords || [])),
-          phone_numbers: Array.isArray(apolloNormalized.phone_numbers) && apolloNormalized.phone_numbers.length > 0 ? apolloNormalized.phone_numbers : (raw.phone_numbers || []),
+          buying_power: classifyBuyingPower(title, seniorityVal, String(d.headline ?? '')),
+          city: d.city as string | undefined,
+          state: d.state as string | undefined,
+          country: String(d.country ?? 'Brazil'),
+          photo_url: d.photo_url as string | undefined,
+          headline: d.headline as string | undefined,
+          apollo_score: (d.people_auto_score_value ?? apolloNormalized.apollo_score ?? raw.auto_score ?? raw.person_score ?? d.apollo_score) as number | undefined,
+          organization_name: String(d.company_name ?? companyApolloData?.name ?? apolloNormalized.organization_name ?? companyData?.name ?? ''),
+          organization_employees: (d.company_employees ?? companyApolloData?.estimated_num_employees ?? apolloNormalized.organization_employees) as number | undefined,
+          organization_industry: (Array.isArray(d.company_industries) && d.company_industries.length > 0) ? String(d.company_industries[0]) : String(companyApolloData?.industry ?? apolloNormalized.organization_industry ?? companyData?.industry ?? ''),
+          organization_keywords: (Array.isArray(d.company_keywords) && d.company_keywords.length > 0) ? (d.company_keywords as string[]) : ((Array.isArray(companyApolloData?.keywords) && companyApolloData.keywords.length > 0) ? (companyApolloData.keywords as string[]) : (apolloNormalized.organization_keywords || [])),
+          phone_numbers: Array.isArray(apolloNormalized.phone_numbers) && apolloNormalized.phone_numbers.length > 0 ? apolloNormalized.phone_numbers : ((raw.phone_numbers as unknown[]) || []),
           departments: deptList,
-          employment_history: raw.employment_history || [],
+          employment_history: (raw.employment_history as unknown[]) || [],
           enriched_with: 'database'
         };
       });
@@ -831,24 +823,23 @@ export function DecisorsContactsTab({
       // 🔥 RECARREGAR DADOS DA EMPRESA (Apollo Organization) após enrichment
       if (companyId) {
         console.log('[DECISORES-TAB] 🔄 Recarregando dados Apollo Organization após enrichment...');
-        const { data: companyData } = await supabase
+        const { data: companyRow } = await supabase
           .from('companies')
-          .select('raw_data, industry, name')
+          .select('*')
           .eq('id', companyId)
           .single();
-        
-        if (companyData?.raw_data?.apollo_organization) {
-          const apolloOrg = companyData.raw_data.apollo_organization;
+        const companyData = companyRow as { raw_data?: { apollo_organization?: Record<string, unknown> }; name?: string; industry?: string } | null;
+        const apolloOrg = companyData?.raw_data?.apollo_organization as Record<string, unknown> | undefined;
+        if (apolloOrg) {
           console.log('[DECISORES-TAB] ✅ Apollo Organization recarregado:', apolloOrg);
-          
           setAnalysisData((prev: any) => ({
             ...prev,
             companyApolloOrg: {
-              name: apolloOrg.name || companyData.name,
+              name: (apolloOrg.name as string) || companyData?.name,
               description: apolloOrg.short_description,
               employees: apolloOrg.estimated_num_employees,
-              industry: apolloOrg.industry || companyData.industry,
-              keywords: apolloOrg.keywords || [],
+              industry: (apolloOrg.industry as string) || companyData?.industry,
+              keywords: (apolloOrg.keywords as string[]) || [],
               founded_year: apolloOrg.founded_year,
               city: data.decisors?.[0]?.city,
               country: data.decisors?.[0]?.country
@@ -1106,7 +1097,7 @@ export function DecisorsContactsTab({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">Todos ({analysisData?.decisorsWithEmails?.length || 0})</SelectItem>
-                      {uniqueBuyingPowers.map(bp => (
+                      {(uniqueBuyingPowers as string[]).map((bp: string) => (
                         <SelectItem key={bp} value={bp}>
                           {bp === 'decision-maker' ? 'Decision Maker' : bp === 'influencer' ? 'Influencer' : 'Usuário'}
                         </SelectItem>
@@ -1127,7 +1118,7 @@ export function DecisorsContactsTab({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">Todos</SelectItem>
-                      {uniqueDepartments.map(dept => (
+                      {(uniqueDepartments as string[]).map((dept: string) => (
                         <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1146,7 +1137,7 @@ export function DecisorsContactsTab({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">Todos</SelectItem>
-                      {uniqueLocations.map(loc => (
+                      {(uniqueLocations as string[]).map((loc: string) => (
                         <SelectItem key={loc} value={loc}>{loc}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1165,7 +1156,7 @@ export function DecisorsContactsTab({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">Todos</SelectItem>
-                      {uniqueSeniorities.map(sen => (
+                      {(uniqueSeniorities as string[]).map((sen: string) => (
                         <SelectItem key={sen} value={sen}>{sen}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1668,7 +1659,7 @@ export function DecisorsContactsTab({
         open={linkedInAuthOpen}
         onOpenChange={setLinkedInAuthOpen}
         onAuthSuccess={() => {
-          toast.success('LinkedIn conectado com sucesso!');
+          sonnerToast.success('LinkedIn conectado com sucesso!');
           // ✅ Fechar modal de auth
           setLinkedInAuthOpen(false);
           

@@ -114,6 +114,7 @@ import { formatWebsiteUrl } from '@/lib/utils/urlHelpers';
 import { getCNAEClassifications, type CNAEClassification } from '@/services/cnaeClassificationService';
 import { resolveCompanyCNAE, formatCNAEForDisplay } from '@/lib/utils/cnaeResolver';
 import { formatCNPJ } from '@/lib/utils/validators';
+import { enrichBatchWithRetry, isDataEnrichConfigured, type EnrichBatchCompany } from '@/services/dataEnrichApi';
 
 // 🎨 Função para gerar cores dinâmicas consistentes baseadas no nome do setor/segmento
 // ✅ MELHORADO: Hash mais robusto para maior diferenciação entre setores diferentes
@@ -1168,6 +1169,8 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         tenant_id: tenantId,
       });
 
+      const toSyncToDataEnrich: EnrichBatchCompany[] = [];
+
       for (const prospect of selectedProspects) {
         try {
           console.log('[Qualified → Companies] 🔍 Processando prospect', {
@@ -1409,7 +1412,7 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
             });
           }
 
-          // ✅ DELETAR de qualified_prospects
+          // ✅ DELETAR de qualified_prospects (obrigatório: sai do Estoque ao ir para Banco)
           const { error: deleteError } = await ((supabase as any).from('qualified_prospects'))
             .delete()
             .eq('id', prospect.id);
@@ -1419,15 +1422,39 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               error: deleteError,
               prospect_id: prospect.id,
             });
-          } else {
-            console.log('[Qualified → Companies] ✅ Removido de qualified_prospects', {
-              prospect_id: prospect.id,
-              cnpj: prospect.cnpj,
-            });
+            errors.push(`CNPJ ${prospect.cnpj}: não foi possível remover do Estoque (${deleteError.message}). Empresa já está no Banco.`);
+            continue;
           }
+          console.log('[Qualified → Companies] ✅ Removido de qualified_prospects', {
+            prospect_id: prospect.id,
+            cnpj: prospect.cnpj,
+          });
 
-          // Contar como promovido (tanto INSERT quanto UPDATE)
+          // Contar como promovido só quando INSERT/UPDATE + DELETE com sucesso
           promotedCount++;
+
+          // Coletar para sync automático com Data Enrich (Lovable)
+          let domainForSync: string | undefined;
+          if (website && typeof website === 'string' && website.trim() && !website.includes('exemplo.com')) {
+            try {
+              if (/^https?:\/\//i.test(website)) {
+                domainForSync = new URL(website).hostname.replace(/^www\./, '');
+              } else {
+                domainForSync = website.replace(/^www\./, '').trim();
+              }
+            } catch {
+              domainForSync = website.trim();
+            }
+          }
+          toSyncToDataEnrich.push({
+            name: companyName || prospect.razao_social || '',
+            domain: domainForSync,
+            cnpj: normalizedCnpj || undefined,
+            trade_name: fantasyName || prospect.nome_fantasia || undefined,
+            city: city || prospect.cidade || undefined,
+            state: state || prospect.estado || undefined,
+            industry: sector || prospect.setor || undefined,
+          });
         } catch (err: any) {
           // ✅ Log detalhado do erro para debug
           const errorDetails = {
@@ -1459,11 +1486,27 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
         }
       }
 
-      // ✅ Toast com resultado detalhado
+      // ✅ Sync automático com Data Enrich (Lovable) — retry para garantir sucesso
+      let syncToDataEnrichCount = 0;
+      let syncDataEnrichFailed = false;
+      let syncDataEnrichErrorMsg: string | undefined;
+      if (toSyncToDataEnrich.length > 0 && isDataEnrichConfigured()) {
+        const syncResult = await enrichBatchWithRetry(toSyncToDataEnrich);
+        if (syncResult.success) {
+          syncToDataEnrichCount = syncResult.syncedCount;
+          console.log('[Qualified → Companies] ✅ Sync Data Enrich (sucesso)', { sent: syncToDataEnrichCount });
+        } else {
+          syncDataEnrichFailed = true;
+          syncDataEnrichErrorMsg = syncResult.lastError;
+          console.warn('[Qualified → Companies] ⚠️ Sync Data Enrich falhou após retries', syncResult.lastError);
+        }
+      }
+
+      // ✅ Toasts inteligentes: Banco de Empresas + Data Enrich (sucesso ou falha explícita)
       if (errors.length > 0) {
         toast({
           title: '⚠️ Envio parcial',
-          description: `${promotedCount} empresa(s) processada(s). ${errors.length} erro(s).`,
+          description: `${promotedCount} empresa(s) processada(s). ${errors.length} erro(s).${syncToDataEnrichCount > 0 ? ` Data Enrich: ${syncToDataEnrichCount} enviada(s) com sucesso.` : syncDataEnrichFailed ? ' Data Enrich: falhou (empresas já no Banco).' : ''}`,
           variant: 'destructive',
           action: (
             <Button
@@ -1481,7 +1524,13 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
       } else {
         toast({
           title: '✅ Enviado para Banco de Empresas',
-          description: `${promotedCount} empresa(s) processada(s). Total: ${selectedIds.size}`,
+          description: promotedCount
+            ? syncToDataEnrichCount > 0
+              ? `${promotedCount} empresa(s) no Banco. Data Enrich: ${syncToDataEnrichCount} empresa(s) enviada(s) para enriquecimento automático (decisores Apollo/Lusha).`
+              : syncDataEnrichFailed
+                ? `${promotedCount} empresa(s) no Banco. Data Enrich: envio falhou (tente sincronizar depois em Data Enrich).`
+                : `${promotedCount} empresa(s) processada(s).`
+            : `${selectedIds.size} selecionada(s).`,
           action: (
             <Button
               variant="outline"
@@ -1491,6 +1540,19 @@ Forneça uma recomendação estratégica objetiva em 2-3 parágrafos sobre:
               Ver Banco de Empresas
             </Button>
           ),
+        });
+      }
+      if (syncToDataEnrichCount > 0) {
+        toast({
+          title: '✅ Data Enrich: envio com sucesso',
+          description: `${syncToDataEnrichCount} empresa(s) serão enriquecidas com decisores (Apollo/Lusha). Acesse Prospecção → Data Enrich para acompanhar.`,
+        });
+      }
+      if (syncDataEnrichFailed && toSyncToDataEnrich.length > 0) {
+        toast({
+          title: '⚠️ Data Enrich: envio falhou',
+          description: syncDataEnrichErrorMsg ?? 'Não foi possível enviar para o Data Enrich. Empresas já estão no Banco. Você pode sincronizar depois em Prospecção → Data Enrich.',
+          variant: 'destructive',
         });
       }
 

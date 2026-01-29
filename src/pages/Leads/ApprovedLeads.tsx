@@ -250,11 +250,23 @@ export default function ApprovedLeads() {
       return;
     }
 
+    // ✅ Apenas empresas aprovadas (icp_analysis_results); excluir fallback (empresas da Base)
+    const validIds = analysisIds.filter((id) => {
+      const c = companies.find((x) => x.id === id);
+      return c && !(c as any)._from_fallback;
+    });
+    if (validIds.length === 0) {
+      toast.error('Enviar ao Pipeline', {
+        description: 'Selecione empresas aprovadas (da Quarentena). Empresas da Base aparecem aqui apenas para abrir o Dossiê.',
+      });
+      return;
+    }
+
     // ✅ REGRA STRATEVO ONE: Leads Aprovados NUNCA exigem ACTIVE para entrar no funil.
     // Mover para Pipeline cria registro no estágio LEADS (não Deal em Discovery).
-    const selectedCompanies = companies.filter(c => analysisIds.includes(c.id));
+    const selectedCompanies = companies.filter(c => validIds.includes(c.id));
 
-    const confirmMessage = `🚀 Enviar ${analysisIds.length} empresa(s) para o Pipeline de Vendas?\n\nSerão criados ${analysisIds.length} lead(s) no estágio "Leads". O Deal poderá ser criado depois, na etapa Discovery.`;
+    const confirmMessage = `🚀 Enviar ${validIds.length} empresa(s) para o Pipeline de Vendas?\n\nSerão criados ${validIds.length} lead(s) no estágio "Leads". O Deal poderá ser criado depois, na etapa Discovery.`;
     
     if (!confirm(confirmMessage)) {
       toast.info('Envio cancelado');
@@ -269,7 +281,7 @@ export default function ApprovedLeads() {
       const { data: rawApproved, error: fetchError } = await supabase
         .from('icp_analysis_results')
         .select(selectCols)
-        .in('id', analysisIds);
+        .in('id', validIds);
 
       if (fetchError) throw fetchError;
       const approvedData = (rawApproved || []) as { id: string; company_id: string | null; cnpj: string; razao_social: string; icp_score?: number; temperatura?: string; raw_data?: unknown; website?: string }[];
@@ -290,8 +302,7 @@ export default function ApprovedLeads() {
       // 3. CRIAR DEALS (transferência para pipeline)
       const { data: { user } } = await supabase.auth.getUser();
       
-      // ✅ Schema da tabela sdr_deals: title, stage, value, assigned_to (conforme useDeals / database.types).
-      // Estágio "discovery" para aparecer na primeira etapa do funil.
+      // ✅ Schema sdr_deals (tabela real): title, stage, value, assigned_to (não deal_* / assigned_sdr)
       const dealsToCreate = validCompanies.map(q => {
         const companyId = typeof q.company_id === 'string' ? q.company_id : null;
         const desc = `Empresa aprovada. ICP Score: ${q.icp_score ?? 0}. Temperatura: ${q.temperatura ?? 'cold'}. Website: ${(q.website || '') || 'N/A'}.`;
@@ -308,18 +319,21 @@ export default function ApprovedLeads() {
         };
       });
 
+      // DB columns: title, stage, value, assigned_to (tipos gerados podem usar deal_* / assigned_sdr)
+      type SdrDealRow = { title: string; description?: string; company_id?: string | null; value?: number; probability?: number; stage: string; assigned_to?: string | null; source?: string; status?: string };
       const { error: insertError } = await supabase
         .from('sdr_deals')
-        .insert(dealsToCreate);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert(dealsToCreate as any);
 
       if (insertError) throw insertError;
 
-      // 4. Atualizar status para 'pipeline'
-      const validIds = validCompanies.map(q => q.id);
+      // 4. Atualizar status para 'pipeline' (ids das linhas de icp_analysis_results)
+      const idsToUpdate = validCompanies.map(q => q.id);
       const { error: updateError } = await supabase
         .from('icp_analysis_results')
         .update({ status: 'pipeline' })
-        .in('id', validIds);
+        .in('id', idsToUpdate);
 
       if (updateError) throw updateError;
 
@@ -2051,8 +2065,8 @@ export default function ApprovedLeads() {
                 onRefreshSelected={handleRefreshSelected}
                 onBulkEnrichReceita={handleBulkEnrichReceita}
                 onBulkEnrichApollo={undefined}
-                onBulkEnrich360={undefined}
-                onBulkEnrichWebsite={undefined}
+                onBulkEnrich360={handleBulkEnrich360}
+                onBulkEnrichWebsite={handleBulkEnrichWebsite}
                 onBulkVerification={undefined}
                 onBulkDiscoverCNPJ={handleBulkDiscoverCNPJ}
                 onBulkApprove={handleSendToPipelineBatch}

@@ -1,6 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+/** Tipo unificado para linha de Leads Aprovados (icp_analysis_results ou fallback companies) */
+export type ApprovedCompanyRow = {
+  id: string;
+  company_id: string | null;
+  cnpj: string;
+  razao_social: string;
+  icp_score?: number;
+  temperatura?: string;
+  status?: string;
+  raw_data?: Record<string, unknown>;
+  website?: string | null;
+  industry?: string | null;
+  decision_makers_count?: number;
+  _from_fallback?: boolean;
+  [key: string]: unknown;
+};
+
 export function useApprovedCompanies(filters?: {
   status?: string;
   temperatura?: string;
@@ -8,18 +25,11 @@ export function useApprovedCompanies(filters?: {
 }) {
   return useQuery({
     queryKey: ['approved-companies', filters],
-    queryFn: async () => {
-      // 🎯 BUSCAR EMPRESAS APROVADAS (status='aprovada')
+    queryFn: async (): Promise<ApprovedCompanyRow[]> => {
+      // 🎯 BUSCAR EMPRESAS APROVADAS (status='aprovada') — select * evita erro em colunas opcionais
       let query = supabase
         .from('icp_analysis_results')
-        .select(`
-          *,
-          website_encontrado,
-          website_fit_score,
-          website_products_match,
-          linkedin_url,
-          purchase_intent_score
-        `)
+        .select('*')
         .eq('status', 'aprovada'); // ✅ APENAS APROVADAS
 
       // Aplicar filtros adicionais
@@ -38,8 +48,19 @@ export function useApprovedCompanies(filters?: {
         throw error;
       }
 
-      console.log(`[useApprovedCompanies] ✅ ${data?.length || 0} empresas aprovadas encontradas`);
-      return data || [];
+      const approved = (data || []) as ApprovedCompanyRow[];
+      if (approved.length > 0) {
+        console.log(`[useApprovedCompanies] ✅ ${approved.length} empresas aprovadas encontradas`);
+        return approved;
+      }
+
+      // Sem fallback: quando 0 aprovadas, retornar lista vazia.
+      // Assim, após "Enviar ao pipeline", as linhas saem da lista (status vira 'pipeline')
+      // e a tabela fica zerada — os deals aparecem no SDR Workspace.
+      // Evita exibir empresas da Base como se fossem aprovadas (ids eram company_id,
+      // causando 406 / "Empresa não encontrada" em enriquecimento).
+      console.log('[useApprovedCompanies] ✅ 0 empresas aprovadas (nenhum pendente de envio ao pipeline)');
+      return [];
     },
     staleTime: 30000, // 30 segundos
     refetchOnWindowFocus: true,
@@ -76,10 +97,24 @@ export function useSendToPipeline() {
     // 3. CRIAR DEALS (transferência para pipeline)
     const { data: { user } } = await supabase.auth.getUser();
     
-    const dealsToCreate = validCompanies.map(q => {
-      const rawData: any = {
-        ...(q.raw_data || {}),
-        ...(q.raw_analysis || {}),
+    // Schema sdr_deals (tabela real): title, stage, value, assigned_to
+    type SdrDealInsert = {
+      title: string;
+      description: string | null;
+      company_id: string | null;
+      value: number;
+      probability: number;
+      stage: string;
+      assigned_to: string | null;
+      source?: string;
+      bitrix24_data?: Record<string, unknown>;
+      status?: string;
+    };
+
+    const dealsToCreate: SdrDealInsert[] = validCompanies.map(q => {
+      const rawData: Record<string, unknown> = {
+        ...(typeof q.raw_data === 'object' && q.raw_data !== null ? (q.raw_data as Record<string, unknown>) : {}),
+        ...(typeof (q as Record<string, unknown>).raw_analysis === 'object' && (q as Record<string, unknown>).raw_analysis !== null ? ((q as Record<string, unknown>).raw_analysis as Record<string, unknown>) : {}),
         icp_score: q.icp_score || 0,
         temperatura: q.temperatura || 'cold',
       };
@@ -90,9 +125,8 @@ export function useSendToPipeline() {
         company_id: q.company_id,
         value: 0,
         probability: Math.min(Math.round((q.icp_score || 0) / 100 * 50), 50),
-        priority: (q.icp_score || 0) >= 75 ? 'high' : 'medium',
-        stage: 'discovery',
-        assigned_to: user?.id || null,
+        stage: 'lead',
+        assigned_to: user?.id ?? null,
         source: 'approved_to_pipeline',
         bitrix24_data: rawData,
         status: 'open',
@@ -101,7 +135,8 @@ export function useSendToPipeline() {
 
     const { error: insertError } = await supabase
       .from('sdr_deals')
-      .insert(dealsToCreate);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .insert(dealsToCreate as any);
 
     if (insertError) throw insertError;
 

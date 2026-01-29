@@ -21,6 +21,25 @@ export interface EnrichSingleInput {
   company_id?: string;
 }
 
+/** Payload por empresa para enrich-batch (sync Motor de Qualificação → Data Enrich) */
+export interface EnrichBatchCompany {
+  name: string;
+  domain?: string;
+  cnpj?: string;
+  trade_name?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  industry?: string;
+}
+
+export interface EnrichBatchResponse {
+  success: boolean;
+  message?: string;
+  results?: Array<{ company_id?: string; success?: boolean; error?: string }>;
+  total_sent?: number;
+}
+
 export interface EnrichSingleResponse {
   success: boolean;
   company_id?: string;
@@ -115,6 +134,42 @@ export async function getCompany(companyId: string): Promise<GetCompanyResponse>
 
 export async function getContacts(companyId: string): Promise<GetContactsResponse> {
   return callDataEnrichApi<GetContactsResponse>('get-contacts', { company_id: companyId });
+}
+
+/**
+ * Envia múltiplas empresas para o Data Enrich (enrich-batch).
+ * Usado após "Enviar para Banco de Empresas" para sincronizar com Lovable.
+ */
+export async function enrichBatch(companies: EnrichBatchCompany[]): Promise<EnrichBatchResponse> {
+  return callDataEnrichApi<EnrichBatchResponse>('enrich-batch', { companies });
+}
+
+const SYNC_RETRY_ATTEMPTS = 3;
+const SYNC_RETRY_DELAY_MS = 2000;
+
+/**
+ * enrich-batch com retry para maior garantia de sucesso.
+ * Usado no fluxo "Enviar para Banco de Empresas".
+ */
+export async function enrichBatchWithRetry(
+  companies: EnrichBatchCompany[]
+): Promise<{ success: boolean; syncedCount: number; lastError?: string }> {
+  let lastError: string | undefined;
+  for (let attempt = 1; attempt <= SYNC_RETRY_ATTEMPTS; attempt++) {
+    try {
+      const result = await enrichBatch(companies);
+      if (result?.success) {
+        return { success: true, syncedCount: companies.length };
+      }
+      lastError = result?.message ?? 'Resposta sem sucesso';
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+    if (attempt < SYNC_RETRY_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, SYNC_RETRY_DELAY_MS));
+    }
+  }
+  return { success: false, syncedCount: 0, lastError };
 }
 
 export function isDataEnrichConfigured(): boolean {

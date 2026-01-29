@@ -70,16 +70,14 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         </header>
 
-        {/* Sidebar - Começa após o header */}
+        {/* Sidebar STRATEVO - sempre visível; na página Data Enrich o sidebar do Lovable fica dentro do iframe (não colide) */}
         <AppSidebar />
-        
+
         {/* Main Content */}
         <div className={`flex-1 flex flex-col transition-all duration-300 ${insightsOpen ? 'mr-[600px] md:mr-[700px] lg:mr-[800px]' : ''}`}>
           {location.pathname === '/leads/data-enrich' ? (
             <main className="flex-1 flex flex-col overflow-hidden mt-16 min-h-0">
-              <div className="px-4 py-1 shrink-0 border-b bg-background/50">
-                <Breadcrumb />
-              </div>
+              {/* Sem breadcrumb aqui: evita duplicata (o Lovable já mostra o seu dentro do iframe) e dá mais altura ao iframe */}
               <div className="flex-1 min-h-0">{children}</div>
             </main>
           ) : (

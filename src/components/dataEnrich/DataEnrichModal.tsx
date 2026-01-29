@@ -18,6 +18,7 @@ import {
   type EnrichSingleInput,
   type DataEnrichContact,
 } from '@/services/dataEnrichApi';
+import { persistDataEnrichContactsToDecisionMakers } from '@/services/dataEnrichToDecisionMakers';
 import {
   Table,
   TableBody,
@@ -129,7 +130,27 @@ export function DataEnrichModal({ isOpen, onClose, company, onDecisorsLoaded }: 
       const byLinkedIn = list.filter((c) => c.data_sources?.includes('linkedin'));
       const byLusha = list.filter((c) => c.data_sources?.includes('lusha'));
       onDecisorsLoaded?.(list, { apollo: byApollo, linkedin: byLinkedIn, lusha: byLusha });
-      toast.success(`${list.length} contato(s) encontrado(s).`);
+
+      // Persistir no STRATEVO (decision_makers) para alimentar Dossiê e CRM
+      if (company.id && list.length > 0) {
+        try {
+          const { inserted, skipped } = await persistDataEnrichContactsToDecisionMakers(company.id, list);
+          if (inserted > 0) {
+            toast.success(`${list.length} contato(s) encontrado(s). ${inserted} decisor(es) salvos no Dossiê e no CRM.`, {
+              description: skipped > 0 ? `${skipped} já existiam e foram ignorados.` : undefined,
+            });
+          } else {
+            toast.success(`${list.length} contato(s) encontrado(s).${skipped > 0 ? ` (${skipped} já estavam no Dossiê.)` : ''}`);
+          }
+        } catch (persistErr) {
+          console.warn('[DataEnrichModal] Persist to decision_makers failed:', persistErr);
+          toast.success(`${list.length} contato(s) encontrado(s).`, {
+            description: 'Não foi possível salvar no Dossiê (dados exibidos no modal).',
+          });
+        }
+      } else {
+        toast.success(`${list.length} contato(s) encontrado(s).`);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Erro ao enriquecer';
       setStatus('error');

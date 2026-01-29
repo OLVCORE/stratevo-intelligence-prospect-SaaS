@@ -51,12 +51,22 @@ Sem essa variável, o modal exibe erro "API Key não configurada" ao clicar em "
 3. **No app Lovable (dentro do iframe ou em nova aba)**  
    Lista de empresas → Ver detalhes / Enriquecer; na empresa → **Extrair Decisores**; abas Apollo / LinkedIn / Lusha; exportar CSV.
 
+## Ver a última publicação do Lovable (cache)
+
+O iframe usa **cache-bust** (`?v=timestamp`) para reduzir o uso de versão em cache do Data Enrich:
+
+- **Cada vez que você abre a página** (Prospecção → Data Enrich ou F5 na página), a URL do iframe inclui um novo `?v=...`, e o navegador tende a buscar a versão mais recente publicada no Lovable.
+- **Botão "Atualizar"** (ícone de refresh ao lado de "Abrir em nova aba"): clique para **forçar o recarregamento** do conteúdo do Data Enrich e ver a última publicação do Lovable sem sair da página.
+- Se mesmo assim aparecer versão antiga (local ou Vercel), use **hard refresh** (Ctrl+Shift+R) ou abra em **nova aba** e faça F5 lá.
+- **Sidebar do Lovable (Configurações no fim):** na página Data Enrich ficam visíveis o **sidebar do STRATEVO** (plataforma) e o **conteúdo do Data Enrich** (iframe). O sidebar do Data Enrich (Dashboard, Empresas, Contatos, Upload CSV, Enriquecimento, Logs de API, **Configurações**) fica **dentro** do iframe. Se a opção "Configurações" não aparecer (por exemplo por altura da tela), use **"Atualizar"** para carregar a última publicação do Lovable, ou **role a barra lateral dentro do iframe**; ou abra em **nova aba** para ver o app completo.
+
 ## Teste no servidor local
 
 1. Subir o app: `npm run dev` (ex.: `http://localhost:5174`).  
 2. Ir em **Prospecção → Data Enrich** (`/leads/data-enrich`).  
-3. Deve aparecer o iframe com o Lovable (lista de empresas). Se ficar em branco ou mensagem de bloqueio, clicar em **"Abrir Data Enrich em nova aba"** — o sistema Lovable abre na mesma URL e funciona igual.  
-4. Para testar com empresa específica: abrir um lead aprovado → Dossiê → **Data Enrich**; ou acessar manualmente `http://localhost:5174/leads/data-enrich?companyId=<id_da_empresa_no_lovable>`.
+3. Deve aparecer o iframe com o Lovable (lista de empresas). Se ficar em branco ou mensagem de bloqueio, clicar em **"Abrir Data Enrich em nova aba"**.  
+4. Após publicar no Lovable, use **"Atualizar"** na página Data Enrich ou recarregue a página (F5) para ver a nova versão.  
+5. Para testar com empresa específica: abrir um lead aprovado → Dossiê → **Data Enrich**; ou acessar `http://localhost:5174/leads/data-enrich?companyId=<id>`.
 
 ## Mapeamento de campos (entrada)
 
@@ -75,15 +85,81 @@ Saída (contatos) é usada nas abas do modal; o callback `onDecisorsLoaded` pode
 
 ---
 
-## Motor de Qualificação × Data Enrich (upload de planilha)
+## Motor de Qualificação × Data Enrich (upload de planilha) — Sync automático
 
-- **Upload de planilha no STRATEVO** (Motor de Qualificação / Estoque Qualificado / Base de Empresas): a planilha vai para **prospecting_candidates** e, após qualificação, para **qualified_prospects** e **companies**. Esse fluxo **não envia automaticamente** os dados para o sistema Lovable (Data Enrich).
-- **Data Enrich (Lovable)** tem seu próprio **"Upload CSV"** dentro do app (sidebar do iframe). Para usar enriquecimento em massa no Lovable, use o Upload CSV **dentro** da página Data Enrich (iframe ou nova aba).
-- **Integração futura:** é possível conectar o fluxo STRATEVO (empresas qualificadas) ao Lovable via API `enrich-batch` ou envio em lote, para que empresas aprovadas sejam enviadas ao Data Enrich automaticamente; hoje o uso é manual (acessar Data Enrich e usar a lista/Upload CSV do Lovable).
+- **Upload de planilha no STRATEVO** (Motor de Qualificação / Estoque Qualificado): a planilha vai para **prospecting_candidates** e, após qualificação, para **qualified_prospects**.
+- **Enviar para Banco de Empresas (Estoque Qualificado):** ao clicar em **"Enviar para Banco de Empresas"**, as empresas selecionadas são criadas/atualizadas na tabela **companies** e **enviadas automaticamente** para o Data Enrich (Lovable) via **enrich-batch**.
+- **Mecanismos de sucesso:** o envio para o Data Enrich usa **retry automático** (até 3 tentativas com intervalo de 2s). Em seguida são exibidos **avisos inteligentes**:
+  - **Sucesso:** toast "Data Enrich: envio com sucesso" + descrição com quantidade de empresas enviadas para enriquecimento (decisores Apollo/Lusha).
+  - **Falha:** toast "Data Enrich: envio falhou" (variant destructive) + descrição do erro; as empresas já estão no Banco e podem ser sincronizadas depois em Prospecção → Data Enrich.
+- **Requisito:** `VITE_DATAENRICH_API_KEY` (ou `VITE_STRATEVO_API_KEY`) configurada no `.env` / Vercel. Sem a chave, o fluxo de Banco de Empresas funciona normalmente, mas o sync com o Data Enrich é omitido.
+- **Data Enrich (Lovable)** também tem **"Upload CSV"** dentro do app (sidebar do iframe) para upload direto no Lovable.
 
 ---
 
 ## Sincronização dossiê estratégico ↔ Lovable
 
 - **Do Dossiê para o Data Enrich:** ao clicar em **"Data Enrich"** no Dossiê, o STRATEVO navega para `/leads/data-enrich?companyId=xxx`. O `companyId` é o ID da empresa no STRATEVO; o Lovable pode usar outro ID internamente. Se o Lovable não tiver essa empresa pelo mesmo ID, abra a **lista de empresas** no Data Enrich e localize a empresa lá (ou use o Upload CSV do Lovable para incluir).
-- **Do Lovable para os cards do Dossiê:** os dados enriquecidos (decisores, emails, telefones) que aparecem **nos cards do Dossiê** vêm hoje do **enriquecimento interno do STRATEVO** (Apollo/Lusha via Edge Functions e aba Decisores). Para que os dados **do Lovable** apareçam nos cards do dossiê, é preciso chamar a API Gateway (`get-company`, `get-contacts`) e exibir/gravar esses dados nos componentes do Dossiê (ex.: aba Decisores do TOTVSCheckCard usando `onDecisorsLoaded` do DataEnrichModal). Ou seja: a **sincronização de exibição** (Lovable → cards do dossiê) é feita via API e componentes STRATEVO; o iframe apenas mostra o app Lovable na mesma tela.
+- **Do Lovable para os cards do Dossiê e CRM:** quando você usa o **DataEnrichModal** (Extrair Decisores no Dossiê) ou quando empresas são enviadas ao Data Enrich via **Enviar para Banco de Empresas**, os contatos retornados pelo Data Enrich são **persistidos automaticamente** na tabela **`decision_makers`** do STRATEVO (serviço `dataEnrichToDecisionMakers`). Assim:
+  - **Dossiê Estratégico (aba Decisores):** a aba Decisores (`DecisorsContactsTab`) carrega decisores de `decision_makers` via `loadDecisorsData()`. Os decisores salvos pelo Data Enrich aparecem ali após "Extrair Decisores" no modal ou após recarregar a aba.
+  - **CRM:** o módulo CRM usa `decision_makers` (por exemplo `CRMEnrichmentIntegration.syncDecisionMakersToLead` atualiza contagem de decisores nos leads). Os decisores do Data Enrich passam a alimentar o CRM porque estão na mesma tabela `decision_makers` vinculada a `company_id`.
+- **Resumo do fluxo:** Data Enrich (Lovable) → API Gateway (`get-contacts`) → DataEnrichModal ou sync em lote → `persistDataEnrichContactsToDecisionMakers(company_id, contacts)` → tabela `decision_makers` → Dossiê (aba Decisores) + CRM.
+
+---
+
+## Como os dados do Data Enrich alimentam os cards e o Dossiê Estratégico
+
+Todos os **contatos/decisores** retornados pelo Data Enrich (Apollo, LinkedIn, Lusha) são persistidos na tabela **`decision_makers`** do STRATEVO. A partir dessa tabela única, os dados alimentam **cards**, **Dossiê Estratégico** e **CRM**.
+
+### Fluxo único (contatos → uma tabela → várias telas)
+
+```
+Data Enrich (Lovable)
+  → get-contacts / Extrair Decisores
+  → persistDataEnrichContactsToDecisionMakers(company_id, contacts)
+  → tabela decision_makers (STRATEVO)
+       │
+       ├─→ Trigger (MC3): atualiza icp_analysis_results.decision_makers_count
+       │       │
+       │       └─→ Cards de leads (Leads Aprovados, Quarentena, Banco de Empresas)
+       │             usam decision_makers_count para badge "X decisores" e filtros
+       │
+       ├─→ Dossiê Estratégico (aba Decisores)
+       │       DecisorsContactsTab carrega decision_makers por company_id
+       │       (nome, cargo, email, LinkedIn, seniority, departamento, etc.)
+       │
+       └─→ CRM (crm_leads)
+             CRMEnrichmentIntegration.syncDecisionMakersToLead atualiza
+             total_interactions com a contagem de decision_makers da empresa
+```
+
+### Onde cada superfície busca os dados
+
+| Superfície | Fonte dos dados | O que mostra |
+|------------|-----------------|--------------|
+| **Dossiê Estratégico – aba Decisores** | `decision_makers` (por `company_id`) | Lista de decisores com nome, cargo, email, LinkedIn, seniority; classificação (decision-maker / influencer / user). |
+| **Cards – Leads Aprovados, Quarentena, Banco de Empresas** | `icp_analysis_results.decision_makers_count` (atualizado por trigger ao inserir/alterar `decision_makers`) | Badge “X decisores”, indicador de “tem decisores” e filtros. |
+| **Card expandido / Company Detail** | `companies` com join em `decision_makers` ou `company.decision_makers` | Contagem e prévia de decisores no card da empresa. |
+| **CRM – leads** | `decision_makers` (contagem por `company_id`) → `crm_leads.total_interactions` | Contagem de decisores/interações por lead. |
+| **Motor de Busca, Playbooks, outros** | `decision_makers` (por `company_id`) | Listas e filtros por “empresas com decisores”. |
+
+### Pontos de entrada que gravam em `decision_makers`
+
+1. **Modal Data Enrich (Dossiê)**  
+   Ao clicar em “Extrair Decisores” no Dossiê, o modal chama a API, recebe os contatos e chama `persistDataEnrichContactsToDecisionMakers(company.id, contacts)`. Os decisores passam a aparecer na aba Decisores e nos cards/CRM.
+
+2. **Enviar para Banco de Empresas (Estoque Qualificado)**  
+   As empresas são enviadas ao Data Enrich via `enrich-batch`. O enriquecimento (e a extração de decisores) ocorre no Lovable; quando os contatos forem obtidos (por exemplo via Data Enrich no Dossiê ou no iframe) e persistidos com `company_id` do STRATEVO, entram em `decision_makers` e alimentam o mesmo fluxo acima.
+
+3. **Uso direto no iframe Data Enrich**  
+   Se o usuário enriquecer e exportar no Lovable sem usar o modal STRATEVO, os dados só entram no STRATEVO quando houver uma ação que chame a API (get-contacts) e `persistDataEnrichContactsToDecisionMakers` (por exemplo ao abrir o Dossiê da empresa e clicar em “Extrair Decisores” no modal).
+
+### Contagem nos cards (trigger MC3)
+
+Sempre que um registro é inserido, atualizado ou removido em **`decision_makers`**, o trigger **`update_decision_makers_count_trigger`** recalcula a contagem por empresa e atualiza **`icp_analysis_results.decision_makers_count`** para esse `company_id`. Por isso:
+
+- Os cards que leem `icp_analysis_results` (por exemplo Leads Aprovados) passam a refletir automaticamente quantos decisores a empresa tem após qualquer persistência em `decision_makers` (incluindo a que vem do Data Enrich).
+
+### Dados de empresa (get-company)
+
+Os dados retornados por **`get-company`** (visão geral da empresa no Lovable) são usados hoje **apenas no modal** para exibição. Não há persistência automática de volta na tabela **`companies`** do STRATEVO. Uma evolução futura pode mapear campos (ex.: indústria, tamanho, descrição) de `get-company` para `companies` ou para o Dossiê.
