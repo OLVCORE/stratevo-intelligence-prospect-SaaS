@@ -198,26 +198,6 @@ const menuGroups: MenuGroup[] = [
     ]
   },
   {
-    label: "Configuração ICP",
-    icon: Target,
-    items: [
-      {
-        title: "Central ICP",
-        icon: Target,
-        url: "/central-icp",
-        description: "Hub central de análise e gestão de ICP",
-        submenu: [
-          { title: "Home", icon: LayoutDashboard, url: "/central-icp", description: "Visão geral da Central ICP" },
-          { title: "ICP Ativo", icon: Target, url: "/central-icp/active", description: "Perfil ideal do ICP ativo com inteligência consolidada" },
-          { title: "Biblioteca de ICPs", icon: FileText, url: "/central-icp/library", description: "Lista completa de ICPs do tenant" },
-          { title: "Meus ICPs", icon: FileText, url: "/central-icp/profiles", description: "Visualizar e gerenciar ICPs configurados" },
-          { title: "Relatórios ICP", icon: FileText, url: "/central-icp/reports", description: "Relatórios completos e resumos do ICP" },
-          { title: "Plano Estratégico", icon: Briefcase, url: "/central-icp/strategic-plan", description: "Kanban, KPIs e ações com investimentos proporcionais" },
-        ],
-      },
-    ]
-  },
-  {
     label: "Execução",
     icon: Rocket,
     items: [
@@ -340,6 +320,20 @@ const menuGroups: MenuGroup[] = [
         description: "Catálogo e simulador de serviços de consultoria especializada"
       },
       {
+        title: "Configuração ICP",
+        icon: Target,
+        url: "/central-icp",
+        description: "Perfil ideal do cliente, biblioteca de ICPs e plano estratégico",
+        submenu: [
+          { title: "Home", icon: LayoutDashboard, url: "/central-icp", description: "Visão geral da Central ICP" },
+          { title: "ICP Ativo", icon: Target, url: "/central-icp/active", description: "Perfil ideal do ICP ativo com inteligência consolidada" },
+          { title: "Biblioteca de ICPs", icon: FileText, url: "/central-icp/library", description: "Lista completa de ICPs do tenant" },
+          { title: "Meus ICPs", icon: FileText, url: "/central-icp/profiles", description: "Visualizar e gerenciar ICPs configurados" },
+          { title: "Relatórios ICP", icon: FileText, url: "/central-icp/reports", description: "Relatórios completos e resumos do ICP" },
+          { title: "Plano Estratégico", icon: Briefcase, url: "/central-icp/strategic-plan", description: "Kanban, KPIs e ações com investimentos proporcionais" },
+        ],
+      },
+      {
         title: "Configurações",
         icon: Settings,
         url: "/settings",
@@ -417,7 +411,6 @@ export function AppSidebar() {
                       <p className="text-xs text-muted-foreground">
                         {group.label === "Comando" && "Visão executiva e busca global de inteligência comercial"}
                         {group.label === "Prospecção" && "Gestão de base de empresas e análise 360° com IA"}
-                        {group.label === "ICP" && "Qualificação de leads, análise individual, em massa e inteligência competitiva"}
                         {group.label === "Estratégia" && "ROI, CPQ, cenários, propostas e canvas colaborativo"}
                         {group.label === "Execução" && "Suite completa de automação de vendas e outbound"}
                         {group.label === "Métricas" && "Dashboards, metas e analytics de conversão"}

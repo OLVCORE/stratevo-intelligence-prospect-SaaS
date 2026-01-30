@@ -55,6 +55,38 @@ export interface GetStatusResponse {
   last_enriched_at?: string;
 }
 
+/** Empresa retornada pelo Data Enrich (get-company). */
+export interface DataEnrichCompany {
+  id: string;
+  name: string;
+  trade_name?: string;
+  cnpj?: string;
+  domain?: string;
+  industry?: string;
+  description?: string;
+  employee_count?: number;
+  founding_year?: number;
+  logo_url?: string;
+  linkedin_url?: string;
+  website_score?: number;
+  trading_symbol?: string;
+  keywords?: string[];
+  sic_codes?: string[];
+  naics_codes?: string[];
+  street?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zip_code?: string;
+  enrichment_status?: string;
+  enrichment_sources?: string[];
+  last_enriched_at?: string;
+  apollo_raw_data?: Record<string, unknown>;
+  linkedin_raw_data?: Record<string, unknown>;
+  lusha_raw_data?: Record<string, unknown>;
+}
+
 export interface DataEnrichContact {
   id: string;
   full_name: string;
@@ -69,12 +101,25 @@ export interface DataEnrichContact {
   mobile_phone?: string;
   linkedin_url?: string;
   city?: string;
+  state?: string;
   country?: string;
   data_sources?: string[];
   confidence_score?: number;
   apollo_raw_data?: Record<string, unknown>;
   linkedin_raw_data?: Record<string, unknown>;
   lusha_raw_data?: Record<string, unknown>;
+  /** Fonte da verificação do email (ex: apollo, hunter). */
+  email_verification_source?: string;
+  /** Telefone verificado. */
+  phone_verified?: boolean;
+  /** ID do perfil LinkedIn. */
+  linkedin_profile_id?: string;
+  /** Localização textual (ex: "São Paulo, BR"). */
+  location?: string;
+  /** Grau de conexão LinkedIn (1, 2, 3). */
+  connection_degree?: number;
+  /** Número de conexões em comum. */
+  mutual_connections?: number;
 }
 
 export interface GetContactsResponse {
@@ -86,7 +131,7 @@ export interface GetContactsResponse {
 
 export interface GetCompanyResponse {
   success: boolean;
-  company?: Record<string, unknown>;
+  company?: DataEnrichCompany;
 }
 
 export async function callDataEnrichApi<T = unknown>(

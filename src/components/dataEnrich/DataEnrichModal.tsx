@@ -3,6 +3,7 @@
  * Popula abas por fonte para o Dossiê Estratégico.
  */
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -17,8 +18,10 @@ import {
   isDataEnrichConfigured,
   type EnrichSingleInput,
   type DataEnrichContact,
+  type DataEnrichCompany,
 } from '@/services/dataEnrichApi';
 import { persistDataEnrichContactsToDecisionMakers } from '@/services/dataEnrichToDecisionMakers';
+import { persistDataEnrichCompany } from '@/services/dataEnrichToCompanies';
 import {
   Table,
   TableBody,
@@ -50,9 +53,10 @@ const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 40; // ~2 min
 
 export function DataEnrichModal({ isOpen, onClose, company, onDecisorsLoaded }: DataEnrichModalProps) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<'idle' | 'enriching' | 'completed' | 'error'>('idle');
   const [contacts, setContacts] = useState<DataEnrichContact[]>([]);
-  const [companyData, setCompanyData] = useState<Record<string, unknown> | null>(null);
+  const [companyData, setCompanyData] = useState<DataEnrichCompany | Record<string, unknown> | null>(null);
   const [enrichedCompanyId, setEnrichedCompanyId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -131,6 +135,18 @@ export function DataEnrichModal({ isOpen, onClose, company, onDecisorsLoaded }: 
       const byLusha = list.filter((c) => c.data_sources?.includes('lusha'));
       onDecisorsLoaded?.(list, { apollo: byApollo, linkedin: byLinkedIn, lusha: byLusha });
 
+      // Persistir empresa do Data Enrich no STRATEVO (companies) para exibir no Dossiê
+      if (company.id && companyResult.company) {
+        try {
+          const companyPersist = await persistDataEnrichCompany(company.id, companyResult.company);
+          if (companyPersist.success) {
+            queryClient.invalidateQueries({ queryKey: ['company-data', company.id] });
+          }
+        } catch (companyPersistErr) {
+          console.warn('[DataEnrichModal] Persist company failed:', companyPersistErr);
+        }
+      }
+
       // Persistir no STRATEVO (decision_makers) para alimentar Dossiê e CRM
       if (company.id && list.length > 0) {
         try {
@@ -142,11 +158,15 @@ export function DataEnrichModal({ isOpen, onClose, company, onDecisorsLoaded }: 
           } else {
             toast.success(`${list.length} contato(s) encontrado(s).${skipped > 0 ? ` (${skipped} já estavam no Dossiê.)` : ''}`);
           }
+          queryClient.invalidateQueries({ queryKey: ['decisors', company.id] });
+          queryClient.invalidateQueries({ queryKey: ['decision-makers', company.id] });
+          queryClient.invalidateQueries({ queryKey: ['company-data', company.id] });
         } catch (persistErr) {
           console.warn('[DataEnrichModal] Persist to decision_makers failed:', persistErr);
           toast.success(`${list.length} contato(s) encontrado(s).`, {
             description: 'Não foi possível salvar no Dossiê (dados exibidos no modal).',
           });
+          queryClient.invalidateQueries({ queryKey: ['company-data', company.id] });
         }
       } else {
         toast.success(`${list.length} contato(s) encontrado(s).`);

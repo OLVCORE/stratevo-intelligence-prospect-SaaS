@@ -162,4 +162,18 @@ Sempre que um registro é inserido, atualizado ou removido em **`decision_makers
 
 ### Dados de empresa (get-company)
 
-Os dados retornados por **`get-company`** (visão geral da empresa no Lovable) são usados hoje **apenas no modal** para exibição. Não há persistência automática de volta na tabela **`companies`** do STRATEVO. Uma evolução futura pode mapear campos (ex.: indústria, tamanho, descrição) de `get-company` para `companies` ou para o Dossiê.
+Os dados retornados por **`get-company`** são **persistidos** na tabela **`companies`** do STRATEVO via **`persistDataEnrichCompany`** (`src/services/dataEnrichToCompanies.ts`). O modal Data Enrich, após extrair decisores, chama `getCompany(companyId)` e `persistDataEnrichCompany(company.id, company)` para atualizar: industry, domain, employees, founding_year, logo_url, linkedin_url, description, city, state, country e **data_enrich_raw** (JSONB com apollo/linkedin/lusha e metadados de enrichment).
+
+---
+
+## Mapeamento de company_id (STRATEVO ↔ Data Enrich / Lovable)
+
+**Abordagem em uso: mesmo UUID (Opção A).**
+
+- No STRATEVO, a tabela **`companies`** usa `id` (UUID) como chave primária.
+- Ao chamar **`enrich-single`**, o payload pode incluir **`company_id`** = `company.id` do STRATEVO.
+- O Data Enrich (Lovable) usa esse **mesmo UUID** como identificador da empresa. Assim, **`get-company`** e **`get-contacts`** recebem `company_id` = UUID da empresa no STRATEVO.
+- **Fluxo:** Dossiê abre modal → `enrichSingle({ ...company, company_id: company.id })` → Data Enrich armazena/atualiza empresa com esse ID → `getCompany(company.id)` e `getContacts(company.id)` retornam dados → `persistDataEnrichCompany(company.id, company)` e `persistDataEnrichContactsToDecisionMakers(company.id, contacts)` gravam no STRATEVO.
+- **Sync na aba Decisores:** o botão **"Atualizar do Data Enrich"** (visível quando `VITE_DATAENRICH_API_KEY` está configurada) chama `getContacts(companyId)` e `getCompany(companyId)` com o `companyId` do Dossiê (mesmo UUID) e persiste em `decision_makers` e `companies`, em seguida recarrega os dados da aba.
+
+**Alternativa (não implementada):** tabela de mapeamento `company_id_mapping (stratevo_id, data_enrich_id)` para quando o Lovable usar IDs internos diferentes; nesse caso seria necessário criar/atualizar o mapeamento ao enviar empresas via `enrich-batch` ou `enrich-single`.

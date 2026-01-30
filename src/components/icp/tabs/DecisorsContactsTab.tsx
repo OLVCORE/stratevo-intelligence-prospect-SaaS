@@ -24,6 +24,9 @@ import { LinkedInLeadCollector } from '@/components/icp/LinkedInLeadCollector';
 import { LinkedInAuthDialog } from '@/components/icp/LinkedInAuthDialog';
 import { enrichCompany } from '@/services/enrichment/EnrichmentOrchestrator';
 import type { EnrichmentInput } from '@/types/enrichment';
+import { getCompany, getContacts, isDataEnrichConfigured } from '@/services/dataEnrichApi';
+import { persistDataEnrichContactsToDecisionMakers } from '@/services/dataEnrichToDecisionMakers';
+import { persistDataEnrichCompany } from '@/services/dataEnrichToCompanies';
 
 interface DecisorsContactsTabProps {
   companyId?: string;
@@ -149,6 +152,8 @@ export function DecisorsContactsTab({
   
   // 🔄 Função para forçar reload manual (SEM sair do relatório!)
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // 🔄 Sync do Data Enrich (get-contacts + get-company → decision_makers + companies)
+  const [syncing, setSyncing] = useState(false);
   
   // 💸 REVEAL DE CONTATOS
   const [revealingContacts, setRevealingContacts] = useState<Set<string>>(new Set());
@@ -422,6 +427,34 @@ export function DecisorsContactsTab({
         decisorsWithEmails: [],
         insights: ['Nenhum decisor identificado ainda. Clique em "Extrair Decisores" para começar.']
       };
+    }
+  };
+
+  /** Sincroniza decisores e dados da empresa do Data Enrich (get-contacts + get-company) para o Dossiê. */
+  const syncFromDataEnrich = async () => {
+    if (!companyId) return;
+    if (!isDataEnrichConfigured()) {
+      sonnerToast.error('Data Enrich não configurado', { description: 'Defina VITE_DATAENRICH_API_KEY ou VITE_STRATEVO_API_KEY.' });
+      return;
+    }
+    setSyncing(true);
+    try {
+      const dataEnrichCompanyId = companyId;
+      const { contacts } = await getContacts(dataEnrichCompanyId);
+      if (contacts?.length) {
+        await persistDataEnrichContactsToDecisionMakers(companyId, contacts);
+      }
+      const { company } = await getCompany(dataEnrichCompanyId);
+      if (company) {
+        await persistDataEnrichCompany(companyId, company);
+      }
+      const newData = await loadDecisorsData();
+      if (newData) setAnalysisData(newData);
+      sonnerToast.success('Dados sincronizados do Data Enrich');
+    } catch (err) {
+      sonnerToast.error('Erro ao sincronizar: ' + String(err));
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -926,7 +959,19 @@ export function DecisorsContactsTab({
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               {isRefreshing ? 'Carregando...' : 'Recarregar'}
             </Button>
-            
+            {isDataEnrichConfigured() && (
+              <Button
+                onClick={syncFromDataEnrich}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={syncing}
+                title="Buscar decisores e dados da empresa no Data Enrich e atualizar o Dossiê"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Sincronizando...' : 'Atualizar do Data Enrich'}
+              </Button>
+            )}
             <ApolloOrgIdDialog 
               onEnrich={handleEnrichApollo}
               disabled={isEnrichingApollo}

@@ -42,10 +42,16 @@ function mapContactToRow(companyId: string, c: DataEnrichContact): Record<string
     seniority: c.seniority || null,
     department: c.department || null,
     city: c.city || null,
-    state: null,
+    state: c.state ?? null,
     country: c.country || 'Brazil',
     data_sources: dataSources,
-    raw_apollo_data: rawPayload as any,
+    raw_apollo_data: rawPayload,
+    email_verification_source: c.email_verification_source ?? null,
+    phone_verified: c.phone_verified ?? false,
+    linkedin_profile_id: c.linkedin_profile_id ?? null,
+    location: c.location ?? null,
+    connection_degree: c.connection_degree ?? null,
+    mutual_connections: c.mutual_connections ?? null,
   };
 }
 
@@ -67,7 +73,7 @@ export async function persistDataEnrichContactsToDecisionMakers(
     .eq('company_id', companyId);
 
   const existingByKey = new Set<string>();
-  (existing || []).forEach((d: any) => {
+  (existing || []).forEach((d: { linkedin_url?: string | null; email?: string | null }) => {
     if (d.linkedin_url) existingByKey.add(`li:${d.linkedin_url}`);
     if (d.email) existingByKey.add(`em:${d.email}`);
   });
@@ -97,7 +103,7 @@ export async function persistDataEnrichContactsToDecisionMakers(
 
   const { data: inserted, error } = await supabase
     .from('decision_makers')
-    .insert(toInsert as any)
+    .insert(toInsert)
     .select('id');
 
   if (error) {
